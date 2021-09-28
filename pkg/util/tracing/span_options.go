@@ -121,7 +121,8 @@ type parentAndAutoCollectionOption Span
 // from a parent Span.
 //
 // WithParentAndAutoCollection can be called with a nil `sp`, in which case
-// it'll be a no-op.
+// it'll be a no-op. It can also be called with a "no-op span", in which case
+// the option will also be a no-op (i.e. the upcoming span will be a root).
 //
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
@@ -143,6 +144,12 @@ type parentAndAutoCollectionOption Span
 // WithParentAndManualCollection should be used, which incurs an
 // obligation to manually propagate the trace data to the parent Span.
 func WithParentAndAutoCollection(sp *Span) SpanOption {
+	if sp == nil {
+		return (*parentAndAutoCollectionOption)(nil)
+	}
+	if sp.IsNoop() {
+		return (*parentAndAutoCollectionOption)(nil)
+	}
 	return (*parentAndAutoCollectionOption)(sp)
 }
 
