@@ -443,7 +443,7 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = logtags.FromContext(ctx)
 	}
 
-	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.IsNoop() {
 		// If no log tags are specified in the options, use the parent
 		// span's, if any. This behavior is the reason logTags are
 		// fundamentally different from tags, which are strictly per span,
@@ -566,7 +566,7 @@ func (t *Tracer) startSpanGeneric(
 	//
 	// NB: this could be optimized.
 	if opts.Parent != nil {
-		if !opts.Parent.i.isNoop() {
+		if !opts.Parent.IsNoop() {
 			opts.Parent.i.crdb.mu.Lock()
 			m := opts.Parent.i.crdb.mu.baggage
 			opts.Parent.i.crdb.mu.Unlock()
