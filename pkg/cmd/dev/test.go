@@ -94,7 +94,6 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, getConfigFlags()...)
 	args = append(args, additionalBazelArgs...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {

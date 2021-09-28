@@ -106,7 +106,6 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 	var args []string
 	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
-	args = append(args, getConfigFlags()...)
 	args = append(args, targets...)
 	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
@@ -168,7 +167,6 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 	var args []string
 	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
-	args = append(args, getConfigFlags()...)
 	args = append(args, targets...)
 	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {

@@ -744,6 +744,36 @@ SELECT min(w) FROM xyz
 ----
 2
 
+query IF
+SELECT min(x), max(z) FROM xyz
+----
+1  8
+
+query IF
+SELECT min(x)+1, max(z)+1 FROM xyz
+----
+2  9
+
+query IFR
+SELECT min(x), max(z), sum(x) FROM xyz
+----
+1  8  12
+
+query II
+SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
+----
+5  5
+
+query II
+SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+1  1
+
+query FI
+SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+3  5
+
 query I
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
