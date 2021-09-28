@@ -87,7 +87,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {
-		args = append(args, getConfigFlags()...)
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err

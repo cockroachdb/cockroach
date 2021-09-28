@@ -17,7 +17,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -91,7 +90,6 @@ func parseAddr(addr string) (string, error) {
 
 func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 	args := []string{"info", key, "--color=no"}
-	args = append(args, getConfigFlags()...)
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
@@ -106,16 +104,6 @@ func (d *dev) getWorkspace(ctx context.Context) (string, error) {
 
 func (d *dev) getBazelBin(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "bazel-bin")
-}
-
-func getConfigFlags() []string {
-	if skipDevConfig {
-		return []string{}
-	}
-	if !isTesting && runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
-		return []string{"--config=devdarwinx86_64"}
-	}
-	return []string{"--config=dev"}
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {

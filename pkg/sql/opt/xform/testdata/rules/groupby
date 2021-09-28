@@ -36,7 +36,7 @@ CREATE TABLE kuvw (
 # ReplaceScalarMinMaxWithLimit (Min variations)
 # --------------------------------------------------
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(a) FROM abc
 ----
 scalar-group-by
@@ -54,7 +54,7 @@ scalar-group-by
            └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(DISTINCT a) FROM abc
 ----
 scalar-group-by
@@ -72,7 +72,7 @@ scalar-group-by
            └── a:1
 
 # Verify the rule does not fire when FILTER is used.
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
@@ -90,7 +90,7 @@ scalar-group-by
       └── const-agg [as=min:8, outer=(1)]
            └── a:1
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(b) FROM abc
 ----
 scalar-group-by
@@ -104,7 +104,7 @@ scalar-group-by
       └── min [as=min:7, outer=(2)]
            └── b:2
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(y) FROM xyz where z=7
 ----
 scalar-group-by
@@ -124,7 +124,7 @@ scalar-group-by
 
 # ReplaceScalarMaxWithLimit has the same behavior with max() as
 # the previous min() query because z is the prefix of a unique key
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(y) FROM xyz where z=7
 ----
 scalar-group-by
@@ -145,7 +145,7 @@ scalar-group-by
 # We expect ReplaceScalarMinWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
 # on the index xy after a scan on xy with x>7.
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
@@ -166,7 +166,7 @@ scalar-group-by
 # We expect ReplaceMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
 # on the index xy after a scan on xy with x>7
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
@@ -184,7 +184,7 @@ scalar-group-by
       └── max [as=max:6, outer=(2)]
            └── y:2
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(x) FROM xyz
 ----
 scalar-group-by
@@ -201,7 +201,7 @@ scalar-group-by
       └── const-agg [as=max:6, outer=(1)]
            └── x:1
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(x) FROM xyz
 ----
 scalar-group-by
@@ -218,7 +218,7 @@ scalar-group-by
       └── const-agg [as=min:6, outer=(1)]
            └── x:1
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
@@ -239,7 +239,7 @@ scalar-group-by
       └── const-agg [as=min:6, outer=(1)]
            └── x:1
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
@@ -260,7 +260,7 @@ scalar-group-by
       └── const-agg [as=max:6, outer=(1)]
            └── x:1
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(y) FROM xyz
 ----
 scalar-group-by
@@ -278,7 +278,7 @@ scalar-group-by
       └── const-agg [as=min:6, outer=(2)]
            └── y:2
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT min(y), min(y) FROM xyz
 ----
 scalar-group-by
@@ -298,7 +298,7 @@ scalar-group-by
 
 # ReplaceScalarMinWithLimit does not apply when there is
 # a grouping column
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT min(y) FROM xyz GROUP BY y
 ----
 project
@@ -318,7 +318,7 @@ project
 
 # ReplaceScalarMaxWithLimit does not apply when there is
 # a grouping column
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT max(y) FROM xyz GROUP BY y
 ----
 project
@@ -338,7 +338,7 @@ project
 
 # ReplaceScalarMinWithLimit does not apply when there is
 # a grouping column
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT min(y) FROM xyz GROUP BY x
 ----
 project
@@ -358,50 +358,9 @@ project
            └── min [as=min:6, outer=(2)]
                 └── y:2
 
-# ReplaceScalarMinWithLimit does not apply on multiple aggregations
-# on different columns
-opt
-SELECT min(y), min(x) FROM xyz
-----
-scalar-group-by
- ├── columns: min:6 min:7
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(6,7)
- ├── scan xyz@xy
- │    ├── columns: x:1!null y:2
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- └── aggregations
-      ├── min [as=min:6, outer=(2)]
-      │    └── y:2
-      └── min [as=min:7, outer=(1)]
-           └── x:1
-
-
-# ReplaceScalarMaxWithLimit does not apply on multiple aggregations
-# on different columns
-opt
-SELECT max(y), max(x) FROM xyz
-----
-scalar-group-by
- ├── columns: max:6 max:7
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(6,7)
- ├── scan xyz@xy
- │    ├── columns: x:1!null y:2
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- └── aggregations
-      ├── max [as=max:6, outer=(2)]
-      │    └── y:2
-      └── max [as=max:7, outer=(1)]
-           └── x:1
-
 # ReplaceScalarMinWithLimit does not apply with
 # multiple grouping columns
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT x,min(y) FROM xyz GROUP BY x,y
 ----
 group-by
@@ -421,7 +380,7 @@ group-by
 
 # ReplaceScalarMaxWithLimit does not apply with
 # multiple grouping columns
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT x,max(y) FROM xyz GROUP BY x,y
 ----
 group-by
@@ -441,7 +400,7 @@ group-by
 
 # ReplaceScalarMinWithLimit does not apply to non-scalar
 # aggregates
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT min(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
@@ -465,7 +424,7 @@ project
 
 # ReplaceScalarMaxWithLimit does not apply to non-scalar
 # aggregates
-opt
+opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT max(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
@@ -615,7 +574,7 @@ memo (optimized, ~6KB, required=[presentation: max:7])
 # ReplaceScalarMinMaxWithLimit (Max variations)
 # --------------------------------------------------
 
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(a) FROM abc
 ----
 scalar-group-by
@@ -633,7 +592,7 @@ scalar-group-by
            └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
-opt
+opt expect=ReplaceScalarMinMaxWithLimit
 SELECT max(DISTINCT a) FROM abc
 ----
 scalar-group-by
@@ -651,7 +610,7 @@ scalar-group-by
            └── a:1
 
 # Verify the rule does not fire when FILTER is used.
-opt
+opt disable=PushAggFilterIntoScalarGroupBy expect-not=ReplaceScalarMinMaxWithLimit
 SELECT max(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
@@ -659,15 +618,20 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(8)
- ├── scan abc,rev
- │    ├── columns: a:1!null
- │    ├── constraint: /1: [/e'a\x00' - ]
- │    ├── limit: 1(rev)
- │    ├── key: ()
- │    └── fd: ()-->(1)
+ ├── project
+ │    ├── columns: column7:7!null a:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7)
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null
+ │    │    └── key: (1)
+ │    └── projections
+ │         └── a:1 > 'a' [as=column7:7, outer=(1)]
  └── aggregations
-      └── const-agg [as=max:8, outer=(1)]
-           └── a:1
+      └── agg-filter [as=max:8, outer=(1,7)]
+           ├── max
+           │    └── a:1
+           └── column7:7
 
 opt
 SELECT max(b) FROM abc
@@ -1111,6 +1075,162 @@ group-by
  └── aggregations
       └── min [as=min:7, outer=(4)]
            └── w:4
+
+# --------------------------------------------------
+# ReplaceScalarMinMaxWithScalarSubqueries
+# --------------------------------------------------
+
+# ReplaceScalarMinWithLimit can be applied on multiple aggregations
+# on different columns.
+opt expect=(ReplaceScalarMinMaxWithScalarSubqueries,ReplaceScalarMinMaxWithLimit)
+SELECT min(y), min(x) FROM xyz
+----
+values
+ ├── columns: min:6 min:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ └── tuple
+      ├── subquery
+      │    └── scalar-group-by
+      │         ├── columns: min:6
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6)
+      │         ├── scan xyz@yy
+      │         │    ├── columns: y:9!null
+      │         │    ├── constraint: /9/8: (/NULL - ]
+      │         │    ├── limit: 1
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
+      │         └── aggregations
+      │              └── const-agg [as=min:6, outer=(9)]
+      │                   └── y:9
+      └── subquery
+           └── scalar-group-by
+                ├── columns: min:7
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── scan xyz@xy
+                │    ├── columns: x:13!null
+                │    ├── limit: 1
+                │    ├── key: ()
+                │    └── fd: ()-->(13)
+                └── aggregations
+                     └── const-agg [as=min:7, outer=(13)]
+                          └── x:13
+
+# ReplaceScalarMinWithLimit can be applied on multiple aggregations
+# on different columns.
+opt expect=(ReplaceScalarMinMaxWithScalarSubqueries,ReplaceScalarMinMaxWithLimit)
+SELECT max(y), max(x) FROM xyz
+----
+values
+ ├── columns: max:6 max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ └── tuple
+      ├── subquery
+      │    └── scalar-group-by
+      │         ├── columns: max:6
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6)
+      │         ├── scan xyz@yy,rev
+      │         │    ├── columns: y:9!null
+      │         │    ├── constraint: /9/8: (/NULL - ]
+      │         │    ├── limit: 1(rev)
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
+      │         └── aggregations
+      │              └── const-agg [as=max:6, outer=(9)]
+      │                   └── y:9
+      └── subquery
+           └── scalar-group-by
+                ├── columns: max:7
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── scan xyz@xy,rev
+                │    ├── columns: x:13!null
+                │    ├── limit: 1(rev)
+                │    ├── key: ()
+                │    └── fd: ()-->(13)
+                └── aggregations
+                     └── const-agg [as=max:7, outer=(13)]
+                          └── x:13
+
+# ReplaceScalarMinMaxWithScalarSubqueries cannot be applied unless all
+# expressions are min or max functions.
+opt expect-not=ReplaceScalarMinMaxWithScalarSubqueries
+SELECT max(y), max(x), sum(z) FROM xyz
+----
+scalar-group-by
+ ├── columns: max:6 max:7 sum:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6-8)
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2 z:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── max [as=max:6, outer=(2)]
+      │    └── y:2
+      ├── max [as=max:7, outer=(1)]
+      │    └── x:1
+      └── sum [as=sum:8, outer=(3)]
+           └── z:3
+
+# ReplaceScalarMinMaxWithScalarSubqueries can only be applied to canonical
+# scans.
+opt expect-not=ReplaceScalarMinMaxWithScalarSubqueries
+SELECT min(y), max(x) FROM xyz WHERE z > 0
+----
+scalar-group-by
+ ├── columns: min:6 max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── scan xyz@zyx
+ │    ├── columns: x:1!null y:2 z:3!null
+ │    ├── constraint: /3/2/1: [/5e-324 - ]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── min [as=min:6, outer=(2)]
+      │    └── y:2
+      └── max [as=max:7, outer=(1)]
+           └── x:1
+
+# ReplaceScalarMinMaxWithScalarSubqueries cannot be applied on MIN/MAX
+# expressions which are not a simple variable expression.
+opt expect-not=ReplaceScalarMinMaxWithScalarSubqueries
+SELECT min(y+1), max(x+1) FROM xyz
+----
+scalar-group-by
+ ├── columns: min:7 max:9
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(7,9)
+ ├── project
+ │    ├── columns: column6:6 column8:8!null
+ │    ├── immutable
+ │    ├── scan xyz@xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── projections
+ │         ├── y:2 + 1 [as=column6:6, outer=(2), immutable]
+ │         └── x:1 + 1 [as=column8:8, outer=(1), immutable]
+ └── aggregations
+      ├── min [as=min:7, outer=(6)]
+      │    └── column6:6
+      └── max [as=max:9, outer=(8)]
+           └── column8:8
 
 # --------------------------------------------------
 # GenerateStreamingGroupBy
