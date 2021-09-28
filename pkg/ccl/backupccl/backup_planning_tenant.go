@@ -22,18 +22,13 @@ import (
 
 const tenantMetadataQuery = `
 SELECT
-  tenants.id,
-  tenants.active,
-  tenants.info,
-  tenant_usage.ru_burst_limit,
-  tenant_usage.ru_refill_rate,
-  tenant_usage.ru_current,
-  tenant_usage.total_ru_usage,
-  tenant_usage.total_read_requests,
-  tenant_usage.total_read_bytes,
-  tenant_usage.total_write_requests,
-  tenant_usage.total_write_bytes,
-  tenant_usage.total_sql_pod_cpu_seconds
+  tenants.id,                        /* 0 */
+  tenants.active,                    /* 1 */
+  tenants.info,                      /* 2 */
+  tenant_usage.ru_burst_limit,       /* 3 */
+  tenant_usage.ru_refill_rate,       /* 4 */
+  tenant_usage.ru_current,           /* 5 */
+  tenant_usage.total_consumption     /* 6 */
 FROM
   system.tenants
   LEFT JOIN system.tenant_usage ON
@@ -51,12 +46,11 @@ func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) 
 		return descpb.TenantInfoWithUsage{}, err
 	}
 	// If this tenant had no reported consumption and its token bucket was not
-	// configured, the tenant_usage values are all NULL. Otherwise none of them
-	// are NULL.
+	// configured, the tenant_usage values are all NULL.
 	//
 	// It should be sufficient to check any one value, but we check all of them
 	// just to be defensive (in case the table contains invalid data).
-	for _, d := range row[3:] {
+	for _, d := range row[3:5] {
 		if d == tree.DNull {
 			return res, nil
 		}
@@ -65,14 +59,12 @@ func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) 
 		RUBurstLimit: float64(tree.MustBeDFloat(row[3])),
 		RURefillRate: float64(tree.MustBeDFloat(row[4])),
 		RUCurrent:    float64(tree.MustBeDFloat(row[5])),
-		Consumption: roachpb.TenantConsumption{
-			RU:                float64(tree.MustBeDFloat(row[6])),
-			ReadRequests:      uint64(tree.MustBeDInt(row[7])),
-			ReadBytes:         uint64(tree.MustBeDInt(row[8])),
-			WriteRequests:     uint64(tree.MustBeDInt(row[9])),
-			WriteBytes:        uint64(tree.MustBeDInt(row[10])),
-			SQLPodsCPUSeconds: float64(tree.MustBeDFloat(row[11])),
-		},
+	}
+	if row[6] != tree.DNull {
+		consumptionBytes := []byte(tree.MustBeDBytes(row[6]))
+		if err := protoutil.Unmarshal(consumptionBytes, &res.Usage.Consumption); err != nil {
+			return descpb.TenantInfoWithUsage{}, err
+		}
 	}
 	return res, nil
 }
