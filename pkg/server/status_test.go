@@ -2662,3 +2662,79 @@ func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 		})
 	}
 }
+
+func TestStatusAPIContentionEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+
+	defer testCluster.Stopper().Stop(ctx)
+
+	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+
+	sqlutils.CreateTable(
+		t,
+		testCluster.ServerConn(0),
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	testTableID, err :=
+		strconv.Atoi(server1Conn.QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+	require.NoError(t, err)
+
+	server1Conn.Exec(t, "USE test")
+	server2Conn.Exec(t, "USE test")
+
+	server1Conn.Exec(t, `
+SET TRACING=on;
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+	server2Conn.Exec(t, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+	server1Conn.ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		`
+COMMIT;
+SET TRACING=off;
+`,
+	)
+
+	var resp serverpb.ListContentionEventsResponse
+	require.NoError(t,
+		getStatusJSONProtoWithAdminOption(
+			testCluster.Server(2),
+			"contention_events",
+			&resp,
+			true /* isAdmin */),
+	)
+
+	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
+		"expecting at least 1 contention event, but found none")
+
+	found := false
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			found = true
+			break
+		}
+	}
+
+	require.True(t, found,
+		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+}
