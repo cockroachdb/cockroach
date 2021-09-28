@@ -1707,6 +1707,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					if err != nil {
 						return err
 					}
+					indpred := tree.DNull
+					if index.IsPartial() {
+						indpred = tree.NewDString(index.GetPredicate())
+					}
 					return addRow(
 						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
 						tableOid,                                     // indrelid
@@ -1726,7 +1730,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						indclass,                                     // indclass
 						indoptionIntVector,                           // indoption
 						tree.DNull,                                   // indexprs
-						tree.DNull,                                   // indpred
+						indpred,                                      // indpred
 						tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
 					)
 				})
