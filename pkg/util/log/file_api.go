@@ -220,7 +220,7 @@ func GetLogReader(filename string) (io.ReadCloser, error) {
 	}
 
 	filename = filepath.Join(dir, filename)
-	// Symlinks are not followed.
+
 	info, err := os.Lstat(filename)
 	if err != nil {
 		if oserror.IsNotExist(err) {
