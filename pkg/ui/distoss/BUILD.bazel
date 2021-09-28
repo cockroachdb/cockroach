@@ -11,7 +11,10 @@ genrule(
 go_library(
     name = "distoss",
     srcs = ["distoss.go"],
-    embedsrcs = [":genassets"],  # keep
+    embedsrcs = select({
+        "//pkg/ui:with_ui": [":genassets"],  # keep
+        "//conditions:default": ["assets"],  # keep
+    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/distoss",
     visibility = ["//visibility:public"],
     deps = ["//pkg/ui"],
