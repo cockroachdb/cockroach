@@ -1473,40 +1473,23 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 		candidateRanges: stat{mean: 1000},
 	}
 
-	sEmpty := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    1024 * 1024 * 1024,
-		LogicalBytes: 0,
-	}
-	sMean := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    512 * 1024 * 1024,
-		LogicalBytes: 512 * 1024 * 1024,
-		RangeCount:   1000,
-	}
-	sRangesOverfull := sMean
-	sRangesOverfull.RangeCount = 1500
-	sRangesUnderfull := sMean
-	sRangesUnderfull.RangeCount = 500
-	sRangesLessThanMean := sMean
-	sRangesLessThanMean.RangeCount = 900
-	sRangesMoreThanMean := sMean
-	sRangesMoreThanMean.RangeCount = 1099
-
 	testCases := []struct {
-		sc       roachpb.StoreCapacity
-		expected balanceStatus
+		RangeCount int32
+		expected   balanceStatus
 	}{
-		{sEmpty, underfull},
-		{sRangesLessThanMean, lessThanEqualToMean},
-		{sMean, lessThanEqualToMean},
-		{sRangesMoreThanMean, moreThanMean},
-		{sRangesOverfull, overfull},
-		{sRangesUnderfull, underfull},
+		{0, underfull},
+		{900, aroundTheMean},
+		{1000, aroundTheMean},
+		{1099, aroundTheMean},
+		{1100, overfull},
+		{2000, overfull},
 	}
 	for i, tc := range testCases {
-		if a, e := options.balanceScore(storeList, tc.sc), tc.expected; a != e {
-			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, tc.sc, a, e)
+		sc := roachpb.StoreCapacity{
+			RangeCount: tc.RangeCount,
+		}
+		if a, e := options.balanceScore(storeList, sc), tc.expected; a != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, sc, a, e)
 		}
 	}
 }
@@ -1518,25 +1501,25 @@ func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
 	storeList := StoreList{
 		candidateQueriesPerSecond: stat{mean: 1000},
 	}
+	options := qpsScorerOptions{
+		qpsRebalanceThreshold: 0.1,
+	}
 
 	testCases := []struct {
 		QPS             float64
 		expBalanceScore balanceStatus
 	}{
 		{0, underfull},
-		{900, lessThanEqualToMean},
-		{999, lessThanEqualToMean},
-		{1000, lessThanEqualToMean},
-		{1001, moreThanMean},
+		{899, underfull},
+		{900, aroundTheMean},
+		{1099, aroundTheMean},
+		{1100, overfull},
 		{2000, overfull},
 	}
 
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
 			QueriesPerSecond: tc.QPS,
-		}
-		options := qpsScorerOptions{
-			qpsRebalanceThreshold: 0.1,
 		}
 		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
 			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)
