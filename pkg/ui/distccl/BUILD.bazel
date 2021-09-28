@@ -11,7 +11,10 @@ genrule(
 go_library(
     name = "distccl",
     srcs = ["distccl.go"],
-    embedsrcs = [":genassets"],  # keep
+    embedsrcs = select({
+        "//pkg/ui:with_ui": [":genassets"],  # keep
+        "//conditions:default": ["assets"],  # keep
+    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
     visibility = ["//visibility:public"],
     deps = ["//pkg/ui"],
