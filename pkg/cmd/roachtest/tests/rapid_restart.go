@@ -51,9 +51,14 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			go func() {
 				err := c.RunE(ctx, nodes,
 					`mkdir -p {log-dir} && ./cockroach start-single-node --insecure --store={store-dir} `+
-						`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
-						`--listen-addr=:{pgport:1} --http-port=$[{pgport:1}+1] `+
+						`--log='file-defaults: dir: {log-dir}' --cache=10% --max-sql-memory=10% `+
+						`--listen-addr=:{pgport:1} --http-addr=$[{pgport:1}+1] `+
 						`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
+				//err := c.RunE(ctx, nodes,
+				//	`mkdir -p {log-dir} && ./cockroach start-single-node --insecure --store={store-dir} `+
+				//		`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
+				//		`--listen-addr=:{pgport:1} --http-port=$[{pgport:1}+1] `+
+				//		`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 				exitCh <- err
 			}()
 			if i == 2 {
