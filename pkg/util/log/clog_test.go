@@ -408,23 +408,26 @@ func TestGetLogReader(t *testing.T) {
 	require.NoError(t, ioutil.WriteFile(filepath.Join(dir, "other.txt"), nil, 0644))
 	relPathFromLogDir := strings.Join([]string{"..", filepath.Base(dir), infoName}, string(os.PathSeparator))
 
+	cntr := 0
+	genFileName := func(prefix string) string {
+		cntr++
+		return program + prefix + ".roach0.root.2015-09-25T19_24_19Z." + fmt.Sprintf("%05d", cntr) + ".log"
+	}
+
 	// A log file in a non-default directory.
-	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1,
-		program+"-g1.roach0.root.2015-09-25T19_24_19Z.00001.log",
-	), nil, 0644))
+	fname1 := genFileName("-g1")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1, fname1), nil, 0644))
 
 	// A log file that matches the file pattern for the default sink,
 	// in a non-default directory.
-	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1,
-		program+".roach0.root.2015-09-25T19_24_19Z.00002.log",
-	), nil, 0644))
-	require.NoError(t, ioutil.WriteFile(filepath.Join(dir,
-		program+"-g1.roach0.root.2015-09-25T19_24_19Z.00003.log",
-	), nil, 0644))
+	fname2 := genFileName("")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1, fname2), nil, 0644))
+	fname3 := genFileName("-g1")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir, fname3), nil, 0644))
 
 	// Fake symlink to check the symlink error below.
-	createSymlink("bogus.log", filepath.Join(dir,
-		program+".roach0.root.2015-09-25T19_24_19Z.00004.log"))
+	fname4 := genFileName("")
+	createSymlink("bogus.log", filepath.Join(dir, fname4))
 
 	testCases := []struct {
 		filename         string
@@ -432,11 +435,11 @@ func TestGetLogReader(t *testing.T) {
 	}{
 		// Base filename is specified.
 		{infoName, ""},
-		{program + "-g1.roach0.root.2015-09-25T19_24_19Z.00001.log", ""},
+		{fname1, ""},
 		// File exists but in a different directory than what the sink
 		// configuration indicates. It is invisible to the API.
-		{program + ".roach0.root.2015-09-25T19_24_19Z.00002.log", "no such file"},
-		{program + "-g1.roach0.root.2015-09-25T19_24_19Z.00003.log", "no such file"},
+		{fname2, "no such file"},
+		{fname3, "no such file"},
 		// File is not specified (trying to open a directory instead).
 		{dir, "pathnames must be basenames"},
 		// Absolute filename is specified.
@@ -444,7 +447,7 @@ func TestGetLogReader(t *testing.T) {
 		// Symlink to a log file.
 		{filepath.Join(dir, program+".log"), "pathnames must be basenames"},
 		// Symlink relative to logDir.
-		{program + ".roach0.root.2015-09-25T19_24_19Z.00004.log", "symlinks are not allowed"},
+		{fname4, "symlinks are not allowed"},
 		// Non-log file.
 		{"other.txt", "malformed log filename"},
 		// Non-existent file matching RE.
