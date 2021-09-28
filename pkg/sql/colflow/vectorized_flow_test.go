@@ -202,7 +202,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// number of metadata sources and then that the input types are what we
 			// expect from the input DAG.
 			require.Len(t, input.MetadataSources, 1)
-			require.Len(t, inboxToNumInputTypes[input.MetadataSources[0].(*colexec.InvariantsChecker).Input.(*colrpc.Inbox)], numInputTypesToOutbox)
+			inbox := colexec.MaybeUnwrapInvariantsChecker(input.MetadataSources[0].(colexecop.Operator)).(*colrpc.Inbox)
+			require.Len(t, inboxToNumInputTypes[inbox], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
