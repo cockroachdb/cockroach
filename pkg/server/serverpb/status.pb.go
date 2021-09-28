@@ -2506,7 +2506,9 @@ func (m *ListContentionEventsRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_ListContentionEventsRequest proto.InternalMessageInfo
 
 // An error wrapper object for ListContentionEventsResponse and
-// ListDistSQLFlowsResponse.
+// ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+// implemented on a tenant, the `node_id` field refers to the instanceIDs that
+// identify individual tenant pods.
 type ListActivityError struct {
 	// ID of node that was being contacted when this error occurred.
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
