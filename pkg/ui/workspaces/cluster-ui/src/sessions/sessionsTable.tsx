@@ -159,7 +159,7 @@ export function makeSessionsColumns(
     {
       name: "statement",
       title: SessionTableTitle.statement,
-      className: cx("cl-table__col-session"),
+      className: cx("cl-table__col-session", "code"),
       cell: session => {
         if (!(session.session.active_queries?.length > 0)) {
           return "N/A";

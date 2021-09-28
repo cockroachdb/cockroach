@@ -31,10 +31,8 @@
 
   & a {
     all: initial;
-    font-family: $font-family--semi-bold;
-    font-weight: $font-weight--bold;
-    line-height: 1.83;
-    color: $colors--link;
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
     text-decoration: none;
     cursor: pointer;
     @include line-clamp(2);
@@ -43,6 +41,11 @@
       text-decoration: underline;
     }
   }
+}
+
+.code {
+  font-family: $font-family--monospace;
+  font-size: $font-size--small;
 }
 
 .session-action--dropdown {

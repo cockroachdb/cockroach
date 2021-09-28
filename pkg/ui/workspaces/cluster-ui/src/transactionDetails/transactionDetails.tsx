@@ -19,6 +19,7 @@ import {
   ISortedTablePagination,
   SortSetting,
 } from "../sortedtable";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
@@ -29,7 +30,7 @@ import { aggregateStatements } from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
 import { Bytes, Duration, formatNumberForDisplay } from "src/util";
-import { UIConfigState } from "../store/uiConfig";
+import { UIConfigState } from "../store";
 
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
@@ -42,6 +43,7 @@ import {
   makeStatementFingerprintColumn,
 } from "src/statementsTable/statementsTable";
 import { TransactionInfo } from "src/transactionsTable";
+import Long from "long";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
@@ -89,18 +91,18 @@ export class TransactionDetails extends React.Component<
     isTenant: false,
   };
 
-  onChangeSortSetting = (ss: SortSetting) => {
+  onChangeSortSetting = (ss: SortSetting): void => {
     this.setState({
       sortSetting: ss,
     });
   };
 
-  onChangePage = (current: number) => {
+  onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
   };
 
-  render() {
+  render(): React.ReactElement {
     const {
       transactionText,
       statements,
@@ -119,6 +121,7 @@ export class TransactionDetails extends React.Component<
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Transactions
           </Button>
@@ -142,6 +145,25 @@ export class TransactionDetails extends React.Component<
               isTenant,
             );
             const duration = (v: number) => Duration(v * 1e9);
+
+            const transactionSampled =
+              transactionStats.exec_stats.count > Long.fromNumber(0);
+            const unavailableTooltip = !transactionSampled && (
+              <Tooltip
+                placement="bottom"
+                style="default"
+                content={
+                  <p>
+                    This metric is part of the transaction execution and
+                    therefore will not be available until it is sampled via
+                    tracing.
+                  </p>
+                }
+              >
+                <span className={cx("tooltip-info")}>unavailable</span>
+              </Tooltip>
+            );
+
             return (
               <React.Fragment>
                 <section className={containerClass}>
@@ -202,12 +224,15 @@ export class TransactionDetails extends React.Component<
                           className={summaryCardStylesCx("summary--card__item")}
                         >
                           <Text>Bytes read over network</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.exec_stats.network_bytes.mean,
-                              Bytes,
-                            )}
-                          </Text>
+                          {transactionSampled && (
+                            <Text>
+                              {formatNumberForDisplay(
+                                transactionStats.exec_stats.network_bytes.mean,
+                                Bytes,
+                              )}
+                            </Text>
+                          )}
+                          {unavailableTooltip}
                         </div>
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
@@ -224,27 +249,33 @@ export class TransactionDetails extends React.Component<
                           className={summaryCardStylesCx("summary--card__item")}
                         >
                           <Text>Max memory usage</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.exec_stats.max_mem_usage.mean,
-                              Bytes,
-                            )}
-                          </Text>
+                          {transactionSampled && (
+                            <Text>
+                              {formatNumberForDisplay(
+                                transactionStats.exec_stats.max_mem_usage.mean,
+                                Bytes,
+                              )}
+                            </Text>
+                          )}
+                          {unavailableTooltip}
                         </div>
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
                           <Text>Max scratch disk usage</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              _.get(
-                                transactionStats,
-                                "exec_stats.max_disk_usage.mean",
-                                0,
-                              ),
-                              Bytes,
-                            )}
-                          </Text>
+                          {transactionSampled && (
+                            <Text>
+                              {formatNumberForDisplay(
+                                _.get(
+                                  transactionStats,
+                                  "exec_stats.max_disk_usage.mean",
+                                  0,
+                                ),
+                                Bytes,
+                              )}
+                            </Text>
+                          )}
+                          {unavailableTooltip}
                         </div>
                       </SummaryCard>
                     </Col>
