@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -136,6 +137,18 @@ func NewSchemaChangerForTesting(
 		distSQLPlanner: execCfg.DistSQLPlanner,
 		testingKnobs:   &SchemaChangerTestingKnobs{},
 	}
+}
+
+// IsConstraintError returns true if the error is considered as
+// an error introduced by the user. For example a constraint
+// violation.
+func IsConstraintError(err error) bool {
+	pgCode := pgerror.GetPGCode(err)
+	return pgCode == pgcode.CheckViolation ||
+		pgCode == pgcode.UniqueViolation ||
+		pgCode == pgcode.ForeignKeyViolation ||
+		pgCode == pgcode.NotNullViolation ||
+		pgCode == pgcode.IntegrityConstraintViolation
 }
 
 // IsPermanentSchemaChangeError returns true if the error results in
@@ -2192,9 +2205,19 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
 				sc.metrics.RetryErrors.Inc(1)
+				if IsConstraintError(scErr) {
+					telemetry.Inc(sc.metrics.ConstraintErrors)
+				} else {
+					telemetry.Inc(sc.metrics.UncategorizedErrors)
+				}
 			default:
 				if ctx.Err() == nil {
 					sc.metrics.PermanentErrors.Inc(1)
+				}
+				if IsConstraintError(scErr) {
+					telemetry.Inc(sc.metrics.ConstraintErrors)
+				} else {
+					telemetry.Inc(sc.metrics.UncategorizedErrors)
 				}
 				// All other errors lead to a failed job.
 				return scErr
