@@ -88,7 +88,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.TestCleanup()
+	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
 	meta := res.MetadataSources[0].DrainMeta()
@@ -167,7 +167,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					}
 				}
 				b.StopTimer()
-				res.TestCleanup()
+				res.TestCleanupNoError(b)
 			}
 		})
 	}
