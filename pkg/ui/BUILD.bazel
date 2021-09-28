@@ -56,3 +56,11 @@ filegroup(
     ),
     visibility = ["//pkg/ui:__subpackages__"],
 )
+
+config_setting(
+    name = "with_ui",
+    define_values = {
+        "with_ui": "true",
+    },
+    visibility = ["//visibility:public"],
+)
