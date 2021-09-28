@@ -67,14 +67,19 @@ func Main() {
 
 		// Finally, extract the error code, as optionally specified
 		// by the sub-command.
-		errCode = exit.UnspecifiedError()
-		var cliErr *cliError
-		if errors.As(err, &cliErr) {
-			errCode = cliErr.exitCode
-		}
+		errCode = getExitCode(err)
 	}
 
 	exit.WithCode(errCode)
+}
+
+func getExitCode(err error) (errCode exit.Code) {
+	errCode = exit.UnspecifiedError()
+	var cliErr *cliError
+	if errors.As(err, &cliErr) {
+		errCode = cliErr.exitCode
+	}
+	return errCode
 }
 
 func doMain(cmd *cobra.Command, cmdName string) error {
