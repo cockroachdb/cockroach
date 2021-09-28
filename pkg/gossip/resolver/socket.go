@@ -34,10 +34,6 @@ func (sr *socketResolver) Addr() string { return sr.addr }
 func (sr *socketResolver) GetAddress() (net.Addr, error) {
 	switch sr.typ {
 	case "tcp":
-		_, err := net.ResolveTCPAddr("tcp", sr.addr)
-		if err != nil {
-			return nil, err
-		}
 		return util.NewUnresolvedAddr("tcp", sr.addr), nil
 	}
 	return nil, errors.Errorf("unknown address type: %q", sr.typ)
