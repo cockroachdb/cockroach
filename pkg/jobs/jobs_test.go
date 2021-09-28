@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -341,12 +340,7 @@ func (rts *registryTestSuite) tearDown() {
 
 func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 	t.Helper()
-	opts := retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
-		MaxBackoff:     time.Second,
-		Multiplier:     2,
-	}
-	if err := retry.WithMaxAttempts(rts.ctx, opts, 10, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rts.mu.Lock()
 		defer rts.mu.Unlock()
 		if diff := cmp.Diff(rts.mu.e, rts.mu.a); diff != "" {
@@ -363,9 +357,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 			return errors.Errorf("expected job status: %s but got: %s", expectedStatus, st)
 		}
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 }
 
 func TestRegistryLifecycle(t *testing.T) {
