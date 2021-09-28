@@ -42,13 +42,13 @@ export function aggregateNumericStats(
   countB: number,
 ): { mean: number; squared_diffs: number } {
   const total = countA + countB;
-  const delta = b.mean - a.mean;
+  const delta = b?.mean - a?.mean;
 
   return {
-    mean: (a.mean * countA + b.mean * countB) / total,
+    mean: (a?.mean * countA + b?.mean * countB) / total,
     squared_diffs:
-      a.squared_diffs +
-      b.squared_diffs +
+      a?.squared_diffs +
+      b?.squared_diffs +
       (delta * delta * countA * countB) / total,
   };
 }

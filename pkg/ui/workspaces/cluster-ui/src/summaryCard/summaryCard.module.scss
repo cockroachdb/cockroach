@@ -51,16 +51,17 @@
     &--label {
       font-family: $font-family--base;
       font-size: 14px;
+      font-weight: $font-weight--bold;
       line-height: 1.57;
       letter-spacing: 0.1px;
-      color: $secondary-text-color;
+      color: $colors--neutral-6;
       margin-right: 5px;
       margin-bottom: 0;
     }
     &--value {
       font-family: $font-family--base;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: $font-weight--bold;
       line-height: 1.71;
       letter-spacing: 0.1px;
       color: $popover-color;

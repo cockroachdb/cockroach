@@ -104,6 +104,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Jobs
           </Button>

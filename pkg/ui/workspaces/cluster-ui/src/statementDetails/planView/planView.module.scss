@@ -90,6 +90,11 @@
     overflow: hidden;
     padding: 24px 32px;
 
+    span {
+      font-family: RobotoMono-Regular;
+      color: $colors--neutral-2;
+    }
+
     .plan-view-container-scroll {
       max-height: 400px;
       overflow-y: scroll;
