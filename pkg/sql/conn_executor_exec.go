@@ -1834,8 +1834,12 @@ func (ex *connExecutor) handleAutoCommit(
 		}
 	}
 
+	// Attempt to refresh the deadline before the autocommit.
+	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
+	if err != nil {
+		return ex.makeErrEvent(err, stmt)
+	}
 	ev, payload := ex.commitSQLTransaction(ctx, stmt, ex.commitSQLTransactionInternal)
-	var err error
 	if perr, ok := payload.(payloadWithError); ok {
 		err = perr.errorCause()
 	}

@@ -3028,3 +3028,148 @@ SELECT * FROM T1`)
 		require.NoError(t, err)
 	})
 }
+
+// Validates that the transaction deadline will be
+// updated for implicit transactions before the autocommit,
+// if the deadline is found to be expired.
+func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	beforeExecute := syncutil.Mutex{}
+	// Statement that will be paused.
+	beforeExecuteStmt := ""
+	beforeExecuteWait := make(chan chan struct{})
+	// Statement that will allow any paused statement to resume.
+	beforeExecuteResumeStmt := ""
+
+	ctx := context.Background()
+
+	params := createTestServerParams()
+	// Set the lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	var leaseManager *lease.Manager
+	leaseTableID := uint64(0)
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		// The before execute hook will be to set up to pause
+		// the beforeExecuteStmt, which will then be resumed
+		// when the beforeExecuteResumeStmt statement is observed.
+		BeforeExecute: func(ctx context.Context, stmt string) {
+			beforeExecute.Lock()
+			if stmt == beforeExecuteStmt {
+				tableID := descpb.ID(atomic.LoadUint64(&leaseTableID))
+				beforeExecute.Unlock()
+				waitChan := make(chan struct{})
+				select {
+				case beforeExecuteWait <- waitChan:
+					<-waitChan
+				case <-ctx.Done():
+					return
+				}
+				// We will intentionally refresh the lease, since the lease duration
+				// is intentionally set to zero inside this test. As a result, the
+				// coordinator might not be aware of the SELECT pushing out the UPDATE in
+				// time, since the transaction heart beat will be longer than whatever jitter
+				// we extend the lease by. As a result in stress scenarios without this
+				// change we may observed intermittent hangs.
+				err := leaseManager.AcquireFreshestFromStore(ctx, tableID)
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				beforeExecute.Unlock()
+			}
+		},
+		AfterExecute: func(ctx context.Context, stmt string, err error) {
+			beforeExecute.Lock()
+			if stmt == beforeExecuteResumeStmt {
+				beforeExecute.Unlock()
+				resumeChan, ok := <-beforeExecuteWait
+				if ok {
+					close(resumeChan)
+				}
+			} else {
+				beforeExecute.Unlock()
+			}
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	// Setup tables for the test.
+	_, err := conn.Exec(`
+CREATE TABLE t1(val int);
+ALTER TABLE t1 SPLIT AT VALUES (1);
+	`)
+	require.NoError(t, err)
+	// Get the lease manager and table ID for acquiring a lease on.
+	beforeExecute.Lock()
+	leaseManager = tc.Servers[0].LeaseManager().(*lease.Manager)
+	beforeExecute.Unlock()
+	tempTableID := uint64(0)
+	err = conn.QueryRow("SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",
+		"t1").Scan(&tempTableID)
+	require.NoError(t, err)
+	atomic.StoreUint64(&leaseTableID, tempTableID)
+
+	// Executes a bulk UPDATE operation that will be repeatedly
+	// pushed out by a SELECT operation on the same table. The
+	// intention here is to confirm that autocommit will adjust
+	// transaction readline for this.
+	t.Run("validate-lease-txn-deadline-ext-update", func(t *testing.T) {
+		updateCompleted := atomic.Value{}
+		updateCompleted.Store(false)
+		conn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		updateConn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		resultChan := make(chan error)
+		_, err = conn.ExecContext(ctx, `
+INSERT INTO t1 select a from generate_series(1, 100) g(a);
+`,
+		)
+		require.NoError(t, err)
+		go func() {
+			const bulkUpdateQuery = "UPDATE t1 SET val = 2"
+			beforeExecute.Lock()
+			beforeExecuteStmt = bulkUpdateQuery
+			beforeExecute.Unlock()
+			// Execute a bulk UPDATE, which will get its
+			// timestamp pushed by a read operation.
+			_, err := updateConn.ExecContext(ctx, bulkUpdateQuery)
+			updateCompleted.Store(true)
+			close(beforeExecuteWait)
+			resultChan <- err
+		}()
+
+		const (
+			selectStmt = `SELECT * FROM t1`
+			selectTxn  = `BEGIN PRIORITY HIGH; ` + selectStmt + `; COMMIT;`
+		)
+		beforeExecute.Lock()
+		beforeExecuteResumeStmt = selectStmt
+		beforeExecute.Unlock()
+		// While the update hasn't completed executing, repeatedly
+		// execute selects to push out the update operation. We will
+		// do this for a limited amount of time, and let the commit
+		// go through.
+		spawnLimit := 0
+		for updateCompleted.Load() == false &&
+			spawnLimit < 4 {
+			_, err = conn.ExecContext(ctx, selectTxn)
+			require.NoError(t, err)
+			spawnLimit++
+		}
+		// Disable the execution hooks, and allow the statement to continue
+		// like normal after being pushed a limited number of times.
+		beforeExecute.Lock()
+		beforeExecuteStmt, beforeExecuteResumeStmt = "", ""
+		beforeExecute.Unlock()
+		resumeChan, channelReadOk := <-beforeExecuteWait
+		if channelReadOk {
+			close(resumeChan)
+		}
+		require.NoError(t, <-resultChan)
+	})
+}

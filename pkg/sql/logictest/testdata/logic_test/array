@@ -1746,6 +1746,48 @@ INSERT INTO t VALUES (
   '{0101, 11}',
   '{12.34, 45.67}');
 
+subtest array_builtin_uncasted_nulls
+
+query T
+SELECT array_prepend(1, NULL);
+----
+{1}
+
+query T
+SELECT array_append(NULL, 'cat');
+----
+{cat}
+
+query T
+SELECT array_cat(NULL, ARRAY[1]);
+----
+{1}
+
+query T
+SELECT array_cat(ARRAY[1], NULL);
+----
+{1}
+
+query T
+SELECT array_remove(NULL, 'cat');
+----
+NULL
+
+query T
+SELECT array_replace(NULL, 'cat', 'dog');
+----
+NULL
+
+query T
+SELECT array_position(NULL, 'cat');
+----
+NULL
+
+query T
+SELECT array_positions(NULL, 'cat');
+----
+NULL
+
 subtest array_tuples
 
 # Test for #32715: able to distribute queries with arrays of tuples.
