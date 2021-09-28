@@ -21,6 +21,7 @@ go_test(
     name = "contention_test",
     size = "small",
     srcs = [
+        "main_test.go",
         "registry_test.go",
         "utils_test.go",
     ],
@@ -29,8 +30,13 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
         "//pkg/sql/contentionpb",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
