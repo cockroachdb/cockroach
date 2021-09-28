@@ -102,8 +102,8 @@ type scorerOptions interface {
 		ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 	) bool
 	// balanceScore returns a discrete score (`balanceStatus`) based on whether
-	// the store represented by `sc` classifies as underfull, lessThanEqualToMean,
-	// moreThanMean or overfull relative to all the stores in `sl`.
+	// the store represented by `sc` classifies as underfull, aroundTheMean, or
+	// overfull relative to all the stores in `sl`.
 	balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
 	// referred to by `sc` based on whether moving a replica away from this store
@@ -172,13 +172,10 @@ func (o rangeCountScorerOptions) balanceScore(
 	curRangeCount := float64(sc.RangeCount)
 	if curRangeCount < minRangeCount {
 		return underfull
-	} else if curRangeCount <= sl.candidateRanges.mean {
-		return lessThanEqualToMean
-	} else if curRangeCount < maxRangeCount {
-		return moreThanMean
-	} else {
+	} else if curRangeCount >= maxRangeCount {
 		return overfull
 	}
+	return aroundTheMean
 }
 
 // rebalanceFromConvergesScore returns 1 iff rebalancing a replica away from
@@ -271,13 +268,10 @@ func (o qpsScorerOptions) balanceScore(sl StoreList, sc roachpb.StoreCapacity) b
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
 		return underfull
-	} else if curQPS <= sl.candidateQueriesPerSecond.mean {
-		return lessThanEqualToMean
-	} else if curQPS < maxQPS {
-		return moreThanMean
-	} else {
+	} else if curQPS >= maxQPS {
 		return overfull
 	}
+	return aroundTheMean
 }
 
 func (o qpsScorerOptions) rebalanceFromConvergesScore(_ StoreList, _ roachpb.StoreCapacity) int {
@@ -1523,10 +1517,9 @@ func diversityRebalanceFromScore(
 type balanceStatus int
 
 const (
-	overfull            balanceStatus = -2
-	moreThanMean        balanceStatus = -1
-	lessThanEqualToMean balanceStatus = 0
-	underfull           balanceStatus = 1
+	overfull      balanceStatus = -1
+	aroundTheMean balanceStatus = 0
+	underfull     balanceStatus = 1
 )
 
 func overfullRangeThreshold(options rangeCountScorerOptions, mean float64) float64 {
