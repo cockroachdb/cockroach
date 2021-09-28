@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -101,6 +102,8 @@ func TestSimpleProjectOp(t *testing.T) {
 func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 70816, "flaky test")
 	inputTypes := []*types.T{types.Bytes, types.Float}
 	constVal := int64(42)
 	var wg sync.WaitGroup
