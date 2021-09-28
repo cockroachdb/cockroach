@@ -221,7 +221,11 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 	}
 	if !spillingMightNotHappen {
-		require.Equal(t, numRuns, numSpills, "the spilling didn't occur in all cases")
+		// The "randomNullsInjection" subtest might not spill to disk when a
+		// large portion of rows is made NULL, so we allow two cases:
+		// - numSpills == numRuns
+		// - numSpills == numRuns - 1.
+		require.GreaterOrEqual(t, numSpills, numRuns-1, "the spilling didn't occur in all cases")
 	}
 
 	for _, acc := range accounts {
