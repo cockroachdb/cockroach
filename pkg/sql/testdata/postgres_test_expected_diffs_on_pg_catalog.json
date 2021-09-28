@@ -5,7 +5,7 @@
     "TotalColumns": 1130,
     "MissingTables": 4,
     "MissingColumns": 1,
-    "DatatypeMismatches": 20
+    "DatatypeMismatches": 19
   },
   "pgMetadata": {
     "pg_am": {
@@ -150,20 +150,7 @@
     "pg_statistic": {},
     "pg_statistic_ext_data": {},
     "pg_stats": {},
-    "pg_stats_ext": {},
-    "pg_user": {
-      "valuntil": {
-        "oid": 1114,
-        "dataType": "timestamp",
-        "expectedOid": 1184,
-        "expectedDataType": "timestamptz"
-      }
-    }
+    "pg_stats_ext": {}
   },
-  "unimplementedTypes": {
-    "2277": "anyarray",
-    "3361": "pg_ndistinct",
-    "3402": "pg_dependencies",
-    "5017": "pg_mcv_list"
-  }
+  "unimplementedTypes": null
 }
