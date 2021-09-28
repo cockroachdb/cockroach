@@ -96,22 +96,23 @@ func CreateTenantRecord(
 	}
 
 	if u := info.Usage; u != nil {
+		consumption, err := protoutil.Marshal(&u.Consumption)
+		if err != nil {
+			return errors.Wrap(err, "marshaling tenant usage data")
+		}
 		if num, err := execCfg.InternalExecutor.ExecEx(
 			ctx, "create-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
 			`INSERT INTO system.tenant_usage (
 			  tenant_id, instance_id, next_instance_id, last_update,
 			  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-			  total_ru_usage, total_read_requests, total_read_bytes,
-			  total_write_requests, total_write_bytes, total_sql_pod_cpu_seconds)
+			  total_consumption)
 			VALUES (
 				$1, 0, 0, now(),
 				$2, $3, $4, 0, 
-				$5, $6, $7,
-				$8, $9, $10)`,
+				$5)`,
 			tenID,
 			u.RUBurstLimit, u.RURefillRate, u.RUCurrent,
-			u.Consumption.RU, u.Consumption.ReadRequests, u.Consumption.ReadBytes,
-			u.Consumption.WriteRequests, u.Consumption.WriteBytes, u.Consumption.SQLPodsCPUSeconds,
+			tree.NewDBytes(tree.DBytes(consumption)),
 		); err != nil {
 			if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
 				return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already has usage data", tenID)
