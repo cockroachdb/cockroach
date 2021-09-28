@@ -55,6 +55,13 @@ type Span struct {
 	numFinishCalled int32 // atomic
 }
 
+// IsNoop returns true if this span is a black hole - it doesn't correspond to a
+// CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
+// net.Trace.
+func (sp *Span) IsNoop() bool {
+	return sp.i.isNoop()
+}
+
 func (sp *Span) done() bool {
 	if sp == nil {
 		return true
@@ -78,7 +85,7 @@ func (sp *Span) SetOperationName(operationName string) {
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || sp.i.isNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil || sp.IsNoop() || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
 		return
 	}
 	sp.i.Finish()
