@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"testing"
@@ -23,9 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -64,6 +67,7 @@ type testState struct {
 	clock       *timeutil.ManualTime
 	tenantUsage multitenant.TenantUsageServer
 	metricsReg  *metric.Registry
+	autoSeqNum  int64
 }
 
 const timeFormat = "15:04:05.000"
@@ -77,7 +81,9 @@ func (ts *testState) start(t *testing.T) {
 
 	ts.clock = timeutil.NewManualTime(t0)
 	ts.tenantUsage = tenantcostserver.NewInstance(
-		ts.kvDB, ts.s.InternalExecutor().(*sql.InternalExecutor), ts.clock,
+		ts.s.ClusterSettings(),
+		ts.kvDB,
+		ts.s.InternalExecutor().(*sql.InternalExecutor), ts.clock,
 	)
 	ts.metricsReg = metric.NewRegistry()
 	ts.metricsReg.AddMetricStruct(ts.tenantUsage.Metrics())
@@ -97,6 +103,7 @@ var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.Test
 	"metrics":              (*testState).metrics,
 	"configure":            (*testState).configure,
 	"inspect":              (*testState).inspect,
+	"wait-inspect":         (*testState).waitInspect,
 	"advance":              (*testState).advance,
 }
 
@@ -127,8 +134,11 @@ func (ts *testState) createTenant(t *testing.T, d *datadriven.TestData) string {
 func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	var args struct {
-		InstanceID  uint32 `yaml:"instance_id"`
-		Consumption struct {
+		InstanceID         uint32 `yaml:"instance_id"`
+		InstanceLease      string `yaml:"instance_lease"`
+		NextLiveInstanceID uint32 `yaml:"next_live_instance_id"`
+		SeqNum             int64  `yaml:"seq_num"`
+		Consumption        struct {
 			RU              float64 `yaml:"ru"`
 			ReadReq         uint64  `yaml:"read_req"`
 			ReadBytes       uint64  `yaml:"read_bytes"`
@@ -139,17 +149,27 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
 	}
+	args.SeqNum = -1
 	args.Period = "10s"
+	args.InstanceLease = "foo"
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
+	}
+	// If sequence number not specified, use an auto-incrementing number.
+	if args.SeqNum == -1 {
+		ts.autoSeqNum++
+		args.SeqNum = ts.autoSeqNum
 	}
 	period, err := time.ParseDuration(args.Period)
 	if err != nil {
 		d.Fatalf(t, "failed to parse duration: %v", args.Period)
 	}
 	req := roachpb.TokenBucketRequest{
-		TenantID:   tenantID,
-		InstanceID: args.InstanceID,
+		TenantID:           tenantID,
+		InstanceID:         args.InstanceID,
+		InstanceLease:      []byte(args.InstanceLease),
+		NextLiveInstanceID: args.NextLiveInstanceID,
+		SeqNum:             args.SeqNum,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                args.Consumption.RU,
 			ReadRequests:      args.Consumption.ReadReq,
@@ -173,10 +193,14 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		}
 		return ""
 	}
-	if res.TrickleDuration == 0 {
-		return fmt.Sprintf("%.10g RUs granted immediately.\n", res.GrantedRU)
+	trickleStr := "immediately"
+	if res.TrickleDuration != 0 {
+		trickleStr = fmt.Sprintf("over %s", res.TrickleDuration)
 	}
-	return fmt.Sprintf("%.10g RUs granted over %s.\n", res.GrantedRU, res.TrickleDuration)
+	return fmt.Sprintf(
+		"%.10g RUs granted %s. Fallback rate: %.10g RU/s\n",
+		res.GrantedRU, trickleStr, res.FallbackRate,
+	)
 }
 
 // metrics outputs all metrics that match the regex in the input.
@@ -235,6 +259,20 @@ func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
 	return res
 }
 
+// inspect-wait is like inspect but waits a little bit and retries until the
+// output equals the expected output; used for cases where
+func (ts *testState) waitInspect(t *testing.T, d *datadriven.TestData) string {
+	time.Sleep(1 * time.Millisecond)
+	testutils.SucceedsSoon(t, func() error {
+		res := ts.inspect(t, d)
+		if res == d.Expected {
+			return nil
+		}
+		return errors.Errorf("-- expected:\n%s\n-- got:\n%s", d.Expected, res)
+	})
+	return d.Expected
+}
+
 // advance advances the clock by the provided duration and returns the new
 // current time.
 func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
@@ -247,4 +285,80 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
 	// using timers.
 	*ts.clock = *timeutil.NewManualTime(ts.clock.Now().Add(dur))
 	return ts.formatTime(ts.clock.Now())
+}
+
+// TestInstanceCleanup is a randomized test that verifies that the server keeps
+// up with a changing live set.
+func TestInstanceCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ts testState
+	ts.start(t)
+	defer ts.stop()
+
+	ts.r.Exec(t, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", 5))
+
+	// Note: this number needs to be at most maxInstancesCleanup.
+	const maxInstances = 10
+	var liveset, prev util.FastIntSet
+
+	for steps := 0; steps < 100; steps++ {
+		// Keep the previous set for debugging.
+		prev = liveset.Copy()
+		// Make a few random changes to the set.
+		for n := rand.Intn(4); n >= 0; n-- {
+			x := 1 + rand.Intn(maxInstances)
+			if rand.Intn(2) == 0 {
+				liveset.Add(x)
+			} else {
+				liveset.Remove(x)
+			}
+		}
+		// Advance the time so all existing instances look stale.
+		ts.clock.Advance(5 * time.Minute)
+		if liveset.Empty() {
+			// An empty live set can't trigger cleanup.
+			continue
+		}
+		// Send one token bucket update from each instance, in random order.
+		instances := liveset.Ordered()
+		for _, i := range rand.Perm(len(instances)) {
+			req := roachpb.TokenBucketRequest{
+				TenantID:   5,
+				InstanceID: uint32(instances[i]),
+			}
+			if i+1 < len(instances) {
+				req.NextLiveInstanceID = uint32(instances[i+1])
+			} else {
+				req.NextLiveInstanceID = uint32(instances[0])
+			}
+			res := ts.tenantUsage.TokenBucketRequest(
+				context.Background(), roachpb.MakeTenantID(5), &req,
+			)
+			if res.Error != (errors.EncodedError{}) {
+				t.Fatal(errors.DecodeError(context.Background(), res.Error))
+			}
+		}
+		// Verify that the server reached the correct liveset.
+		rows := ts.r.Query(t,
+			"SELECT instance_id FROM system.tenant_usage WHERE tenant_id = 5 AND instance_id > 0",
+		)
+		var serverSet util.FastIntSet
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			serverSet.Add(id)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if !liveset.Equals(serverSet) {
+			t.Fatalf(
+				"previous live set: %s  current live set: %s  server live set: %s",
+				liveset, prev, serverSet,
+			)
+		}
+	}
 }

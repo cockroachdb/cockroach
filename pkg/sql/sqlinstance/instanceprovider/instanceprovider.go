@@ -43,6 +43,7 @@ type provider struct {
 	initOnce     sync.Once
 	initialized  chan struct{}
 	instanceID   base.SQLInstanceID
+	sessionID    sqlliveness.SessionID
 	initError    error
 }
 
@@ -68,20 +69,22 @@ func New(
 }
 
 // Instance returns the instance ID for the current SQL instance.
-func (p *provider) Instance(ctx context.Context) (_ base.SQLInstanceID, err error) {
+func (p *provider) Instance(
+	ctx context.Context,
+) (_ base.SQLInstanceID, _ sqlliveness.SessionID, err error) {
 	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
-		return base.SQLInstanceID(0), ctx.Err()
+		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
-		return base.SQLInstanceID(0), stop.ErrUnavailable
+		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.initError
+		return p.instanceID, p.sessionID, p.initError
 	}
 }
 
@@ -108,6 +111,7 @@ func (p *provider) initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	p.sessionID = session.ID()
 	p.instanceID = instanceID
 	session.RegisterCallbackForSessionExpiry(p.shutdownSQLInstance)
 	return nil
