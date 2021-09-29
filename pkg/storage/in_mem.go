@@ -52,3 +52,13 @@ func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	}
 	return eng
 }
+
+// NewDefaultInMemForStickyEngineTesting is just like NewDefaultInMemForTesting but uses
+// ForStickyEngineTesting to always separate intents from MVCC data, instead of randomizing this setting.
+func NewDefaultInMemForStickyEngineTesting(opts ...ConfigOption) Engine {
+	eng, err := Open(context.Background(), InMemory(), ForStickyEngineTesting, MaxSize(1<<20), CombineOptions(opts...))
+	if err != nil {
+		panic(err)
+	}
+	return eng
+}
