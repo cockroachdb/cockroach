@@ -3367,7 +3367,8 @@ CREATE TABLE pg_catalog.pg_attribute (
    attoptions STRING[] NULL,
    attfdwoptions STRING[] NULL,
    atthasmissing BOOL NULL,
-   INDEX pg_attribute_attrelid_idx (attrelid ASC) STORING (attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing)
+   attmissingval STRING[] NULL,
+   INDEX pg_attribute_attrelid_idx (attrelid ASC) STORING (attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing, attmissingval)
 )  CREATE TABLE pg_catalog.pg_attribute (
    attrelid OID NOT NULL,
    attname NAME NULL,
@@ -3393,7 +3394,8 @@ CREATE TABLE pg_catalog.pg_attribute (
    attoptions STRING[] NULL,
    attfdwoptions STRING[] NULL,
    atthasmissing BOOL NULL,
-   INDEX pg_attribute_attrelid_idx (attrelid ASC) STORING (attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing)
+   attmissingval STRING[] NULL,
+   INDEX pg_attribute_attrelid_idx (attrelid ASC) STORING (attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing, attmissingval)
 )  {}  {}
 CREATE TABLE pg_catalog.pg_auth_members (
    roleid OID NULL,
@@ -5545,6 +5547,71 @@ CREATE TABLE pg_catalog.pg_statio_user_tables (
    schemaname NAME NULL,
    tidx_blks_hit INT8 NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_statistic (
+   stakind2 INT2 NULL,
+   stanumbers2 FLOAT4[] NULL,
+   stanumbers3 FLOAT4[] NULL,
+   staop5 OID NULL,
+   stacoll3 OID NULL,
+   stainherit BOOL NULL,
+   stakind3 INT2 NULL,
+   stavalues5 STRING[] NULL,
+   staattnum INT2 NULL,
+   stacoll1 OID NULL,
+   stacoll4 OID NULL,
+   stanullfrac FLOAT4 NULL,
+   stavalues1 STRING[] NULL,
+   stawidth INT4 NULL,
+   stacoll2 OID NULL,
+   stanumbers4 FLOAT4[] NULL,
+   stanumbers5 FLOAT4[] NULL,
+   staop2 OID NULL,
+   stavalues3 STRING[] NULL,
+   stakind4 INT2 NULL,
+   staop1 OID NULL,
+   staop4 OID NULL,
+   stacoll5 OID NULL,
+   stakind5 INT2 NULL,
+   staop3 OID NULL,
+   stavalues2 STRING[] NULL,
+   stavalues4 STRING[] NULL,
+   stakind1 INT2 NULL,
+   stanumbers1 FLOAT4[] NULL,
+   starelid OID NULL,
+   stadistinct FLOAT4 NULL
+)  CREATE TABLE pg_catalog.pg_statistic (
+   stakind2 INT2 NULL,
+   stanumbers2 FLOAT4[] NULL,
+   stanumbers3 FLOAT4[] NULL,
+   staop5 OID NULL,
+   stacoll3 OID NULL,
+   stainherit BOOL NULL,
+   stakind3 INT2 NULL,
+   stavalues5 STRING[] NULL,
+   staattnum INT2 NULL,
+   stacoll1 OID NULL,
+   stacoll4 OID NULL,
+   stanullfrac FLOAT4 NULL,
+   stavalues1 STRING[] NULL,
+   stawidth INT4 NULL,
+   stacoll2 OID NULL,
+   stanumbers4 FLOAT4[] NULL,
+   stanumbers5 FLOAT4[] NULL,
+   staop2 OID NULL,
+   stavalues3 STRING[] NULL,
+   stakind4 INT2 NULL,
+   staop1 OID NULL,
+   staop4 OID NULL,
+   stacoll5 OID NULL,
+   stakind5 INT2 NULL,
+   staop3 OID NULL,
+   stavalues2 STRING[] NULL,
+   stavalues4 STRING[] NULL,
+   stakind1 INT2 NULL,
+   stanumbers1 FLOAT4[] NULL,
+   starelid OID NULL,
+   stadistinct FLOAT4 NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext (
    oid OID NULL,
    stxrelid OID NULL,
@@ -5563,6 +5630,77 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
    stxstattarget INT4 NULL,
    stxkeys INT2VECTOR NULL,
    stxkind "char"[] NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_statistic_ext_data (
+   stxddependencies BYTES NULL,
+   stxdmcv BYTES NULL,
+   stxdndistinct BYTES NULL,
+   stxoid OID NULL
+)  CREATE TABLE pg_catalog.pg_statistic_ext_data (
+   stxddependencies BYTES NULL,
+   stxdmcv BYTES NULL,
+   stxdndistinct BYTES NULL,
+   stxoid OID NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_stats (
+   histogram_bounds STRING[] NULL,
+   most_common_elem_freqs FLOAT4[] NULL,
+   most_common_elems STRING[] NULL,
+   most_common_vals STRING[] NULL,
+   attname NAME NULL,
+   inherited BOOL NULL,
+   n_distinct FLOAT4 NULL,
+   schemaname NAME NULL,
+   correlation FLOAT4 NULL,
+   null_frac FLOAT4 NULL,
+   elem_count_histogram FLOAT4[] NULL,
+   most_common_freqs FLOAT4[] NULL,
+   tablename NAME NULL,
+   avg_width INT4 NULL
+)  CREATE TABLE pg_catalog.pg_stats (
+   histogram_bounds STRING[] NULL,
+   most_common_elem_freqs FLOAT4[] NULL,
+   most_common_elems STRING[] NULL,
+   most_common_vals STRING[] NULL,
+   attname NAME NULL,
+   inherited BOOL NULL,
+   n_distinct FLOAT4 NULL,
+   schemaname NAME NULL,
+   correlation FLOAT4 NULL,
+   null_frac FLOAT4 NULL,
+   elem_count_histogram FLOAT4[] NULL,
+   most_common_freqs FLOAT4[] NULL,
+   tablename NAME NULL,
+   avg_width INT4 NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_stats_ext (
+   kinds "char"[] NULL,
+   most_common_base_freqs FLOAT8[] NULL,
+   most_common_freqs FLOAT8[] NULL,
+   n_distinct BYTES NULL,
+   schemaname NAME NULL,
+   statistics_schemaname NAME NULL,
+   dependencies BYTES NULL,
+   most_common_val_nulls BOOL[] NULL,
+   most_common_vals STRING[] NULL,
+   statistics_name NAME NULL,
+   statistics_owner NAME NULL,
+   tablename NAME NULL,
+   attnames NAME[] NULL
+)  CREATE TABLE pg_catalog.pg_stats_ext (
+   kinds "char"[] NULL,
+   most_common_base_freqs FLOAT8[] NULL,
+   most_common_freqs FLOAT8[] NULL,
+   n_distinct BYTES NULL,
+   schemaname NAME NULL,
+   statistics_schemaname NAME NULL,
+   dependencies BYTES NULL,
+   most_common_val_nulls BOOL[] NULL,
+   most_common_vals STRING[] NULL,
+   statistics_name NAME NULL,
+   statistics_owner NAME NULL,
+   tablename NAME NULL,
+   attnames NAME[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_subscription (
    subname NAME NULL,
