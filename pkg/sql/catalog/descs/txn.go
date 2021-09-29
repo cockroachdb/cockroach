@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -25,6 +26,21 @@ import (
 )
 
 var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violated")
+
+// UnsafeSkipSystemConfigTrigger will prevent setting the system config
+// trigger for transactions which write to tables in the system config. The
+// implication of setting this to true is that various subsystems which
+// rely on that trigger, such as zone configs and replication reports, will
+// not work. This can be used to accelerate high-frequency schema changes
+// like during an ORM test suite.
+var UnsafeSkipSystemConfigTrigger = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.catalog.unsafe_skip_system_config_trigger.enabled",
+	"avoid setting the system config trigger in transactions which write to "+
+		"the system config. This will unlock performance at the cost of breaking "+
+		"table splits, zone configuration propagation, and cluster settings",
+	false,
+)
 
 // Txn enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
@@ -78,8 +94,10 @@ func (cf *CollectionFactory) Txn(
 			deletedDescs = nil
 			descsCol = cf.MakeCollection(nil)
 			defer descsCol.ReleaseAll(ctx)
-			if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {
-				return err
+			if !UnsafeSkipSystemConfigTrigger.Get(&cf.settings.SV) {
+				if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {
+					return err
+				}
 			}
 			if err := f(ctx, txn, &descsCol); err != nil {
 				return err
