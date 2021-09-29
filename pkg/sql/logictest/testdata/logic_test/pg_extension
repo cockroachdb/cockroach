@@ -15,38 +15,38 @@ CREATE TABLE pg_extension_test (
 query TTTTIIT rowsort
 SELECT * FROM pg_extension.geography_columns WHERE f_table_name = 'pg_extension_test'
 ----
-test  public  pg_extension_test  a    2     4326  POINT
-test  public  pg_extension_test  d    NULL  0     GEOMETRY
-test  public  pg_extension_test  az   3     4326  POINTZ
-test  public  pg_extension_test  am   3     4326  POINTM
-test  public  pg_extension_test  azm  4     4326  POINTZM
+test  public  pg_extension_test  a    2     4326  Point
+test  public  pg_extension_test  d    NULL  0     Geometry
+test  public  pg_extension_test  az   3     4326  PointZ
+test  public  pg_extension_test  am   3     4326  PointM
+test  public  pg_extension_test  azm  4     4326  PointZM
 
 query TTTTIIT rowsort
 SELECT * FROM pg_extension.geometry_columns WHERE f_table_name = 'pg_extension_test'
 ----
 test  public  pg_extension_test  b    2  3857  POLYGON
 test  public  pg_extension_test  c    2  0     GEOMETRY
-test  public  pg_extension_test  bz   3  3857  POLYGONZ
-test  public  pg_extension_test  bm   3  3857  POLYGONM
-test  public  pg_extension_test  bzm  4  3857  POLYGONZM
+test  public  pg_extension_test  bz   3  3857  POLYGON
+test  public  pg_extension_test  bm   3  3857  POLYGON
+test  public  pg_extension_test  bzm  4  3857  POLYGON
 
 query TTTTIIT rowsort
 SELECT * FROM geography_columns WHERE f_table_name = 'pg_extension_test'
 ----
-test  public  pg_extension_test  a    2     4326  POINT
-test  public  pg_extension_test  d    NULL  0     GEOMETRY
-test  public  pg_extension_test  az   3     4326  POINTZ
-test  public  pg_extension_test  am   3     4326  POINTM
-test  public  pg_extension_test  azm  4     4326  POINTZM
+test  public  pg_extension_test  a    2     4326  Point
+test  public  pg_extension_test  d    NULL  0     Geometry
+test  public  pg_extension_test  az   3     4326  PointZ
+test  public  pg_extension_test  am   3     4326  PointM
+test  public  pg_extension_test  azm  4     4326  PointZM
 
 query TTTTIIT rowsort
 SELECT * FROM geometry_columns WHERE f_table_name = 'pg_extension_test'
 ----
 test  public  pg_extension_test  b    2  3857  POLYGON
 test  public  pg_extension_test  c    2  0     GEOMETRY
-test  public  pg_extension_test  bz   3  3857  POLYGONZ
-test  public  pg_extension_test  bm   3  3857  POLYGONM
-test  public  pg_extension_test  bzm  4  3857  POLYGONZM
+test  public  pg_extension_test  bz   3  3857  POLYGON
+test  public  pg_extension_test  bm   3  3857  POLYGON
+test  public  pg_extension_test  bzm  4  3857  POLYGON
 
 query ITITT
 SELECT * FROM pg_extension.spatial_ref_sys WHERE srid IN (3857, 4326) ORDER BY srid ASC
