@@ -147,10 +147,10 @@ pk2  val2       def
 # as to which ON UPDATE should be applied.
 subtest OnUpdateFKConflict
 
-statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column "j"
 CREATE TABLE test_fk_invalid_inline (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE ON UPDATE 'test')
 
-statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column with ID 2
+statement error pq: cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column "j"
 CREATE TABLE test_fk_invalid (p STRING PRIMARY KEY, j STRING ON UPDATE 'test', CONSTRAINT fk FOREIGN KEY (j) REFERENCES test_fk_base(j) ON UPDATE SET NULL)
 
 statement ok
