@@ -142,14 +142,14 @@ export class LoginPage extends React.Component<Props> {
           <div className="content">
             <section className="section login-page__form">
               <div className="form-container">
-                <Text textType={TextTypes.Heading2}>Log in to the Admin UI</Text>
+                <Text textType={TextTypes.Heading2}>Log in to the DB Console</Text>
                 {this.renderError()}
                 <PasswordLoginForm {...this.props} />
                 <OIDCLoginConnected loginState={loginState} />
               </div>
             </section>
             <section className="section login-page__info">
-              <Text textType={TextTypes.Heading3}>A user with a password is required to log in to the Admin UI on secure clusters.</Text>
+              <Text textType={TextTypes.Heading3}>A user with a password is required to log in to the DB Console on secure clusters.</Text>
               <Text textType={TextTypes.Heading5}>Create a user with this SQL command:</Text>
               <pre className="login-note-box__sql-command">
                 <span className="sql-keyword">CREATE USER</span>
