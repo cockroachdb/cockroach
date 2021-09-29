@@ -33,7 +33,10 @@ go_binary(
 
 go_test(
     name = "dev_test",
-    srcs = ["datadriven_test.go"],
+    srcs = [
+        "datadriven_test.go",
+        "dev_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [
