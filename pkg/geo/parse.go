@@ -168,16 +168,12 @@ func parseEWKT(
 		}
 	}
 
-	geom, wktUnmarshalErr := wkt.Unmarshal(string(str))
+	g, wktUnmarshalErr := wkt.Unmarshal(string(str))
 	if wktUnmarshalErr != nil {
 		return geopb.SpatialObject{}, wktUnmarshalErr
 	}
-	AdjustGeomTSRID(geom, srid)
-	ewkb, ewkbMarshalErr := ewkb.Marshal(geom, DefaultEWKBEncodingFormat)
-	if ewkbMarshalErr != nil {
-		return geopb.SpatialObject{}, ewkbMarshalErr
-	}
-	return parseEWKBRaw(soType, ewkb)
+	AdjustGeomTSRID(g, srid)
+	return spatialObjectFromGeomT(g, soType)
 }
 
 // hasPrefixIgnoreCase returns whether a given str begins with a prefix, ignoring case.
