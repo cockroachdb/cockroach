@@ -18,9 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -68,13 +66,7 @@ func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *
 // start dials the remote addr and commences gossip once connected. Upon exit,
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
-func (c *client) startLocked(
-	g *Gossip,
-	disconnected chan *client,
-	rpcCtx *rpc.Context,
-	stopper *stop.Stopper,
-	breaker *circuit.BreakerV2,
-) {
+func (c *client) startLocked(g *Gossip, disconnected chan *client, stopper *stop.Stopper) {
 	// Add a placeholder for the new outgoing connection because we may not know
 	// the ID of the node we're connecting to yet. This will be resolved in
 	// (*client).handleResponse once we know the ID.
@@ -98,31 +90,22 @@ func (c *client) startLocked(
 			disconnected <- c
 		}()
 
-		//consecFailures := breaker.ConsecFailures()
-		var stream Gossip_GossipClient
-		if err := breaker.Call(ctx, func(ctx context.Context) error {
-			// Note: avoid using `grpc.WithBlock` here. This code is already
-			// asynchronous from the caller's perspective, so the only effect of
-			// `WithBlock` here is blocking shutdown - at the time of this writing,
-			// that ends ups up making `kv` tests take twice as long.
-			conn, err := rpcCtx.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
-			if err != nil {
-				return err
-			}
-			if stream, err = NewGossipClient(conn).Gossip(ctx); err != nil {
-				return err
-			}
-			return c.requestGossip(g, stream)
-		}); err != nil {
-			// if consecFailures == 0 {
+		var conn Gossip_GossipClient
+		cc, err := g.dial(ctx, c.addr.String())
+		if err == nil {
+			conn, err = NewGossipClient(cc).Gossip(ctx)
+		}
+		if err == nil {
+			err = c.requestGossip(g, conn)
+		}
+		if err != nil {
 			log.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
-			// }
 			return
 		}
 
 		// Start gossiping.
 		log.Infof(ctx, "started gossip client to n%d (%s)", c.peerID, c.addr)
-		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
+		if err := c.gossip(ctx, g, conn, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.RLock()
 				if c.peerID != 0 {

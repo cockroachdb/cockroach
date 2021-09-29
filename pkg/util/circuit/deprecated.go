@@ -10,11 +10,7 @@
 
 package circuit
 
-import (
-	"context"
-
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/errors"
 
 // Ready ...
 // TODO(tbg): remove, use Err() == nil instead.
@@ -55,21 +51,4 @@ func (b *BreakerV2) Trip() {
 // TODO(tbg): remove this, use Err() != nil instead.
 func (b *BreakerV2) Tripped() bool {
 	return b.Err() != nil
-}
-
-// Call checks the breaker. If it is tripped, the error is returned and the
-// closure is not invoked. Otherwise, calls the closure and reports any error
-// it returns to the breaker.
-//
-// TODO(tbg): remove this, this pattern invites passing unrelated errors to
-// the breaker and we only have a single caller.
-func (b *BreakerV2) Call(ctx context.Context, f func(ctx context.Context) error) error {
-	if err := b.Err(); err != nil {
-		return err
-	}
-	if err := f(ctx); err != nil {
-		b.Report(err)
-		return err
-	}
-	return nil
 }

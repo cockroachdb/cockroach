@@ -1518,43 +1518,50 @@ func (g *Gossip) signalConnectedLocked() {
 	}
 }
 
+func (g *Gossip) dial(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+	return g.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+}
+
 // startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClientLocked(addr util.UnresolvedAddr) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
+
 	breaker, ok := g.clientsMu.breakers[addr.String()]
 	if !ok {
 		name := fmt.Sprintf("gossip to %v", addr)
-		// Don't actually probe anything here, just wait and then declare the
-		// breaker good to go. This is sufficient for the Gossip use case.
-		//
-		// TODO(tbg): refactor this such that a client wraps the breaker and the
-		// dialing logic, so that the probe has easy access to exactly the same
-		// operation that the breaker later guards.
+		// Wait a second after failed probes.
 		asyncProbe := func(report func(error), done func()) {
 			g.stopper.RunAsyncTask(g.AnnotateCtx(context.Background()), "gossip-probe",
 				func(ctx context.Context) {
 					defer done()
+					_, err := g.dial(ctx, addr.String())
+					report(err)
+					if err == nil {
+						return
+					}
+
 					select {
 					case <-time.After(1 * time.Second):
-						report(nil)
-					case <-ctx.Done():
-						return
 					case <-g.stopper.ShouldQuiesce():
-						return
 					}
 				})
 		}
 		breaker = g.rpcContext.NewBreaker(name, asyncProbe)
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
-	ctx := g.AnnotateCtx(context.TODO())
-	log.VEventf(ctx, 1, "starting new client to %s", addr)
+
 	c := newClient(g.server.AmbientContext, &addr, g.serverMetrics)
+	ctx := c.AnnotateCtx(context.TODO())
+	if err := breaker.Err(); err != nil {
+		log.VEventf(ctx, 1, "not starting new client to %s: %s", addr, err)
+		return
+	}
+	log.VEventf(ctx, 1, "starting new client to %s", addr)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.startLocked(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
+	c.startLocked(g, g.disconnected, g.server.stopper)
 }
 
 // removeClientLocked removes the specified client. Called when a client
