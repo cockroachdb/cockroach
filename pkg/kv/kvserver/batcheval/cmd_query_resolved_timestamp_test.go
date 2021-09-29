@@ -30,7 +30,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	db := storage.NewDefaultInMemForStickyEngineTesting()
+	db := storage.NewInMemForTesting(true)
 	defer db.Close()
 
 	makeTS := func(ts int64) hlc.Timestamp {

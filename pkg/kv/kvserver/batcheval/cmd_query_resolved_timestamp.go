@@ -105,10 +105,6 @@ func computeMinIntentTimestamp(
 	iter := reader.NewEngineIterator(storage.IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
 	defer iter.Close()
 
-	// Iterate through all keys using NextKey. This will look at the first MVCC
-	// version for each key. We're only looking for MVCCMetadata versions, which
-	// will always be the first version of a key if it exists, so its fine that
-	// we skip over all other versions of keys.
 	var meta enginepb.MVCCMetadata
 	var minTS hlc.Timestamp
 	var encountered []roachpb.Intent
@@ -131,25 +127,26 @@ func computeMinIntentTimestamp(
 		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
 			return hlc.Timestamp{}, nil, errors.Wrapf(err, "unmarshaling mvcc meta: %v", lockedKey)
 		}
+		if meta.Txn == nil {
+			return hlc.Timestamp{}, nil, errors.Errorf("nil transaction in LockTable. Key: %v, mvcc meta: %v",
+				lockedKey, meta)
+		}
 
-		// If this is an intent, account for it.
-		if meta.Txn != nil {
-			if minTS.IsEmpty() {
-				minTS = meta.Txn.WriteTimestamp
-			} else {
-				minTS.Backward(meta.Txn.WriteTimestamp)
-			}
+		if minTS.IsEmpty() {
+			minTS = meta.Txn.WriteTimestamp
+		} else {
+			minTS.Backward(meta.Txn.WriteTimestamp)
+		}
 
-			// Also, add the intent to the encountered intents set if it is old enough
-			// and we have room, both in terms of the number of intents and the size
-			// of the intent keys.
-			oldEnough := meta.Txn.WriteTimestamp.Less(intentCleanupThresh)
-			intentFitsByCount := int64(len(encountered)) < maxEncounteredIntents
-			intentFitsByBytes := encounteredKeyBytes < maxEncounteredIntentKeyBytes
-			if oldEnough && intentFitsByCount && intentFitsByBytes {
-				encountered = append(encountered, roachpb.MakeIntent(meta.Txn, lockedKey))
-				encounteredKeyBytes += int64(len(lockedKey))
-			}
+		// Also, add the intent to the encountered intents set if it is old enough
+		// and we have room, both in terms of the number of intents and the size
+		// of the intent keys.
+		oldEnough := meta.Txn.WriteTimestamp.Less(intentCleanupThresh)
+		intentFitsByCount := int64(len(encountered)) < maxEncounteredIntents
+		intentFitsByBytes := encounteredKeyBytes < maxEncounteredIntentKeyBytes
+		if oldEnough && intentFitsByCount && intentFitsByBytes {
+			encountered = append(encountered, roachpb.MakeIntent(meta.Txn, lockedKey))
+			encounteredKeyBytes += int64(len(lockedKey))
 		}
 	}
 	return minTS, encountered, nil

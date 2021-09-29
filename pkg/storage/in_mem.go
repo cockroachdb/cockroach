@@ -44,7 +44,7 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
 // the default configuration. The caller must call the engine's Close method
-// when the engine is no longer needed.
+// when the engine is no longer needed. This method randomizes whether separated intents are written.
 func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20), CombineOptions(opts...))
 	if err != nil {
@@ -53,10 +53,11 @@ func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	return eng
 }
 
-// NewDefaultInMemForStickyEngineTesting is just like NewDefaultInMemForTesting but uses
-// ForStickyEngineTesting to always separate intents from MVCC data, instead of randomizing this setting.
-func NewDefaultInMemForStickyEngineTesting(opts ...ConfigOption) Engine {
-	eng, err := Open(context.Background(), InMemory(), ForStickyEngineTesting, MaxSize(1<<20), CombineOptions(opts...))
+// NewInMemForTesting is just like NewDefaultInMemForTesting but allows to deterministically define whether it
+// separates intents from MVCC data.
+func NewInMemForTesting(enableSeparatedIntents bool, opts ...ConfigOption) Engine {
+	eng, err := Open(context.Background(), InMemory(), SetSeparatedIntents(!enableSeparatedIntents), MaxSize(1<<20),
+		CombineOptions(opts...))
 	if err != nil {
 		panic(err)
 	}
