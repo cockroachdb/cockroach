@@ -82,12 +82,23 @@ func postgisColumnsTablePopulator(
 						default:
 							datumNDims = tree.NewDInt(2)
 						}
-
 					}
 
-					shapeName := m.ShapeType.String()
-					if m.ShapeType == geopb.ShapeType_Unset {
-						shapeName = geopb.ShapeType_Geometry.String()
+					// PostGIS is weird on this one! It has the following behavior:
+					//
+					// * For Geometry, it uses the 2D shape type, all uppercase.
+					// * For Geography, use the correct OGR case for the shape type.
+					shapeName := geopb.ShapeType_Geometry.String()
+					if matchingFamily == types.GeometryFamily {
+						if m.ShapeType == geopb.ShapeType_Unset {
+							shapeName = strings.ToUpper(shapeName)
+						} else {
+							shapeName = strings.ToUpper(m.ShapeType.To2D().String())
+						}
+					} else {
+						if m.ShapeType != geopb.ShapeType_Unset {
+							shapeName = m.ShapeType.String()
+						}
 					}
 
 					if err := addRow(
@@ -97,7 +108,7 @@ func postgisColumnsTablePopulator(
 						tree.NewDString(col.GetName()),
 						datumNDims,
 						tree.NewDInt(tree.DInt(m.SRID)),
-						tree.NewDString(strings.ToUpper(shapeName)),
+						tree.NewDString(shapeName),
 					); err != nil {
 						return err
 					}
