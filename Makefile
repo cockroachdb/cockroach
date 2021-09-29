@@ -1399,7 +1399,7 @@ ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
 pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
-	find pkg/ui/dist$*/assets -mindepth 1 -not -name index.html -delete
+	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
 	for dll in $(shell find pkg/ui/workspaces/db-console/dist -name '*.dll.js' -type f); do \
 		echo $$dll | sed -E "s/.oss.dll.js|.ccl.dll.js/.dll.js/" | sed -E "s|^.*\/|pkg/ui/dist$*/assets/|" | xargs -I{} cp $$dll {};\
 	done
@@ -1428,7 +1428,7 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
-	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name index.html -delete
+	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 	rm -rf pkg/ui/dist/*
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)

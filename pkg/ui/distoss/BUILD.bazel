@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 # TODO (koorosh): genrule produces directory as output, should be changed later.
 genrule(
     name = "genassets",
-    srcs = ["//pkg/ui/workspaces/db-console:db-console-oss"],
+    srcs = select({
+        "//pkg/ui:with_ui": ["//pkg/ui/workspaces/db-console:db-console-oss"],
+        "//conditions:default": ["_empty_assets"],
+    }),
     outs = ["assets"],
     cmd = "cp -R $(SRCS)/* $(OUTS)",
 )
@@ -11,10 +14,7 @@ genrule(
 go_library(
     name = "distoss",
     srcs = ["distoss.go"],
-    embedsrcs = select({
-        "//pkg/ui:with_ui": [":genassets"],  # keep
-        "//conditions:default": ["assets"],  # keep
-    }),
+    embedsrcs = [":genassets"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/distoss",
     visibility = ["//visibility:public"],
     deps = ["//pkg/ui"],

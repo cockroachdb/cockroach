@@ -14,9 +14,11 @@ assets.oss.installed
 # Generated intermediates
 .cache-loader
 dist*/**
-!dist*/index.html
+!dist*/_empty_assets/assets/index.html
+!distccl/assets/.gitkeep
 !distccl/distccl.go
 !distccl/BUILD.bazel
+!distoss/assets/.gitkeep
 !distoss/distoss.go
 !distoss/BUILD.bazel
 *manifest.json
