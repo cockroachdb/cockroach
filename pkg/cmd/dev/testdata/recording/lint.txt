@@ -1,34 +1,4 @@
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
 bazel run --config=test //build/bazelutil:lint -- -test.v
-----
-
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel run --config=test //build/bazelutil:lint -- -test.v -test.short -test.timeout 5m0s
