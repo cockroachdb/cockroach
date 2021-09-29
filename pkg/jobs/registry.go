@@ -676,8 +676,28 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
 // table.
+//
+// WARNING: Avoid new uses of this function. The returned Job allows
+// for mutation even if the instance no longer holds a valid claim on
+// the job.
+//
+// TODO(ssd): Remove this API and replace it with a safer API.
 func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
 	return r.LoadJobWithTxn(ctx, jobID, nil)
+}
+
+// LoadClaimedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been claimed by this
+// Registry.
+func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	j, err := r.getClaimedJob(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := j.load(ctx, nil); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // LoadJobWithTxn does the same as above, but using the transaction passed in
@@ -1345,6 +1365,21 @@ func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) {
 	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
 		aj.cancel()
 	}
+}
+
+func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	return &Job{
+		id:        jobID,
+		sessionID: aj.sid,
+		registry:  r,
+	}, nil
 }
 
 // RetryInitialDelay returns the value of retryInitialDelaySetting cluster setting,

@@ -741,11 +741,15 @@ func (j *Job) runInTxn(
 
 // JobNotFoundError is returned from load when the job does not exist.
 type JobNotFoundError struct {
-	jobID jobspb.JobID
+	jobID     jobspb.JobID
+	sessionID sqlliveness.SessionID
 }
 
 // Error makes JobNotFoundError an error.
 func (e *JobNotFoundError) Error() string {
+	if e.sessionID != "" {
+		return fmt.Sprintf("job with ID %d does not exist with claim session id %q", e.jobID, e.sessionID.String())
+	}
 	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
 }
 
@@ -760,10 +764,21 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 	var createdBy *CreatedByInfo
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		const stmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt, j.ID())
+		const (
+			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
+		)
+		sess := sessiondata.InternalExecutorOverride{User: security.RootUserName()}
+
+		var err error
+		var row tree.Datums
+		if j.sessionID == "" {
+			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+				queryNoSessionID, j.ID())
+		} else {
+			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+				queryWithSessionID, j.ID(), j.sessionID.UnsafeBytes())
+		}
 		if err != nil {
 			return err
 		}
