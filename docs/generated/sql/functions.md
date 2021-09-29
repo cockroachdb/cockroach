@@ -3152,6 +3152,12 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="has_type_privilege"></a><code>has_type_privilege(user: oid, type: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for type.</p>
 </span></td></tr>
+<tr><td><a name="information_schema._pg_numeric_precision"></a><code>information_schema._pg_numeric_precision(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the precision of the given type with type modifier</p>
+</span></td></tr>
+<tr><td><a name="information_schema._pg_numeric_precision_radix"></a><code>information_schema._pg_numeric_precision_radix(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the radix of the given type with type modifier</p>
+</span></td></tr>
+<tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
+</span></td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>

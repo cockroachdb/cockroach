@@ -537,3 +537,44 @@ indexed_b_d_idx  {2,4}  1  NULL
 indexed_b_d_idx  {2,4}  2  1
 indexed_b_d_idx  {2,4}  3  NULL
 indexed_b_d_idx  {2,4}  4  2
+
+# information_schema._pg_numeric_precision and information_schema._pg_numeric_precision_radix
+# and information_schema._pg_numeric_scale
+
+statement ok
+CREATE TABLE numeric (
+  a SMALLINT,
+  b INT4,
+  c BIGINT,
+  d FLOAT(1),
+  e FLOAT4,
+  f FLOAT8,
+  g FLOAT(40),
+  h FLOAT,
+  i DECIMAL(12,2),
+  j DECIMAL(4,4)
+);
+
+query TTIII
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_numeric_precision(a.atttypid,a.atttypmod),
+       information_schema._pg_numeric_precision_radix(a.atttypid,a.atttypmod),
+       information_schema._pg_numeric_scale(a.atttypid,a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attrelid = 'numeric'::regclass
+ORDER BY a.attname
+----
+a      int2     16  2   0
+b      int4     32  2   0
+c      int8     64  2   0
+d      float4   24  2   NULL
+e      float4   24  2   NULL
+f      float8   53  2   NULL
+g      float8   53  2   NULL
+h      float8   53  2   NULL
+i      numeric  12  10  2
+j      numeric  4   10  4
+rowid  int8     64  2   0
