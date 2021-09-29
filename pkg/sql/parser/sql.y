@@ -3438,6 +3438,11 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
   }
+
+| COMMENT ON CONSTRAINT constraint_name ON table_name IS comment_text
+  {
+    $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
+  }
 | COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
 
 comment_text:
@@ -5268,14 +5273,14 @@ show_indexes_stmt:
 // %Text: SHOW CONSTRAINTS FROM <tablename>
 // %SeeAlso: WEBDOCS/show-constraints.html
 show_constraints_stmt:
-  SHOW CONSTRAINT FROM table_name
+  SHOW CONSTRAINT FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
-| SHOW CONSTRAINTS FROM table_name
+| SHOW CONSTRAINTS FROM table_name with_comment
   {
-    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 

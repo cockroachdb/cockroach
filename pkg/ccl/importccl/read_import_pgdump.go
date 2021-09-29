@@ -862,7 +862,7 @@ func readPostgresStmt(
 	case *tree.Insert, *tree.CopyFrom, *tree.Delete, copyData:
 		// handled during the data ingestion pass.
 	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
-		*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.SetVar, *tree.Analyze,
+		*tree.CommentOnIndex, *tree.CommentOnConstraint, *tree.CommentOnColumn, *tree.SetVar, *tree.Analyze,
 		*tree.CommentOnSchema:
 		// These are the statements that can be parsed by CRDB but are not
 		// supported, or are not required to be processed, during an IMPORT.
@@ -1358,7 +1358,7 @@ func (m *pgDumpReader) readFile(
 				return wrapErrorWithUnsupportedHint(err)
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
-			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence,
+			*tree.CommentOnIndex, *tree.CommentOnConstraint, *tree.CommentOnColumn, *tree.AlterSequence,
 			*tree.CommentOnSchema:
 			// handled during schema extraction.
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
