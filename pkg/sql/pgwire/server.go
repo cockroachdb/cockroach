@@ -309,6 +309,12 @@ func MakeServer(
 	return server
 }
 
+// BytesInAndOut returns the total number of bytes transmitted to and from this
+// server.
+func (s *Server) BytesInAndOut() uint64 {
+	return uint64(s.metrics.BytesInCount.Count() + s.metrics.BytesOutCount.Count())
+}
+
 // AnnotateCtxForIncomingConn annotates the provided context with a
 // tag that reports the peer's address. In the common case, the
 // context is annotated with a "client" tag. When the server is

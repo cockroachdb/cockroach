@@ -276,6 +276,12 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
+	externalUsageFn := func(ctx context.Context) (cpuSecs float64, pgwireBytes uint64) {
+		cpuSecs = status.GetUserCPUSeconds(ctx)
+		pgwireBytes = s.pgServer.BytesInAndOut()
+		return cpuSecs, pgwireBytes
+	}
+
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(
 		ctx,
 		args.stopper,
@@ -285,7 +291,7 @@ func StartTenant(
 
 	if err := args.costController.Start(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
-		status.GetUserCPUSeconds, nextLiveInstanceIDFn,
+		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		return nil, "", "", err
 	}
@@ -591,7 +597,7 @@ func (noopTenantSideCostController) Start(
 	stopper *stop.Stopper,
 	instanceID base.SQLInstanceID,
 	sessionID sqlliveness.SessionID,
-	cpuSecsFn multitenant.CPUSecsFn,
+	externalUsageFn multitenant.ExternalUsageFn,
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
 	return nil
