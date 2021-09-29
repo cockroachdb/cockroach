@@ -2268,6 +2268,93 @@ SELECT description
 			Volatility: tree.VolatilityStable,
 		},
 	),
+
+	"information_schema._pg_numeric_precision": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"typid", types.Oid},
+				{"typmod", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				typmod := tree.MustBeDInt(args[1])
+				switch typid {
+				case oid.T_int2:
+					return tree.NewDInt(16), nil
+				case oid.T_int4:
+					return tree.NewDInt(32), nil
+				case oid.T_int8:
+					return tree.NewDInt(64), nil
+				case oid.T_numeric:
+					if typmod != -1 {
+						// This logics matches the postgres implementation
+						// of how to calculate the precision based on the typmod
+						//https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L109
+						return tree.NewDInt(((typmod - 4) >> 16) & 65535), nil
+					}
+					return tree.DNull, nil
+				case oid.T_float4:
+					return tree.NewDInt(24), nil
+				case oid.T_float8:
+					return tree.NewDInt(53), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       "Returns the precision of the given type with type modifier",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"information_schema._pg_numeric_precision_radix": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"typid", types.Oid},
+				{"typmod", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				if typid == oid.T_int2 || typid == oid.T_int4 || typid == oid.T_int8 || typid == oid.T_float4 || typid == oid.T_float8 {
+					return tree.NewDInt(2), nil
+				} else if typid == oid.T_numeric {
+					return tree.NewDInt(10), nil
+				} else {
+					return tree.DNull, nil
+				}
+			},
+			Info:       "Returns the radix of the given type with type modifier",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"information_schema._pg_numeric_scale": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"typid", types.Oid},
+				{"typmod", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				typmod := tree.MustBeDInt(args[1])
+				if typid == oid.T_int2 || typid == oid.T_int4 || typid == oid.T_int8 {
+					return tree.NewDInt(0), nil
+				} else if typid == oid.T_numeric {
+					if typmod == -1 {
+						return tree.DNull, nil
+					}
+					// This logics matches the postgres implementation
+					// of how to calculate scale based on the typmod
+					// https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L140
+					return tree.NewDInt((typmod - 4) & 65535), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       "Returns the scale of the given type with type modifier",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
