@@ -456,6 +456,7 @@ crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
 crdb_internal       tables
+crdb_internal       tenant_usage_details
 crdb_internal       transaction_statistics
 crdb_internal       zones
 information_schema  administrable_role_authorizations
@@ -767,6 +768,7 @@ table_columns
 table_indexes
 table_row_statistics
 tables
+tenant_usage_details
 transaction_statistics
 zones
 administrable_role_authorizations
@@ -1037,6 +1039,7 @@ triggers
 triggered_update_columns
 transforms
 transaction_statistics
+tenant_usage_details
 tablespaces_extensions
 tablespaces
 tables_extensions
@@ -1114,6 +1117,7 @@ system         crdb_internal       table_columns                          SYSTEM
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                                 SYSTEM VIEW  NO                  1
+system         crdb_internal       tenant_usage_details                   SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                                  SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations      SYSTEM VIEW  NO                  1
@@ -2109,21 +2113,16 @@ system         public        table_statistics                 statisticID       
 system         public        table_statistics                 tableID                                                                                                   1
 system         public        tenant_usage                     current_share_sum                                                                                         8
 system         public        tenant_usage                     instance_id                                                                                               2
-system         public        tenant_usage                     instance_lease                                                                                            15
-system         public        tenant_usage                     instance_seq                                                                                              16
-system         public        tenant_usage                     instance_shares                                                                                           17
+system         public        tenant_usage                     instance_lease                                                                                            10
+system         public        tenant_usage                     instance_seq                                                                                              11
+system         public        tenant_usage                     instance_shares                                                                                           12
 system         public        tenant_usage                     last_update                                                                                               4
 system         public        tenant_usage                     next_instance_id                                                                                          3
 system         public        tenant_usage                     ru_burst_limit                                                                                            5
 system         public        tenant_usage                     ru_current                                                                                                7
 system         public        tenant_usage                     ru_refill_rate                                                                                            6
 system         public        tenant_usage                     tenant_id                                                                                                 1
-system         public        tenant_usage                     total_read_bytes                                                                                          11
-system         public        tenant_usage                     total_read_requests                                                                                       10
-system         public        tenant_usage                     total_ru_usage                                                                                            9
-system         public        tenant_usage                     total_sql_pod_cpu_seconds                                                                                 14
-system         public        tenant_usage                     total_write_bytes                                                                                         13
-system         public        tenant_usage                     total_write_requests                                                                                      12
+system         public        tenant_usage                     total_consumption                                                                                         9
 system         public        tenants                          active                                                                                                    2
 system         public        tenants                          id                                                                                                        1
 system         public        tenants                          info                                                                                                      3
@@ -2682,6 +2681,7 @@ NULL     public   system         crdb_internal       table_columns              
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NULL          YES
@@ -3282,6 +3282,7 @@ NULL     public   system         crdb_internal       table_columns              
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NULL          YES

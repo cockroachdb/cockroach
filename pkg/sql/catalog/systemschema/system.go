@@ -539,26 +539,26 @@ CREATE TABLE system.database_role_settings (
 CREATE TABLE system.tenant_usage (
   tenant_id INT NOT NULL,
 
-	-- For each tenant, there is a special row with instance_id = 0 which contains
-	-- per-tenant stat. Each SQL instance (pod) also has its own row with
-	-- per-instance state.
-	instance_id INT NOT NULL,
+  -- For each tenant, there is a special row with instance_id = 0 which contains
+  -- per-tenant stat. Each SQL instance (pod) also has its own row with
+  -- per-instance state.
+  instance_id INT NOT NULL,
 
-	-- next_instance_id identifies the next live instance ID, with the smallest ID
-	-- larger than this instance_id (or 0 if there is no such ID).
-	-- We are overlaying a circular linked list of all live instances, with
-	-- instance 0 acting as a sentinel (always the head of the list).
-	next_instance_id INT NOT NULL,
+  -- next_instance_id identifies the next live instance ID, with the smallest ID
+  -- larger than this instance_id (or 0 if there is no such ID).
+  -- We are overlaying a circular linked list of all live instances, with
+  -- instance 0 acting as a sentinel (always the head of the list).
+  next_instance_id INT NOT NULL,
 
-	-- Time when we last interacted with this row. For the per-tenant row, this
-	-- is the time of the last update from any instance. For instance rows, this
-	-- is the time of the last update from that particular instance.
-	last_update TIMESTAMP NOT NULL,
+  -- Time when we last interacted with this row. For the per-tenant row, this
+  -- is the time of the last update from any instance. For instance rows, this
+  -- is the time of the last update from that particular instance.
+  last_update TIMESTAMP NOT NULL,
 
-	-- -------------------------------------------------------------------
-	--  The following fields are used only for the per-tenant state, when
-	--  instance_id = 0.
-	-- -------------------------------------------------------------------
+  -- -------------------------------------------------------------------
+  --  The following fields are used only for the per-tenant state, when
+  --  instance_id = 0.
+  -- -------------------------------------------------------------------
 
   -- Bucket configuration.
   ru_burst_limit FLOAT,
@@ -570,38 +570,32 @@ CREATE TABLE system.tenant_usage (
   -- Current sum of the shares values for all instances.
   current_share_sum FLOAT,
 
-  -- Cumulative usage statistics.
-  total_ru_usage            FLOAT,
-  total_read_requests       INT,
-  total_read_bytes          INT,
-  total_write_requests      INT,
-  total_write_bytes         INT,
-  total_sql_pod_cpu_seconds FLOAT, -- TODO: Maybe milliseconds and INT8?
+  -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
+  total_consumption BYTES,
 
-	-- -------------------------------------------------------------
-	--  The following fields are used for per-instance state, when
-	--  instance_id != 0.
-	-- --------------------------------------------------------------
+  -- -------------------------------------------------------------
+  --  The following fields are used for per-instance state, when
+  --  instance_id != 0.
+  -- --------------------------------------------------------------
 
-	-- The lease is a unique identifier for this instance, necessary because
-	-- instance IDs can be reused.
-	instance_lease BYTES,
+  -- The lease is a unique identifier for this instance, necessary because
+  -- instance IDs can be reused.
+  instance_lease BYTES,
 
-	-- Last request sequence number. These numbers are provided by the
-	-- instance and are monotonically increasing; used to detect duplicate
-	-- requests and provide idempotency.
-	instance_seq INT,
+  -- Last request sequence number. These numbers are provided by the
+  -- instance and are monotonically increasing; used to detect duplicate
+  -- requests and provide idempotency.
+  instance_seq INT,
 
-	-- Current shares value for this instance.
+  -- Current shares value for this instance.
   instance_shares FLOAT,
 
-	FAMILY "primary" (
-	  tenant_id, instance_id, next_instance_id, last_update,
-	  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-	  total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
-	  total_write_bytes, total_sql_pod_cpu_seconds,
-	  instance_lease, instance_seq, instance_shares
-	),
+  FAMILY "primary" (
+    tenant_id, instance_id, next_instance_id, last_update,
+    ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
+    total_consumption,
+    instance_lease, instance_seq, instance_shares
+  ),
 
   PRIMARY KEY (tenant_id, instance_id)
 )`
@@ -2156,15 +2150,10 @@ var (
 				{Name: "ru_refill_rate", ID: 6, Type: types.Float, Nullable: true},
 				{Name: "ru_current", ID: 7, Type: types.Float, Nullable: true},
 				{Name: "current_share_sum", ID: 8, Type: types.Float, Nullable: true},
-				{Name: "total_ru_usage", ID: 9, Type: types.Float, Nullable: true},
-				{Name: "total_read_requests", ID: 10, Type: types.Int, Nullable: true},
-				{Name: "total_read_bytes", ID: 11, Type: types.Int, Nullable: true},
-				{Name: "total_write_requests", ID: 12, Type: types.Int, Nullable: true},
-				{Name: "total_write_bytes", ID: 13, Type: types.Int, Nullable: true},
-				{Name: "total_sql_pod_cpu_seconds", ID: 14, Type: types.Float, Nullable: true},
-				{Name: "instance_lease", ID: 15, Type: types.Bytes, Nullable: true},
-				{Name: "instance_seq", ID: 16, Type: types.Int, Nullable: true},
-				{Name: "instance_shares", ID: 17, Type: types.Float, Nullable: true},
+				{Name: "total_consumption", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "instance_lease", ID: 10, Type: types.Bytes, Nullable: true},
+				{Name: "instance_seq", ID: 11, Type: types.Int, Nullable: true},
+				{Name: "instance_shares", ID: 12, Type: types.Float, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2173,11 +2162,10 @@ var (
 					ColumnNames: []string{
 						"tenant_id", "instance_id", "next_instance_id", "last_update",
 						"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
-						"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
-						"total_write_bytes", "total_sql_pod_cpu_seconds",
+						"total_consumption",
 						"instance_lease", "instance_seq", "instance_shares",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
 					DefaultColumnID: 0,
 				},
 			},
