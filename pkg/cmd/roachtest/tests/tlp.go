@@ -14,8 +14,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/google/go-cmp/cmp"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -169,32 +172,56 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	unpartitioned, partitioned := smither.GenerateTLP()
 
 	return runWithTimeout(func() error {
-		var unpartitionedCount int
-		row := conn.QueryRow(unpartitioned)
-		if err := row.Scan(&unpartitionedCount); err != nil {
+		rows1, err := conn.Query(unpartitioned)
+		if err != nil {
 			// Ignore errors.
 			//nolint:returnerrcheck
 			return nil
 		}
-
-		var partitionedCount int
-		row = conn.QueryRow(partitioned)
-		if err := row.Scan(&partitionedCount); err != nil {
+		defer rows1.Close()
+		unpartitionedRows, err := sqlutils.RowsToStrMatrix(rows1)
+		if err != nil {
 			// Ignore errors.
 			//nolint:returnerrcheck
 			return nil
 		}
+		rows2, err := conn.Query(partitioned)
+		if err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		partitionedRows, err := sqlutils.RowsToStrMatrix(rows2)
+		if err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		defer rows2.Close()
 
-		if unpartitionedCount != partitionedCount {
+		if isEqualUnsortedRowMatrix(unpartitionedRows, partitionedRows) == false {
 			logStmt(unpartitioned)
 			logStmt(partitioned)
 			return errors.Newf(
-				"expected unpartitioned count %d to equal partitioned count %d\nsql: %s\n%s",
-				unpartitionedCount, partitionedCount, unpartitioned, partitioned)
+				"expected unpartitioned results %v to equal partitioned results %v\nsql: %s\n%s",
+				unpartitionedRows, partitionedRows, unpartitioned, partitioned)
 		}
-
 		return nil
 	})
+}
+
+func isEqualUnsortedRowMatrix(rowMatrix1, rowMatrix2 [][]string) bool {
+	var rows1 []string
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], ","))
+	}
+	var rows2 []string
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], ","))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	return cmp.Equal(rows1, rows2)
 }
 
 func runWithTimeout(f func() error) error {
