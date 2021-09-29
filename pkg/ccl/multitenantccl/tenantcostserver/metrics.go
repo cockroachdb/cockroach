@@ -31,6 +31,7 @@ type Metrics struct {
 	TotalWriteRequests     *aggmetric.AggGauge
 	TotalWriteBytes        *aggmetric.AggGauge
 	TotalSQLPodsCPUSeconds *aggmetric.AggGaugeFloat64
+	TotalPGWireBytes       *aggmetric.AggGauge
 
 	mu struct {
 		syncutil.Mutex
@@ -83,6 +84,12 @@ var (
 		Measurement: "CPU Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
+	metaTotalPGWireBytes = metric.Metadata{
+		Name:        "tenant.consumption.pgwire_bytes",
+		Help:        "Total number of bytes transferred between the client and SQL",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func (m *Metrics) init() {
@@ -94,6 +101,7 @@ func (m *Metrics) init() {
 		TotalWriteRequests:     b.Gauge(metaTotalWriteRequests),
 		TotalWriteBytes:        b.Gauge(metaTotalWriteBytes),
 		TotalSQLPodsCPUSeconds: b.GaugeFloat64(metaTotalSQLPodsCPUSeconds),
+		TotalPGWireBytes:       b.Gauge(metaTotalPGWireBytes),
 	}
 	m.mu.tenantMetrics = make(map[roachpb.TenantID]tenantMetrics)
 }
@@ -106,6 +114,7 @@ type tenantMetrics struct {
 	totalWriteRequests     *aggmetric.Gauge
 	totalWriteBytes        *aggmetric.Gauge
 	totalSQLPodsCPUSeconds *aggmetric.GaugeFloat64
+	totalPGWireBytes       *aggmetric.Gauge
 
 	// Mutex is used to atomically update metrics together with a corresponding
 	// change to the system table.
@@ -126,6 +135,7 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 			totalWriteRequests:     m.TotalWriteRequests.AddChild(tid),
 			totalWriteBytes:        m.TotalWriteBytes.AddChild(tid),
 			totalSQLPodsCPUSeconds: m.TotalSQLPodsCPUSeconds.AddChild(tid),
+			totalPGWireBytes:       m.TotalPGWireBytes.AddChild(tid),
 			mutex:                  &syncutil.Mutex{},
 		}
 		m.mu.tenantMetrics[tenantID] = tm

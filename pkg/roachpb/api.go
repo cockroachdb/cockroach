@@ -1598,6 +1598,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.WriteRequests += other.WriteRequests
 	c.WriteBytes += other.WriteBytes
 	c.SQLPodsCPUSeconds += other.SQLPodsCPUSeconds
+	c.PGWireBytes += other.PGWireBytes
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -1636,5 +1637,11 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.SQLPodsCPUSeconds = 0
 	} else {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
+	}
+
+	if c.PGWireBytes < other.PGWireBytes {
+		c.PGWireBytes = 0
+	} else {
+		c.PGWireBytes -= other.PGWireBytes
 	}
 }
