@@ -91,7 +91,7 @@ var migrations = []migration.Migration{
 		databaseRoleSettingsTableMigration,
 	),
 	migration.NewTenantMigration(
-		"add the systems.tenant_usage table",
+		"add the system.tenant_usage table",
 		toCV(clusterversion.TenantUsageTable),
 		NoPrecondition,
 		tenantUsageTableMigration,
@@ -138,6 +138,12 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.AlterSystemWebSessionsCreateIndexes),
 		NoPrecondition,
 		alterSystemWebSessionsCreateIndexes,
+	),
+	migration.NewTenantMigration(
+		"change system.tenant_usage table to use a single column for consumption",
+		toCV(clusterversion.TenantUsageSingleConsumptionColumn),
+		NoPrecondition,
+		tenantUsageSingleConsumptionColumn,
 	),
 }
 
