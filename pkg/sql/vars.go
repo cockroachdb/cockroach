@@ -281,7 +281,8 @@ var varGen = map[string]sessionVar{
 							pgcode.FeatureNotSupported,
 							"setting DateStyle is not enabled",
 						),
-						"You can enable DateStyle customization for all sessions with the cluster setting sql.defaults.datestyle_enabled, or per session using SET datestyle_enabled = true.",
+						"You can enable DateStyle customization for all sessions with the cluster setting %s, or per session using SET datestyle_enabled = true.",
+						dateStyleEnabledClusterSetting,
 					),
 					"Setting DateStyle changes the volatility of timestamp/timestamptz/date::string "+
 						"and string::timestamp/timestamptz/date/time/timetz casts from immutable to stable. "+
@@ -875,7 +876,8 @@ var varGen = map[string]sessionVar{
 							pgcode.FeatureNotSupported,
 							"setting IntervalStyle is not enabled",
 						),
-						"You can enable IntervalStyle customization for all sessions with the cluster setting sql.defaults.intervalstyle_enabled, or per session using SET intervalstyle_enabled = true.",
+						"You can enable IntervalStyle customization for all sessions with the cluster setting %s, or per session using SET intervalstyle_enabled = true.",
+						intervalStyleEnabledClusterSetting,
 					),
 					"Setting IntervalStyle changes the volatility of string::interval or interval::string "+
 						"casts from immutable to stable. No computed columns, partial indexes, partitions "+
