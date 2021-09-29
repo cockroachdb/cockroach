@@ -605,7 +605,7 @@ func getDescriptorsFromIDs(
 			catalog.Any,
 			bestEffort,
 			dg,
-			catalog.ValidationLevelCrossReferences,
+			catalog.ValidationLevelSelfOnly,
 			true, /* shouldRunPostDeserializationChanges */
 		)
 		if err != nil {

@@ -501,22 +501,7 @@ func collectDescriptorsForValidation(
 			return nil, err
 		}
 	}
-	newDescs, err := cs.getMissingDescs(ctx, maybeBatchDescGetter)
-	if err != nil {
-		return nil, err
-	}
-	for _, newDesc := range newDescs {
-		if newDesc == nil {
-			continue
-		}
-		switch newDesc.(type) {
-		case DatabaseDescriptor, TypeDescriptor:
-			if err := cs.addDirectReferences(newDesc); err != nil {
-				return nil, err
-			}
-		}
-	}
-	_, err = cs.getMissingDescs(ctx, maybeBatchDescGetter)
+	_, err := cs.getMissingDescs(ctx, maybeBatchDescGetter)
 	if err != nil {
 		return nil, err
 	}
