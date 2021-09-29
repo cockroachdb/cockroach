@@ -123,7 +123,11 @@ pg_catalog  pg_statio_sys_tables             table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_indexes           table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_sequences         table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_tables            table  NULL  NULL  NULL
+pg_catalog  pg_statistic                     table  NULL  NULL  NULL
 pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
+pg_catalog  pg_statistic_ext_data            table  NULL  NULL  NULL
+pg_catalog  pg_stats                         table  NULL  NULL  NULL
+pg_catalog  pg_stats_ext                     table  NULL  NULL  NULL
 pg_catalog  pg_subscription                  table  NULL  NULL  NULL
 pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
 pg_catalog  pg_tables                        table  NULL  NULL  NULL
@@ -274,7 +278,11 @@ pg_catalog  pg_statio_sys_tables             table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_indexes           table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_sequences         table  NULL  NULL  NULL
 pg_catalog  pg_statio_user_tables            table  NULL  NULL  NULL
+pg_catalog  pg_statistic                     table  NULL  NULL  NULL
 pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
+pg_catalog  pg_statistic_ext_data            table  NULL  NULL  NULL
+pg_catalog  pg_stats                         table  NULL  NULL  NULL
+pg_catalog  pg_stats_ext                     table  NULL  NULL  NULL
 pg_catalog  pg_subscription                  table  NULL  NULL  NULL
 pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
 pg_catalog  pg_tables                        table  NULL  NULL  NULL
@@ -1574,28 +1582,32 @@ oid         typname                                typnamespace  typowner    typ
 100074      _newtype1                              2332901747    1546506610  -1      false     b
 100075      newtype2                               2332901747    1546506610  -1      false     e
 100076      _newtype2                              2332901747    1546506610  -1      false     b
-4294967015  spatial_ref_sys                        3553698885    3233629770  -1      false     c
-4294967016  geometry_columns                       3553698885    3233629770  -1      false     c
-4294967017  geography_columns                      3553698885    3233629770  -1      false     c
-4294967019  pg_views                               1307062959    3233629770  -1      false     c
-4294967020  pg_user                                1307062959    3233629770  -1      false     c
-4294967021  pg_user_mappings                       1307062959    3233629770  -1      false     c
-4294967022  pg_user_mapping                        1307062959    3233629770  -1      false     c
-4294967023  pg_type                                1307062959    3233629770  -1      false     c
-4294967024  pg_ts_template                         1307062959    3233629770  -1      false     c
-4294967025  pg_ts_parser                           1307062959    3233629770  -1      false     c
-4294967026  pg_ts_dict                             1307062959    3233629770  -1      false     c
-4294967027  pg_ts_config                           1307062959    3233629770  -1      false     c
-4294967028  pg_ts_config_map                       1307062959    3233629770  -1      false     c
-4294967029  pg_trigger                             1307062959    3233629770  -1      false     c
-4294967030  pg_transform                           1307062959    3233629770  -1      false     c
-4294967031  pg_timezone_names                      1307062959    3233629770  -1      false     c
-4294967032  pg_timezone_abbrevs                    1307062959    3233629770  -1      false     c
-4294967033  pg_tablespace                          1307062959    3233629770  -1      false     c
-4294967034  pg_tables                              1307062959    3233629770  -1      false     c
-4294967035  pg_subscription                        1307062959    3233629770  -1      false     c
-4294967036  pg_subscription_rel                    1307062959    3233629770  -1      false     c
-4294967037  pg_statistic_ext                       1307062959    3233629770  -1      false     c
+4294967011  spatial_ref_sys                        3553698885    3233629770  -1      false     c
+4294967012  geometry_columns                       3553698885    3233629770  -1      false     c
+4294967013  geography_columns                      3553698885    3233629770  -1      false     c
+4294967015  pg_views                               1307062959    3233629770  -1      false     c
+4294967016  pg_user                                1307062959    3233629770  -1      false     c
+4294967017  pg_user_mappings                       1307062959    3233629770  -1      false     c
+4294967018  pg_user_mapping                        1307062959    3233629770  -1      false     c
+4294967019  pg_type                                1307062959    3233629770  -1      false     c
+4294967020  pg_ts_template                         1307062959    3233629770  -1      false     c
+4294967021  pg_ts_parser                           1307062959    3233629770  -1      false     c
+4294967022  pg_ts_dict                             1307062959    3233629770  -1      false     c
+4294967023  pg_ts_config                           1307062959    3233629770  -1      false     c
+4294967024  pg_ts_config_map                       1307062959    3233629770  -1      false     c
+4294967025  pg_trigger                             1307062959    3233629770  -1      false     c
+4294967026  pg_transform                           1307062959    3233629770  -1      false     c
+4294967027  pg_timezone_names                      1307062959    3233629770  -1      false     c
+4294967028  pg_timezone_abbrevs                    1307062959    3233629770  -1      false     c
+4294967029  pg_tablespace                          1307062959    3233629770  -1      false     c
+4294967030  pg_tables                              1307062959    3233629770  -1      false     c
+4294967031  pg_subscription                        1307062959    3233629770  -1      false     c
+4294967032  pg_subscription_rel                    1307062959    3233629770  -1      false     c
+4294967033  pg_stats                               1307062959    3233629770  -1      false     c
+4294967034  pg_stats_ext                           1307062959    3233629770  -1      false     c
+4294967035  pg_statistic                           1307062959    3233629770  -1      false     c
+4294967036  pg_statistic_ext                       1307062959    3233629770  -1      false     c
+4294967037  pg_statistic_ext_data                  1307062959    3233629770  -1      false     c
 4294967038  pg_statio_user_tables                  1307062959    3233629770  -1      false     c
 4294967039  pg_statio_user_sequences               1307062959    3233629770  -1      false     c
 4294967040  pg_statio_user_indexes                 1307062959    3233629770  -1      false     c
@@ -1952,28 +1964,32 @@ oid         typname                                typcategory  typispreferred  
 100074      _newtype1                              A            false           true          ,         0           100073   0
 100075      newtype2                               E            false           true          ,         0           0        100076
 100076      _newtype2                              A            false           true          ,         0           100075   0
-4294967015  spatial_ref_sys                        C            false           true          ,         4294967015  0        0
-4294967016  geometry_columns                       C            false           true          ,         4294967016  0        0
-4294967017  geography_columns                      C            false           true          ,         4294967017  0        0
-4294967019  pg_views                               C            false           true          ,         4294967019  0        0
-4294967020  pg_user                                C            false           true          ,         4294967020  0        0
-4294967021  pg_user_mappings                       C            false           true          ,         4294967021  0        0
-4294967022  pg_user_mapping                        C            false           true          ,         4294967022  0        0
-4294967023  pg_type                                C            false           true          ,         4294967023  0        0
-4294967024  pg_ts_template                         C            false           true          ,         4294967024  0        0
-4294967025  pg_ts_parser                           C            false           true          ,         4294967025  0        0
-4294967026  pg_ts_dict                             C            false           true          ,         4294967026  0        0
-4294967027  pg_ts_config                           C            false           true          ,         4294967027  0        0
-4294967028  pg_ts_config_map                       C            false           true          ,         4294967028  0        0
-4294967029  pg_trigger                             C            false           true          ,         4294967029  0        0
-4294967030  pg_transform                           C            false           true          ,         4294967030  0        0
-4294967031  pg_timezone_names                      C            false           true          ,         4294967031  0        0
-4294967032  pg_timezone_abbrevs                    C            false           true          ,         4294967032  0        0
-4294967033  pg_tablespace                          C            false           true          ,         4294967033  0        0
-4294967034  pg_tables                              C            false           true          ,         4294967034  0        0
-4294967035  pg_subscription                        C            false           true          ,         4294967035  0        0
-4294967036  pg_subscription_rel                    C            false           true          ,         4294967036  0        0
-4294967037  pg_statistic_ext                       C            false           true          ,         4294967037  0        0
+4294967011  spatial_ref_sys                        C            false           true          ,         4294967011  0        0
+4294967012  geometry_columns                       C            false           true          ,         4294967012  0        0
+4294967013  geography_columns                      C            false           true          ,         4294967013  0        0
+4294967015  pg_views                               C            false           true          ,         4294967015  0        0
+4294967016  pg_user                                C            false           true          ,         4294967016  0        0
+4294967017  pg_user_mappings                       C            false           true          ,         4294967017  0        0
+4294967018  pg_user_mapping                        C            false           true          ,         4294967018  0        0
+4294967019  pg_type                                C            false           true          ,         4294967019  0        0
+4294967020  pg_ts_template                         C            false           true          ,         4294967020  0        0
+4294967021  pg_ts_parser                           C            false           true          ,         4294967021  0        0
+4294967022  pg_ts_dict                             C            false           true          ,         4294967022  0        0
+4294967023  pg_ts_config                           C            false           true          ,         4294967023  0        0
+4294967024  pg_ts_config_map                       C            false           true          ,         4294967024  0        0
+4294967025  pg_trigger                             C            false           true          ,         4294967025  0        0
+4294967026  pg_transform                           C            false           true          ,         4294967026  0        0
+4294967027  pg_timezone_names                      C            false           true          ,         4294967027  0        0
+4294967028  pg_timezone_abbrevs                    C            false           true          ,         4294967028  0        0
+4294967029  pg_tablespace                          C            false           true          ,         4294967029  0        0
+4294967030  pg_tables                              C            false           true          ,         4294967030  0        0
+4294967031  pg_subscription                        C            false           true          ,         4294967031  0        0
+4294967032  pg_subscription_rel                    C            false           true          ,         4294967032  0        0
+4294967033  pg_stats                               C            false           true          ,         4294967033  0        0
+4294967034  pg_stats_ext                           C            false           true          ,         4294967034  0        0
+4294967035  pg_statistic                           C            false           true          ,         4294967035  0        0
+4294967036  pg_statistic_ext                       C            false           true          ,         4294967036  0        0
+4294967037  pg_statistic_ext_data                  C            false           true          ,         4294967037  0        0
 4294967038  pg_statio_user_tables                  C            false           true          ,         4294967038  0        0
 4294967039  pg_statio_user_sequences               C            false           true          ,         4294967039  0        0
 4294967040  pg_statio_user_indexes                 C            false           true          ,         4294967040  0        0
@@ -2330,28 +2346,32 @@ oid         typname                                typinput        typoutput    
 100074      _newtype1                              array_in        array_out        array_recv        array_send        0         0          0
 100075      newtype2                               enum_in         enum_out         enum_recv         enum_send         0         0          0
 100076      _newtype2                              array_in        array_out        array_recv        array_send        0         0          0
-4294967015  spatial_ref_sys                        record_in       record_out       record_recv       record_send       0         0          0
-4294967016  geometry_columns                       record_in       record_out       record_recv       record_send       0         0          0
-4294967017  geography_columns                      record_in       record_out       record_recv       record_send       0         0          0
-4294967019  pg_views                               record_in       record_out       record_recv       record_send       0         0          0
-4294967020  pg_user                                record_in       record_out       record_recv       record_send       0         0          0
-4294967021  pg_user_mappings                       record_in       record_out       record_recv       record_send       0         0          0
-4294967022  pg_user_mapping                        record_in       record_out       record_recv       record_send       0         0          0
-4294967023  pg_type                                record_in       record_out       record_recv       record_send       0         0          0
-4294967024  pg_ts_template                         record_in       record_out       record_recv       record_send       0         0          0
-4294967025  pg_ts_parser                           record_in       record_out       record_recv       record_send       0         0          0
-4294967026  pg_ts_dict                             record_in       record_out       record_recv       record_send       0         0          0
-4294967027  pg_ts_config                           record_in       record_out       record_recv       record_send       0         0          0
-4294967028  pg_ts_config_map                       record_in       record_out       record_recv       record_send       0         0          0
-4294967029  pg_trigger                             record_in       record_out       record_recv       record_send       0         0          0
-4294967030  pg_transform                           record_in       record_out       record_recv       record_send       0         0          0
-4294967031  pg_timezone_names                      record_in       record_out       record_recv       record_send       0         0          0
-4294967032  pg_timezone_abbrevs                    record_in       record_out       record_recv       record_send       0         0          0
-4294967033  pg_tablespace                          record_in       record_out       record_recv       record_send       0         0          0
-4294967034  pg_tables                              record_in       record_out       record_recv       record_send       0         0          0
-4294967035  pg_subscription                        record_in       record_out       record_recv       record_send       0         0          0
-4294967036  pg_subscription_rel                    record_in       record_out       record_recv       record_send       0         0          0
-4294967037  pg_statistic_ext                       record_in       record_out       record_recv       record_send       0         0          0
+4294967011  spatial_ref_sys                        record_in       record_out       record_recv       record_send       0         0          0
+4294967012  geometry_columns                       record_in       record_out       record_recv       record_send       0         0          0
+4294967013  geography_columns                      record_in       record_out       record_recv       record_send       0         0          0
+4294967015  pg_views                               record_in       record_out       record_recv       record_send       0         0          0
+4294967016  pg_user                                record_in       record_out       record_recv       record_send       0         0          0
+4294967017  pg_user_mappings                       record_in       record_out       record_recv       record_send       0         0          0
+4294967018  pg_user_mapping                        record_in       record_out       record_recv       record_send       0         0          0
+4294967019  pg_type                                record_in       record_out       record_recv       record_send       0         0          0
+4294967020  pg_ts_template                         record_in       record_out       record_recv       record_send       0         0          0
+4294967021  pg_ts_parser                           record_in       record_out       record_recv       record_send       0         0          0
+4294967022  pg_ts_dict                             record_in       record_out       record_recv       record_send       0         0          0
+4294967023  pg_ts_config                           record_in       record_out       record_recv       record_send       0         0          0
+4294967024  pg_ts_config_map                       record_in       record_out       record_recv       record_send       0         0          0
+4294967025  pg_trigger                             record_in       record_out       record_recv       record_send       0         0          0
+4294967026  pg_transform                           record_in       record_out       record_recv       record_send       0         0          0
+4294967027  pg_timezone_names                      record_in       record_out       record_recv       record_send       0         0          0
+4294967028  pg_timezone_abbrevs                    record_in       record_out       record_recv       record_send       0         0          0
+4294967029  pg_tablespace                          record_in       record_out       record_recv       record_send       0         0          0
+4294967030  pg_tables                              record_in       record_out       record_recv       record_send       0         0          0
+4294967031  pg_subscription                        record_in       record_out       record_recv       record_send       0         0          0
+4294967032  pg_subscription_rel                    record_in       record_out       record_recv       record_send       0         0          0
+4294967033  pg_stats                               record_in       record_out       record_recv       record_send       0         0          0
+4294967034  pg_stats_ext                           record_in       record_out       record_recv       record_send       0         0          0
+4294967035  pg_statistic                           record_in       record_out       record_recv       record_send       0         0          0
+4294967036  pg_statistic_ext                       record_in       record_out       record_recv       record_send       0         0          0
+4294967037  pg_statistic_ext_data                  record_in       record_out       record_recv       record_send       0         0          0
 4294967038  pg_statio_user_tables                  record_in       record_out       record_recv       record_send       0         0          0
 4294967039  pg_statio_user_sequences               record_in       record_out       record_recv       record_send       0         0          0
 4294967040  pg_statio_user_indexes                 record_in       record_out       record_recv       record_send       0         0          0
@@ -2708,28 +2728,32 @@ oid         typname                                typalign  typstorage  typnotn
 100074      _newtype1                              NULL      NULL        false       0            -1
 100075      newtype2                               NULL      NULL        false       0            -1
 100076      _newtype2                              NULL      NULL        false       0            -1
-4294967015  spatial_ref_sys                        NULL      NULL        false       0            -1
-4294967016  geometry_columns                       NULL      NULL        false       0            -1
-4294967017  geography_columns                      NULL      NULL        false       0            -1
-4294967019  pg_views                               NULL      NULL        false       0            -1
-4294967020  pg_user                                NULL      NULL        false       0            -1
-4294967021  pg_user_mappings                       NULL      NULL        false       0            -1
-4294967022  pg_user_mapping                        NULL      NULL        false       0            -1
-4294967023  pg_type                                NULL      NULL        false       0            -1
-4294967024  pg_ts_template                         NULL      NULL        false       0            -1
-4294967025  pg_ts_parser                           NULL      NULL        false       0            -1
-4294967026  pg_ts_dict                             NULL      NULL        false       0            -1
-4294967027  pg_ts_config                           NULL      NULL        false       0            -1
-4294967028  pg_ts_config_map                       NULL      NULL        false       0            -1
-4294967029  pg_trigger                             NULL      NULL        false       0            -1
-4294967030  pg_transform                           NULL      NULL        false       0            -1
-4294967031  pg_timezone_names                      NULL      NULL        false       0            -1
-4294967032  pg_timezone_abbrevs                    NULL      NULL        false       0            -1
-4294967033  pg_tablespace                          NULL      NULL        false       0            -1
-4294967034  pg_tables                              NULL      NULL        false       0            -1
-4294967035  pg_subscription                        NULL      NULL        false       0            -1
-4294967036  pg_subscription_rel                    NULL      NULL        false       0            -1
-4294967037  pg_statistic_ext                       NULL      NULL        false       0            -1
+4294967011  spatial_ref_sys                        NULL      NULL        false       0            -1
+4294967012  geometry_columns                       NULL      NULL        false       0            -1
+4294967013  geography_columns                      NULL      NULL        false       0            -1
+4294967015  pg_views                               NULL      NULL        false       0            -1
+4294967016  pg_user                                NULL      NULL        false       0            -1
+4294967017  pg_user_mappings                       NULL      NULL        false       0            -1
+4294967018  pg_user_mapping                        NULL      NULL        false       0            -1
+4294967019  pg_type                                NULL      NULL        false       0            -1
+4294967020  pg_ts_template                         NULL      NULL        false       0            -1
+4294967021  pg_ts_parser                           NULL      NULL        false       0            -1
+4294967022  pg_ts_dict                             NULL      NULL        false       0            -1
+4294967023  pg_ts_config                           NULL      NULL        false       0            -1
+4294967024  pg_ts_config_map                       NULL      NULL        false       0            -1
+4294967025  pg_trigger                             NULL      NULL        false       0            -1
+4294967026  pg_transform                           NULL      NULL        false       0            -1
+4294967027  pg_timezone_names                      NULL      NULL        false       0            -1
+4294967028  pg_timezone_abbrevs                    NULL      NULL        false       0            -1
+4294967029  pg_tablespace                          NULL      NULL        false       0            -1
+4294967030  pg_tables                              NULL      NULL        false       0            -1
+4294967031  pg_subscription                        NULL      NULL        false       0            -1
+4294967032  pg_subscription_rel                    NULL      NULL        false       0            -1
+4294967033  pg_stats                               NULL      NULL        false       0            -1
+4294967034  pg_stats_ext                           NULL      NULL        false       0            -1
+4294967035  pg_statistic                           NULL      NULL        false       0            -1
+4294967036  pg_statistic_ext                       NULL      NULL        false       0            -1
+4294967037  pg_statistic_ext_data                  NULL      NULL        false       0            -1
 4294967038  pg_statio_user_tables                  NULL      NULL        false       0            -1
 4294967039  pg_statio_user_sequences               NULL      NULL        false       0            -1
 4294967040  pg_statio_user_indexes                 NULL      NULL        false       0            -1
@@ -3086,28 +3110,32 @@ oid         typname                                typndims  typcollation  typde
 100074      _newtype1                              0         0             NULL           NULL        NULL
 100075      newtype2                               0         0             NULL           NULL        NULL
 100076      _newtype2                              0         0             NULL           NULL        NULL
-4294967015  spatial_ref_sys                        0         0             NULL           NULL        NULL
-4294967016  geometry_columns                       0         0             NULL           NULL        NULL
-4294967017  geography_columns                      0         0             NULL           NULL        NULL
-4294967019  pg_views                               0         0             NULL           NULL        NULL
-4294967020  pg_user                                0         0             NULL           NULL        NULL
-4294967021  pg_user_mappings                       0         0             NULL           NULL        NULL
-4294967022  pg_user_mapping                        0         0             NULL           NULL        NULL
-4294967023  pg_type                                0         0             NULL           NULL        NULL
-4294967024  pg_ts_template                         0         0             NULL           NULL        NULL
-4294967025  pg_ts_parser                           0         0             NULL           NULL        NULL
-4294967026  pg_ts_dict                             0         0             NULL           NULL        NULL
-4294967027  pg_ts_config                           0         0             NULL           NULL        NULL
-4294967028  pg_ts_config_map                       0         0             NULL           NULL        NULL
-4294967029  pg_trigger                             0         0             NULL           NULL        NULL
-4294967030  pg_transform                           0         0             NULL           NULL        NULL
-4294967031  pg_timezone_names                      0         0             NULL           NULL        NULL
-4294967032  pg_timezone_abbrevs                    0         0             NULL           NULL        NULL
-4294967033  pg_tablespace                          0         0             NULL           NULL        NULL
-4294967034  pg_tables                              0         0             NULL           NULL        NULL
-4294967035  pg_subscription                        0         0             NULL           NULL        NULL
-4294967036  pg_subscription_rel                    0         0             NULL           NULL        NULL
-4294967037  pg_statistic_ext                       0         0             NULL           NULL        NULL
+4294967011  spatial_ref_sys                        0         0             NULL           NULL        NULL
+4294967012  geometry_columns                       0         0             NULL           NULL        NULL
+4294967013  geography_columns                      0         0             NULL           NULL        NULL
+4294967015  pg_views                               0         0             NULL           NULL        NULL
+4294967016  pg_user                                0         0             NULL           NULL        NULL
+4294967017  pg_user_mappings                       0         0             NULL           NULL        NULL
+4294967018  pg_user_mapping                        0         0             NULL           NULL        NULL
+4294967019  pg_type                                0         0             NULL           NULL        NULL
+4294967020  pg_ts_template                         0         0             NULL           NULL        NULL
+4294967021  pg_ts_parser                           0         0             NULL           NULL        NULL
+4294967022  pg_ts_dict                             0         0             NULL           NULL        NULL
+4294967023  pg_ts_config                           0         0             NULL           NULL        NULL
+4294967024  pg_ts_config_map                       0         0             NULL           NULL        NULL
+4294967025  pg_trigger                             0         0             NULL           NULL        NULL
+4294967026  pg_transform                           0         0             NULL           NULL        NULL
+4294967027  pg_timezone_names                      0         0             NULL           NULL        NULL
+4294967028  pg_timezone_abbrevs                    0         0             NULL           NULL        NULL
+4294967029  pg_tablespace                          0         0             NULL           NULL        NULL
+4294967030  pg_tables                              0         0             NULL           NULL        NULL
+4294967031  pg_subscription                        0         0             NULL           NULL        NULL
+4294967032  pg_subscription_rel                    0         0             NULL           NULL        NULL
+4294967033  pg_stats                               0         0             NULL           NULL        NULL
+4294967034  pg_stats_ext                           0         0             NULL           NULL        NULL
+4294967035  pg_statistic                           0         0             NULL           NULL        NULL
+4294967036  pg_statistic_ext                       0         0             NULL           NULL        NULL
+4294967037  pg_statistic_ext_data                  0         0             NULL           NULL        NULL
 4294967038  pg_statio_user_tables                  0         0             NULL           NULL        NULL
 4294967039  pg_statio_user_sequences               0         0             NULL           NULL        NULL
 4294967040  pg_statio_user_indexes                 0         0             NULL           NULL        NULL
@@ -3819,28 +3847,32 @@ objoid      classoid    objsubid  description
 4294967040  4294967132  0         pg_statio_user_indexes was created for compatibility and is currently unimplemented
 4294967039  4294967132  0         pg_statio_user_sequences was created for compatibility and is currently unimplemented
 4294967038  4294967132  0         pg_statio_user_tables was created for compatibility and is currently unimplemented
-4294967037  4294967132  0         pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-4294967035  4294967132  0         pg_subscription was created for compatibility and is currently unimplemented
-4294967036  4294967132  0         pg_subscription_rel was created for compatibility and is currently unimplemented
-4294967034  4294967132  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967033  4294967132  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967032  4294967132  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
-4294967031  4294967132  0         pg_timezone_names was created for compatibility and is currently unimplemented
-4294967030  4294967132  0         pg_transform was created for compatibility and is currently unimplemented
-4294967029  4294967132  0         triggers (empty - feature does not exist)
-4294967027  4294967132  0         pg_ts_config was created for compatibility and is currently unimplemented
-4294967028  4294967132  0         pg_ts_config_map was created for compatibility and is currently unimplemented
-4294967026  4294967132  0         pg_ts_dict was created for compatibility and is currently unimplemented
-4294967025  4294967132  0         pg_ts_parser was created for compatibility and is currently unimplemented
-4294967024  4294967132  0         pg_ts_template was created for compatibility and is currently unimplemented
-4294967023  4294967132  0         scalar types (incomplete)
-4294967020  4294967132  0         database users
-4294967022  4294967132  0         local to remote user mapping (empty - feature does not exist)
-4294967021  4294967132  0         pg_user_mappings was created for compatibility and is currently unimplemented
-4294967019  4294967132  0         view definitions (incomplete - see also information_schema.views)
-4294967017  4294967132  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967016  4294967132  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294967015  4294967132  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294967035  4294967132  0         pg_statistic was created for compatibility and is currently unimplemented
+4294967036  4294967132  0         pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+4294967037  4294967132  0         pg_statistic_ext_data was created for compatibility and is currently unimplemented
+4294967033  4294967132  0         pg_stats was created for compatibility and is currently unimplemented
+4294967034  4294967132  0         pg_stats_ext was created for compatibility and is currently unimplemented
+4294967031  4294967132  0         pg_subscription was created for compatibility and is currently unimplemented
+4294967032  4294967132  0         pg_subscription_rel was created for compatibility and is currently unimplemented
+4294967030  4294967132  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967029  4294967132  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967028  4294967132  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
+4294967027  4294967132  0         pg_timezone_names was created for compatibility and is currently unimplemented
+4294967026  4294967132  0         pg_transform was created for compatibility and is currently unimplemented
+4294967025  4294967132  0         triggers (empty - feature does not exist)
+4294967023  4294967132  0         pg_ts_config was created for compatibility and is currently unimplemented
+4294967024  4294967132  0         pg_ts_config_map was created for compatibility and is currently unimplemented
+4294967022  4294967132  0         pg_ts_dict was created for compatibility and is currently unimplemented
+4294967021  4294967132  0         pg_ts_parser was created for compatibility and is currently unimplemented
+4294967020  4294967132  0         pg_ts_template was created for compatibility and is currently unimplemented
+4294967019  4294967132  0         scalar types (incomplete)
+4294967016  4294967132  0         database users
+4294967018  4294967132  0         local to remote user mapping (empty - feature does not exist)
+4294967017  4294967132  0         pg_user_mappings was created for compatibility and is currently unimplemented
+4294967015  4294967132  0         view definitions (incomplete - see also information_schema.views)
+4294967013  4294967132  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967012  4294967132  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967011  4294967132  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 
@@ -5026,7 +5058,7 @@ indoption
 query TTI
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
-test  pg_views  4294967019
+test  pg_views  4294967015
 
 # Verify INCLUDED columns appear in pg_index. See issue #59563
 statement ok
