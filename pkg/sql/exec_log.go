@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -109,7 +110,13 @@ var adminAuditLogEnabled = settings.RegisterBoolSetting(
 var telemetryLoggingEnabled = settings.RegisterBoolSetting(
 	"sql.telemetry.query_sampling.enabled",
 	"when set to true, executed queries will emit an event on the telemetry logging channel",
-	false,
+	// Note: Usage of an env var here makes it possible to set a default without
+	// the execution of a cluster setting SQL query. This is particularly advantageous
+	// when cluster setting queries would be too inefficient or to slow to use. For
+	// example, in multi-tenant setups in CC, it is impractical to enable this
+	// setting directly after tenant creation without significant overhead in terms
+	// of time and code.
+	envutil.EnvOrDefaultBool("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_ENABLED", false),
 ).WithPublic()
 
 type executorType int
