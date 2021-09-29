@@ -112,6 +112,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterSequence(ctx, n)
 	case *tree.CommentOnColumn:
 		return p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnConstraint:
+		return p.CommentOnConstraint(ctx, n)
 	case *tree.CommentOnDatabase:
 		return p.CommentOnDatabase(ctx, n)
 	case *tree.CommentOnSchema:
@@ -245,6 +247,7 @@ func init() {
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnSchema{},
 		&tree.CommentOnIndex{},
+		&tree.CommentOnConstraint{},
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
