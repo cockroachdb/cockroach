@@ -74,7 +74,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util",
-        "//pkg/util/circuit",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

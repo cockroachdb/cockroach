@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -149,25 +148,18 @@ func gossipSucceedsSoon(
 	gossip map[*client]*Gossip,
 	f func() error,
 ) {
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	// Use an insecure context since we don't need a valid cert.
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 
 	for c := range gossip {
 		disconnected <- c
 	}
 
-	neverTripBreaker := circuit.NewBreakerV2(circuit.OptionsV2{
-		Name:       "never-breaker",
-		ShouldTrip: func(err error) error { return nil },
-	})
 	testutils.SucceedsSoon(t, func() error {
 		select {
 		case client := <-disconnected:
 			// If the client wasn't able to connect, restart it.
 			g := gossip[client]
 			g.mu.Lock()
-			client.startLocked(g, disconnected, rpcContext, stopper, neverTripBreaker)
+			client.startLocked(g, disconnected, stopper)
 			g.mu.Unlock()
 		default:
 		}
@@ -293,10 +285,6 @@ func TestClientNodeID(t *testing.T) {
 	localNodeID := roachpb.NodeID(1)
 	local, remote := startFakeServerGossips(t, clusterID, localNodeID, stopper)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-
 	c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, &remote.nodeAddr, makeMetrics())
 	disconnected <- c
 
@@ -307,13 +295,6 @@ func TestClientNodeID(t *testing.T) {
 		}
 	}()
 
-	// A gossip client may fail to start if the grpc connection times out which
-	// can happen under load (such as in CircleCI or using `make stress`). So we
-	// loop creating clients until success or the test times out.
-	neverTripBreaker := circuit.NewBreakerV2(circuit.OptionsV2{
-		Name:       "never-breaker",
-		ShouldTrip: func(err error) error { return nil },
-	})
 	for {
 		// Wait for c.gossip to start.
 		select {
@@ -325,7 +306,7 @@ func TestClientNodeID(t *testing.T) {
 		case <-disconnected:
 			// The client hasn't been started or failed to start, loop and try again.
 			local.mu.Lock()
-			c.startLocked(local, disconnected, rpcContext, stopper, neverTripBreaker)
+			c.startLocked(local, disconnected, stopper)
 			local.mu.Unlock()
 		}
 	}

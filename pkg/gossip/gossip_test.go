@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -518,15 +517,11 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		local.server.mu.Unlock()
 		peer := startGossip(clusterID, roachpb.NodeID(i+maxSize+2), stopper, t, metric.NewRegistry())
 
-		neverTripBreaker := circuit.NewBreakerV2(circuit.OptionsV2{
-			Name:       "never-breaker",
-			ShouldTrip: func(err error) error { return nil },
-		})
 		for {
 			localAddr := local.GetNodeAddr()
 			c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, localAddr, makeMetrics())
 			peer.mu.Lock()
-			c.startLocked(peer, disconnectedCh, peer.rpcContext, stopper, neverTripBreaker)
+			c.startLocked(peer, disconnectedCh, stopper)
 			peer.mu.Unlock()
 
 			disconnectedClient := <-disconnectedCh
