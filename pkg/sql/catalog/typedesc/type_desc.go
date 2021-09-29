@@ -177,7 +177,7 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
-// PrimaryRegionName returns the primary region for a multi-region enum.
+// PrimaryRegionName implements the TypeDescriptor interface.
 func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
@@ -186,8 +186,7 @@ func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	return desc.RegionConfig.PrimaryRegion, nil
 }
 
-// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
-// that are in the process of being added/removed (`READ_ONLY`) are omitted.
+// RegionNames implements the TypeDescriptor interface.
 func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
@@ -204,8 +203,7 @@ func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
-// TransitioningRegionNames returns regions which are transitioning to PUBLIC
-// or are being removed.
+// TransitioningRegionNames implements the TypeDescriptor interface.
 func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
@@ -221,15 +219,7 @@ func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
-// RegionNamesForValidation returns all regions on the multi-region
-// enum to make validation with the public zone configs and partitons
-// possible.
-// Since the partitions and zone configs are only updated when a transaction
-// commits, this must ignore all regions being added (since they will not be
-// reflected in the zone configuration yet), but it must include all region
-// being dropped (since they will not be dropped from the zone configuration
-// until they are fully removed from the type descriptor, again, at the end
-// of the transaction).
+// RegionNamesForValidation implements the TypeDescriptor interface.
 func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
@@ -247,8 +237,7 @@ func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
-// RegionNamesIncludingTransitioning returns all the regions on a multi-region
-// enum, including `READ ONLY` regions which are in the process of transitioning.
+// RegionNamesIncludingTransitioning implements the TypeDescriptor interface.
 func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
@@ -708,7 +697,7 @@ func (t TypeLookupFunc) GetTypeDescriptor(
 	return t(ctx, id)
 }
 
-// MakeTypesT creates a types.T from the input type descriptor.
+// MakeTypesT implements the TypeDescriptor interface.
 func (desc *immutable) MakeTypesT(
 	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
@@ -770,12 +759,7 @@ func HydrateTypesInTableDescriptor(
 	return nil
 }
 
-// HydrateTypeInfoWithName fills in user defined type metadata for
-// a type and also sets the name in the metadata to the passed in name.
-// This is used when hydrating a type with a known qualified name.
-//
-// Note that if the passed type is already hydrated, regardless of the version
-// with which it has been hydrated, this is a no-op.
+// HydrateTypeInfoWithName implements the TypeDescriptor interface.
 func (desc *immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
@@ -828,45 +812,37 @@ func (desc *immutable) HydrateTypeInfoWithName(
 	}
 }
 
-// NumEnumMembers returns the number of enum members if the type is an
-// enumeration type, 0 otherwise.
+// NumEnumMembers implements the TypeDescriptor interface.
 func (desc *immutable) NumEnumMembers() int {
 	return len(desc.EnumMembers)
 }
 
-// GetMemberPhysicalRepresentation returns the physical representation of the
-// enum member at ordinal enumMemberOrdinal.
+// GetMemberPhysicalRepresentation implements the TypeDescriptor interface.
 func (desc *immutable) GetMemberPhysicalRepresentation(enumMemberOrdinal int) []byte {
 	return desc.physicalReps[enumMemberOrdinal]
 }
 
-// GetMemberLogicalRepresentation returns the logical representation of the enum
-// member at ordinal enumMemberOrdinal.
+// GetMemberLogicalRepresentation implements the TypeDescriptor interface.
 func (desc *immutable) GetMemberLogicalRepresentation(enumMemberOrdinal int) string {
 	return desc.logicalReps[enumMemberOrdinal]
 }
 
-// IsMemberReadOnly returns true iff the enum member at ordinal
-// enumMemberOrdinal is read-only.
+// IsMemberReadOnly implements the TypeDescriptor interface.
 func (desc *immutable) IsMemberReadOnly(enumMemberOrdinal int) bool {
 	return desc.readOnlyMembers[enumMemberOrdinal]
 }
 
-// NumReferencingDescriptors returns the number of descriptors referencing this
-// type, directly or indirectly.
+// NumReferencingDescriptors implements the TypeDescriptor interface.
 func (desc *immutable) NumReferencingDescriptors() int {
 	return len(desc.ReferencingDescriptorIDs)
 }
 
-// GetReferencingDescriptorID returns the ID of the referencing descriptor at
-// ordinal refOrdinal.
+// GetReferencingDescriptorID implements the TypeDescriptor interface.
 func (desc *immutable) GetReferencingDescriptorID(refOrdinal int) descpb.ID {
 	return desc.ReferencingDescriptorIDs[refOrdinal]
 }
 
-// IsCompatibleWith returns whether the type "desc" is compatible with "other".
-// As of now "compatibility" entails that disk encoded data of "desc" can be
-// interpreted and used by "other".
+// IsCompatibleWith implements the TypeDescriptor interface.
 func (desc *immutable) IsCompatibleWith(other catalog.TypeDescriptor) error {
 
 	switch desc.Kind {
@@ -904,8 +880,7 @@ func (desc *immutable) IsCompatibleWith(other catalog.TypeDescriptor) error {
 	}
 }
 
-// HasPendingSchemaChanges returns whether or not this descriptor has schema
-// changes that need to be completed.
+// HasPendingSchemaChanges implements the TypeDescriptor interface.
 func (desc *immutable) HasPendingSchemaChanges() bool {
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
@@ -922,8 +897,7 @@ func (desc *immutable) HasPendingSchemaChanges() bool {
 	}
 }
 
-// GetIDClosure returns all type descriptor IDs that are referenced by this
-// type descriptor.
+// GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
