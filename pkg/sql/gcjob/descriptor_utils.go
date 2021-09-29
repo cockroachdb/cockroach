@@ -73,8 +73,10 @@ func deleteDatabaseZoneConfig(
 		return nil
 	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
+		if !descs.UnsafeSkipSystemConfigTrigger.Get(&settings.SV) {
+			if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
+				return err
+			}
 		}
 		b := &kv.Batch{}
 
