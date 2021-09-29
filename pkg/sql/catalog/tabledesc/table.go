@@ -227,13 +227,12 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// GetConstraintInfo returns a summary of all constraints on the table.
+// GetConstraintInfo implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(nil)
 }
 
-// GetConstraintInfoWithLookup returns a summary of all constraints on the
-// table using the provided function to fetch a TableDescriptor from an ID.
+// GetConstraintInfoWithLookup implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
