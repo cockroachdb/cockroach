@@ -2,9 +2,9 @@
   "pgVersion": "13.3",
   "diffSummary": {
     "TotalTables": 129,
-    "TotalColumns": 1130,
-    "MissingTables": 4,
-    "MissingColumns": 1,
+    "TotalColumns": 1192,
+    "MissingTables": 0,
+    "MissingColumns": 0,
     "DatatypeMismatches": 19
   },
   "pgMetadata": {
@@ -15,9 +15,6 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       }
-    },
-    "pg_attribute": {
-      "attmissingval": null
     },
     "pg_collation": {
       "collcollate": {
@@ -146,11 +143,7 @@
         "expectedOid": 23,
         "expectedDataType": "int4"
       }
-    },
-    "pg_statistic": {},
-    "pg_statistic_ext_data": {},
-    "pg_stats": {},
-    "pg_stats_ext": {}
+    }
   },
   "unimplementedTypes": null
 }

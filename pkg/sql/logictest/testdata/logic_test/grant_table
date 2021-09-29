@@ -423,7 +423,11 @@ test           pg_catalog          pg_statio_sys_tables                   public
 test           pg_catalog          pg_statio_user_indexes                 public   SELECT
 test           pg_catalog          pg_statio_user_sequences               public   SELECT
 test           pg_catalog          pg_statio_user_tables                  public   SELECT
+test           pg_catalog          pg_statistic                           public   SELECT
 test           pg_catalog          pg_statistic_ext                       public   SELECT
+test           pg_catalog          pg_statistic_ext_data                  public   SELECT
+test           pg_catalog          pg_stats                               public   SELECT
+test           pg_catalog          pg_stats_ext                           public   SELECT
 test           pg_catalog          pg_subscription                        public   SELECT
 test           pg_catalog          pg_subscription_rel                    public   SELECT
 test           pg_catalog          pg_tables                              public   SELECT

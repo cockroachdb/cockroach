@@ -114,8 +114,6 @@ var pgCatalog = virtualSchema{
 		// select distinct '"'||table_name||'",' from information_schema.tables
 		//    where table_schema='pg_catalog' order by table_name;
 		"pg_pltemplate",
-		"pg_statistic",
-		"pg_stats",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
 		catconstants.PgCatalogAggregateTableID:                  pgCatalogAggregateTable,
@@ -224,7 +222,11 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogStatioUserIndexesTableID:          pgCatalogStatioUserIndexesTable,
 		catconstants.PgCatalogStatioUserSequencesTableID:        pgCatalogStatioUserSequencesTable,
 		catconstants.PgCatalogStatioUserTablesTableID:           pgCatalogStatioUserTablesTable,
+		catconstants.PgCatalogStatisticExtDataTableID:           pgCatalogStatisticExtDataTable,
 		catconstants.PgCatalogStatisticExtTableID:               pgCatalogStatisticExtTable,
+		catconstants.PgCatalogStatisticTableID:                  pgCatalogStatisticTable,
+		catconstants.PgCatalogStatsExtTableID:                   pgCatalogStatsExtTable,
+		catconstants.PgCatalogStatsTableID:                      pgCatalogStatsTable,
 		catconstants.PgCatalogSubscriptionRelTableID:            pgCatalogSubscriptionRelTable,
 		catconstants.PgCatalogSubscriptionTableID:               pgCatalogSubscriptionTable,
 		catconstants.PgCatalogTablesTableID:                     pgCatalogTablesTable,
@@ -442,6 +444,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull,                                       // attfdwoptions
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // atthasmissing
+				// These columns were automatically created by pg_catalog_test's missing column generator.
+				tree.DNull, // attmissingval
 			)
 		}
 
@@ -3854,6 +3858,42 @@ var pgCatalogStatioAllTablesTable = virtualSchemaTable{
 var pgCatalogStatProgressCreateIndexTable = virtualSchemaTable{
 	comment: "pg_stat_progress_create_index was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogStatProgressCreateIndex,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatisticTable = virtualSchemaTable{
+	comment: "pg_statistic was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatistic,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatsTable = virtualSchemaTable{
+	comment: "pg_stats was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStats,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatsExtTable = virtualSchemaTable{
+	comment: "pg_stats_ext was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatsExt,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatisticExtDataTable = virtualSchemaTable{
+	comment: "pg_statistic_ext_data was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatisticExtData,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
