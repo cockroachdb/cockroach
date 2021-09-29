@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -113,6 +114,16 @@ var telemetryLoggingEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+// Note: Usage of an env var here makes it possible to unconditionally enable
+// this feature when cluster settings would be too inefficient or to slow to
+// use. For example, in multi-tenant setups in CC, it is impractical to enable
+// this setting directly after tenant creation without significant overhead in
+// terms of time and code. This override mechanism can be removed once the
+// default for `telemetryLoggingEnabled` is toggled to `true`. This override
+// only has an effect if the cluster setting is false, thus this override can
+// not be used to disable telemetry query sampling.
+var telemetryLoggingEnabledOverride = envutil.EnvOrDefaultBool("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_ENABLED", false)
+
 type executorType int
 
 const (
@@ -174,6 +185,11 @@ func (p *planner) maybeLogStatementInternal(
 
 	// We only consider non-internal SQL statements for telemetry logging.
 	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
+	// If telemetryLoggingEnabled is not enabled by a cluster setting, check to
+	// see if an environment variable has enabled it instead.
+	if !telemetryLoggingEnabled {
+		telemetryLoggingEnabled = telemetryLoggingEnabledOverride
+	}
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
