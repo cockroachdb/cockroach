@@ -260,9 +260,9 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 
 // generateAggregationTLP returns two SQL queries as strings that can be used by
 // the GenerateTLP function. These queries make use of the WHERE clause and a
-// predicate p to partition the original query into three. The two aggregations
-// that are supported are MAX() and MIN(), although SUM(), AVG(), and COUNT()
-// are also valid TLP aggregations.
+// predicate p to partition the original query into three. The aggregations that
+// are supported are MAX(), MIN(), and COUNT(). AVG() and SUM() are also valid
+// TLP aggregations.
 //
 // The first query returned is an unpartitioned query of the form:
 //
@@ -285,7 +285,10 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 //   )
 //
 // Note that all instances of MAX can be replaced with MIN to get the
-// corresponding MIN version of the queries.
+// corresponding MIN version of the queries. For the COUNT version, we
+// replace the outer MAX in the partitioned query with SUM, and then replace all
+// other instances of MAX with COUNT. Both of these queries return the total
+// count.
 //
 // If the resulting values of the two queries are not equal, there is a logical
 // bug.
@@ -300,17 +303,19 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	tableName := f.CloseAndGetString()
 	tableNameAlias := strings.TrimSpace(strings.Split(tableName, "AS")[1])
 
-	var agg string
-	switch aggType := rand.Intn(2); aggType {
+	var innerAgg, outerAgg string
+	switch aggType := rand.Intn(3); aggType {
 	case 0:
-		agg = "MAX"
+		innerAgg, outerAgg = "MAX", "MAX"
+	case 1:
+		innerAgg, outerAgg = "MIN", "MIN"
 	default:
-		agg = "MIN"
+		innerAgg, outerAgg = "COUNT", "SUM"
 	}
 
 	unpartitioned = fmt.Sprintf(
 		"SELECT %s(first) FROM (SELECT * FROM %s) %s(first)",
-		agg, tableName, tableNameAlias,
+		innerAgg, tableName, tableNameAlias,
 	)
 
 	pred := makeBoolExpr(s, cols)
@@ -319,20 +324,20 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 
 	part1 := fmt.Sprintf(
 		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE %s) %s(first)",
-		agg, tableName, predicate, tableNameAlias,
+		innerAgg, tableName, predicate, tableNameAlias,
 	)
 	part2 := fmt.Sprintf(
 		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE NOT (%s)) %s(first)",
-		agg, tableName, predicate, tableNameAlias,
+		innerAgg, tableName, predicate, tableNameAlias,
 	)
 	part3 := fmt.Sprintf(
 		"SELECT %s(first) AS agg FROM (SELECT * FROM %s WHERE (%s) IS NULL) %s(first)",
-		agg, tableName, predicate, tableNameAlias,
+		innerAgg, tableName, predicate, tableNameAlias,
 	)
 
 	partitioned = fmt.Sprintf(
 		"SELECT %s(agg) FROM (%s UNION ALL %s UNION ALL %s)",
-		agg, part1, part2, part3,
+		outerAgg, part1, part2, part3,
 	)
 
 	return unpartitioned, partitioned
