@@ -187,10 +187,12 @@ func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string)
 	argsLenAtDash := cmd.ArgsLenAtDash()
 	if argsLenAtDash < 0 {
 		// If there's no dash, the value of this is -1.
-		before = args
+		before = args[:len(args):len(args)]
 	} else {
-		before = args[0:argsLenAtDash]
-		after = args[argsLenAtDash:]
+		// NB: Have to do this verbose slicing to force Go to copy the
+		// memory. Otherwise later `append`s will break stuff.
+		before = args[0:argsLenAtDash:argsLenAtDash]
+		after = args[argsLenAtDash : len(args) : len(args)-argsLenAtDash+1]
 	}
 	return
 }
