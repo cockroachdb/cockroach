@@ -3,12 +3,7 @@
 workspace(
     name = "cockroach",
     managed_directories = {
-       "@npm": [
-          "pkg/ui/node_modules",
-          "pkg/ui/workspaces/cluster-ui/node_modules",
-          "pkg/ui/workspaces/db-console/node_modules",
-          "pkg/ui/workspaces/db-console/src/js/node_modules",
-       ],
+       "@npm": ["pkg/ui/node_modules"],
     },
 )
 
