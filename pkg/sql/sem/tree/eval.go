@@ -63,6 +63,8 @@ var (
 	// ErrFloatOutOfRange is reported when float arithmetic overflows.
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
+	// errCharOutOfRange is reported when int cast to ASCII byte overflows.
+	errCharOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "\"char\" out of range")
 
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
