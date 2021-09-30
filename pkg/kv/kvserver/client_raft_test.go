@@ -2465,10 +2465,20 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// heartbeat transmission to the other store.
 	cb := tc.Servers[followerIdx].RaftTransport().GetCircuitBreaker(
 		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
-	// TODO(tbg): this is a no-op since the breaker in this test is
-	// configured to never trip. See:
+	// The breakers in this test are configured to never trip, so
+	// reconfigure them here.
+	// See:
 	// https://github.com/cockroachdb/cockroach/blob/885075b9c16ae04f537ffe4a0cfe7113c28c4811/pkg/server/testserver.go#L1304-L1310
-	cb.Trip()
+	opts := cb.Opts()
+	opts.ShouldTrip = func(err error) error {
+		return err
+	}
+	opts.AsyncProbe = func(_ func(error), done func()) {
+		done() // never untrip
+	}
+	cb.Reconfigure(opts)
+	cb.Report(errors.New("tripped on purpose"))
+	require.Error(t, cb.Err())
 
 	// Send a command to ensure Raft is aware of lost follower so that it won't
 	// quiesce (which would prevent heartbeats).
