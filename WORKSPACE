@@ -3,12 +3,7 @@
 workspace(
     name = "cockroach",
     managed_directories = {
-       "@npm": [
-          "pkg/ui/node_modules",
-          "pkg/ui/workspaces/cluster-ui/node_modules",
-          "pkg/ui/workspaces/db-console/node_modules",
-          "pkg/ui/workspaces/db-console/src/js/node_modules",
-       ],
+       "@npm": ["pkg/ui/node_modules"],
     },
 )
 
@@ -69,6 +64,10 @@ yarn_install(
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
     strict_visibility = False,
+    args = [
+        "--ignore-optional",
+        "--offline",
+    ],
 )
 
 # Load gazelle dependencies.

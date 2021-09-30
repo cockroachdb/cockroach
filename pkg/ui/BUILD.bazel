@@ -13,46 +13,10 @@ go_library(
     ],
 )
 
-filegroup(
-    name = "node_modules",
-    srcs = glob(
-        include = [
-            "node_modules/**",
-        ],
-        exclude = [
-            "node_modules/db-console",
-            "node_modules/@cockroachlabs/cluster-ui",
-        ],
-    ),
-    visibility = ["//pkg/ui:__subpackages__"],
-)
-
-filegroup(
-    name = "node_modules_db_console",
-    srcs = glob(
-        include = [
-            "node_modules/**",
-        ],
-        exclude = [
-            "node_modules/db-console",
-            "node_modules/@types/react-select",
-            "node_modules/react-select",
-        ],
-    ),
-    visibility = ["//pkg/ui:__subpackages__"],
-)
-
-filegroup(
-    name = "node_modules_cluster_ui",
-    srcs = glob(
-        include = [
-            "node_modules/**",
-        ],
-        exclude = [
-            "node_modules/db-console",
-            "node_modules/@cockroachlabs/cluster-ui",
-            "node_modules/react-router-dom",
-        ],
-    ),
-    visibility = ["//pkg/ui:__subpackages__"],
+config_setting(
+    name = "cockroach_with_ui",
+    define_values = {
+        "cockroach_with_ui": "true",
+    },
+    visibility = ["//visibility:public"],
 )

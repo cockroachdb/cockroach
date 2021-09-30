@@ -10,6 +10,7 @@ go_library(
         "doctor.go",
         "generate.go",
         "lint.go",
+        "logic.go",
         "main.go",
         "test.go",
         "util.go",

@@ -1,4 +1,4 @@
-git grep -l ^func Benchmark -- pkg/util/*_test.go
+git grep -l '^func Benchmark' -- 'pkg/util/*_test.go'
 ----
 pkg/util/topk_test.go
 pkg/util/uuid/benchmark_fast_test.go
