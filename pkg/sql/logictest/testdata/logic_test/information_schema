@@ -410,6 +410,7 @@ crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
 crdb_internal       cluster_transactions
+crdb_internal       create_schema_statements
 crdb_internal       create_statements
 crdb_internal       create_type_statements
 crdb_internal       cross_db_references
@@ -726,6 +727,7 @@ cluster_queries
 cluster_sessions
 cluster_settings
 cluster_transactions
+create_schema_statements
 create_statements
 create_type_statements
 cross_db_references
@@ -1079,6 +1081,7 @@ system         crdb_internal       cluster_queries                        SYSTEM
 system         crdb_internal       cluster_sessions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transactions                   SYSTEM VIEW  NO                  1
+system         crdb_internal       create_schema_statements               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                      SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements                 SYSTEM VIEW  NO                  1
 system         crdb_internal       cross_db_references                    SYSTEM VIEW  NO                  1
@@ -2647,6 +2650,7 @@ NULL     public   system         crdb_internal       cluster_queries            
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       create_schema_statements               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       cross_db_references                    SELECT          NULL          YES
@@ -3252,6 +3256,7 @@ NULL     public   system         crdb_internal       cluster_queries            
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       create_schema_statements               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       cross_db_references                    SELECT          NULL          YES

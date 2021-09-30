@@ -1,0 +1,38 @@
+statement ok
+CREATE DATABASE d
+
+statement ok
+USE d
+
+query T colnames
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+
+statement ok
+CREATE SCHEMA test
+
+query T colnames
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA test;
+
+statement ok
+CREATE SCHEMA test2
+
+query T colnames
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA test;
+CREATE SCHEMA test2;
+
+statement ok
+DROP SCHEMA test
+
+query T colnames
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA test2;
