@@ -349,6 +349,8 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 			// Are we trying to decommision a node that does not
 			// exist? See Server.Decommission for where this specific grpc error
 			// code is generated.
+			// TODO(erikgrinaker): We no longer return this error for unknown nodes,
+			// but we keep the check for backwards compatibility; remove in v22.1.
 			return errors.New("node does not exist")
 		}
 		return err
@@ -388,7 +390,7 @@ func expectNodesDecommissioned(
 	for _, nodeID := range nodeIDs {
 		liveness, ok := resp.LivenessByNodeID[nodeID]
 		if !ok {
-			fmt.Fprintln(stderr, "warning: cannot find status of node", nodeID)
+			fmt.Fprintf(stderr, "warning: cannot find status of node %d, does it exist?\n", nodeID)
 			continue
 		}
 		if !expDecommissioned {

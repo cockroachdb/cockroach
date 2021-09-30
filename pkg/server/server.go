@@ -2444,10 +2444,13 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
-			if errors.Is(err, liveness.ErrMissingRecord) {
-				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
+			// If the node is unknown (no liveness record) and we're trying to
+			// decommission, we go ahead with cleanup anyway. In particular, we want
+			// to remove stray node status entries even if no liveness entry exists.
+			if !errors.Is(err, liveness.ErrMissingRecord) ||
+				(!targetStatus.Decommissioning() && !targetStatus.Decommissioned()) {
+				return err
 			}
-			return err
 		}
 		if statusChanged {
 			nodeDetails.TargetNodeID = int32(nodeID)
