@@ -33,6 +33,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
+	addCommonBuildFlags(benchCmd)
 	addCommonTestFlags(benchCmd)
 	return benchCmd
 }
