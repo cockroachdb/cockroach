@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // delegateShowSchemas implements SHOW SCHEMAS which returns all the schemas in
@@ -38,6 +39,21 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 	)
 
 	return parse(getSchemasQuery)
+}
+
+func (d *delegator) delegateShowCreateAllSchemas() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateAllSchemasQuery = `
+	SELECT crdb_internal.show_create_all_schemas(%[1]s) AS create_statement;
+`
+	databaseLiteral := d.evalCtx.SessionData().Database
+
+	query := fmt.Sprintf(showCreateAllSchemasQuery,
+		lexbase.EscapeSQLString(databaseLiteral),
+	)
+
+	return parse(query)
 }
 
 // getSpecifiedOrCurrentDatabase returns the name of the specified database, or

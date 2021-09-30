@@ -28,6 +28,7 @@ crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
 crdb_internal  cluster_transactions         table  NULL  NULL  NULL
+crdb_internal  create_schema_statements     table  NULL  NULL  NULL
 crdb_internal  create_statements            table  NULL  NULL  NULL
 crdb_internal  create_type_statements       table  NULL  NULL  NULL
 crdb_internal  cross_db_references          table  NULL  NULL  NULL

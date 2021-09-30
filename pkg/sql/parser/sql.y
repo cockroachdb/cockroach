@@ -5621,6 +5621,7 @@ show_transaction_stmt:
 // %Text:
 // SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
 // SHOW CREATE ALL TABLES
+// SHOW CREATE ALL SCHEMAS
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
   SHOW CREATE table_name
@@ -5651,6 +5652,10 @@ show_create_stmt:
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
+| SHOW CREATE ALL SCHEMAS
+	{
+		$$.val = &tree.ShowCreateAllSchemas{}
+	}
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
 // %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs

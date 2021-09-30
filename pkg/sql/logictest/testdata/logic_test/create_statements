@@ -232,6 +232,19 @@ CREATE TABLE crdb_internal.cluster_transactions (
    num_retries INT8 NULL,
    num_auto_retries INT8 NULL
 )  {}  {}
+CREATE TABLE crdb_internal.create_schema_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   create_statement STRING NULL
+)  CREATE TABLE crdb_internal.create_schema_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   create_statement STRING NULL
+)  {}  {}
 CREATE TABLE crdb_internal.create_statements (
    database_id INT8 NULL,
    database_name STRING NULL,

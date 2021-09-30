@@ -641,6 +641,7 @@ show_constraints_stmt ::=
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
+	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
