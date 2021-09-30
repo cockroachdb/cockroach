@@ -194,7 +194,8 @@ func TestConnHealthTryDial(t *testing.T) {
 
 	// When no connection exists, we expect ConnHealthTryDial to dial the node,
 	// which will return ErrNoHeartbeat at first but eventually succeed.
-	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass))
+	err := nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass)
+	require.Equal(t, rpc.ErrNotHeartbeated, err, "%+v", err)
 	require.Eventually(t, func() bool {
 		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
 	}, time.Second, 10*time.Millisecond)
@@ -216,7 +217,8 @@ func TestConnHealthTryDial(t *testing.T) {
 
 	// Tripping the breaker should return ErrBreakerOpen.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Report(errors.New("explody"))
+	br.Report(errors.New("bang"))
+	require.Error(t, br.Err())
 	{
 		err := nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass)
 		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
