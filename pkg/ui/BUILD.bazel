@@ -16,7 +16,7 @@ go_library(
 config_setting(
     name = "cockroach_with_ui",
     define_values = {
-        "cockroach_with_ui": "true",
+        "cockroach_with_ui": "y",
     },
     visibility = ["//visibility:public"],
 )
