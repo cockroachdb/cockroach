@@ -245,6 +245,11 @@ func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallEx
 		return
 	}
 
+	if isSafeStringToStringCast(pass, call.Args[idx]) {
+		// It's a SafeString cast to a string! All is well.
+		return
+	}
+
 	pass.Reportf(call.Lparen, escNl("%s(): %s argument is not a constant expression"+Tip),
 		enclosingFnName, argType)
 }
@@ -298,4 +303,27 @@ func stripVendor(s string) string {
 
 func escNl(msg string) string {
 	return strings.ReplaceAll(msg, "\n", "\\n++")
+}
+
+var safeStringTypes = map[string]struct{}{
+	"github.com/cockroachdb/redact.SafeString":            {},
+	"github.com/cockroachdb/redact/interfaces.SafeString": {},
+}
+
+func isSafeStringToStringCast(pass *analysis.Pass, expr ast.Expr) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	// We know we have fn(a). Is it string(redact.SafeString)?
+	argType := pass.TypesInfo.Types[call.Args[0]].Type.String()
+	if _, ok = safeStringTypes[argType]; !ok {
+		return false
+	}
+	// We have fn(redact.SafeString).
+	ident, ok := call.Fun.(*ast.Ident)
+	if !ok || ident.Name != "string" || pass.TypesInfo.Types[ident].Type.String() != "string" {
+		return false
+	}
+	return true
 }
