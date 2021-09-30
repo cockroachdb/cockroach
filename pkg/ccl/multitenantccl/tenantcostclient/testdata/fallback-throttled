@@ -44,6 +44,10 @@ wait-for-event
 low-ru
 ----
 
+timers
+----
+00:04:41.479
+
 advance
 2s
 ----
@@ -54,6 +58,10 @@ advance
 wait-for-event
 tick
 ----
+
+timers
+----
+00:00:38.947
 
 not-completed label=w2
 ----
