@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: 5node
 
 #
 # Tests that verify DistSQL support and auto mode determination.
@@ -11,7 +11,9 @@ statement ok
 SET distsql=auto
 
 statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
 
 # Verify the JSON variant.
 query T
@@ -55,11 +57,11 @@ SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k] WHERE i
 ----
 distribution: full
 
-# Hard limit in scan - distribute.
+# Hard limit in scan - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: local
 
 # Soft limit in scan - don't distribute.
 # TODO(yuzefovich): soft limits are currently ignored in scans.
@@ -87,7 +89,9 @@ SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
 distribution: full
 
 statement ok
-CREATE TABLE kw (k INT PRIMARY KEY, w INT)
+CREATE TABLE kw (k INT PRIMARY KEY, w INT);
+ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Join - distribute.
 query T
@@ -95,14 +99,16 @@ SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw] WHERE info LIKE 'dis
 ----
 distribution: full
 
-# Join with span - distribute.
+# Join with the data living on the remote node - distribute.
 query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=1] WHERE info LIKE 'distribution%'
+SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
 statement ok
-CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b));
+ALTER TABLE abc SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE abc EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Index join - don't distribute.
 query T

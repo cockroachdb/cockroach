@@ -27,7 +27,7 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -74,7 +74,7 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -121,7 +121,7 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -143,7 +143,7 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -187,7 +187,7 @@ PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 query T retry
 EXECUTE p
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -204,7 +204,7 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query T retry
 EXECUTE p
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -231,7 +231,7 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -255,7 +255,7 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -312,7 +312,7 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -359,7 +359,7 @@ PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 query T retry
 EXECUTE p
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -374,7 +374,7 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
 query T retry
 EXECUTE p
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -406,7 +406,7 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -423,7 +423,7 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -481,7 +481,7 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -499,7 +499,7 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
