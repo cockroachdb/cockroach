@@ -411,7 +411,7 @@ func TestGetLogReader(t *testing.T) {
 	cntr := 0
 	genFileName := func(prefix string) string {
 		cntr++
-		return program + prefix + ".roach0.root.2015-09-25T19_24_19Z." + fmt.Sprintf("%05d", cntr) + ".log"
+		return fileNameConstants.program + prefix + ".roach0.root.2015-09-25T19_24_19Z." + fmt.Sprintf("%05d", cntr) + ".log"
 	}
 
 	// A log file in a non-default directory.
@@ -445,13 +445,13 @@ func TestGetLogReader(t *testing.T) {
 		// Absolute filename is specified.
 		{info.file.Name(), "pathnames must be basenames"},
 		// Symlink to a log file.
-		{filepath.Join(dir, program+".log"), "pathnames must be basenames"},
+		{filepath.Join(dir, fileNameConstants.program+".log"), "pathnames must be basenames"},
 		// Symlink relative to logDir.
 		{fname4, "symlinks are not allowed"},
 		// Non-log file.
 		{"other.txt", "malformed log filename"},
 		// Non-existent file matching RE.
-		{program + ".roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file"},
+		{fileNameConstants.program + ".roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file"},
 		// Relative path with directory components.
 		{relPathFromCurDir, "pathnames must be basenames"},
 		// Relative path within the logs directory.

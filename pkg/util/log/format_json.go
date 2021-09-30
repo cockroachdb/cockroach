@@ -212,7 +212,7 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		// already.
 		// Also use escapeString() in case program contains double
 		// quotes or other special JSON characters.
-		escapeString(buf, program)
+		escapeString(buf, fileNameConstants.program)
 		buf.WriteByte('.')
 		if !entry.header {
 			buf.WriteString(channelNamesLowercase[entry.ch])

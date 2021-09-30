@@ -170,7 +170,7 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	for _, info := range infos {
 		if info.Mode().IsRegular() {
 			details, err := ParseLogFilename(info.Name())
-			if err == nil && details.Program == l.fileNamePrefix {
+			if err == nil && l.nameGenerator.ownsFileByPrefix(details.Program) {
 				results = append(results, MakeFileInfo(details, info))
 			}
 		}
@@ -199,7 +199,7 @@ func GetLogReader(filename string) (io.ReadCloser, error) {
 	// Find the sink that matches the file name prefix.
 	var fs *fileSink
 	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
-		if l.fileNamePrefix == details.Program {
+		if l.nameGenerator.ownsFileByPrefix(details.Program) {
 			fs = l
 			// Interrupt the loop.
 			return io.EOF
