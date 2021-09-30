@@ -26,11 +26,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// TestMaybeRedactRecording verifies that maybeRedactRecording strips
+// TestMaybeRedactRecording verifies that redactRecordingForTenant strips
 // sensitive details for recordings consumed by tenants.
 //
 // See kvccl.TestTenantTracesAreRedacted for an end-to-end test of this.
-func TestMaybeRedactRecording(t *testing.T) {
+func TestRedactRecordingForTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
@@ -59,10 +59,10 @@ func TestMaybeRedactRecording(t *testing.T) {
 
 	t.Run("regular-tenant", func(t *testing.T) {
 		rec := mkRec()
-		maybeRedactRecording(roachpb.MakeTenantID(100), rec)
+		require.NoError(t, redactRecordingForTenant(roachpb.MakeTenantID(100), rec))
 		require.Zero(t, rec[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Fields[0].Value
+		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
 		require.NotContains(t, msg, msgSensitive)
 		require.NotContains(t, msg, tagSensitive)
@@ -72,7 +72,7 @@ func TestMaybeRedactRecording(t *testing.T) {
 
 	t.Run("system-tenant", func(t *testing.T) {
 		rec := mkRec()
-		maybeRedactRecording(roachpb.SystemTenantID, rec)
+		require.NoError(t, redactRecordingForTenant(roachpb.SystemTenantID, rec))
 		require.Equal(t, map[string]string{
 			"_verbose":                   "1",
 			"all_span_tags_are_stripped": "because_no_redactability",
@@ -80,7 +80,7 @@ func TestMaybeRedactRecording(t *testing.T) {
 			"tag_sensitive":              tagSensitive,
 		}, rec[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Fields[0].Value
+		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
 		require.Contains(t, msg, msgSensitive)
 		require.Contains(t, msg, tagSensitive)
@@ -93,7 +93,7 @@ func TestMaybeRedactRecording(t *testing.T) {
 		// you're here to see why this test failed to compile, ensure that the
 		// change you're making to RecordedSpan does not include new sensitive data
 		// that may leak from the KV layer to tenants. If it does, update
-		// maybeRedactRecording appropriately.
+		// redactRecordingForTenant appropriately.
 		type calcifiedRecordedSpan struct {
 			TraceID                      uint64
 			SpanID                       uint64

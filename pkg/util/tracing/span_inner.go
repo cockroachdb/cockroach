@@ -81,6 +81,11 @@ func (s *spanInner) GetRecording() Recording {
 	}
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
+	//
+	// TODO(andrei): The optimization for avoiding the tags was done back when
+	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
+	// That has become cheap since, so this optimization might not be worth it any
+	// more.
 	wantTags := s.crdb.recordingType() == RecordingVerbose
 	return s.crdb.getRecording(wantTags)
 }

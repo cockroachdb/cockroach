@@ -297,8 +297,10 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 		now = time.Now()
 	}
 	logRecord := &tracingpb.LogRecord{
-		Time: now,
-		Fields: []tracingpb.LogRecord_Field{
+		Time:    now,
+		Message: msg,
+		// Compatibility with 21.2.
+		DeprecatedFields: []tracingpb.LogRecord_Field{
 			{Key: tracingpb.LogMessageField, Value: msg},
 		},
 	}

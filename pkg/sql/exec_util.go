@@ -2465,7 +2465,7 @@ func getMessagesForSubtrace(
 			allLogs = append(allLogs,
 				logRecordRow{
 					timestamp: logTime,
-					msg:       span.Logs[i].Msg(),
+					msg:       span.Logs[i].Msg().StripMarkers(),
 					span:      span,
 					// Add 1 to the index to account for the first dummy message in a
 					// span.

@@ -240,7 +240,7 @@ func TestGRPCInterceptors(t *testing.T) {
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=server test-baggage-key=test-baggage-value
 						event: structured=magic-value`, tc.name)
-			require.NoError(t, tracing.TestingCheckRecordedSpans(finalRecs, exp))
+			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
 		})
 	}
 	testutils.SucceedsSoon(t, func() error {

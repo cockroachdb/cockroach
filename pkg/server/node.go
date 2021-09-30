@@ -916,11 +916,11 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
-		var finishSpan func(*roachpb.BatchResponse)
+		var finishSpan func(context.Context, *roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
 		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, tenID)
 		// NB: wrapped to delay br evaluation to its value when returning.
-		defer func() { finishSpan(br) }()
+		defer func() { finishSpan(ctx, br) }()
 		if log.HasSpanOrEvent(ctx) {
 			log.Eventf(ctx, "node received request: %s", args.Summary())
 		}
@@ -1062,7 +1062,7 @@ func (n *Node) Batch(
 // be nil in case no response is to be returned to the rpc caller.
 func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID,
-) (context.Context, func(*roachpb.BatchResponse)) {
+) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
 	// The operation name matches the one created by the interceptor in the
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
@@ -1083,7 +1083,7 @@ func (n *Node) setupSpanForIncomingRPC(
 		}
 	}
 
-	finishSpan := func(br *roachpb.BatchResponse) {
+	finishSpan := func(ctx context.Context, br *roachpb.BatchResponse) {
 		if newSpan != nil {
 			newSpan.Finish()
 		}
@@ -1098,8 +1098,12 @@ func (n *Node) setupSpanForIncomingRPC(
 			// sensitive stripped out of the verbose messages. However,
 			// structured payloads stay untouched.
 			if rec := grpcSpan.GetRecording(); rec != nil {
-				maybeRedactRecording(tenID, rec)
-				br.CollectedSpans = append(br.CollectedSpans, rec...)
+				err := redactRecordingForTenant(tenID, rec)
+				if err == nil {
+					br.CollectedSpans = append(br.CollectedSpans, rec...)
+				} else {
+					log.Errorf(ctx, "error redacting trace recording: %s", err)
+				}
 			}
 		}
 	}
