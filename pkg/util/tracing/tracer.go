@@ -211,7 +211,7 @@ func NewTracer() *Tracer {
 	t.activeSpans.m = make(map[uint64]*Span)
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
-	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
+	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
 	return t
 }
 
@@ -511,6 +511,11 @@ func (t *Tracer) startSpanGeneric(
 			// WithParentAndAutoCollection option.
 			panic("invalid no-op parent")
 		}
+		if opts.Parent.IsSterile() {
+			// A sterile parent should have been optimized away by
+			// WithParentAndAutoCollection.
+			panic("invalid sterile parent")
+		}
 	}
 
 	// Are we tracing everything, or have a parent, or want a real span? Then
@@ -611,6 +616,7 @@ func (t *Tracer) startSpanGeneric(
 		crdb:     &helper.crdbSpan,
 		otelSpan: otelSpan,
 		netTr:    netTr,
+		sterile:  opts.Sterile,
 	}
 
 	// Copy over the parent span's root span reference, and if there isn't one
@@ -724,6 +730,12 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
 		// empty map as a noop context.
 		return nil
 	}
+	// If the span has been marked as not wanting children, we don't propagate any
+	// information about it through the carrier (the point of propagating span
+	// info is to create a child from it).
+	if sm.sterile {
+		return nil
+	}
 
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(sm.traceID, 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
@@ -823,6 +835,10 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
 		Baggage:       baggage,
+		// The sterile field doesn't make it across the wire. The simple fact that
+		// there was any tracing info in the carrier means that the parent span was
+		// not sterile.
+		sterile: false,
 	}, nil
 }
 
