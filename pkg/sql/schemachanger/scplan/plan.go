@@ -11,12 +11,11 @@
 package scplan
 
 import (
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
@@ -73,17 +72,10 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	if err != nil {
 		return Plan{}, err
 	}
-
-	if err := g.ForEachNode(func(n *scpb.Node) error {
-		d, ok := p[reflect.TypeOf(n.Element())]
-		if !ok {
-			return errors.Errorf("not implemented for %T", n.Target)
-		}
-		d.deps(g, n.Target, n.Status)
-		return nil
-	}); err != nil {
+	if err := deprules.Apply(g); err != nil {
 		return Plan{}, err
 	}
+
 	stages := buildStages(initial, g, params)
 	return Plan{
 		Params:  params,

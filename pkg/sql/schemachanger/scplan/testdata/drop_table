@@ -61,6 +61,8 @@ Stage 0
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
+  *scop.RemoveSequenceOwnedBy
+    TableID: 56
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
     TableID: 55
@@ -108,7 +110,7 @@ deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 - from: [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT]
-  to:   [Sequence:{DescID: 56}, DELETE_ONLY]
+  to:   [Sequence:{DescID: 56}, ABSENT]
 - from: [Table:{DescID: 55}, PUBLIC]
   to:   [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT]
 - from: [Table:{DescID: 55}, PUBLIC]

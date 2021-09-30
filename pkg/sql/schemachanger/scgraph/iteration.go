@@ -15,23 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
-// TargetIterator is used to iterate targets. Return iterutil.StopIteration to
-// return early with no error.
-type TargetIterator func(t *scpb.Target) error
-
-// ForEachTarget iterates the targets in the graph.
-func (g *Graph) ForEachTarget(it TargetIterator) error {
-	for _, t := range g.targets {
-		if err := it(t); err != nil {
-			if iterutil.Done(err) {
-				err = nil
-			}
-			return err
-		}
-	}
-	return nil
-}
-
 // NodeIterator is used to iterate nodes. Return iterutil.StopIteration to
 // return early with no error.
 type NodeIterator func(n *scpb.Node) error
