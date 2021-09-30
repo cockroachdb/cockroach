@@ -172,9 +172,14 @@ func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
-	fromTarget *scpb.Target, fromStatus scpb.Status, toTarget *scpb.Target, toStatus scpb.Status,
+	rule string,
+	fromTarget *scpb.Target,
+	fromStatus scpb.Status,
+	toTarget *scpb.Target,
+	toStatus scpb.Status,
 ) {
 	de := &DepEdge{
+		rule: rule,
 		from: g.getOrCreateNode(fromTarget, fromStatus),
 		to:   g.getOrCreateNode(toTarget, toStatus),
 	}
@@ -215,6 +220,10 @@ func (oe *OpEdge) Revertible() bool { return oe.revertible }
 // can be reached concurrently.
 type DepEdge struct {
 	from, to *scpb.Node
+
+	// TODO(ajwerner): Deal with the possibility that multiple rules could
+	// generate the same edge.
+	rule string
 }
 
 // From implements the Edge interface.
@@ -222,3 +231,6 @@ func (de *DepEdge) From() *scpb.Node { return de.from }
 
 // To implements the Edge interface.
 func (de *DepEdge) To() *scpb.Node { return de.to }
+
+// Name returns the name of the rule which generated this edge.
+func (de *DepEdge) Name() string { return de.rule }
