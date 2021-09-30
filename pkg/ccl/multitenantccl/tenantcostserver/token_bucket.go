@@ -61,6 +61,14 @@ func (s *instance) TokenBucketRequest(
 			return err
 		}
 
+		if !tenant.Present {
+			// If there is no state, we will initialize it. But check that the tenant
+			// is valid and active. It is possible that the tenant was deleted and an
+			// existing tenant process is still sending requests.
+			if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
+				return err
+			}
+		}
 		now := s.timeSource.Now()
 		tenant.update(now)
 

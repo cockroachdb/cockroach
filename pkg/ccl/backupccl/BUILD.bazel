@@ -5,9 +5,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "backupccl",
     srcs = [
+        "backup.go",
         "backup_destination.go",
         "backup_job.go",
         "backup_planning.go",
+        "backup_planning_tenant.go",
         "backup_processor.go",
         "backup_processor_planning.go",
         "create_scheduled_backup.go",
@@ -153,6 +155,7 @@ go_test(
         "//pkg/blobs",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multitenantccl",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
