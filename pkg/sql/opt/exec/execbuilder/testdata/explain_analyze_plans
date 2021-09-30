@@ -233,7 +233,7 @@ EXPLAIN ANALYZE (DISTSQL) EXPLAIN SELECT 1
 query T
 EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • group (scalar)

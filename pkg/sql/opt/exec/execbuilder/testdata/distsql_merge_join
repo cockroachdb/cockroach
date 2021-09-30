@@ -136,7 +136,7 @@ NULL       NULL     {1}       1
 query T
 EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -157,7 +157,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -189,7 +189,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -212,7 +212,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdGL00AQxt_9K
 query T
 EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -244,7 +244,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -269,7 +269,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckdGL00AQxt_9K
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join (inner)
@@ -298,7 +298,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -327,7 +327,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUVFv0zAQfudXn
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -360,7 +360,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -383,7 +383,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckd9v0zAQx9_5K
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -417,7 +417,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -682,7 +682,7 @@ EXPLAIN (DISTSQL)
   SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
     pid1 >= 10 AND pid1 <= 39
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • group (scalar)
@@ -1004,7 +1004,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlW9Po04Qx5__X
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -1025,7 +1025,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFr2zAQgN_3K
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -1049,7 +1049,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFr2zAQgN_3K
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • hash join
@@ -1119,7 +1119,7 @@ EXPLAIN (DISTSQL)
   JOIN parent1 USING (pid1)
 ORDER BY pid1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join
@@ -1151,7 +1151,7 @@ EXPLAIN (DISTSQL)
   JOIN child1 USING (pid1)
   JOIN grandchild1 USING (pid1, cid1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join

@@ -216,7 +216,7 @@ func Example_misc_table() {
 	// sql --format=table -e explain select s, 'foo' from t.t
 	//            info
 	// --------------------------
-	//   distribution: full
+	//   distribution: local
 	//   vectorized: true
 	//
 	//   • render

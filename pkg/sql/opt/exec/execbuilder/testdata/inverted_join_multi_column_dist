@@ -90,7 +90,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT * FROM j2@ij_idx, j1 WHERE i IN (2, 3) AND j2.j @> j1.j ORDER BY j1.k, j2.k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -170,7 +170,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT * FROM a2@ia_idx, a1 WHERE i IN (2, 3) AND a2.a @> a1.a ORDER BY a1.k, a2.k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort

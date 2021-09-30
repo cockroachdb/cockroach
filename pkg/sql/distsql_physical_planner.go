@@ -1646,13 +1646,14 @@ func (dsp *DistSQLPlanner) addSorters(
 // needed to perform the physical planning of aggregators once the specs have
 // been created.
 type aggregatorPlanningInfo struct {
-	aggregations         []execinfrapb.AggregatorSpec_Aggregation
-	argumentsColumnTypes [][]*types.T
-	isScalar             bool
-	groupCols            []int
-	groupColOrdering     colinfo.ColumnOrdering
-	inputMergeOrdering   execinfrapb.Ordering
-	reqOrdering          ReqOrdering
+	aggregations             []execinfrapb.AggregatorSpec_Aggregation
+	argumentsColumnTypes     [][]*types.T
+	isScalar                 bool
+	groupCols                []int
+	groupColOrdering         colinfo.ColumnOrdering
+	inputMergeOrdering       execinfrapb.Ordering
+	reqOrdering              ReqOrdering
+	allowPartialDistribution bool
 }
 
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
@@ -2175,7 +2176,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 
 		// We have multiple streams, so we definitely have a processor planned
 		// on a remote node.
-		stageID := p.NewStage(true /* containsRemoteProcessor */)
+		stageID := p.NewStage(true /* containsRemoteProcessor */, info.allowPartialDistribution)
 
 		// We have one final stage processor for each result router. This is a
 		// somewhat arbitrary decision; we could have a different number of nodes
@@ -2845,7 +2846,7 @@ func (dsp *DistSQLPlanner) planJoiners(
 	p := planCtx.NewPhysicalPlan()
 	physicalplan.MergePlans(
 		&p.PhysicalPlan, &info.leftPlan.PhysicalPlan, &info.rightPlan.PhysicalPlan,
-		info.leftPlanDistribution, info.rightPlanDistribution,
+		info.leftPlanDistribution, info.rightPlanDistribution, info.allowPartialDistribution,
 	)
 	leftRouters := info.leftPlan.ResultRouters
 	rightRouters := info.rightPlan.ResultRouters
@@ -3005,7 +3006,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *valuesNode:
 		if mustWrapValuesNode(planCtx, n.specifiedInQuery) {
-			plan, err = dsp.wrapPlan(planCtx, n)
+			plan, err = dsp.wrapPlan(planCtx, n, false /* allowPartialDistribution */)
 		} else {
 			colTypes := getTypesFromResultColumns(n.columns)
 			var spec *execinfrapb.ValuesCoreSpec
@@ -3027,7 +3028,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *createStatsNode:
 		if n.runAsJob {
-			plan, err = dsp.wrapPlan(planCtx, n)
+			plan, err = dsp.wrapPlan(planCtx, n, false /* allowPartialDistribution */)
 		} else {
 			// Create a job record but don't actually start the job.
 			var record *jobs.Record
@@ -3041,7 +3042,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
-		plan, err = dsp.wrapPlan(planCtx, n)
+		plan, err = dsp.wrapPlan(planCtx, n, false /* allowPartialDistribution */)
 	}
 
 	if err != nil {
@@ -3086,7 +3087,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 // will create a planNodeToRowSource wrapper for the sub-tree that's not
 // plannable by DistSQL. If that sub-tree has DistSQL-plannable sources, they
 // will be planned by DistSQL and connected to the wrapper.
-func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*PhysicalPlan, error) {
+func (dsp *DistSQLPlanner) wrapPlan(
+	planCtx *PlanningCtx, n planNode, allowPartialDistribution bool,
+) (*PhysicalPlan, error) {
 	useFastPath := planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected
 
 	// First, we search the planNode tree we're trying to wrap for the first
@@ -3177,7 +3180,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 			}},
 			// This stage consists of a single processor planned on the gateway.
-			StageID:     p.NewStage(false /* containsRemoteProcessor */),
+			StageID:     p.NewStage(false /* containsRemoteProcessor */, allowPartialDistribution),
 			ResultTypes: wrapper.outputTypes,
 		},
 	}
@@ -3597,6 +3600,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// the distribution of the whole plans.
 		leftPlan.GetLastStageDistribution(),
 		rightPlan.GetLastStageDistribution(),
+		false, /* allowPartialDistribution */
 	)
 
 	if n.unionType == tree.UnionOp {
@@ -3811,7 +3815,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			}
 			// We have multiple streams, so we definitely have a processor planned
 			// on a remote node.
-			stageID := plan.NewStage(true /* containsRemoteProcessor */)
+			stageID := plan.NewStage(true /* containsRemoteProcessor */, false /* allowPartialDistribution */)
 
 			// We put a windower on each node and we connect it
 			// with all hash routers from the previous stage in
