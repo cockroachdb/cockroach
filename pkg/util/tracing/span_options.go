@@ -49,7 +49,8 @@ type spanOptions struct {
 	LogTags       *logtags.Buffer        // see WithLogTags
 	Tags          map[string]interface{} // see WithTags
 	ForceRealSpan bool                   // see WithForceRealSpan
-	SpanKind      oteltrace.SpanKind
+	SpanKind      oteltrace.SpanKind     // see WithSpanKind
+	Sterile       bool                   // see WithSterile
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -120,9 +121,16 @@ type parentAndAutoCollectionOption Span
 // WithParentAndAutoCollection instructs StartSpan to create a child Span
 // from a parent Span.
 //
-// WithParentAndAutoCollection can be called with a nil `sp`, in which case
-// it'll be a no-op. It can also be called with a "no-op span", in which case
-// the option will also be a no-op (i.e. the upcoming span will be a root).
+// WithParentAndAutoCollection will be a no-op (i.e. the span resulting from
+// applying this option will be a root span, just as if this option hadn't been
+// specified) in the following cases:
+// - if `sp` is nil
+// - if `sp` is a no-op span
+// - if `sp` is a sterile span (i.e. a span explicitly marked as not wanting
+//   children). Note that the singleton Tracer.noop span is marked as sterile,
+//   which makes this condition mostly encompass the previous one, however in
+//   theory there could be no-op spans other than the singleton one.
+//
 //
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
@@ -144,7 +152,7 @@ type parentAndAutoCollectionOption Span
 // WithParentAndManualCollection should be used, which incurs an
 // obligation to manually propagate the trace data to the parent Span.
 func WithParentAndAutoCollection(sp *Span) SpanOption {
-	if sp == nil || sp.IsNoop() {
+	if sp == nil || sp.IsNoop() || sp.IsSterile() {
 		return (*parentAndAutoCollectionOption)(nil)
 	}
 	return (*parentAndAutoCollectionOption)(sp)
@@ -180,6 +188,9 @@ type parentAndManualCollectionOption SpanMeta
 // wait for the child to Finish(). If this expectation does not hold,
 // WithFollowsFrom should be added to the StartSpan invocation.
 func WithParentAndManualCollection(parent SpanMeta) SpanOption {
+	if parent.sterile {
+		return parentAndManualCollectionOption{}
+	}
 	return (parentAndManualCollectionOption)(parent)
 }
 
@@ -267,3 +278,16 @@ var WithServerSpanKind = WithSpanKind(oteltrace.SpanKindServer)
 // WithClientSpanKind is a shorthand for server spans, frequently saving
 // allocations.
 var WithClientSpanKind = WithSpanKind(oteltrace.SpanKindClient)
+
+type withSterileOption struct{}
+
+// WithSterile configures the span to not permit any child spans. The would-be
+// children of a sterile span end up being root spans.
+func WithSterile() SpanOption {
+	return withSterileOption{}
+}
+
+func (w withSterileOption) apply(opts spanOptions) spanOptions {
+	opts.Sterile = true
+	return opts
+}
