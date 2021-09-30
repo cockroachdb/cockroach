@@ -82,3 +82,21 @@ INNER LOOKUP JOIN t66067_a a ON b.a = a.a
 WHERE b.v = 'bar' AND a.c = 'foo'
 ----
 1  bar  1  foo
+
+query ITI
+SELECT i, i::"char", length(i::"char")
+FROM (VALUES (32), (97), (127), (0), (-1), (-127), (-128)) v(i);
+----
+32      1
+97   a  1
+127    1
+0    ¬∑  0
+-1   ˇ	1	
+-127	Å	1	
+-128	Ä	1	
+
+statement error pgcode 22003 \"char\" out of range
+SELECT 128::"char";
+
+statement error pgcode 22003 \"char\" out of range
+SELECT (-129)::"char";
