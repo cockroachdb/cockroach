@@ -245,8 +245,8 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	}
 	// NB: Don't call Ready(). The breaker protocol would require us to follow
 	// that up with a dial, which we won't do as this is called in hot paths.
-	if n.getBreaker(nodeID, class).Tripped() {
-		return circuit.ErrBreakerOpen()
+	if err := n.getBreaker(nodeID, class).Err(); err != nil {
+		return err
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
