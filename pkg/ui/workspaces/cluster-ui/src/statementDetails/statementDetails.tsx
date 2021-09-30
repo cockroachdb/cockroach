@@ -34,6 +34,7 @@ import {
   calculateTotalWorkload,
   unique,
   queryByName,
+  aggregatedTsAttr,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -517,6 +518,13 @@ export class StatementDetails extends React.Component<
         <span className={cx("tooltip-info")}>unavailable</span>
       </Tooltip>
     );
+
+    // If the aggregatedTs is unset, we are aggregating over the whole date range.
+    const aggregatedTs = queryByName(this.props.location, aggregatedTsAttr);
+    const intervalStartTime = aggregatedTs
+      ? moment.unix(parseInt(aggregatedTs)).utc()
+      : this.props.dateRange[0];
+
     return (
       <Tabs
         defaultActiveKey="1"
@@ -628,6 +636,11 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={8}>
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Interval start time</Text>
+                  <Text>{intervalStartTime.format("MMM D, h:mm A (UTC)")}</Text>
+                </div>
+
                 {!isTenant && (
                   <div>
                     <div className={summaryCardStylesCx("summary--card__item")}>

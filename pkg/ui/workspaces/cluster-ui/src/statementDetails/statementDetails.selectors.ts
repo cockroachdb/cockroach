@@ -25,6 +25,7 @@ import {
   databaseAttr,
   StatementStatistics,
   statementKey,
+  aggregatedTsAttr,
   queryByName,
 } from "../util";
 import { AggregateStatistics } from "../statementsTable";
@@ -32,6 +33,7 @@ import { Fraction } from "./statementDetails";
 
 interface StatementDetailsData {
   nodeId: number;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -48,6 +50,7 @@ function coalesceNodeStats(
     if (!(key in statsKey)) {
       statsKey[key] = {
         nodeId: stmt.node_id,
+        aggregatedTs: stmt.aggregated_ts,
         implicitTxn: stmt.implicit_txn,
         fullScan: stmt.full_scan,
         database: stmt.database,
@@ -61,6 +64,7 @@ function coalesceNodeStats(
     const stmt = statsKey[key];
     return {
       label: stmt.nodeId.toString(),
+      aggregatedTs: stmt.aggregatedTs,
       implicitTxn: stmt.implicitTxn,
       fullScan: stmt.fullScan,
       database: stmt.database,
@@ -96,9 +100,13 @@ function filterByRouterParamsPredicate(
   const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
   const database = queryByName(location, databaseAttr);
   let app = queryByName(location, appAttr);
+  // If the aggregatedTs is unset, we will aggregate across the current date range.
+  const aggregatedTs = queryByName(location, aggregatedTsAttr);
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
     stmt.statement === statement &&
+    aggregatedTs == null &&
+    (aggregatedTs == null || stmt.aggregated_ts.toString() === aggregatedTs) &&
     stmt.implicit_txn === implicitTxn &&
     (stmt.database === database || database === null);
 
