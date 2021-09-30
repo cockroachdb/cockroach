@@ -242,7 +242,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll1v2jwUx--fT
 query T
 EXPLAIN (DISTSQL) VALUES (1), (2) UNION VALUES (2), (3)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • union

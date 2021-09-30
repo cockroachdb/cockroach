@@ -9,7 +9,7 @@ CREATE TABLE uniontest (
 query T
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • union
@@ -27,7 +27,7 @@ vectorized: true
 query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • union all
@@ -63,7 +63,7 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query T
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -98,7 +98,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • project
@@ -129,7 +129,7 @@ query T
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT * FROM (VALUES ('', '', 'x'), ('', '', 'x'))) EXCEPT (VALUES ('', '', 'x')))
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • render
