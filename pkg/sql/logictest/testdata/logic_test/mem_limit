@@ -25,22 +25,6 @@ INSERT INTO foo SELECT 3, 10, repeat('a', 60000000)
 statement ok
 INSERT INTO foo SELECT 4, 10, repeat('a', 60000000)
 
-query T
-EXPLAIN SELECT * FROM foo@foo_attribute_idx WHERE attribute=10 AND blob LIKE 'blah%'
-----
-distribution: local
-vectorized: true
-·
-• filter
-│ filter: blob LIKE 'blah%'
-│
-└── • index join
-    │ table: foo@primary
-    │
-    └── • scan
-          missing stats
-          table: foo@foo_attribute_idx
-          spans: [/10 - /10]
-
+# The query below uses an index join which will hit the memory budget error.
 query error scan with start key .* memory budget exceeded
 SELECT * FROM foo@foo_attribute_idx WHERE attribute=10 AND blob LIKE 'blah%'

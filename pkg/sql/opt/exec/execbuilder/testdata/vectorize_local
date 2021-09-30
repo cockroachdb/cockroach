@@ -308,11 +308,6 @@ CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
 INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
 
 query T
-SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
-----
-bigint
-
-query T
 EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 ----
 │
@@ -326,11 +321,6 @@ EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
               └ *colexecbase.castInt4IntOp
                 └ *colexecbase.castInt4IntOp
                   └ *colfetcher.ColBatchScan
-
-query I
-SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
-----
-4
 
 # Check that joinReader core is wrapped into the plan when vectorize is set to
 # `experimental_always` - that core is the only exception to disabling of
@@ -388,13 +378,6 @@ EXPLAIN (VEC) SELECT c = c FROM t63792
     ├ *colexec.isNullProjOp
     └ *colexecbase.castOpNullAny
       └ *colexecbase.constNullOp
-
-query IB rowsort
-SELECT c, c = c FROM t63792
-----
-NULL  NULL
-1     true
-2     true
 
 # Regression test that we can run EXPLAIN (VEC) on a mutation that utilizes the
 # vectorized engine for some internal operations (#66568).
