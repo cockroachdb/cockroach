@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -2924,7 +2925,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	)
 	after, err := runNewSchemaChanger(
 		ctx,
-		scplan.PreCommitPhase,
+		scop.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.state,
 		executor,
 		scs.stmts,
@@ -2979,7 +2980,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 
 func runNewSchemaChanger(
 	ctx context.Context,
-	phase scplan.Phase,
+	phase scop.Phase,
 	state scpb.State,
 	executor *scexec.Executor,
 	stmts []string,
