@@ -4,7 +4,6 @@ go_library(
     name = "circuit",
     srcs = [
         "circuitbreaker.go",
-        "deprecated.go",
         "event_handler.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/circuit",
