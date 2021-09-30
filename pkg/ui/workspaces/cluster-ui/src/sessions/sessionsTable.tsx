@@ -97,11 +97,12 @@ const AgeLabel = (props: { start: Moment; thingName: string }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
+  isCloud?: boolean,
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
 ): ColumnDescriptor<SessionInfo>[] {
-  return [
+  const columns: ColumnDescriptor<SessionInfo>[] = [
     {
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
@@ -168,67 +169,70 @@ export function makeSessionsColumns(
         return shortStatement(summary, stmt);
       },
     },
-    {
-      name: "actions",
-      title: SessionTableTitle.actions,
-      className: cx("cl-table__col-session-actions"),
-      titleAlign: "right",
-      cell: ({ session }) => {
-        const menuItems: DropdownItem[] = [
-          {
-            value: "terminateStatement",
-            name: "Terminate Statement",
-            disabled: session.active_queries?.length === 0,
-          },
-          {
-            value: "terminateSession",
-            name: "Terminate Session",
-          },
-        ];
+  ];
 
-        const onMenuItemChange = (
-          value: "terminateStatement" | "terminateSession",
-        ) => {
-          switch (value) {
-            case "terminateSession":
-              onTerminateSessionClick && onTerminateSessionClick();
-              terminateSessionRef?.current?.showModalFor({
-                session_id: session.id,
+  const actions: ColumnDescriptor<SessionInfo> = {
+    name: "actions",
+    title: SessionTableTitle.actions,
+    className: cx("cl-table__col-session-actions"),
+    titleAlign: "right",
+    cell: ({ session }) => {
+      const menuItems: DropdownItem[] = [
+        {
+          value: "terminateStatement",
+          name: "Terminate Statement",
+          disabled: session.active_queries?.length === 0,
+        },
+        {
+          value: "terminateSession",
+          name: "Terminate Session",
+        },
+      ];
+
+      const onMenuItemChange = (
+        value: "terminateStatement" | "terminateSession",
+      ) => {
+        switch (value) {
+          case "terminateSession":
+            onTerminateSessionClick && onTerminateSessionClick();
+            terminateSessionRef?.current?.showModalFor({
+              session_id: session.id,
+              node_id: session.node_id.toString(),
+            });
+            break;
+          case "terminateStatement":
+            if (session.active_queries?.length > 0) {
+              onTerminateStatementClick && onTerminateStatementClick();
+              terminateQueryRef?.current?.showModalFor({
+                query_id: session.active_queries[0].id,
                 node_id: session.node_id.toString(),
               });
-              break;
-            case "terminateStatement":
-              if (session.active_queries?.length > 0) {
-                onTerminateStatementClick && onTerminateStatementClick();
-                terminateQueryRef?.current?.showModalFor({
-                  query_id: session.active_queries[0].id,
-                  node_id: session.node_id.toString(),
-                });
-              }
-              break;
-            default:
-              break;
-          }
-        };
+            }
+            break;
+          default:
+            break;
+        }
+      };
 
-        const renderDropdownToggleButton: JSX.Element = (
-          <>
-            <Button type="secondary" size="small">
-              <Icon type="ellipsis" />
-            </Button>
-          </>
-        );
+      const renderDropdownToggleButton: JSX.Element = (
+        <>
+          <Button type="secondary" size="small">
+            <Icon type="ellipsis" />
+          </Button>
+        </>
+      );
 
-        return (
-          <Dropdown
-            items={menuItems}
-            customToggleButton={renderDropdownToggleButton}
-            onChange={onMenuItemChange}
-            className={cx("session-action--dropdown")}
-            menuPosition="right"
-          />
-        );
-      },
+      return (
+        <Dropdown
+          items={menuItems}
+          customToggleButton={renderDropdownToggleButton}
+          onChange={onMenuItemChange}
+          className={cx("session-action--dropdown")}
+          menuPosition="right"
+        />
+      );
     },
-  ];
+  };
+
+  return isCloud ? columns : columns.concat([actions]);
 }
