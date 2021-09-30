@@ -69,8 +69,9 @@ type testState struct {
 	provider   *testProvider
 	controller multitenant.TenantSideCostController
 
-	// cpuUsage, accessed using atomic.
-	cpuUsage time.Duration
+	// external usage values, accessed using atomic.
+	cpuUsage    time.Duration
+	pgwireBytes int64
 
 	requestDoneCh map[string]chan struct{}
 
@@ -139,9 +140,11 @@ func (ts *testState) start(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cpuUsageFn := func(context.Context) float64 {
-		usage := time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage)))
-		return usage.Seconds()
+	externalUsageFn := func(context.Context) multitenant.ExternalUsage {
+		return multitenant.ExternalUsage{
+			CPUSecs:     time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage))).Seconds(),
+			PGWireBytes: uint64(atomic.LoadInt64(&ts.pgwireBytes)),
+		}
 	}
 	nextLiveInstanceIDFn := func(ctx context.Context) base.SQLInstanceID {
 		return 0
@@ -149,7 +152,7 @@ func (ts *testState) start(t *testing.T) {
 	instanceID := base.SQLInstanceID(1)
 	sessionID := sqlliveness.SessionID("foo")
 	if err := ts.controller.Start(
-		ctx, ts.stopper, instanceID, sessionID, cpuUsageFn, nextLiveInstanceIDFn,
+		ctx, ts.stopper, instanceID, sessionID, externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -199,6 +202,7 @@ var testStateCommands = map[string]func(
 	"wait-for-event": (*testState).waitForEvent,
 	"timers":         (*testState).timers,
 	"cpu":            (*testState).cpu,
+	"pgwire":         (*testState).pgwire,
 	"usage":          (*testState).usage,
 	"configure":      (*testState).configure,
 }
@@ -411,6 +415,17 @@ func (ts *testState) cpu(t *testing.T, d *datadriven.TestData, args cmdArgs) str
 	return ""
 }
 
+// pgwire adds PGWire usage which will be observed by the controller on the next
+// main loop tick.
+func (ts *testState) pgwire(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	bytes, err := strconv.Atoi(d.Input)
+	if err != nil {
+		d.Fatalf(t, "error parsing pgwire bytes value: %v", err)
+	}
+	atomic.AddInt64(&ts.pgwireBytes, int64(bytes))
+	return ""
+}
+
 // usage advances the clock until the latest consumption is reported and prints
 // out the latest consumption.
 func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
@@ -433,13 +448,15 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		"RU:  %.2f\n"+
 		"Reads:  %d requests (%d bytes)\n"+
 		"Writes:  %d requests (%d bytes)\n"+
-		"SQL Pods CPU seconds:  %.2f\n",
+		"SQL Pods CPU seconds:  %.2f\n"+
+		"PGWire: %d bytes\n",
 		c.RU,
 		c.ReadRequests,
 		c.ReadBytes,
 		c.WriteRequests,
 		c.WriteBytes,
 		c.SQLPodsCPUSeconds,
+		c.PGWireBytes,
 	)
 }
 
@@ -598,6 +615,9 @@ func TestConsumption(t *testing.T) {
 		c := testProvider.waitForConsumption(t)
 		if c.SQLPodsCPUSeconds == 0 {
 			return errors.New("no CPU usage reported")
+		}
+		if c.PGWireBytes == 0 {
+			return errors.New("no pgwire bytes reported")
 		}
 		return nil
 	})

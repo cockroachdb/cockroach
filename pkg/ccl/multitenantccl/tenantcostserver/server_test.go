@@ -145,6 +145,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteReq        uint64  `yaml:"write_req"`
 			WriteBytes      uint64  `yaml:"write_bytes"`
 			SQLPodsCPUUsage float64 `yaml:"sql_pods_cpu_usage"`
+			PGWireBytes     uint64  `yaml:"pgwire_bytes"`
 		}
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
@@ -177,6 +178,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteRequests:     args.Consumption.WriteReq,
 			WriteBytes:        args.Consumption.WriteBytes,
 			SQLPodsCPUSeconds: args.Consumption.SQLPodsCPUUsage,
+			PGWireBytes:       args.Consumption.PGWireBytes,
 		},
 		RequestedRU:         args.RU,
 		TargetRequestPeriod: period,
