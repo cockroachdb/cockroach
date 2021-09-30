@@ -788,6 +788,17 @@ func DecodeDatum(
 		// Trim the trailing spaces
 		sv := strings.TrimRight(string(b), " ")
 		return tree.NewDString(sv), nil
+	case oid.T_char:
+		sv := string(b)
+		// Always truncate to 1 byte, and handle the null byte specially.
+		if len(b) >= 1 {
+			if b[0] == 0 {
+				sv = ""
+			} else {
+				sv = string(b[:1])
+			}
+		}
+		return tree.NewDString(sv), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
