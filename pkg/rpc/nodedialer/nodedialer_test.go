@@ -142,34 +142,38 @@ func TestConnHealth(t *testing.T) {
 	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.SystemClass))
 
 	// When the heartbeat errors, ConnHealth should eventually error too.
+	// Furthermore the circuit breaker should be open; this isn't exactly
+	// by design but it is the status quo (the circuit breaker lives at
+	// the NodeDialer level and will only be tripped by failed attempts
+	// to dial via the NodeDialer, whereas the connection heartbeat lives
+	// at the RPCContext).
 	hb.setErr(errors.New("boom"))
+	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
-		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
-	}, time.Second, 10*time.Millisecond)
+		err := nd.ConnHealth(staticNodeID, rpc.DefaultClass)
+		t.Logf("err: %s", err)
+		return err != nil
+	}, 1*time.Second, 10*time.Millisecond)
+	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
+	require.NoError(t, br.Err())
 
 	// When the heartbeat recovers, ConnHealth should too.
 	hb.setErr(nil)
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) == nil
-	}, time.Second, 10*time.Millisecond)
-
-	// Tripping the breaker should return ErrBreakerOpen.
-	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
-	{
-		err := nd.ConnHealth(staticNodeID, rpc.DefaultClass)
-		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
-	}
-
-	// Resetting the breaker should recover ConnHealth.
-	br.Reset()
-	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	}, 1*time.Second, 10*time.Millisecond)
 
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
 	}, 10*time.Second, 10*time.Millisecond)
+
+	// If we also trip the breaker, we see it short-circuit
+	// ConnHealth. (Note that it won't recover since we closed
+	// the remote connection).
+	br.Report(errors.New("borking breaker"))
+	require.True(t, errors.Is(nd.ConnHealth(staticNodeID, rpc.DefaultClass), circuit.ErrBreakerOpen()))
 }
 
 func TestConnHealthTryDial(t *testing.T) {
@@ -251,7 +255,13 @@ func TestConnHealthInternal(t *testing.T) {
 
 	// However, it does respect the breaker.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
+	opts := br.Opts()
+	opts.AsyncProbe = func(_ func(error), done func()) {
+		// No-op probe, i.e. breaker stays tripped eternally.
+		done()
+	}
+	br.Reconfigure(opts)
+	br.Report(errors.New("foo"))
 	{
 		err := nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
