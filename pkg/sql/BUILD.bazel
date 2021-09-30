@@ -70,7 +70,6 @@ go_library(
         "distsql_physical_planner.go",
         "distsql_plan_backfill.go",
         "distsql_plan_bulk.go",
-        "distsql_plan_csv.go",
         "distsql_plan_ctas.go",
         "distsql_plan_join.go",
         "distsql_plan_scrub_physical.go",

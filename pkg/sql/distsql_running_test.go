@@ -148,7 +148,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		}
 
 		// Create and run a DistSQL plan.
-		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
 		recv := MakeDistSQLReceiver(
