@@ -39,7 +39,7 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
@@ -135,7 +135,7 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
@@ -246,7 +246,7 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
@@ -350,7 +350,7 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
-Stage 2
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
@@ -485,7 +485,7 @@ Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 53
-Stage 2
+Stage 2 (non-revertible)
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
