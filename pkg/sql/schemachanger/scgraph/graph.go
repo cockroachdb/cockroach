@@ -11,8 +11,10 @@
 package scgraph
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,16 +47,34 @@ type Graph struct {
 	opToNode map[scop.Op]*scpb.Node
 
 	edges []Edge
+
+	entities *rel.Database
+}
+
+// Database returns a database of the graph's underlying entities.
+func (g *Graph) Database() *rel.Database {
+	return g.entities
 }
 
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
 func New(initial scpb.State) (*Graph, error) {
+	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
+		{rel.Type, screl.DescID},
+		{screl.DescID, rel.Type},
+		{screl.Element},
+		{screl.Target},
+		// TODO(ajwerner): Decide what more predicates are needed
+	})
+	if err != nil {
+		return nil, err
+	}
 	g := Graph{
 		targetIdxMap: map[*scpb.Target]int{},
 		nodeOpEdges:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdges: map[*scpb.Node][]*DepEdge{},
 		opToNode:     map[scop.Op]*scpb.Node{},
+		entities:     db,
 	}
 	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -66,6 +86,9 @@ func New(initial scpb.State) (*Graph, error) {
 		g.targetNodes = append(g.targetNodes, map[scpb.Status]*scpb.Node{
 			n.Status: n,
 		})
+		if err := g.entities.Insert(n); err != nil {
+			return nil, err
+		}
 	}
 	return &g, nil
 }
@@ -79,17 +102,20 @@ func (g *Graph) getNode(t *scpb.Target, s scpb.Status) (*scpb.Node, bool) {
 // Suppress the linter.
 var _ = (*Graph)(nil).getNode
 
-func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) *scpb.Node {
+func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*scpb.Node, error) {
 	targetStatuses := g.getTargetStatusMap(t)
 	if ts, ok := targetStatuses[s]; ok {
-		return ts
+		return ts, nil
 	}
 	ts := &scpb.Node{
 		Target: t,
 		Status: s,
 	}
 	targetStatuses[s] = ts
-	return ts
+	if err := g.entities.Insert(ts); err != nil {
+		return nil, err
+	}
+	return ts, nil
 }
 
 func (g *Graph) getTargetStatusMap(target *scpb.Target) map[scpb.Status]*scpb.Node {
@@ -123,16 +149,22 @@ func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
 }
 
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
-func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.Status, revertible bool, ops ...scop.Op) {
+func (g *Graph) AddOpEdges(
+	t *scpb.Target, from, to scpb.Status, revertible bool, ops ...scop.Op,
+) (err error) {
 	oe := &OpEdge{
-		from:       g.getOrCreateNode(t, from),
-		to:         g.getOrCreateNode(t, to),
 		op:         ops,
 		revertible: revertible,
 	}
+	if oe.from, err = g.getOrCreateNode(t, from); err != nil {
+		return err
+	}
+	if oe.to, err = g.getOrCreateNode(t, to); err != nil {
+		return err
+	}
 	if existing, exists := g.nodeOpEdges[oe.from]; exists {
-		panic(errors.Errorf("duplicate outbound op edge %v and %v",
-			oe, existing))
+		return errors.Errorf("duplicate outbound op edge %v and %v",
+			oe, existing)
 	}
 	g.edges = append(g.edges, oe)
 	g.nodeOpEdges[oe.from] = oe
@@ -140,6 +172,7 @@ func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.Status, revertible bool
 	for _, op := range ops {
 		g.opToNode[op] = oe.From()
 	}
+	return nil
 }
 
 // GetNodeFromOp Gets an Edge from a given op.
