@@ -22,7 +22,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -73,7 +73,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -111,7 +111,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -139,7 +139,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort

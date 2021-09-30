@@ -31,7 +31,7 @@ ALTER TABLE def INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -68,7 +68,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -86,7 +86,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -105,7 +105,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -124,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -923,7 +923,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -944,7 +944,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join (inner)
@@ -972,7 +972,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -1002,7 +1002,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1020,7 +1020,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1038,7 +1038,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1057,7 +1057,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1076,7 +1076,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1095,7 +1095,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1833,7 +1833,7 @@ CREATE TABLE t59615 (
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1850,7 +1850,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615 t WHERE u.y = t.y
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1878,7 +1878,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
 ON u.w = t.w AND u.x = t.x
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1895,7 +1895,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
   SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)

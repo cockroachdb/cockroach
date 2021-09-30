@@ -48,7 +48,7 @@ NULL       /2000    {1}       1
 query T
 EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • render
@@ -89,7 +89,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lWGL2jAYx9_vU
 query T
 EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
@@ -280,7 +280,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lVFv2jwUhu-_X
 query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -294,7 +294,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FL_DAUxO__T
 query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -323,7 +323,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMGrm0AQxu_9K
 query T
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -337,7 +337,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -402,7 +402,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • group (scalar)

@@ -25,7 +25,7 @@ NULL       /10      {1}       1
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
@@ -41,7 +41,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-x
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -61,7 +61,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLw0AQhe_-i
 query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort

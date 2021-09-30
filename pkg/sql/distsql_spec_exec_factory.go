@@ -129,7 +129,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 			specifiedInQuery: true,
 		}
 		planNodesToClose = []planNode{v}
-		physPlan, err = e.dsp.wrapPlan(planCtx, v)
+		physPlan, err = e.dsp.wrapPlan(planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
@@ -158,7 +158,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return constructVirtualScan(
 			e, e.planner, table, index, params, reqOrdering,
 			func(d *delayedNode) (exec.Node, error) {
-				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d)
+				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d, e.planningMode != distSQLLocalOnlyPlanning)
 				if err != nil {
 					return nil, err
 				}
@@ -830,7 +830,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 		}
 	}
 
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode)
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -971,7 +971,7 @@ func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (e
 	if err != nil {
 		return nil, err
 	}
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan)
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -1090,21 +1090,22 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	leftEqColsRemapped := eqCols(leftEqCols, leftMap)
 	rightEqColsRemapped := eqCols(rightEqCols, rightMap)
 	info := joinPlanningInfo{
-		leftPlan:              leftPhysPlan,
-		rightPlan:             rightPhysPlan,
-		joinType:              joinType,
-		joinResultTypes:       getTypesFromResultColumns(resultColumns),
-		onExpr:                onExpr,
-		post:                  post,
-		joinToStreamColMap:    joinToStreamColMap,
-		leftEqCols:            leftEqColsRemapped,
-		rightEqCols:           rightEqColsRemapped,
-		leftEqColsAreKey:      leftEqColsAreKey,
-		rightEqColsAreKey:     rightEqColsAreKey,
-		leftMergeOrd:          distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
-		rightMergeOrd:         distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
-		leftPlanDistribution:  leftPhysPlan.Distribution,
-		rightPlanDistribution: rightPhysPlan.Distribution,
+		leftPlan:                 leftPhysPlan,
+		rightPlan:                rightPhysPlan,
+		joinType:                 joinType,
+		joinResultTypes:          getTypesFromResultColumns(resultColumns),
+		onExpr:                   onExpr,
+		post:                     post,
+		joinToStreamColMap:       joinToStreamColMap,
+		leftEqCols:               leftEqColsRemapped,
+		rightEqCols:              rightEqColsRemapped,
+		leftEqColsAreKey:         leftEqColsAreKey,
+		rightEqColsAreKey:        rightEqColsAreKey,
+		leftMergeOrd:             distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
+		rightMergeOrd:            distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
+		leftPlanDistribution:     leftPhysPlan.Distribution,
+		rightPlanDistribution:    rightPhysPlan.Distribution,
+		allowPartialDistribution: e.planningMode != distSQLLocalOnlyPlanning,
 	}
 	p := e.dsp.planJoiners(planCtx, &info, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns
