@@ -162,11 +162,3 @@ func PositiveFloat(v float64) error {
 	}
 	return nil
 }
-
-// FloatBetweenZeroAndOneInclusive can be passed to RegisterFloatSetting.
-func FloatBetweenZeroAndOneInclusive(v float64) error {
-	if math.Signbit(v) || v > 1 {
-		return errors.Errorf("must set to value between 0 and 1 inclusive: %f", v)
-	}
-	return nil
-}

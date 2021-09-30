@@ -353,9 +353,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		}),
 	}
 
-	telemetryLoggingMetrics := NewTelemetryLoggingMetrics(
-		telemetrySmoothingAlpha.Get(&cfg.Settings.SV),
-		cfg.getTelemetryRollingInterval())
+	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}
 
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
@@ -376,14 +374,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	return s
-}
-
-func (cfg *ExecutorConfig) getTelemetryRollingInterval() int64 {
-	if cfg.TelemetryLoggingTestingKnobs != nil && cfg.TelemetryLoggingTestingKnobs.getRollingIntervalLength != nil {
-		return cfg.TelemetryLoggingTestingKnobs.getRollingIntervalLength()
-	}
-
-	return telemetryRollingInterval.Get(&cfg.Settings.SV)
 }
 
 func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
