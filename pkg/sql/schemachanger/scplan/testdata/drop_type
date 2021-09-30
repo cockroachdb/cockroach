@@ -10,7 +10,7 @@ Stage 0
     TableID: 52
   *scop.MarkDescriptorAsDropped
     TableID: 53
-Stage 1
+Stage 1 (non-revertible)
   *scop.DrainDescriptorName
     TableID: 52
   *scop.DrainDescriptorName

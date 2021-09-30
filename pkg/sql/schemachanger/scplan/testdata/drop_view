@@ -13,7 +13,7 @@ Stage 0
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 53
     TableID: 52
-Stage 1
+Stage 1 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName
@@ -73,7 +73,7 @@ Stage 0
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 58
-Stage 1
+Stage 1 (non-revertible)
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName
