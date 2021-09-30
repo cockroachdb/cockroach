@@ -566,6 +566,7 @@ cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
 cluster_transactions                   NULL
+create_schema_statements               NULL
 create_statements                      NULL
 create_type_statements                 NULL
 cross_db_references                    NULL

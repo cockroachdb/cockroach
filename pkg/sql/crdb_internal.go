@@ -106,6 +106,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:           crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalCreateSchemaStmtsTableID:         crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:               crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:           crdbInternalCreateTypeStmtsTable,
 		catconstants.CrdbInternalDatabasesTableID:                 crdbInternalDatabasesTable,
@@ -2273,6 +2274,43 @@ CREATE TABLE crdb_internal.create_type_statements (
 			// statements for them.
 			default:
 				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
+			}
+			return nil
+		})
+	},
+}
+
+var crdbInternalCreateSchemaStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user defined schemas accessible by the current user in current database (KV scan)",
+	schema: `
+CREATE TABLE crdb_internal.create_schema_statements (
+	database_id        INT,
+  database_name      STRING,
+  schema_name        STRING,
+  descriptor_id      INT,
+  create_statement   STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachSchema(ctx, p, db, func(schemaDesc catalog.SchemaDescriptor) error {
+			switch schemaDesc.SchemaKind() {
+			case catalog.SchemaUserDefined:
+				node := &tree.CreateSchema{
+					Schema: tree.ObjectNamePrefix{
+						SchemaName:     tree.Name(schemaDesc.GetName()),
+						ExplicitSchema: true,
+					},
+				}
+				if err := addRow(
+					tree.NewDInt(tree.DInt(db.GetID())),         // database_id
+					tree.NewDString(db.GetName()),               // database_name
+					tree.NewDString(schemaDesc.GetName()),       // schema_name
+					tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
+					tree.NewDString(tree.AsString(node)),        // create_statement
+				); err != nil {
+					return err
+				}
+
 			}
 			return nil
 		})

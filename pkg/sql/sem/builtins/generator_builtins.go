@@ -406,6 +406,22 @@ The output can be used to recreate a database.'
 			tree.VolatilityVolatile,
 		),
 	),
+	"crdb_internal.show_create_all_schemas": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"database_name", types.String},
+			},
+			showCreateAllSchemasGeneratorType,
+			makeShowCreateAllSchemasGenerator,
+			`Returns rows of CREATE schema statements. 
+The output can be used to recreate a database.'
+`,
+			tree.VolatilityVolatile,
+		),
+	),
 }
 
 func makeGeneratorOverload(
@@ -1879,6 +1895,7 @@ func (p *payloadsForTraceGenerator) Close(_ context.Context) {
 }
 
 var showCreateAllTablesGeneratorType = types.String
+var showCreateAllSchemasGeneratorType = types.String
 
 // Phase is used to determine if CREATE statements or ALTER statements
 // are being generated for showCreateAllTables.
@@ -1889,6 +1906,86 @@ const (
 	alterAddFks
 	alterValidateFks
 )
+
+// showCreateAllSchemasGenerator supports the execution of
+// crdb_internal.show_create_all_schemas(dbName).
+type showCreateAllSchemasGenerator struct {
+	ie     sqlutil.InternalExecutor
+	txn    *kv.Txn
+	ids    []int64
+	dbName string
+	acc    mon.BoundAccount
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// showCreateAllSchemasGenerator.
+	curr tree.Datum
+	idx  int
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
+	return showCreateAllSchemasGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	ids, err := getSchemaIDs(
+		ctx, s.ie, txn, s.dbName, &s.acc,
+	)
+	if err != nil {
+		return err
+	}
+
+	s.ids = ids
+
+	s.txn = txn
+	s.idx = -1
+	return nil
+}
+
+func (s *showCreateAllSchemasGenerator) Next(ctx context.Context) (bool, error) {
+	s.idx++
+	if s.idx >= len(s.ids) {
+		return false, nil
+	}
+
+	createStmt, err := getSchemaCreateStatement(
+		ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
+	)
+	if err != nil {
+		return false, err
+	}
+	createStmtStr := string(tree.MustBeDString(createStmt))
+	s.curr = tree.NewDString(createStmtStr + ";")
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *showCreateAllSchemasGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *showCreateAllSchemasGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeShowCreateAllSchemasGenerator creates a generator to support the
+// crdb_internal.show_create_all_schemas(dbName) builtin.
+// We use the timestamp of when the generator is created as the
+// timestamp to pass to AS OF SYSTEM TIME for looking up the create schema
+func makeShowCreateAllSchemasGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	return &showCreateAllSchemasGenerator{
+		dbName: dbName,
+		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
+		acc:    ctx.Mon.MakeBoundAccount(),
+	}, nil
+}
 
 // showCreateAllTablesGenerator supports the execution of
 // crdb_internal.show_create_all_tables(dbName).
