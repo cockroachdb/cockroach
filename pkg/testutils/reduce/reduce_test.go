@@ -52,11 +52,11 @@ var (
 )
 
 func isInterestingGo(contains string) reduce.InterestingFn {
-	return func(ctx context.Context, f string) bool {
+	return func(ctx context.Context, f string) (bool, func()) {
 		_, err := parser.ParseExpr(f)
 		if err == nil {
-			return false
+			return false, nil
 		}
-		return strings.Contains(err.Error(), contains)
+		return strings.Contains(err.Error(), contains), nil
 	}
 }
