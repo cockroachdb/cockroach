@@ -721,7 +721,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	kvProber := kvprober.NewProber(kvprober.Opts{
-		AmbientCtx:              cfg.AmbientCtx,
+		Tracer:                  cfg.AmbientCtx.Tracer,
 		DB:                      db,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),

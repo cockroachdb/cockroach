@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
@@ -162,9 +161,7 @@ func TestWriteProbe(t *testing.T) {
 
 func initTestProber(m *mock) *Prober {
 	p := NewProber(Opts{
-		AmbientCtx: log.AmbientContext{
-			Tracer: tracing.NewTracer(),
-		},
+		Tracer:                  tracing.NewTracer(),
 		HistogramWindowInterval: time.Minute, // actual value not important to test
 		Settings:                cluster.MakeTestingClusterSettings(),
 	})
