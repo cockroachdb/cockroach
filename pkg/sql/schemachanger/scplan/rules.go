@@ -283,7 +283,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					dirPredicate: sameDirection,
-					thatStatus:   scpb.Status_DELETE_ONLY,
+					thatStatus:   scpb.Status_ABSENT,
 					predicate:    typeHasReference,
 				},
 			},
