@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -68,15 +69,11 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		}
 	}()
 
-	g, err := scgraph.New(initial)
+	g, err := opgen.BuildGraph(params.ExecutionPhase, initial)
 	if err != nil {
 		return Plan{}, err
 	}
-	// TODO(ajwerner): Generate the stages for all of the phases as it will make
-	// debugging easier.
-	for _, ts := range initial {
-		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.Status, params)
-	}
+
 	if err := g.ForEachNode(func(n *scpb.Node) error {
 		d, ok := p[reflect.TypeOf(n.Element())]
 		if !ok {
