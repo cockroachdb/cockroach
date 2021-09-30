@@ -2436,7 +2436,7 @@ func (s *Server) Decommission(
 		nodeDetails = &ev.CommonNodeDecommissionDetails
 		event = ev
 	} else {
-		panic("unexpected target membership status")
+		return errors.AssertionFailedf("unexpected target membership status")
 	}
 	event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
 	nodeDetails.RequestingNodeID = int32(s.NodeID())
@@ -2444,10 +2444,17 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
-			if errors.Is(err, liveness.ErrMissingRecord) {
-				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
+			// If the node is unknown (no liveness record) and we're trying to
+			// decommission, we go ahead with cleanup anyway. In particular, we want
+			// to remove stray node status entries even if no liveness entry exists.
+			//
+			// We check the status, because in the case of a recommission (i.e.
+			// targetStatus.Active) we have to error on unknown nodes.
+			hasRecord := !errors.Is(err, liveness.ErrMissingRecord)
+			decommissioning := targetStatus.Decommissioning() || targetStatus.Decommissioned()
+			if hasRecord || !decommissioning {
+				return err
 			}
-			return err
 		}
 		if statusChanged {
 			nodeDetails.TargetNodeID = int32(nodeID)
