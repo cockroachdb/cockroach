@@ -83,11 +83,12 @@ func TestDialNoBreaker(t *testing.T) {
 	// Now trip the breaker and check that DialNoBreaker will go ahead
 	// and dial anyway, and on top of that open the breaker again (since
 	// the dial will succeed).
-	breaker.Trip()
-	require.True(t, breaker.Tripped())
+	repErr := errors.New("reported a problem")
+	breaker.Report(repErr)
+	require.True(t, errors.Is(breaker.Err(), repErr), "%+v is no %+v", breaker.Err(), repErr)
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	require.NoError(t, err)
-	require.False(t, breaker.Tripped())
+	require.NoError(t, breaker.Err())
 
 	// Test that resolver errors also trip the breaker, just like
 	// they would for regular Dial.
