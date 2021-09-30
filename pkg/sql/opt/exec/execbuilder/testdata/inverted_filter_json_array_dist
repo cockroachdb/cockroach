@@ -320,7 +320,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
