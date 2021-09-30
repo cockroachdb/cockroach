@@ -223,15 +223,6 @@ func (n *Dialer) dial(
 		return nil, err
 	}
 
-	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
-	// behavior in this file. Note that this different behavior causes problems
-	// for higher-levels in the system. For example, DistSQL checks for
-	// ConnHealth when scheduling processors, but can then see attempts to send
-	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
-	// as a stop-gap before the reconciliation occurs.
-	if breaker != nil {
-		breaker.Success()
-	}
 	return conn, nil
 }
 
@@ -239,6 +230,13 @@ func (n *Dialer) dial(
 // class to the given node that succeeded on its most recent heartbeat.
 // Returns circuit.ErrBreakerOpen if the breaker is tripped, otherwise
 // ErrNoConnection if no connection to the node currently exists.
+//
+// TODO(bdarnell): Reconcile the different health checks and circuit breaker
+// behavior in this file. Note that this different behavior causes problems
+// for higher-levels in the system. For example, DistSQL checks for
+// ConnHealth when scheduling processors, but can then see attempts to send
+// RPCs fail when dial fails due to an open breaker. Reset the breaker here
+// as a stop-gap before the reconciliation occurs.
 func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")

@@ -21,9 +21,3 @@ func (b *BreakerV2) Ready() bool {
 func (b *BreakerV2) Fail(err error) {
 	b.Report(err)
 }
-
-// Success ...
-// TODO(tbg): remove this and the callers.
-func (b *BreakerV2) Success() {
-	b.Reset()
-}
