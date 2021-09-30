@@ -605,3 +605,13 @@ func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.Pr
 	}
 	return projections
 }
+
+// IsCorrelatedFiltersAggs returns true if any column in the filter expression
+// is an output column of the aggregation. This is used to determine whether the
+// results of GroupBy aggregations are used in an InnerJoin predicate.
+func (c *CustomFuncs) IsCorrelatedFiltersAggs(
+	filters memo.FiltersExpr, aggs memo.AggregationsExpr,
+) bool {
+	aggCols := aggs.OutputCols()
+	return aggCols.Intersects(c.FilterOuterCols(filters))
+}

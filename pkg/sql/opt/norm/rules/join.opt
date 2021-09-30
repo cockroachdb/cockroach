@@ -298,6 +298,41 @@
     $private
 )
 
+# PushJoinIntoGroupByRight matches on InnerJoins with a GroupBy in the right
+# relation. The GroupBy can be pushed into the join if the following 2
+# conditions are met:
+#
+# 1. The left relation has a key.
+# 2. The results of the GroupBy's aggregate functions are not used in the join
+#    predicate.
+#
+# Note that this normalization rule is not always an improvement. Its
+# purpose is to try and group InnerJoins together for further optimization. Thus
+# there is a corresponding optimization rule, PushGroupByIntoJoinRight, that
+# reverses this change if necessary.
+#
+# See this published paper for further context:
+# http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf
+[PushJoinIntoGroupByRight, Normalize]
+(InnerJoin
+    $left:* & (HasStrictKey $left)
+    $right:(GroupBy | ScalarGroupBy
+        $input:*
+        $aggs:*
+        $groupingPrivate:(GroupingPrivate $groupingCols:* $ordering:*))
+    $on:* & ^(IsCorrelatedFiltersAggs $on $aggs)
+    $private:*
+)
+=>
+((OpName $right)
+    (InnerJoin $left $input $on $private)
+    $aggs
+    (MakeGrouping
+        (UnionCols $groupingCols (OutputCols $left))
+        $ordering
+    )
+)
+
 # SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
 # FullJoin to a RightJoin) when it's known that every row in the join's left
 # input will match at least one row in the right input. Since every row matches,
