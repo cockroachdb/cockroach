@@ -15,6 +15,7 @@ import (
 	"log"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -41,11 +42,17 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 		stdout, err := d.exec.CommandContextSilent(ctx, "/usr/bin/xcodebuild", "-version")
 		if err != nil {
 			success = false
-			log.Printf("Failed to run /usr/bin/xcodebuild -version. Got output: ")
-			log.Printf("stdout:   %s", string(stdout))
+			log.Printf("Failed to run `/usr/bin/xcodebuild -version`.")
+			stdoutStr := strings.TrimSpace(string(stdout))
+			if len(stdoutStr) > 0 {
+				log.Printf("stdout:   %s", stdoutStr)
+			}
 			var cmderr *exec.ExitError
 			if errors.As(err, &cmderr) {
-				log.Printf("stderr:   %s", string(cmderr.Stderr))
+				stderrStr := strings.TrimSpace(string(cmderr.Stderr))
+				if len(stderrStr) > 0 {
+					log.Printf("stderr:   %s", stderrStr)
+				}
 			}
 			log.Println(`You must have a full installation of XCode to build with Bazel.
 A command-line tools instance does not suffice.
