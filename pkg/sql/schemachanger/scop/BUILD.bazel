@@ -7,9 +7,11 @@ go_library(
         "backfill.go",
         "mutation.go",
         "ops.go",
+        "phase.go",
         "validation.go",
         ":gen-backfill",  # keep
         ":gen-mutation",  # keep
+        ":gen-phase-stringer",  # keep
         ":gen-type-stringer",  # keep
         ":gen-validation",  # keep
     ],
@@ -72,4 +74,10 @@ stringer(
     name = "gen-type-stringer",
     src = "ops.go",
     typ = "Type",
+)
+
+stringer(
+    name = "gen-phase-stringer",
+    src = "phase.go",
+    typ = "Phase",
 )

@@ -238,7 +238,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.Database, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
 					},
 				},
@@ -257,7 +257,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Database, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
 					},
 				},
@@ -304,7 +304,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.Schema, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
 					},
 				},
@@ -323,7 +323,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Schema, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
 					},
 				},
@@ -355,7 +355,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.SequenceOwnedBy, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
 					},
 				},
@@ -377,7 +377,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.RelationDependedOnBy, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -400,7 +400,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.TypeReference, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
 							!flags.CreatedDescriptorIDs.Contains(this.DescID)
 					},
@@ -420,7 +420,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_ABSENT: {
 				{
 					predicate: func(this *scpb.TypeReference, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
 							!flags.CreatedDescriptorIDs.Contains(this.DescID)
 					},
@@ -443,7 +443,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.DefaultExpression, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -479,7 +479,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.Type, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
 					},
 				},
@@ -498,7 +498,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Type, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
 					},
 				},
@@ -531,7 +531,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.Sequence, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
 					},
 				},
@@ -577,7 +577,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.View, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -607,7 +607,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.OutboundForeignKey, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
 					},
 				},
@@ -631,7 +631,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.InboundForeignKey, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
 					},
 				},
@@ -699,7 +699,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.Table, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -754,7 +754,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_ABSENT: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -773,7 +773,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
-						return flags.ExecutionPhase == PreCommitPhase &&
+						return flags.ExecutionPhase == scop.PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -816,8 +816,8 @@ var rules = map[scpb.Element]targetRules{
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
 						return !flags.CreatedDescriptorIDs.Contains(this.TableID) &&
-							(flags.ExecutionPhase == StatementPhase ||
-								flags.ExecutionPhase == PreCommitPhase)
+							(flags.ExecutionPhase == scop.StatementPhase ||
+								flags.ExecutionPhase == scop.PreCommitPhase)
 					},
 				},
 				{
@@ -869,7 +869,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_ABSENT: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -886,7 +886,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == PreCommitPhase &&
+						return flags.ExecutionPhase == scop.PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -956,7 +956,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
+						return flags.ExecutionPhase == scop.StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -974,7 +974,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == PreCommitPhase &&
+						return flags.ExecutionPhase == scop.PreCommitPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
