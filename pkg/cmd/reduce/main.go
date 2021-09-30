@@ -52,7 +52,7 @@ var (
 	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
 	file            = flags.String("file", "", "the path to a file containing a SQL query to reduce")
-	verbose         = flags.Bool("v", false, "print progress to standard output")
+	verbose         = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
 	contains        = flags.String("contains", "", "error regex to search for")
 	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
 	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
@@ -141,7 +141,7 @@ func reduceSQL(
 		chunkReducer = reducesql.NewSQLChunkReducer(chunkReductions)
 	}
 
-	interesting := func(ctx context.Context, sql string) bool {
+	isInteresting := func(ctx context.Context, sql string) (interesting bool, logOriginalHint func()) {
 		// Disable telemetry and license generation.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
@@ -162,13 +162,18 @@ func reduceSQL(
 		case errors.HasType(err, (*os.PathError)(nil)):
 			log.Fatal(err)
 		}
-		return containsRE.Match(out)
+		if verbose {
+			logOriginalHint = func() {
+				fmt.Fprintf(logger, "output did not match regex %s:\n\n%s", contains, string(out))
+			}
+		}
+		return containsRE.Match(out), logOriginalHint
 	}
 
 	out, err := reduce.Reduce(
 		logger,
 		inputSQL,
-		interesting,
+		isInteresting,
 		workers,
 		reduce.ModeInteresting,
 		chunkReducer,
