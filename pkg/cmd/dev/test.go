@@ -43,6 +43,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		RunE: runE,
 	}
 	// Attach flags for the test sub-command.
+	addCommonBuildFlags(testCmd)
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
