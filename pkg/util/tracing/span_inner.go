@@ -35,6 +35,12 @@ type spanInner struct {
 	// otelSpan is the "shadow span" created for reporting to the OpenTelemetry
 	// tracer (if an otel tracer was configured).
 	otelSpan oteltrace.Span
+
+	// sterile is set if this span does not want to have children spans. In that
+	// case, trying to create a child span will result in the would-be child being
+	// a root span. This is useful for span corresponding to long-running
+	// operations that don't want to be associated with derived operations.
+	sterile bool
 }
 
 func (s *spanInner) TraceID() uint64 {
@@ -46,6 +52,10 @@ func (s *spanInner) TraceID() uint64 {
 
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
+}
+
+func (s *spanInner) isSterile() bool {
+	return s.sterile
 }
 
 func (s *spanInner) IsVerbose() bool {
@@ -136,6 +146,7 @@ func (s *spanInner) Meta() SpanMeta {
 	var spanID uint64
 	var recordingType RecordingType
 	var baggage map[string]string
+	var sterile bool
 
 	if s.crdb != nil {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
@@ -150,6 +161,7 @@ func (s *spanInner) Meta() SpanMeta {
 			baggage[k] = v
 		}
 		recordingType = s.crdb.mu.recording.recordingType.load()
+		sterile = s.isSterile()
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -161,7 +173,8 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		baggage == nil {
+		baggage == nil &&
+		!sterile {
 		return SpanMeta{}
 	}
 	return SpanMeta{
@@ -170,6 +183,7 @@ func (s *spanInner) Meta() SpanMeta {
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
 		Baggage:       baggage,
+		sterile:       sterile,
 	}
 }
 
