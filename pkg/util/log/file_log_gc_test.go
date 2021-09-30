@@ -16,7 +16,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -75,7 +74,7 @@ func TestSecondaryGC(t *testing.T) {
 	var fs *fileSink
 	require.NoError(t, logging.allSinkInfos.iterFileSinks(
 		func(p *fileSink) error {
-			if strings.HasSuffix(p.fileNamePrefix, "-gctest") {
+			if p.nameGenerator.ownsFileByPrefix(fileNameConstants.program + "-gctest") {
 				fs = p
 			}
 			return nil
