@@ -583,20 +583,24 @@ var dateStyle = settings.RegisterEnumSetting(
 	dateStyleEnumMap,
 ).WithPublic()
 
+const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
+
 // intervalStyleEnabled controls intervals representation.
 // TODO(#sql-experience): remove session setting in v22.1 and have this
 // always enabled.
 var intervalStyleEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.intervalstyle.enabled",
+	intervalStyleEnabledClusterSetting,
 	"default value for intervalstyle_enabled session setting",
 	false,
 ).WithPublic()
+
+const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
 
 // dateStyleEnabled controls dates representation.
 // TODO(#sql-experience): remove session setting in v22.1 and have this
 // always enabled.
 var dateStyleEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.datestyle.enabled",
+	dateStyleEnabledClusterSetting,
 	"default value for datestyle_enabled session setting",
 	false,
 ).WithPublic()
