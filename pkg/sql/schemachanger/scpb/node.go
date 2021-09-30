@@ -32,7 +32,13 @@ type Node struct {
 // index or column in a table).
 type Element interface {
 	protoutil.Message
+
+	// element is intended to be implemented only by the members of ElementProto.
+	// Code generation implements this method.
+	element()
 }
+
+//go:generate go run element_generator.go --in scpb.proto --out elements_generated.go
 
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
