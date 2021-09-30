@@ -46,11 +46,11 @@ func TestNodedialerPositive(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	// Ensure that dialing works.
 	breaker := nd.GetCircuitBreaker(1, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 	ctx := context.Background()
 	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
 	assert.Nil(t, err, "failed to dial")
-	assert.True(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 }
 
 func TestDialNoBreaker(t *testing.T) {
@@ -73,12 +73,12 @@ func TestDialNoBreaker(t *testing.T) {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 	})
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 
 	// Test that DialNoBreaker is successful normally.
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	assert.Nil(t, err, "failed to dial")
-	assert.True(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 
 	// Now trip the breaker and check that DialNoBreaker will go ahead
 	// and dial anyway, and on top of that open the breaker again (since
@@ -112,7 +112,7 @@ func TestDialNoBreaker(t *testing.T) {
 	_, ln, _ = newTestServer(t, clock, stopper, false /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
 	breaker = nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	assert.NotNil(t, err, "expected dial error")
 }
@@ -320,7 +320,7 @@ func TestResolverErrorsTrip(t *testing.T) {
 	_, err := nd.Dial(context.Background(), staticNodeID, rpc.DefaultClass)
 	assert.Equal(t, errors.Cause(err), boom)
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.False(t, breaker.Ready())
+	assert.NoError(t, breaker.Err())
 }
 
 /*

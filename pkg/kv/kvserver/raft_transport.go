@@ -550,7 +550,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 		panic("snapshots must be sent using SendSnapshot")
 	}
 
-	if !t.dialer.GetCircuitBreaker(toNodeID, class).Ready() {
+	if t.dialer.GetCircuitBreaker(toNodeID, class).Err() != nil {
 		return false
 	}
 

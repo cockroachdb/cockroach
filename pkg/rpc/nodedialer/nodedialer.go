@@ -190,9 +190,10 @@ func (n *Dialer) dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
-	if checkBreaker && !breaker.Ready() {
-		err = errors.Wrapf(circuit.ErrBreakerOpen(), "unable to dial n%d", nodeID)
-		return nil, err
+	if checkBreaker {
+		if err = breaker.Err(); err != nil {
+			return nil, err
+		}
 	}
 	defer func() {
 		// Enforce a minimum interval between warnings for failed connections.
@@ -265,7 +266,8 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // See also: https://github.com/cockroachdb/cockroach/issues/70111
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
-	if err == nil || !n.getBreaker(nodeID, class).Ready() {
+	// NB: ConnHealth already checked the circuit breaker for us.
+	if err == nil {
 		return err
 	}
 	addr, err := n.resolver(nodeID)
