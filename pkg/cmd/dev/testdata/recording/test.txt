@@ -1,3 +1,7 @@
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
 bazel test //pkg/util/tracing:tracing_test --test_output errors
 ----
 ----
@@ -20,6 +24,10 @@ Executed 0 out of 1 test: 1 test passes.
 ----
 ----
 
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
 bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
@@ -28,6 +36,10 @@ bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --tes
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
 
 bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
 ----
@@ -42,6 +54,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
 bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
@@ -50,6 +66,10 @@ bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experi
 Executed 0 out of 1 test: 1 test passes.
 ----
 ----
+
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
 
 bazel test //pkg/util/tracing:tracing_test --nocache_test_results '--test_filter=TestStartChild*' --test_output errors
 ----
@@ -60,6 +80,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
 bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output errors
 ----
 ----
@@ -68,6 +92,10 @@ bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --r
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
 
 bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
 ----
@@ -83,6 +111,10 @@ SUCCESS
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+bazel query 'kind(go_test, //pkg/testutils:all)'
+----
+//pkg/testutils:testutils_test
 
 bazel test //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
 ----
@@ -109,11 +141,29 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel test -s //pkg/util/tracing:tracing_test --test_output errors
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+----
+//pkg/util/tracing:tracing_test
+
+bazel test //pkg/util/tracing:tracing_test --test_output errors -s
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+bazel query 'kind(go_test, //pkg/roachpb:all)'
+----
+----
+//pkg/roachpb:roachpb_test
+//pkg/roachpb:string_test
+----
+----
+
+bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output errors
+----
+
+bazel test pkg/roachpb:string_test --test_output errors
 ----
