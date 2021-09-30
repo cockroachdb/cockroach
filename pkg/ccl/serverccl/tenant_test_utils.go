@@ -35,12 +35,17 @@ type testTenant struct {
 }
 
 func newTestTenant(
-	t *testing.T, server serverutils.TestServerInterface, existing bool, tenantID roachpb.TenantID,
+	t *testing.T,
+	server serverutils.TestServerInterface,
+	existing bool,
+	tenantID roachpb.TenantID,
+	knobs base.TestingKnobs,
 ) *testTenant {
 	t.Helper()
 
 	tenantParams := tests.CreateTestTenantParams(tenantID)
 	tenantParams.Existing = existing
+	tenantParams.TestingKnobs = knobs
 
 	log.TestingClearServerIdentifiers()
 	tenant, tenantConn := serverutils.StartTenant(t, server, tenantParams)
@@ -71,7 +76,9 @@ type tenantTestHelper struct {
 	tenantControlCluster tenantCluster
 }
 
-func newTestTenantHelper(t *testing.T, tenantClusterSize int) *tenantTestHelper {
+func newTestTenantHelper(
+	t *testing.T, tenantClusterSize int, knobs base.TestingKnobs,
+) *tenantTestHelper {
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
@@ -87,12 +94,14 @@ func newTestTenantHelper(t *testing.T, tenantClusterSize int) *tenantTestHelper 
 			server,
 			tenantClusterSize,
 			security.EmbeddedTenantIDs()[0],
+			knobs,
 		),
 		tenantControlCluster: newTenantCluster(
 			t,
 			server,
 			tenantClusterSize,
 			security.EmbeddedTenantIDs()[1],
+			knobs,
 		),
 	}
 }
@@ -115,14 +124,19 @@ func (h *tenantTestHelper) cleanup(ctx context.Context, t *testing.T) {
 type tenantCluster []*testTenant
 
 func newTenantCluster(
-	t *testing.T, server serverutils.TestServerInterface, tenantClusterSize int, tenantID uint64,
+	t *testing.T,
+	server serverutils.TestServerInterface,
+	tenantClusterSize int,
+	tenantID uint64,
+	knobs base.TestingKnobs,
 ) tenantCluster {
 	t.Helper()
 
 	cluster := make([]*testTenant, tenantClusterSize)
 	existing := false
 	for i := 0; i < tenantClusterSize; i++ {
-		cluster[i] = newTestTenant(t, server, existing, roachpb.MakeTenantID(tenantID))
+		cluster[i] =
+			newTestTenant(t, server, existing, roachpb.MakeTenantID(tenantID), knobs)
 		existing = true
 	}
 

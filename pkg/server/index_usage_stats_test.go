@@ -54,51 +54,11 @@ func compareStatsHelper(
 	require.Equal(t, expected, actual)
 }
 
-func createIndexStatsIngestedCallback() (
-	func(key roachpb.IndexUsageKey),
-	chan roachpb.IndexUsageKey,
-) {
-	// Create a buffered channel so the callback is non-blocking.
-	notify := make(chan roachpb.IndexUsageKey, 100)
-
-	cb := func(key roachpb.IndexUsageKey) {
-		notify <- key
-	}
-
-	return cb, notify
-}
-
-func waitForStatsIngestion(
-	t *testing.T,
-	notify chan roachpb.IndexUsageKey,
-	expectedKeys map[roachpb.IndexUsageKey]struct{},
-	expectedEventCnt int,
-	timeout time.Duration,
-) {
-	var timer timeutil.Timer
-	eventCnt := 0
-
-	timer.Reset(timeout)
-
-	for eventCnt < expectedEventCnt {
-		select {
-		case key := <-notify:
-			if _, ok := expectedKeys[key]; ok {
-				eventCnt++
-			}
-			continue
-		case <-timer.C:
-			timer.Read = true
-			t.Fatalf("expected stats ingestion to complete within %s, but it timed out", timeout)
-		}
-	}
-}
-
 func TestStatusAPIIndexUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	statsIngestionCb, statsIngestionNotifier := createIndexStatsIngestedCallback()
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
 
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -214,10 +174,12 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	thirdLocalStatsReader := thirdServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	// Wait for the stats to be ingested.
-	waitForStatsIngestion(t, statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-		indexKeyA: {},
-		indexKeyB: {},
-	}, /* expectedKeys */ 4 /* expectedEventCnt*/, 5*time.Second /* timeout */)
+	require.NoError(t,
+		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+			indexKeyA: {},
+			indexKeyB: {},
+		}, /* expectedKeys */ 4 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+	)
 
 	// First node should have nothing.
 	stats := firstLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
