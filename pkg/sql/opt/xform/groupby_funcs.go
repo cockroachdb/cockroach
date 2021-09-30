@@ -28,19 +28,39 @@ func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
 }
 
 // MakeMinMaxScalarSubqueries transforms a list of MIN and MAX aggregate
-// expressions (aggs) and a ScanExpr (input) into multiple scalar subqueries,
-// with one MIN or MAX expression per subquery.
+// expressions (aggs) and a scanPrivate into multiple scalar subqueries, with
+// one MIN or MAX expression per subquery.
 func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, aggs memo.AggregationsExpr,
+) {
+	c.MakeMinMaxScalarSubqueriesWithFilter(grp, scanPrivate, aggs, nil)
+}
+
+// MakeMinMaxScalarSubqueriesWithFilter transforms a list of MIN and MAX aggregate
+// expressions (aggs) and a scanPrivate with filters into multiple scalar
+// subqueries, with one MIN or MAX expression per subquery.
+func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
+	grp memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	aggs memo.AggregationsExpr,
+	filters memo.FiltersExpr,
 ) {
 	numCols := len(aggs)
 	valuesEntries := make(memo.ScalarListExpr, numCols)
 	dataTypes := make([]*types.T, numCols)
 	newCols := make(opt.ColList, numCols)
 
+	var inputExpr memo.RelExpr
 	for i := 0; i < numCols; i++ {
 		newScanPrivate := c.DuplicateScanPrivate(scanPrivate)
-		newScanExpr := c.e.f.ConstructScan(newScanPrivate)
+		inputExpr = c.e.f.ConstructScan(newScanPrivate)
+
+		// If the input to the scalar group by is a Select with filters, remap the
+		// column IDs in the filters and use that to build a new Select.
+		if len(filters) > 0 {
+			newFilters := c.MapFilterCols(filters, scanPrivate.Cols, newScanPrivate.Cols)
+			inputExpr = c.e.f.ConstructSelect(inputExpr, newFilters)
+		}
 
 		var newAggrItem = aggs[i]
 		// Variable expressions must have their ColIDs remapped, which requires
@@ -68,7 +88,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
 		valuesEntries[i] =
 			c.e.f.ConstructSubquery(
 				c.e.f.ConstructScalarGroupBy(
-					newScanExpr,
+					inputExpr,
 					memo.AggregationsExpr{
 						newAggrItem,
 					},
@@ -109,6 +129,8 @@ func (c *CustomFuncs) TwoOrMoreMinOrMax(aggs memo.AggregationsExpr) bool {
 
 		switch agg.Agg.Op() {
 		case opt.MinOp, opt.MaxOp:
+			// The child of a min or max aggregation should always be a variable, but
+			// we add a sanity check here anyway.
 			if _, ok := agg.Agg.Child(0).(*memo.VariableExpr); !ok {
 				return false
 			}
