@@ -25,6 +25,7 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"math"
+	"math/bits"
 	"math/rand"
 	"net"
 	"regexp/syntax"
@@ -2013,6 +2014,25 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
+	"unordered_unique_rowid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				v := GenerateUniqueUnorderedID(ctx.NodeID.SQLInstanceID())
+				return tree.NewDInt(v), nil
+			},
+			Info: "Returns a unique ID. The value is a combination of the " +
+				"insert timestamp and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. The way it is generated " +
+				"there is no ordering",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	// Sequence functions.
 
 	"nextval": makeBuiltin(
@@ -2026,11 +2046,11 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.IncrementSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -2066,11 +2086,11 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(dOid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -2127,14 +2147,14 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Sequence.SetSequenceValue(
-					evalCtx.Ctx(), qualifiedName, int64(newVal), true); err != nil {
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), true); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2166,16 +2186,15 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-
 				isCalled := bool(tree.MustBeDBool(args[2]))
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Sequence.SetSequenceValue(
-					evalCtx.Ctx(), qualifiedName, int64(newVal), isCalled); err != nil {
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(dOid.DInt), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -3433,8 +3452,15 @@ value if you rely on the HLC for accuracy.`,
 
 	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			Types: tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) > 0 {
+					if argTyp := args[0].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				return types.MakeArray(typ)
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -3445,8 +3471,15 @@ value if you rely on the HLC for accuracy.`,
 
 	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			Types: tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) > 1 {
+					if argTyp := args[1].ResolvedType(); argTyp.Family() != types.UnknownFamily {
+						return argTyp
+					}
+				}
+				return types.MakeArray(typ)
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -3470,14 +3503,18 @@ value if you rely on the HLC for accuracy.`,
 	"array_remove": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) != 0 {
+					cmp, err := e.CompareError(ctx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp != 0 {
 						if err := result.Append(e); err != nil {
 							return nil, err
 						}
@@ -3493,14 +3530,18 @@ value if you rely on the HLC for accuracy.`,
 	"array_replace": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
+			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					cmp, err := e.CompareError(ctx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp == 0 {
 						if err := result.Append(args[2]); err != nil {
 							return nil, err
 						}
@@ -3526,7 +3567,11 @@ value if you rely on the HLC for accuracy.`,
 					return tree.DNull, nil
 				}
 				for i, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					cmp, err := e.CompareError(ctx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp == 0 {
 						return tree.NewDInt(tree.DInt(i + 1)), nil
 					}
 				}
@@ -3547,7 +3592,11 @@ value if you rely on the HLC for accuracy.`,
 				}
 				result := tree.NewDArray(types.Int)
 				for i, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					cmp, err := e.CompareError(ctx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp == 0 {
 						if err := result.Append(tree.NewDInt(tree.DInt(i + 1))); err != nil {
 							return nil, err
 						}
@@ -7567,6 +7616,26 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 // NodeIDBits is the number of bits stored in the lower portion of
 // GenerateUniqueInt.
 const NodeIDBits = 15
+
+// GenerateUniqueUnorderedID creates a unique int64 composed of the current time
+// at a 10-microsecond granularity and the instance-id. The top-bit is left
+// empty so that negative values are not returned. The 48 bits following after
+// represent the reversed timestamp and then 15 bits of the node id.
+func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
+	orig := uint64(GenerateUniqueInt(instanceID))
+	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
+	return tree.DInt(uniqueUnorderedID)
+}
+
+// mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
+// serial unique uint64 to an unordered unique int64. The bit manipulation
+// should preserve the number of 1-bits.
+func mapToUnorderedUniqueInt(val uint64) uint64 {
+	// val is [0][48 bits of ts][15 bits of node id]
+	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
+	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
+	return v
+}
 
 // GenerateUniqueInt creates a unique int composed of the current time at a
 // 10-microsecond granularity and the instance-id. The instance-id is stored in the

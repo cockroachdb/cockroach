@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -28,12 +27,6 @@ const (
 	stressArgsFlag  = "stress-args"
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
-
-	// Logic test related flags.
-	logicFlag    = "logic"
-	filesFlag    = "files"
-	subtestsFlag = "subtests"
-	configFlag   = "config"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -45,8 +38,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
-	dev test --stress --race ...
-	dev test --logic --files=prepare|fk --subtests=20042 --config=local`,
+	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -57,27 +49,13 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-
-	// Logic test related flags.
-	testCmd.Flags().Bool(logicFlag, false, "run logic tests")
-	testCmd.Flags().String(filesFlag, "", "run logic tests for files matching this regex")
-	testCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
-	testCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
 	return testCmd
 }
 
 // TODO(irfansharif): Add tests for the various bazel commands that get
 // generated from the set of provided user flags.
 
-func (d *dev) test(cmd *cobra.Command, args []string) error {
-	if logicTest := mustGetFlagBool(cmd, logicFlag); logicTest {
-		return d.runLogicTest(cmd)
-	}
-
-	return d.runUnitTest(cmd, args)
-}
-
-func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
+func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	stress := mustGetFlagBool(cmd, stressFlag)
@@ -94,9 +72,6 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, "--color=yes")
-	args = append(args, "--experimental_convenience_symlinks=ignore")
-	args = append(args, getConfigFlags()...)
 	args = append(args, additionalBazelArgs...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
@@ -113,7 +88,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
-			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
 		if strings.HasSuffix(pkg, "...") {
@@ -182,15 +157,6 @@ func (d *dev) runUnitTest(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_output", "errors")
 	}
 
+	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
-}
-
-func (d *dev) runLogicTest(cmd *cobra.Command) error {
-	files := mustGetFlagString(cmd, filesFlag)
-	subtests := mustGetFlagString(cmd, subtestsFlag)
-	config := mustGetFlagString(cmd, configFlag)
-
-	d.log.Printf("logic test args: files=%s  subtests=%s  config=%s",
-		files, subtests, config)
-	return errors.New("--logic unimplemented")
 }

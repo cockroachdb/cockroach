@@ -85,7 +85,8 @@ func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error
 			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 			Codec:            keys.SystemSQLCodec,
 		}
-		return wc.Worker(ctx, evalCtx)
+		semaCtx := tree.MakeSemaContext()
+		return wc.Worker(ctx, evalCtx, &semaCtx)
 	})
 	var sst []byte
 	var kvs sortableKVs

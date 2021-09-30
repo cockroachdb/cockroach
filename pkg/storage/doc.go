@@ -99,5 +99,62 @@ inlined, non-versioned value. These values are replaced if they exist
 on a Put operation and are cleared from the engine on a delete.
 Importantly, zero-timestamped MVCC values may be merged, as is
 necessary for stats counters and time series data.
+
+Versioning
+
+CockroachDB uses cluster versions to accommodate backwards-incompatible
+behavior. Cluster versions are described and documented in
+pkg/clusterversion. The negotiation of cluster versions during cluster
+initialization and version upgrades maintains an 'active' cluster
+version that all nodes operate at. During an upgrade, this active
+cluster version is ratcheted upwards only when all nodes are running
+binaries capable of supporting the new active cluster version. Once an
+active cluster version is set, none of the cluster's nodes may be
+downgraded to a binary that does not understand the new cluster version.
+
+When a new active cluster version has been negotiated, during cluster
+initialization or a version upgrade, the new active cluster version is
+durably written to every store on every node (see kvserver's
+WriteClusterVersionToEngines). If a node has multiple stores, the first
+store's cluster version determines the cluster version that the node
+operates at. The active cluster version that is persisted to an
+individual store is referred to as the "store cluster version". This
+cluster version is stored in a store-local key
+keys.StoreClusterVersionKey() within the store itself.
+
+Previously, as a consequence of storing the store cluster key within the
+store, a store's cluster version could not be known until after the
+store was opened. In order to address this limitation, a separate
+`STORAGE_MIN_VERSION` file was introduced in v21.2 to store the store
+cluster version outside the store itself. This file stores a cluster
+version protocol buffer and may be read without opening the store
+itself. Whenever a store must persist a new active cluster version, it
+writes to the store cluster version key and calls the engine's
+SetMinVersion method to update the `STORAGE_MIN_VERSION` file.  The
+engine's SetMinVersion invocation also serves as the storage engine's
+opportunity to enable its own backwards-incompatible features when
+required.
+
+Pebble has its own concept of backwards-incompatibility gating, using
+'format major versions.' Format major versions are tied to CockroachDB
+cluster versions. When a store's active cluster version is updated and
+SetMinVersion is called, there is a guarantee that the store will never
+be opened with a binary that does not understand the new cluster
+version. If there's a format major version associated with the cluster
+version, SetMinVersion ratchets Pebble's format major version, enabling
+the new backwards-incompatible format. Since this ratcheting is not
+atomic with the persistence of the `STORAGE_MIN_VERSION` file, a crash
+before the format major version is ratcheted may leave Pebble using an
+old format. To account for this failure scenario, opening a store also
+re-sets the the min-version on store open. Setting the min version again
+doesn't ratchet the min version, but performs the necessary mapping from
+cluster version to format major version and potentially ratcheting the
+format major version. Because of this `SetMinVersion` must handle
+repeated calls at the same version, and unconditionally map the version
+to a Pebble format major version.
+
+Future work may remove the store cluster version key, instead relying on
+the `STORAGE_MIN_VERSION` as the single source of truth on a store's
+cluster version.
 */
 package storage

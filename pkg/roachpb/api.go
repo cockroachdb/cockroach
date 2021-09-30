@@ -1577,6 +1577,16 @@ func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
 
+// Equal returns whether the two structs are identical. Needed for compatibility
+// with proto2.
+func (c *TenantConsumption) Equal(other *TenantConsumption) bool {
+	return *c == *other
+}
+
+// Equal is used by generated code when TenantConsumption is embedded in a
+// proto2.
+var _ = (*TenantConsumption).Equal
+
 // Add consumption from the given structure.
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU
@@ -1585,6 +1595,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.WriteRequests += other.WriteRequests
 	c.WriteBytes += other.WriteBytes
 	c.SQLPodsCPUSeconds += other.SQLPodsCPUSeconds
+	c.PGWireBytes += other.PGWireBytes
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -1623,6 +1634,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.SQLPodsCPUSeconds = 0
 	} else {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
+	}
+
+	if c.PGWireBytes < other.PGWireBytes {
+		c.PGWireBytes = 0
+	} else {
+		c.PGWireBytes -= other.PGWireBytes
 	}
 }
 

@@ -171,7 +171,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
 	require.NoError(t, err)
 
-	const tenant11HTTPPort, tenant11SQLPort = 8081, 36357
+	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
 	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, 1))
 	// We'll sometimes have to wait out the backoff of the host cluster
@@ -245,7 +245,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("creating a new tenant 12")
 
-	const tenant12HTTPPort, tenant12SQLPort = 8082, 36358
+	const tenant12HTTPPort, tenant12SQLPort = 8012, 20012
 	const tenant12ID = 12
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant12ID)
 
@@ -267,7 +267,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("creating a new tenant 13")
 
-	const tenant13HTTPPort, tenant13SQLPort = 8083, 36359
+	const tenant13HTTPPort, tenant13SQLPort = 8013, 20013
 	const tenant13ID = 13
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant13ID)
 
@@ -383,7 +383,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("creating tenant 14 at the new version")
 
-	const tenant14HTTPPort, tenant14SQLPort = 8084, 36360
+	const tenant14HTTPPort, tenant14SQLPort = 8014, 20014
 	const tenant14ID = 14
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant14ID)
 

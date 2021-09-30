@@ -22,7 +22,9 @@ export const selectTransactionsSlice = createSelector(
 
 export const selectTransactionsData = createSelector(
   selectTransactionsSlice,
-  transactionsState => transactionsState.data,
+  transactionsState =>
+    // The state is valid if we have successfully fetched data, and it has not yet been invalidated.
+    transactionsState.valid ? transactionsState.data : null,
 );
 
 export const selectTransactionsLastError = createSelector(

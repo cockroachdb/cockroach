@@ -48,6 +48,7 @@ module.exports = {
             limit: true,
           }
         },
+        exclude: /node_modules/,
       },
       // Styles in current project use SCSS preprocessing language with CSS modules.
       // They have to follow file naming convention: [filename].module.scss
@@ -74,6 +75,7 @@ module.exports = {
       {
         test: /(?<!\.module)\.scss/,
         use: ["style-loader", "css-loader", "sass-loader"],
+        exclude: /node_modules/,
       },
       {
         test: /\.(ts|js)x?$/,
@@ -84,7 +86,10 @@ module.exports = {
             options: {extension: ".module.scss"},
           },
         ],
-        exclude: /node_modules/,
+        exclude: [
+          /node_modules/,
+          /db-console\/src\/js/,
+        ],
       },
       // Preprocess LESS styles required by external components
       // (react-select)
@@ -108,9 +113,16 @@ module.exports = {
         enforce: "pre",
         test: /\.js$/,
         loader: "source-map-loader",
+        exclude: [
+          /node_modules/,
+          /db-console\/src\/js/,
+        ],
+      },
+      {
+        test: /\.css$/,
+        use: ["style-loader", "css-loader"],
         exclude: /node_modules/,
       },
-      {test: /\.css$/, use: ["style-loader", "css-loader"]},
     ],
   },
 

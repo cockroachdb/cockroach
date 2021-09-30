@@ -22,7 +22,14 @@ import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { summarize, TimestampToMoment } from "src/util";
+import {
+  appAttr,
+  databaseAttr,
+  aggregatedTsAttr,
+  propsToQueryString,
+  summarize,
+  TimestampToMoment,
+} from "src/util";
 import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -41,6 +48,7 @@ export const StatementTableCell = {
   ) => (stmt: any) => (
     <StatementLink
       statement={stmt.label}
+      aggregatedTs={stmt.aggregatedTs}
       database={stmt.database}
       implicitTxn={stmt.implicitTxn}
       search={search}
@@ -121,7 +129,34 @@ export const StatementTableCell = {
   ),
 };
 
+type StatementLinkTargetProps = {
+  statement: string;
+  aggregatedTs?: number;
+  app: string;
+  implicitTxn: boolean;
+  statementNoConstants?: string;
+  database?: string;
+};
+
+// StatementLinkTarget returns the link to the relevant statement page, given
+// the input statement details.
+export const StatementLinkTarget = (
+  props: StatementLinkTargetProps,
+): string => {
+  const base = `/statement/${props.implicitTxn}`;
+  const linkStatement = props.statementNoConstants || props.statement;
+
+  const searchParams = propsToQueryString({
+    [databaseAttr]: props.database,
+    [appAttr]: props.app,
+    [aggregatedTsAttr]: props.aggregatedTs,
+  });
+
+  return `${base}/${encodeURIComponent(linkStatement)}?${searchParams}`;
+};
+
 interface StatementLinkProps {
+  aggregatedTs?: number;
   statement: string;
   app: string;
   implicitTxn: boolean;
@@ -131,52 +166,47 @@ interface StatementLinkProps {
   onClick?: (statement: string) => void;
 }
 
-// StatementLinkTarget returns the link to the relevant statement page, given
-// the input statement details.
-export const StatementLinkTarget = (props: StatementLinkProps) => {
-  let base: string;
-  if (props.app && props.app.length > 0) {
-    base = `/statements/${props.app}`;
-  } else {
-    base = `/statement`;
-  }
-  if (props.database && props.database.length > 0) {
-    base = base + `/${props.database}/${props.implicitTxn}`;
-  } else {
-    base = base + `/${props.implicitTxn}`;
-  }
-
-  let linkStatement = props.statement;
-  if (props.statementNoConstants) {
-    linkStatement = props.statementNoConstants;
-  }
-  return `${base}/${encodeURIComponent(linkStatement)}`;
-};
-
-export const StatementLink = (props: StatementLinkProps) => {
-  const summary = summarize(props.statement);
-  const { onClick, statement } = props;
+export const StatementLink = ({
+  aggregatedTs,
+  statement,
+  app,
+  implicitTxn,
+  search,
+  statementNoConstants,
+  database,
+  onClick,
+}: StatementLinkProps): React.ReactElement => {
+  const summary = summarize(statement);
   const onStatementClick = React.useCallback(() => {
     if (onClick) {
       onClick(statement);
     }
   }, [onClick, statement]);
 
+  const linkProps = {
+    aggregatedTs,
+    statement,
+    app,
+    implicitTxn,
+    statementNoConstants,
+    database,
+  };
+
   return (
-    <Link to={StatementLinkTarget(props)} onClick={onStatementClick}>
+    <Link to={StatementLinkTarget(linkProps)} onClick={onStatementClick}>
       <div>
         <Tooltip
           placement="bottom"
           content={
             <pre className={cx("cl-table-link__description")}>
-              {getHighlightedText(props.statement, props.search, true)}
+              {getHighlightedText(statement, search, true)}
             </pre>
           }
         >
           <div className="cl-table-link__tooltip-hover-area">
             {getHighlightedText(
-              shortStatement(summary, props.statement),
-              props.search,
+              shortStatement(summary, statement),
+              search,
               false,
               true,
             )}

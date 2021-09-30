@@ -11,6 +11,7 @@
 package kvserver_test
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"sort"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1049,6 +1051,83 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	if count := atomic.LoadInt32(&injectedErrorCount); count != 2 {
 		t.Errorf("expected injected error count of 2; got %d", count)
 	}
+}
+
+// Test that, although a liveness heartbeat is generally retried on
+// AmbiguousResultError (see test above), it is not retried when the error is
+// caused by a canceled context.
+func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var sem chan struct{}
+	testingEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+		// Maybe trap a liveness heartbeat.
+		_, ok := args.Req.(*roachpb.ConditionalPutRequest)
+		if !ok {
+			return nil
+		}
+		if !bytes.HasPrefix(args.Req.Header().Key, keys.NodeLivenessPrefix) {
+			return nil
+		}
+
+		if sem == nil {
+			return nil
+		}
+
+		// Block the request.
+		sem <- struct{}{}
+		<-sem
+		return nil
+	}
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingEvalFilter: testingEvalFilter,
+				},
+			},
+			DialerKnobs: nodedialer.DialerTestingKnobs{
+				// We're going to cancel a client RPC context and we want that
+				// cancellation to disconnect the client from the server. That only
+				// happens when going through gRPC, not when optimizing gRPC away.
+				TestingNoLocalClientOptimization: true,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	nl := s.NodeLiveness().(*liveness.NodeLiveness)
+
+	// We want to control the heartbeats.
+	nl.PauseHeartbeatLoopForTest()
+
+	sem = make(chan struct{})
+
+	l, ok := nl.Self()
+	assert.True(t, ok)
+
+	hbCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		// Wait for a trapped heartbeat.
+		<-sem
+		// Cancel the RPC. This should cause the DistSender to return an AmbiguousResultError.
+		cancel()
+	}()
+
+	err := nl.Heartbeat(hbCtx, l)
+
+	// Now that the client has gotten a response, unblock the evaluation on the
+	// server.
+	sem <- struct{}{}
+
+	// Check that Heartbeat() returned an ambiguous error, and take that as proof
+	// that the heartbeat wasn't retried.
+	require.Error(t, err)
+	require.Equal(t, "result is ambiguous (context done during DistSender.Send: context canceled)", err.Error())
 }
 
 func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, nodeID roachpb.NodeID) {

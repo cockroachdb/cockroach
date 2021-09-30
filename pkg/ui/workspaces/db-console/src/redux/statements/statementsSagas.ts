@@ -74,6 +74,7 @@ export function* setCombinedStatementsDateRangeSaga(
     }),
   );
   const req = new CombinedStatementsRequest({
+    combined: true,
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });

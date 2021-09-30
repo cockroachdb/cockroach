@@ -168,3 +168,7 @@ h3.base-heading {
   flex-grow: 0;
   width: 100%;
 }
+
+.tooltip-info {
+  border-bottom: 1px dashed $colors--neutral-5;
+}

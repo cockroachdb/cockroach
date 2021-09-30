@@ -89,24 +89,9 @@ func (so *DummySequenceOperators) HasPrivilege(
 	return false, errors.WithStack(errEvalPlanner)
 }
 
-// IncrementSequence is part of the tree.SequenceOperators interface.
-func (so *DummySequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errors.WithStack(errSequenceOperators)
-}
-
 // IncrementSequenceByID is part of the tree.SequenceOperators interface.
 func (so *DummySequenceOperators) IncrementSequenceByID(
 	ctx context.Context, seqID int64,
-) (int64, error) {
-	return 0, errors.WithStack(errSequenceOperators)
-}
-
-// GetLatestValueInSessionForSequence implements the tree.SequenceOperators
-// interface.
-func (so *DummySequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	return 0, errors.WithStack(errSequenceOperators)
 }
@@ -117,13 +102,6 @@ func (so *DummySequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errors.WithStack(errSequenceOperators)
-}
-
-// SetSequenceValue implements the tree.SequenceOperators interface.
-func (so *DummySequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errors.WithStack(errSequenceOperators)
 }
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.

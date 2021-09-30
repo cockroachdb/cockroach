@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
-	"github.com/cockroachdb/errors/oserror"
 )
 
 // OS is a convenience wrapper around the stdlib os package. It lets us
@@ -95,7 +94,7 @@ func (o *OS) Remove(path string) error {
 
 	if o.Recording == nil {
 		// Do the real thing.
-		if err := os.Remove(path); err != nil && !oserror.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil

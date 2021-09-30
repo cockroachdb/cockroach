@@ -1520,6 +1520,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			case keys.ColumnCommentType, keys.TableCommentType:
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
+			case keys.ConstraintCommentType:
+				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				objSubID = tree.DZero
+				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:
 				objID = makeOidHasher().IndexOid(
 					descpb.ID(tree.MustBeDInt(objID)),
@@ -1729,6 +1733,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					if err != nil {
 						return err
 					}
+					indpred := tree.DNull
+					if index.IsPartial() {
+						indpred = tree.NewDString(index.GetPredicate())
+					}
 					return addRow(
 						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
 						tableOid,                                     // indrelid
@@ -1748,7 +1756,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						indclass,                                     // indclass
 						indoptionIntVector,                           // indoption
 						tree.DNull,                                   // indexprs
-						tree.DNull,                                   // indpred
+						indpred,                                      // indpred
 						tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
 					)
 				})
@@ -2182,7 +2190,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						isRetSet := false
 						if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 							var retOid oid.Oid
-							if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
+							if fixedRetType.Family() == types.TupleFamily && builtin.IsGenerator() {
 								isRetSet = true
 								// Functions returning tables with zero, or more than one
 								// columns are marked to return "anyelement"
@@ -3194,12 +3202,47 @@ var pgCatalogRulesTable = virtualSchemaTable{
 }
 
 var pgCatalogShadowTable = virtualSchemaTable{
-	comment: "pg_shadow was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogShadow,
+	comment: `pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
+https://www.postgresql.org/docs/13/view-pg-shadow.html`,
+	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+		h := makeOidHasher()
+		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			noLogin, err := options.noLogin()
+			if err != nil {
+				return err
+			}
+			if noLogin {
+				return nil
+			}
+
+			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
+			createDB, err := options.createDB()
+			if err != nil {
+				return err
+			}
+			rolValidUntil, err := options.validUntil(p)
+			if err != nil {
+				return err
+			}
+			isSuper, err := userIsSuper(ctx, p, username)
+			if err != nil {
+				return err
+			}
+
+			return addRow(
+				tree.NewDName(username.Normalized()), // usename
+				h.UserOid(username),                  // usesysid
+				tree.MakeDBool(isRoot || createDB),   // usecreatedb
+				tree.MakeDBool(isRoot || isSuper),    // usesuper
+				tree.DBoolFalse,                      // userepl
+				tree.DBoolFalse,                      // usebypassrls
+				passwdStarString,                     // passwd
+				rolValidUntil,                        // valuntil
+				settings,                             // useconfig
+			)
+		})
 	},
-	unimplemented: true,
 }
 
 var pgCatalogPublicationTable = virtualSchemaTable{
@@ -3329,12 +3372,39 @@ var pgCatalogHbaFileRulesTable = virtualSchemaTable{
 }
 
 var pgCatalogStatisticExtTable = virtualSchemaTable{
-	comment: "pg_statistic_ext was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogStatisticExt,
+	comment: `pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
+	schema: vtable.PgCatalogStatisticExt,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		query := `SELECT "statisticID", name, "tableID", "columnIDs" FROM system.table_statistics;`
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+			ctx, "read-statistics-objects", p.txn, query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range rows {
+			statisticsID := tree.MustBeDInt(row[0])
+			name := tree.MustBeDString(row[1])
+			tableID := tree.MustBeDInt(row[2])
+			columnIDs := tree.MustBeDArray(row[3])
+
+			if err := addRow(
+				tree.NewDOid(statisticsID), // oid
+				tree.NewDOid(tableID),      // stxrelid
+				&name,                      // stxname
+				tree.DNull,                 // stxnamespace
+				tree.DNull,                 // stxowner
+				tree.DNull,                 // stxstattarget
+				columnIDs,                  // stxkeys
+				tree.DNull,                 // stxkind
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogReplicationOriginTable = virtualSchemaTable{

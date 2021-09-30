@@ -5,6 +5,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-test-suites",
     visibility = ["//visibility:private"],
+    deps = ["@com_github_alessio_shellescape//:shellescape"],
 )
 
 go_binary(

@@ -7,8 +7,10 @@ go_library(
         "build.go",
         "builder.go",
         "dev.go",
+        "doctor.go",
         "generate.go",
         "lint.go",
+        "logic.go",
         "main.go",
         "test.go",
         "util.go",
@@ -19,8 +21,7 @@ go_library(
         "//pkg/build/util",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
@@ -33,7 +34,10 @@ go_binary(
 
 go_test(
     name = "dev_test",
-    srcs = ["datadriven_test.go"],
+    srcs = [
+        "datadriven_test.go",
+        "dev_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [

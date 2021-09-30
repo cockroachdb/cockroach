@@ -179,7 +179,8 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				Codec:            keys.SystemSQLCodec,
 			}
-			return wc.Worker(ctx, evalCtx)
+			semaCtx := tree.MakeSemaContext()
+			return wc.Worker(ctx, evalCtx, &semaCtx)
 		})
 		for kvBatch := range kvCh {
 			for i := range kvBatch.KVs {

@@ -3689,9 +3689,6 @@ subtest 65890
 statement ok
 SET enable_insert_fast_path = true
 
-# TODO(mgartner): We can remove ab_idx once we lift the restriction that FK
-# column ordering must match the column ordering of a UNIQUE constraint in the
-# reference table.
 statement ok
 CREATE TABLE t65890_p (
   k INT PRIMARY KEY,
@@ -3699,7 +3696,6 @@ CREATE TABLE t65890_p (
   b INT,
   UNIQUE (a),
   UNIQUE INDEX ba_idx (b, a),
-  UNIQUE INDEX ab_idx (a, b),
   FAMILY (k, a, b)
 )
 
