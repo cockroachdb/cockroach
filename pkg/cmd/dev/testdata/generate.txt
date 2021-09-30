@@ -1,18 +1,10 @@
 dev gen bazel
 ----
-getenv PATH
-which cc
-readlink /usr/local/opt/ccache/libexec/cc
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel info workspace --color=no
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
 
 dev gen docs
 ----
-getenv PATH
-which cc
-readlink /usr/local/opt/ccache/libexec/cc
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel info workspace --color=no
 cat go/src/github.com/cockroachdb/cockroach/docs/generated/bazel_targets.txt
 bazel build //docs/generated:gen-logging-md //docs/generated/sql
@@ -29,10 +21,6 @@ echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/gene
 
 dev gen go
 ----
-getenv PATH
-which cc
-readlink /usr/local/opt/ccache/libexec/cc
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel info workspace --color=no
 cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.txt
 bazel build //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
