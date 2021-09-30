@@ -130,3 +130,8 @@ func (q *Query) Entities() []Var {
 	})
 	return vars
 }
+
+// Clauses returns the query's Clauses.
+func (q *Query) Clauses() Clauses {
+	return q.clauses
+}
