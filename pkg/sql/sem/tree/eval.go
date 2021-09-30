@@ -64,6 +64,8 @@ var (
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
+	// ErrCharOutOfRangeis reported when int cast to ASCII byte overflows.
+	ErrCharOutOfRange = pgerror.New(pgcode.InvalidCharacterValueForCast, "\"char\" out of range")
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
 	errSqrtOfNegNumber = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
