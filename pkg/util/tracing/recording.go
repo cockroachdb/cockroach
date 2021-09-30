@@ -20,12 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
-	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/pmezard/go-difflib/difflib"
 )
 
 // RecordingType is the type of recording that a Span might be performing.
@@ -43,9 +40,7 @@ const (
 )
 
 type traceLogData struct {
-	// TODO(andrei): Remove the opentracing dependency. We generally don't use
-	// opentracing any more and this little dependency here pulls a large package.
-	opentracing.LogRecord
+	logRecord
 	depth int
 	// timeSincePrev represents the duration since the previous log line (previous in the
 	// set of log lines that this is part of). This is always computed relative to a log line
@@ -57,6 +52,11 @@ type traceLogData struct {
 	//   log 2  			 // duration relative to "start Span B"
 	// log 3  				 // duration relative to "log 1"
 	timeSincePrev time.Duration
+}
+
+type logRecord struct {
+	Timestamp time.Time
+	Msg       redact.RedactableString
 }
 
 // String formats the given spans for human consumption, showing the
@@ -89,12 +89,7 @@ func (r Recording) String() string {
 				1000*entry.Timestamp.Sub(start).Seconds(),
 				1000*entry.timeSincePrev.Seconds(),
 				strings.Repeat("    ", entry.depth+1))
-			for i, f := range entry.Fields {
-				if i != 0 {
-					buf.WriteByte(' ')
-				}
-				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
-			}
+			fmt.Fprint(&buf, entry.Msg.StripMarkers())
 			buf.WriteByte('\n')
 		}
 	}
@@ -141,11 +136,14 @@ func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
 
 // FindLogMessage returns the first log message in the recording that matches
 // the given regexp. The bool return value is true if such a message is found.
+//
+// This method strips the redaction markers from all the log messages, which is
+// pretty inefficient.
 func (r Recording) FindLogMessage(pattern string) (string, bool) {
 	re := regexp.MustCompile(pattern)
 	for _, sp := range r {
 		for _, l := range sp.Logs {
-			msg := l.Msg()
+			msg := l.Msg().StripMarkers()
 			if re.MatchString(msg) {
 				return msg, true
 			}
@@ -172,51 +170,49 @@ func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
 func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
-	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
+	conv := func(msg redact.RedactableString, timestamp time.Time, ref time.Time) traceLogData {
 		var timeSincePrev time.Duration
 		if ref != (time.Time{}) {
-			timeSincePrev = l.Timestamp.Sub(ref)
+			timeSincePrev = timestamp.Sub(ref)
 		}
 		return traceLogData{
-			LogRecord:     l,
+			logRecord: logRecord{
+				Timestamp: timestamp,
+				Msg:       msg,
+			},
 			depth:         depth,
 			timeSincePrev: timeSincePrev,
 		}
 	}
 
 	// Add a log line representing the start of the Span.
-	lr := opentracing.LogRecord{
-		Timestamp: sp.StartTime,
-		Fields:    []otlog.Field{otlog.String("=== operation", sp.Operation)},
+	var sb redact.StringBuilder
+	sb.SafeString("=== operation:")
+	sb.SafeString(redact.SafeString(sp.Operation))
+
+	tags := make([]string, 0, len(sp.Tags))
+	for k := range sp.Tags {
+		tags = append(tags, k)
 	}
-	if len(sp.Tags) > 0 {
-		tags := make([]string, 0, len(sp.Tags))
-		for k := range sp.Tags {
-			tags = append(tags, k)
-		}
-		sort.Strings(tags)
-		for _, k := range tags {
-			lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
-		}
+	sort.Strings(tags)
+
+	for _, k := range tags {
+		sb.SafeRune(' ')
+		sb.SafeString(redact.SafeString(k))
+		sb.SafeRune(':')
+		_, _ = sb.WriteString(sp.Tags[k])
 	}
 	ownLogs = append(ownLogs, conv(
-		lr,
+		sb.RedactableString(),
+		sp.StartTime,
 		// ref - this entries timeSincePrev will be computed when we merge it into the parent
 		time.Time{}))
 
 	for _, l := range sp.Logs {
-		lr := opentracing.LogRecord{
-			Timestamp: l.Time,
-			Fields:    make([]otlog.Field, len(l.Fields)),
-		}
-		for i, f := range l.Fields {
-			// TODO(obs-inf): the use of opentracing data structures here seems
-			// like detritus and prevents good redactability of the result.
-			// It looks like this is only used for Recording.String() though.
-			lr.Fields[i] = otlog.String(f.Key, f.Value.StripMarkers())
-		}
 		lastLog := ownLogs[len(ownLogs)-1]
-		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+		var sb redact.StringBuilder
+		sb.Printf("event:%s", l.Msg())
+		ownLogs = append(ownLogs, conv(sb.RedactableString(), l.Time, lastLog.Timestamp))
 	}
 
 	// If the span was verbose then the Structured events would have been
@@ -224,16 +220,15 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 	// we should add the Structured events now.
 	if !isVerbose(sp) {
 		sp.Structured(func(sr *types.Any, t time.Time) {
-			lr := opentracing.LogRecord{
-				Timestamp: t,
-			}
 			str, err := MessageToJSONString(sr, true /* emitDefaults */)
 			if err != nil {
 				return
 			}
-			lr.Fields = append(lr.Fields, otlog.String("structured", str))
 			lastLog := ownLogs[len(ownLogs)-1]
-			ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+			var sb redact.StringBuilder
+			sb.SafeString("structured:")
+			_, _ = sb.WriteString(str)
+			ownLogs = append(ownLogs, conv(sb.RedactableString(), t, lastLog.Timestamp))
 		})
 	}
 
@@ -363,13 +358,13 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			})
 		}
 		for _, l := range sp.Logs {
-			jl := jaegerjson.Log{Timestamp: uint64(l.Time.UnixNano() / 1000)}
-			for _, field := range l.Fields {
-				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
-					Key:   field.Key,
-					Value: field.Value,
+			jl := jaegerjson.Log{
+				Timestamp: uint64(l.Time.UnixNano() / 1000),
+				Fields: []jaegerjson.KeyValue{{
+					Key:   "event",
+					Value: l.Msg(),
 					Type:  "STRING",
-				})
+				}},
 			}
 			s.Logs = append(s.Logs, jl)
 		}
@@ -425,167 +420,4 @@ func isVerbose(s tracingpb.RecordedSpan) bool {
 	}
 	_, isVerbose := s.Baggage[verboseTracingBaggageKey]
 	return isVerbose
-}
-
-// TestingCheckRecordedSpans checks whether a recording looks like an expected
-// one represented by a string with one line per expected span and one line per
-// expected event (i.e. log message), with a tab-indentation for child spans.
-//
-//      if err := TestingCheckRecordedSpans(Span.GetRecording(), `
-//          span: root
-//              event: a
-//              span: child
-//                  event: [ambient] b
-//                  event: c
-//      `); err != nil {
-//        t.Fatal(err)
-//      }
-//
-// The event lines can (and generally should) omit the file:line part that they
-// might contain (depending on the level at which they were logged).
-//
-// Note: this test function is in this file because it needs to be used by
-// both tests in the tracing package and tests outside of it, and the function
-// itself depends on tracing.
-func TestingCheckRecordedSpans(rec Recording, expected string) error {
-	normalize := func(rec string) string {
-		// normalize the string form of a recording for ease of comparison.
-		//
-		// 1. Strip out any leading new lines.
-		rec = strings.TrimLeft(rec, "\n")
-		// 2. Strip out trailing whitespace.
-		rec = strings.TrimRight(rec, "\n\t ")
-		// 3. Strip out file:line information from the recordings.
-		//
-		// 	 Before |  "event: util/log/trace_test.go:111 log"
-		// 	 After  |  "event: log"
-		re := regexp.MustCompile(`event: .*:[0-9]*`)
-		rec = string(re.ReplaceAll([]byte(rec), []byte("event:")))
-		// 4. Change all tabs to four spaces.
-		rec = strings.ReplaceAll(rec, "\t", "    ")
-		// 5. Compute the outermost indentation.
-		indent := strings.Repeat(" ", len(rec)-len(strings.TrimLeft(rec, " ")))
-		// 6. Outdent each line by that amount.
-		var lines []string
-		for _, line := range strings.Split(rec, "\n") {
-			lines = append(lines, strings.TrimPrefix(line, indent))
-		}
-		// 7. Stitch everything together.
-		return strings.Join(lines, "\n")
-	}
-
-	var rows []string
-	row := func(depth int, format string, args ...interface{}) {
-		rows = append(rows, strings.Repeat("    ", depth)+fmt.Sprintf(format, args...))
-	}
-
-	mapping := make(map[uint64]uint64) // spanID -> parentSpanID
-	for _, rs := range rec {
-		mapping[rs.SpanID] = rs.ParentSpanID
-	}
-	depth := func(spanID uint64) int {
-		// Traverse up the parent links until one is not found.
-		curSpanID := spanID
-		d := 0
-		for {
-			var ok bool
-			curSpanID, ok = mapping[curSpanID]
-			if !ok {
-				break
-			}
-			d++
-		}
-		return d
-	}
-
-	for _, rs := range rec {
-		d := depth(rs.SpanID)
-		row(d, "span: %s", rs.Operation)
-		if len(rs.Tags) > 0 {
-			var tags []string
-			for k, v := range rs.Tags {
-				tags = append(tags, fmt.Sprintf("%s=%v", k, v))
-			}
-			sort.Strings(tags)
-			row(d, "    tags: %s", strings.Join(tags, " "))
-		}
-		for _, l := range rs.Logs {
-			var msg string
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("    %s: %v", f.Key, f.Value.StripMarkers())
-			}
-			row(d, "%s", msg)
-		}
-	}
-
-	exp := normalize(expected)
-	got := normalize(strings.Join(rows, "\n"))
-	if got != exp {
-		diff := difflib.UnifiedDiff{
-			A:        difflib.SplitLines(exp),
-			FromFile: "exp",
-			B:        difflib.SplitLines(got),
-			ToFile:   "got",
-			Context:  4,
-		}
-		diffText, _ := difflib.GetUnifiedDiffString(diff)
-		return errors.Newf("unexpected diff:\n%s\n\nrecording:\n%s", diffText, rec.String())
-	}
-	return nil
-}
-
-// TestingCheckRecording checks whether a recording looks like the expected
-// one. The expected string is allowed to elide timing information, and the
-// outer-most indentation level is adjusted for when comparing.
-//
-//       if err := TestingCheckRecording(sp.GetRecording(), `
-//           === operation:root
-//           event:root 1
-//               === operation:remote child
-//               event:remote child 1
-//       `); err != nil {
-//           t.Fatal(err)
-//       }
-//
-func TestingCheckRecording(rec Recording, expected string) error {
-	normalize := func(rec string) string {
-		// normalize the string form of a recording for ease of comparison.
-		//
-		// 1. Strip out any leading new lines.
-		rec = strings.TrimLeft(rec, "\n")
-		// 2. Strip out trailing space.
-		rec = strings.TrimRight(rec, "\n\t ")
-		// 3. Strip out all timing information from the recordings.
-		//
-		// 	 Before |  "0.007ms      0.007ms    event:root 1"
-		// 	 After  |  "event:root 1"
-		re := regexp.MustCompile(`.*s.*s\s{4}`)
-		rec = string(re.ReplaceAll([]byte(rec), nil))
-		// 4. Change all tabs to four spaces.
-		rec = strings.ReplaceAll(rec, "\t", "    ")
-		// 5. Compute the outermost indentation.
-		indent := strings.Repeat(" ", len(rec)-len(strings.TrimLeft(rec, " ")))
-		// 6. Outdent each line by that amount.
-		var lines []string
-		for _, line := range strings.Split(rec, "\n") {
-			lines = append(lines, strings.TrimPrefix(line, indent))
-		}
-		// 6. Stitch everything together.
-		return strings.Join(lines, "\n")
-	}
-
-	exp := normalize(expected)
-	got := normalize(rec.String())
-	if got != exp {
-		diff := difflib.UnifiedDiff{
-			A:        difflib.SplitLines(exp),
-			FromFile: "exp",
-			B:        difflib.SplitLines(got),
-			ToFile:   "got",
-			Context:  4,
-		}
-		diffText, _ := difflib.GetUnifiedDiffString(diff)
-		return errors.Newf("unexpected diff:\n%s", diffText)
-	}
-	return nil
 }

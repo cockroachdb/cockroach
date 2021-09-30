@@ -56,6 +56,9 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace Recording) tracingpb.Normaliz
 // MessageToJSONString converts a protocol message into a JSON string. The
 // emitDefaults flag dictates whether fields with zero values are rendered or
 // not.
+//
+// TODO(andrei): It'd be nice if this function dealt with redactable vs safe
+// fields, like EventPayload.AppendJSONFields does.
 func MessageToJSONString(msg protoutil.Message, emitDefaults bool) (string, error) {
 	// Convert to json.
 	jsonEncoder := jsonpb.Marshaler{EmitDefaults: emitDefaults}
