@@ -82,3 +82,20 @@ INNER LOOKUP JOIN t66067_a a ON b.a = a.a
 WHERE b.v = 'bar' AND a.c = 'foo'
 ----
 1  bar  1  foo
+
+SELECT i, i::"char", length(i::"char")
+FROM (VALUES (32), (97), (127), (0), (-1), (-127), (-128)) v(i);
+----
+32     1
+97  a  1
+127  \x7F  1
+0    1
+-1    1
+-127    1
+-128    1
+
+statement error pgcode 22003 integer out of range
+SELECT select 128::"char";
+
+statement error pgcode 22003 integer out of range
+SELECT select -129::"char";

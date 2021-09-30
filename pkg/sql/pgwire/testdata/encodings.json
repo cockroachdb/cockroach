@@ -42,6 +42,62 @@
 		"Binary": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 23]
 	},
 	{
+		"SQL": "(-128)::\"char\"",
+		"Oid": 18,
+		"Text": "\x80",
+		"TextAsBinary": [128],
+		"Binary": [128]
+	},
+	{
+		"SQL": "(-32)::\"char\"",
+		"Oid": 18,
+		"Text": "\xe0",
+		"TextAsBinary": [224],
+		"Binary": [224]
+	},
+	{
+		"SQL": "(-1)::\"char\"",
+		"Oid": 18,
+		"Text": "\xff",
+		"TextAsBinary": [255],
+		"Binary": [255]
+	},
+	{
+		"SQL": "0::\"char\"",
+		"Oid": 18,
+		"Text": "",
+		"TextAsBinary": [],
+		"Binary": [0]
+	},
+	{
+		"SQL": "1::\"char\"",
+		"Oid": 18,
+		"Text": "\x01",
+		"TextAsBinary": [1],
+		"Binary": [1]
+	},
+	{
+		"SQL": "32::\"char\"",
+		"Oid": 18,
+		"Text": " ",
+		"TextAsBinary": [32],
+		"Binary": [32]
+	},
+	{
+		"SQL": "97::\"char\"",
+		"Oid": 18,
+		"Text": "a",
+		"TextAsBinary": [97],
+		"Binary": [97]
+	},
+	{
+		"SQL": "127::\"char\"",
+		"Oid": 18,
+		"Text": "\u007f",
+		"TextAsBinary": [127],
+		"Binary": [127]
+	},
+	{
 		"SQL": "'hello'::char(8)",
 		"Oid": 1042,
 		"Text": "hello   ",
