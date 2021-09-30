@@ -17,7 +17,7 @@ import {
   ExecutionStatistics,
   flattenStatementStats,
   formatDate,
-  getMatchParamByName,
+  queryByName,
   statementKey,
   StatementStatistics,
   TimestampToMoment,
@@ -33,6 +33,7 @@ import { AggregateStatistics } from "../statementsTable";
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
   statement: string;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
@@ -138,11 +139,12 @@ export const selectStatements = createSelector(
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
-    if (!state.data) {
+    // State is valid if we successfully fetched data, and the data has not yet been invalidated.
+    if (!state.data || !state.valid) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
-    const app = getMatchParamByName(props.match, appAttr);
+    const app = queryByName(props.location, appAttr);
     const isInternal = (statement: ExecutionStatistics) =>
       statement.app.startsWith(state.data.internal_app_name_prefix);
 
@@ -169,6 +171,7 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statement: stmt.statement,
+          aggregatedTs: stmt.aggregated_ts,
           implicitTxn: stmt.implicit_txn,
           fullScan: stmt.full_scan,
           database: stmt.database,
@@ -182,6 +185,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
+        aggregatedTs: stmt.aggregatedTs,
         implicitTxn: stmt.implicitTxn,
         fullScan: stmt.fullScan,
         database: stmt.database,

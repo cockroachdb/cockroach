@@ -219,6 +219,11 @@ func changefeedPlanHook(
 		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
+			var m *backupresolver.MissingTableErr
+			if errors.As(err, &m) {
+				tableName := m.GetTableName()
+				err = errors.Errorf("table %q does not exist", tableName)
+			}
 			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 			if !initialHighWater.IsEmpty() {
 				// We specified cursor -- it is possible the targets do not exist at that time.
@@ -744,7 +749,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

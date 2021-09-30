@@ -7,6 +7,7 @@ query --ui_event_filters=-DEBUG
 try-import %workspace%/.bazelrc.user
 
 # CI should always run with `--config=ci`.
+build:ci --experimental_convenience_symlinks=ignore
 build:ci --stamp
 build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 # Set `-test.v` in Go tests.

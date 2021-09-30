@@ -57,6 +57,9 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 
 		if scheduledJobID != jobs.InvalidScheduleID {
 			r.sj, err = jobs.LoadScheduledJob(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduledJobID, ie, txn)
+			if err != nil {
+				return err
+			}
 			r.sj.SetScheduleStatus(string(jobs.StatusRunning))
 			return r.sj.Update(ctx, ie, txn)
 		}

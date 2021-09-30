@@ -442,13 +442,18 @@ func (node *ShowTransactions) Format(ctx *FmtCtx) {
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table *UnresolvedObjectName
+	Table       *UnresolvedObjectName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
 	ctx.FormatNode(node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowGrants represents a SHOW GRANTS statement.

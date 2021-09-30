@@ -92,6 +92,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
+		s.Ctx,
 		s.flowCtx.Txn,
 		s.spans,
 		s.bsHeader,
@@ -338,6 +339,7 @@ func (s *ColBatchScan) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close() error {
+	s.rf.Close(s.EnsureCtx())
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil

@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Anchor } from "src/anchor";
+import moment from "moment";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
@@ -18,10 +19,12 @@ import {
   statementsSql,
   statementsTimeInterval,
   readFromDisk,
+  writtenToDisk,
   planningExecutionTime,
   contentionTime,
   readsAndWrites,
 } from "src/util";
+import { AggregateStatistics } from "src/statementsTable";
 
 export type NodeNames = { [nodeId: string]: string };
 
@@ -32,11 +35,13 @@ export const statisticsColumnLabels = {
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
+  intervalStartTime: "Interval Start Time (UTC)",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
   regionNodes: "Regions/Nodes",
   retries: "Retries",
   rowsRead: "Rows Read",
+  rowsWritten: "Rows Written",
   statements: "Statements",
   statementsCount: "Statements",
   time: "Time",
@@ -91,7 +96,7 @@ export function getLabel(
 // of data the statistics are based on (e.g. statements, transactions, or transactionDetails). The
 // StatisticType is used to modify the content of the tooltip.
 export const statisticsTableTitles: StatisticTableTitleType = {
-  statements: (statType: StatisticType) => {
+  statements: () => {
     return (
       <Tooltip
         placement="bottom"
@@ -135,6 +140,28 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
+  intervalStartTime: () => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <div>
+            <p>
+              The time that the statement execution interval started. By
+              default, statements are configured to aggregate over an hour
+              interval.
+              <br />
+              For example, if a statement is executed at 1:23PM it will fall in
+              the 1:00PM - 2:00PM time interval.
+            </p>
+          </div>
+        }
+      >
+        {getLabel("intervalStartTime")}
+      </Tooltip>
+    );
+  },
   executionCount: (statType: StatisticType) => {
     let contentModifier = "";
     let fingerprintModifier = "";
@@ -163,7 +190,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               {"The bar indicates the ratio of runtime success (gray) to "}
@@ -194,7 +221,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={<p>Database on which the ${contentModifier} was executed.</p>}
+        content={<p>Database on which the {contentModifier} was executed.</p>}
       >
         {getLabel("database")}
       </Tooltip>
@@ -232,7 +259,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the mean number of rows read from disk. The
@@ -277,7 +304,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the mean number of bytes read from disk.
@@ -287,6 +314,51 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("bytesRead")}
+      </Tooltip>
+    );
+  },
+  rowsWritten: (statType: StatisticType) => {
+    let contentModifier = "";
+    let fingerprintModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statements;
+        break;
+      case "transactionDetails":
+        contentModifier = contentModifiers.statements;
+        fingerprintModifier =
+          " for this " + contentModifiers.transactionFingerprint;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              {"Aggregation of all rows "}
+              <Anchor href={writtenToDisk} target="_blank">
+                written to disk
+              </Anchor>
+              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
+              <Anchor href={statementsTimeInterval} target="_blank">
+                time interval
+              </Anchor>
+              .&nbsp;
+            </p>
+            <p>
+              The gray bar indicates the mean number of rows written to disk.
+              The blue bar indicates one standard deviation from the mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("rowsWritten")}
       </Tooltip>
     );
   },
@@ -322,7 +394,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={planningExecutionTime} target="_blank">
                 planning and execution time
               </Anchor>
-              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval.`}
+              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval. `}
             </p>
             <p>
               The gray bar indicates the mean latency. The blue bar indicates
@@ -367,7 +439,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates mean contention time. The blue bar
@@ -408,7 +480,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               The gray bar indicates the average max memory usage. The blue bar
@@ -453,7 +525,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsTimeInterval} target="_blank">
                 time interval
               </Anchor>
-              .
+              .&nbsp;
             </p>
             <p>
               If this value is 0, the statement was executed on a single node.
@@ -528,7 +600,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            % of runtime all ${contentModifier} with this fingerprint$
+            % of runtime all {contentModifier} with this fingerprint
             {fingerprintModifier} represent, compared to the cumulative runtime
             of all queries within the last hour or specified time interval.
           </p>
@@ -554,7 +626,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         placement="bottom"
         style="tableTitle"
         content={
-          <p>Regions/Nodes in which the ${contentModifier} was executed.</p>
+          <p>Regions/Nodes in which the {contentModifier} was executed.</p>
         }
       >
         {getLabel("regionNodes")}
@@ -603,3 +675,10 @@ export const statisticsTableTitles: StatisticTableTitleType = {
     );
   },
 };
+
+export function formatStartIntervalColumn(aggregatedTs: number) {
+  return moment
+    .unix(aggregatedTs)
+    .utc()
+    .format("MMM D, h:mm A");
+}

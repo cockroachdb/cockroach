@@ -368,7 +368,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	@# and should not be installed for production builds.
 	@# Also some of linux distributives (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
-	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional
+	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
@@ -1399,7 +1399,7 @@ ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
 pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
-	find pkg/ui/dist$*/assets -mindepth 1 -not -name index.html -delete
+	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
 	for dll in $(shell find pkg/ui/workspaces/db-console/dist -name '*.dll.js' -type f); do \
 		echo $$dll | sed -E "s/.oss.dll.js|.ccl.dll.js/.dll.js/" | sed -E "s|^.*\/|pkg/ui/dist$*/assets/|" | xargs -I{} cp $$dll {};\
 	done
@@ -1407,7 +1407,7 @@ pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell f
 	touch $@
 
 pkg/ui/yarn.opt.installed:
-	$(NODE_RUN) -C pkg/ui yarn install --check-files
+	$(NODE_RUN) -C pkg/ui yarn install --check-files --offline
 	touch $@
 
 .PHONY: ui-watch-secure
@@ -1428,7 +1428,7 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
-	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name index.html -delete
+	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 	rm -rf pkg/ui/dist/*
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)

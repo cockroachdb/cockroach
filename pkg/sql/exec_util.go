@@ -168,6 +168,14 @@ var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+const allowCrossDatabaseSeqReferencesSetting = "sql.cross_db_sequence_references.enabled"
+
+var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
+	allowCrossDatabaseSeqReferencesSetting,
+	"if true, sequences referenced by tables from other databases are allowed",
+	false,
+).WithPublic()
+
 const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.experimental_allow_for_secondary_tenant.enabled"
 
 // secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
@@ -534,6 +542,7 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"rowid",
 	map[int64]string{
 		int64(sessiondatapb.SerialUsesRowID):              "rowid",
+		int64(sessiondatapb.SerialUsesUnorderedRowID):     "unordered_rowid",
 		int64(sessiondatapb.SerialUsesVirtualSequences):   "virtual_sequence",
 		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
 		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
@@ -574,20 +583,24 @@ var dateStyle = settings.RegisterEnumSetting(
 	dateStyleEnumMap,
 ).WithPublic()
 
+const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
+
 // intervalStyleEnabled controls intervals representation.
 // TODO(#sql-experience): remove session setting in v22.1 and have this
 // always enabled.
 var intervalStyleEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.intervalstyle.enabled",
+	intervalStyleEnabledClusterSetting,
 	"default value for intervalstyle_enabled session setting",
 	false,
 ).WithPublic()
+
+const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
 
 // dateStyleEnabled controls dates representation.
 // TODO(#sql-experience): remove session setting in v22.1 and have this
 // always enabled.
 var dateStyleEnabled = settings.RegisterBoolSetting(
-	"sql.defaults.datestyle.enabled",
+	dateStyleEnabledClusterSetting,
 	"default value for datestyle_enabled session setting",
 	false,
 ).WithPublic()
@@ -2452,7 +2465,7 @@ func getMessagesForSubtrace(
 			allLogs = append(allLogs,
 				logRecordRow{
 					timestamp: logTime,
-					msg:       span.Logs[i].Msg(),
+					msg:       span.Logs[i].Msg().StripMarkers(),
 					span:      span,
 					// Add 1 to the index to account for the first dummy message in a
 					// span.

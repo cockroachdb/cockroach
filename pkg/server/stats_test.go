@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
@@ -310,50 +313,65 @@ func TestClusterResetSQLStats(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-	defer testCluster.Stopper().Stop(ctx)
 
-	gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
-	status := gatewayServer.status
+	for _, flushed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
+			testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+				ServerArgs: params,
+			})
+			defer testCluster.Stopper().Stop(ctx)
 
-	sqlDB := serverutils.OpenDBConn(
-		t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
-		gatewayServer.Stopper())
+			gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
+			status := gatewayServer.status
 
-	populateStats(t, sqlDB)
+			sqlDB := serverutils.OpenDBConn(
+				t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
+				gatewayServer.Stopper())
 
-	statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
-	require.NoError(t, err)
-
-	if statsCount := len(statsPreReset.Statements); statsCount == 0 {
-		t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
-	}
-
-	_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{})
-	require.NoError(t, err)
-
-	statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
-	require.NoError(t, err)
-
-	if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
-		t.Fatal("expected to find stats last reset value changed, but didn't")
-	}
-
-	for _, txn := range statsPostReset.Transactions {
-		for _, previousTxn := range statsPreReset.Transactions {
-			if reflect.DeepEqual(txn, previousTxn) {
-				t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+			populateStats(t, sqlDB)
+			if flushed {
+				gatewayServer.SQLServer().(*sql.Server).
+					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 			}
-		}
-	}
 
-	for _, stmt := range statsPostReset.Statements {
-		for _, previousStmt := range statsPreReset.Statements {
-			if reflect.DeepEqual(stmt, previousStmt) {
-				t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			if statsCount := len(statsPreReset.Statements); statsCount == 0 {
+				t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
 			}
-		}
+
+			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
+				ResetPersistedStats: true,
+			})
+			require.NoError(t, err)
+
+			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+				t.Fatal("expected to find stats last reset value changed, but didn't")
+			}
+
+			for _, txn := range statsPostReset.Transactions {
+				for _, previousTxn := range statsPreReset.Transactions {
+					if reflect.DeepEqual(txn, previousTxn) {
+						t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+					}
+				}
+			}
+
+			for _, stmt := range statsPostReset.Statements {
+				for _, previousStmt := range statsPreReset.Statements {
+					if reflect.DeepEqual(stmt, previousStmt) {
+						t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+					}
+				}
+			}
+		})
 	}
 }

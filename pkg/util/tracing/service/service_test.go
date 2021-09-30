@@ -67,13 +67,13 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	sort.SliceStable(resp.Recordings, func(i, j int) bool {
 		return resp.Recordings[i].RecordedSpans[0].StartTime.Before(resp.Recordings[j].RecordedSpans[0].StartTime)
 	})
-	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[0].RecordedSpans, `
+	require.NoError(t, tracing.CheckRecordedSpans(resp.Recordings[0].RecordedSpans, `
 			span: root1
 				tags: _unfinished=1 _verbose=1
 				span: root1.child
 					tags: _unfinished=1 _verbose=1
 `))
-	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[1].RecordedSpans, `
+	require.NoError(t, tracing.CheckRecordedSpans(resp.Recordings[1].RecordedSpans, `
 			span: fork1
 				tags: _unfinished=1 _verbose=1
 `))

@@ -31,7 +31,6 @@ var (
 	// Shared flags.
 	remoteCacheAddr string
 	numCPUs         int
-	skipDevConfig   bool
 )
 
 func makeDevCmd() *dev {
@@ -74,7 +73,9 @@ lets engineers do a few things:
 		makeBenchCmd(ret.bench),
 		makeBuildCmd(ret.build),
 		makeBuilderCmd(ret.builder),
+		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
+		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
 	)
@@ -89,7 +90,6 @@ lets engineers do a few things:
 		// support for the  Remote Asset API, which helps speed things up when
 		// the cache sits across the network boundary.
 		subCmd.Flags().StringVar(&remoteCacheAddr, "remote-cache", "", "remote caching grpc endpoint to use")
-		subCmd.Flags().BoolVar(&skipDevConfig, "skip-dev-config", false, "Don't infer an appropriate dev config to build with")
 	}
 	for _, subCmd := range ret.cli.Commands() {
 		subCmd.PreRun = func(cmd *cobra.Command, args []string) {

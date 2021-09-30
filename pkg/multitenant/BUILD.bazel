@@ -11,9 +11,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/sqlliveness",
         "//pkg/util/metric",
         "//pkg/util/stop",
     ],

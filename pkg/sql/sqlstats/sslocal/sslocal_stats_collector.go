@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
-type statsCollector struct {
-	sqlstats.Writer
+// StatsCollector is used to collect statement and transaction statistics
+// from connExecutor.
+type StatsCollector struct {
+	sqlstats.ApplicationStats
 
 	// phaseTimes tracks session-level phase times.
 	phaseTimes *sessionphase.Times
@@ -26,33 +28,33 @@ type statsCollector struct {
 	previousPhaseTimes *sessionphase.Times
 }
 
-var _ sqlstats.StatsCollector = &statsCollector{}
+var _ sqlstats.ApplicationStats = &StatsCollector{}
 
 // NewStatsCollector returns an instance of sqlstats.StatsCollector.
 func NewStatsCollector(
-	writer sqlstats.Writer, phaseTime *sessionphase.Times,
-) sqlstats.StatsCollector {
-	return &statsCollector{
-		Writer:     writer,
-		phaseTimes: phaseTime.Clone(),
+	appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times,
+) *StatsCollector {
+	return &StatsCollector{
+		ApplicationStats: appStats,
+		phaseTimes:       phaseTime.Clone(),
 	}
 }
 
 // PhaseTimes implements sqlstats.StatsCollector interface.
-func (s *statsCollector) PhaseTimes() *sessionphase.Times {
+func (s *StatsCollector) PhaseTimes() *sessionphase.Times {
 	return s.phaseTimes
 }
 
 // PreviousPhaseTimes implements sqlstats.StatsCollector interface.
-func (s *statsCollector) PreviousPhaseTimes() *sessionphase.Times {
+func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 	return s.previousPhaseTimes
 }
 
 // Reset implements sqlstats.StatsCollector interface.
-func (s *statsCollector) Reset(writer sqlstats.Writer, phaseTime *sessionphase.Times) {
+func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
-	*s = statsCollector{
-		Writer:             writer,
+	*s = StatsCollector{
+		ApplicationStats:   appStats,
 		previousPhaseTimes: previousPhaseTime,
 		phaseTimes:         phaseTime.Clone(),
 	}

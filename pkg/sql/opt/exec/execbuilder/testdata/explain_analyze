@@ -1,0 +1,113 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+query T
+EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k >= 2
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• scan
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows read: 0
+  KV bytes read: 0 B
+  missing stats
+  table: kv@primary
+  spans: [/2 - ]
+
+statement ok
+INSERT INTO kv VALUES (1,10), (2,20), (3,30), (4,40);
+
+query T
+EXPLAIN ANALYZE (PLAN) SELECT * FROM kv WHERE k >= 2
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows read from KV: 3 (24 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• scan
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 3
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows read: 3
+  KV bytes read: 24 B
+  missing stats
+  table: kv@primary
+  spans: [/2 - ]
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT);
+INSERT INTO ab VALUES (10,100), (40,400), (50,500);
+
+query T
+EXPLAIN ANALYZE (PLAN, VERBOSE) SELECT * FROM kv JOIN ab ON v=a
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows read from KV: 7 (56 B)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• hash join (inner)
+│ columns: (k, v, a, b)
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 2
+│ vectorized batch count: 0
+│ estimated row count: 990 (missing stats)
+│ equality: (v) = (a)
+│ right cols are key
+│
+├── • scan
+│     columns: (k, v)
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 4
+│     vectorized batch count: 0
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows read: 4
+│     KV bytes read: 32 B
+│     MVCC step count (ext/int): 0/0
+│     MVCC seek count (ext/int): 0/0
+│     estimated row count: 1,000 (missing stats)
+│     table: kv@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a, b)
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 3
+      vectorized batch count: 0
+      KV time: 0µs
+      KV contention time: 0µs
+      KV rows read: 3
+      KV bytes read: 24 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      estimated row count: 1,000 (missing stats)
+      table: ab@primary
+      spans: FULL SCAN
+

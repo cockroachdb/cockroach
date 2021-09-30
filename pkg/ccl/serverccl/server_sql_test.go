@@ -11,6 +11,7 @@ package serverccl
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -185,4 +186,41 @@ func TestNonExistentTenant(t *testing.T) {
 		})
 	require.Error(t, err)
 	require.Equal(t, "system DB uninitialized, check if tenant is non existent", err.Error())
+}
+
+// TestTenantRowIDs confirms `unique_rowid()` works as expected in a
+// multi-tenant setup.
+func TestTenantRowIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	const numRows = 10
+	tenant, db := serverutils.StartTenant(
+		t,
+		tc.Server(0),
+		base.TestTenantArgs{TenantID: serverutils.TestTenantID()},
+	)
+	defer db.Close()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+	sqlDB.Exec(t, fmt.Sprintf("INSERT INTO foo (val) SELECT * FROM generate_series(1, %d)", numRows))
+
+	// Verify that the rows are inserted successfully and that the row ids
+	// are based on the SQL instance ID.
+	rows := sqlDB.Query(t, "SELECT key FROM foo")
+	defer rows.Close()
+	rowCount := 0
+	instanceID := int(tenant.SQLInstanceID())
+	for rows.Next() {
+		var key int
+		if err := rows.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		require.Equal(t, instanceID, key&instanceID)
+		rowCount++
+	}
+	require.Equal(t, numRows, rowCount)
 }

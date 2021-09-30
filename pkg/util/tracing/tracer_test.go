@@ -12,16 +12,16 @@ package tracing
 
 import (
 	"sort"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
-	lightstep "github.com/lightstep/lightstep-tracer-go"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/log"
-	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	otelsdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -69,12 +69,12 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
+	if err := CheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
 	}
 
 	s1.SetVerbose(true)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -98,7 +98,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s2.Recordf("x=%d", 3)
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -109,7 +109,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
+	if err := CheckRecordedSpans(s2.GetRecording(), `
 		span: b
 			tags: _unfinished=1 _verbose=1
 			event: x=3
@@ -119,11 +119,11 @@ func TestTracerRecording(t *testing.T) {
 
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
 	s3.Recordf("x=%d", 4)
-	s3.SetTag("tag", "val")
+	s3.SetTag("tag", attribute.StringValue("val"))
 
 	s2.Finish()
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -137,7 +137,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3.Finish()
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
@@ -153,7 +153,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 	`); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// The child Span, now finished, will drop future recordings.
 	s3.Recordf("x=%d", 5)
-	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
+	if err := CheckRecordedSpans(s3.GetRecording(), `
 		span: c
 			tags: _verbose=1 tag=val
 			event: x=4
@@ -179,7 +179,7 @@ func TestStartChildSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -193,13 +193,13 @@ func TestStartChildSpan(t *testing.T) {
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := TestingCheckRecordedSpans(sp2.GetRecording(), `
+	if err := CheckRecordedSpans(sp2.GetRecording(), `
 		span: child
 			tags: _verbose=1
 	`); err != nil {
@@ -212,7 +212,7 @@ func TestStartChildSpan(t *testing.T) {
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	sp1.Finish()
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := CheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
 			tags: _verbose=1
 			span: child
@@ -282,7 +282,7 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	// Verify that recording was started automatically.
 	rec := s2.GetRecording()
-	if err := TestingCheckRecordedSpans(rec, `
+	if err := CheckRecordedSpans(rec, `
 		span: remote op
 			tags: _verbose=1
 			event: x=1
@@ -290,7 +290,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
@@ -300,7 +300,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.ImportRemoteSpans(rec)
 	s1.Finish()
 
-	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _verbose=1
 			span: remote op
@@ -332,128 +332,63 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	require.NotZero(t, sp2.i.crdb.spanID)
 }
 
-func TestShadowTracer(t *testing.T) {
-	zipMgr, _ := createZipkinTracer("127.0.0.1:900000")
-	zipRec := zipkin.NewInMemoryRecorder()
-	zipTr, err := zipkin.NewTracer(zipRec)
-	require.NoError(t, err)
+func TestOtelTracer(t *testing.T) {
+	tr := NewTracer()
+	sr := tracetest.NewSpanRecorder()
+	otelTr := otelsdk.NewTracerProvider(
+		otelsdk.WithSpanProcessor(sr),
+		otelsdk.WithSampler(otelsdk.AlwaysSample()),
+	).Tracer("test")
+	tr.SetOpenTelemetryTracer(otelTr)
+	s := tr.StartSpan("test")
+	defer s.Finish()
+	// The span is not verbose, but has a sink (i.e. the log messages
+	// go somewhere), though we'll actually check that end-to-end below
+	// at least for the mock tracer.
+	require.False(t, s.IsVerbose())
+	require.True(t, s.i.hasVerboseSink())
+	// Put something in the span.
+	s.Record("hello")
 
-	ddMgr, ddTr := createDataDogTracer("dummyaddr", "dummyproject")
+	const testBaggageKey = "test-baggage"
+	const testBaggageVal = "test-val"
+	s.SetBaggageItem(testBaggageKey, testBaggageVal)
 
-	for _, tc := range []struct {
-		mgr   shadowTracerManager
-		str   opentracing.Tracer
-		check func(t *testing.T, sp opentracing.Span)
-	}{
-		{
-			mgr: lightStepManager{},
-			str: lightstep.NewTracer(lightstep.Options{
-				AccessToken: "invalid",
-				// Massaged the creation here to not erroneously send crap to
-				// lightstep's API. One of the ways below would've done it but
-				// can't hurt to block it in multiple ways just in case.
-				MinReportingPeriod: time.Hour,
-				Collector: lightstep.Endpoint{
-					Host:      "127.0.0.1",
-					Port:      65535,
-					Plaintext: true,
-				},
-				MaxLogsPerSpan: maxLogsPerSpanExternal,
-				UseGRPC:        true,
-			}),
-		},
-		{
-			mgr: zipMgr,
-			str: zipTr,
-			check: func(t *testing.T, spi opentracing.Span) {
-				rs := zipRec.GetSpans()
-				require.Len(t, rs, 2)
-				// The first span we opened is the second one to get recorded.
-				parentSpan := rs[1]
-				require.Len(t, parentSpan.Logs, 1)
-				require.Equal(t, log.String("event", "hello"), parentSpan.Logs[0].Fields[0])
-			},
-		},
-		{
-			mgr: ddMgr,
-			str: ddTr,
-		},
-	} {
-		t.Run(tc.mgr.Name(), func(t *testing.T) {
-			tr := NewTracer()
-			tr.setShadowTracer(tc.mgr, tc.str)
-			s := tr.StartSpan("test")
-			defer func() {
-				if tc.check != nil {
-					tc.check(t, s.i.ot.shadowSpan)
-				}
-			}()
-			defer s.Finish()
-			// The span is not verbose, but has a sink (i.e. the log messages
-			// go somewhere), though we'll actually check that end-to-end below
-			// at least for the mock tracer.
-			require.False(t, s.IsVerbose())
-			require.True(t, s.i.hasVerboseSink())
-			// Put something in the span.
-			s.Record("hello")
-
-			const testBaggageKey = "test-baggage"
-			const testBaggageVal = "test-val"
-			s.SetBaggageItem(testBaggageKey, testBaggageVal)
-			// Also add a baggage item that is exclusive to the shadow span.
-			// This wouldn't typically happen in practice, but it serves as
-			// a regression test for #62702. Losing the Span context directly
-			// is hard to verify via baggage items since the top-level baggage
-			// is transported separately and re-inserted into the shadow context
-			// on the remote side, i.e. the test-baggage item above shows up
-			// regardless of whether #62702 is fixed. But if we're losing the
-			// shadowCtx, the only-in-shadow item does get lost as well, so if
-			// it does not then we know for sure that the shadowContext was
-			// propagated properly.
-			s.i.ot.shadowSpan.SetBaggageItem("only-in-shadow", "foo")
-
-			carrier := metadataCarrier{metadata.MD{}}
-			if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
-				t.Fatal(err)
-			}
-
-			// ExtractMetaFrom also extracts the embedded shadow context.
-			wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
-			defer s2.Finish()
-			s2Ctx := s2.i.ot.shadowSpan.Context()
-
-			// Verify that the baggage is correct in both the tracer context and in the
-			// shadow's context.
-			shadowBaggage := make(map[string]string)
-			s2Ctx.ForeachBaggageItem(func(k, v string) bool {
-				shadowBaggage[k] = v
-				return true
-			})
-			require.Equal(t, map[string]string{
-				testBaggageKey: testBaggageVal,
-			}, s2.Meta().Baggage)
-			require.Equal(t, map[string]string{
-				testBaggageKey:   testBaggageVal,
-				"only-in-shadow": "foo",
-			}, shadowBaggage)
-		})
+	carrier := metadataCarrier{metadata.MD{}}
+	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
+		t.Fatal(err)
 	}
 
-}
+	// ExtractMetaFrom also extracts the embedded OpenTelemetry context.
+	wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-func TestShadowTracerNilTracer(t *testing.T) {
-	tr := NewTracer()
-	// The lightstep tracer is nil when lightstep find that it is
-	// misconfigured or can't instantiate a connection. Make sure
-	// this does not lead to a crash.
-	require.NotPanics(t, func() {
-		tr.setShadowTracer(lightStepManager{}, nil)
-	})
+	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
+
+	exp := map[string]string{
+		testBaggageKey: testBaggageVal,
+	}
+	require.Equal(t, exp, s2.Meta().Baggage)
+	// Note: we don't propagate baggage to the otel spans very well - we don't use
+	// the otel baggage features. We do, however, set attributes on the shadow
+	// spans when we can, which happens to be sufficient for this test.
+
+	rs := sr.Started()
+	require.Len(t, rs, 2)
+	require.Len(t, rs[0].Events(), 1)
+	require.Equal(t, "hello", rs[0].Events()[0].Name)
+	require.Len(t, rs[0].Attributes(), 1)
+	require.Equal(t,
+		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
+		rs[0].Attributes()[0])
+	require.Len(t, rs[1].Attributes(), 1)
+	require.Equal(t,
+		attribute.KeyValue{Key: testBaggageKey, Value: attribute.StringValue(testBaggageVal)},
+		rs[1].Attributes()[0])
+	require.Equal(t, rs[0].SpanContext().TraceID(), rs[1].Parent().TraceID())
+	require.Equal(t, rs[0].SpanContext().SpanID(), rs[1].Parent().SpanID())
 }
 
 func TestTracer_RegistryMaxSize(t *testing.T) {
@@ -636,4 +571,28 @@ func TestNoopSpanFinish(t *testing.T) {
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
 	sp.Finish()
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+}
+
+func TestConcurrentChildAndRecording(t *testing.T) {
+	tr := NewTracer()
+	rootSp := tr.StartSpan("root", WithForceRealSpan())
+	rootSp.SetVerbose(true)
+	var wg sync.WaitGroup
+	const n = 1000
+	wg.Add(2 * n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			sp := tr.StartSpan(
+				"child",
+				WithParentAndAutoCollection(rootSp),      // links sp to rootSp
+				WithSpanKind(oteltrace.SpanKindConsumer)) // causes a tag to be set
+			sp.Finish()
+		}()
+		go func() {
+			defer wg.Done()
+			_ = rootSp.GetRecording()
+		}()
+	}
+	wg.Wait()
 }

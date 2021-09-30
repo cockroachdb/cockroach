@@ -317,6 +317,10 @@ func TestTypeCheckError(t *testing.T) {
 			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
 		},
 		{
+			`((1,2,3)).foo`,
+			`could not identify column "foo" in record data type`,
+		},
+		{
 			`1::d.notatype`,
 			`type "d.notatype" does not exist`,
 		},

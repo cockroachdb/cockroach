@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -146,15 +148,18 @@ func init() {
 }
 
 type tenantSideCostController struct {
-	timeSource timeutil.TimeSource
-	testInstr  TestInstrumentation
-	settings   *cluster.Settings
-	costCfg    tenantcostmodel.Config
-	tenantID   roachpb.TenantID
-	provider   kvtenant.TokenBucketProvider
-	limiter    limiter
-	stopper    *stop.Stopper
-	cpuSecsFn  multitenant.CPUSecsFn
+	timeSource           timeutil.TimeSource
+	testInstr            TestInstrumentation
+	settings             *cluster.Settings
+	costCfg              tenantcostmodel.Config
+	tenantID             roachpb.TenantID
+	provider             kvtenant.TokenBucketProvider
+	limiter              limiter
+	stopper              *stop.Stopper
+	instanceID           base.SQLInstanceID
+	sessionID            sqlliveness.SessionID
+	externalUsageFn      multitenant.ExternalUsageFn
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
 
 	mu struct {
 		syncutil.Mutex
@@ -172,11 +177,17 @@ type tenantSideCostController struct {
 
 	// run contains the state that is updated by the main loop.
 	run struct {
-		now         time.Time
-		cpuSecs     float64
+		now time.Time
+		// externalUsage stores the last value returned by externalUsageFn.
+		externalUsage multitenant.ExternalUsage
+		// consumption stores the last value of mu.consumption.
 		consumption roachpb.TenantConsumption
+		// requestSeqNum is an increasing sequence number that is included in token
+		// bucket requests.
+		requestSeqNum int64
 
-		// TargetPeriodSetting value at the last update.
+		// targetPeriod stores the value of the TargetPeriodSetting setting at the
+		// last update.
 		targetPeriod time.Duration
 
 		// initialRequestCompleted is set to true when the first token bucket
@@ -228,10 +239,24 @@ var _ multitenant.TenantSideCostController = (*tenantSideCostController)(nil)
 
 // Start is part of multitenant.TenantSideCostController.
 func (c *tenantSideCostController) Start(
-	ctx context.Context, stopper *stop.Stopper, cpuSecsFn multitenant.CPUSecsFn,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	instanceID base.SQLInstanceID,
+	sessionID sqlliveness.SessionID,
+	externalUsageFn multitenant.ExternalUsageFn,
+	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
+	if instanceID == 0 {
+		return errors.New("invalid SQLInstanceID")
+	}
+	if sessionID == "" {
+		return errors.New("invalid sqlliveness.SessionID")
+	}
 	c.stopper = stopper
-	c.cpuSecsFn = cpuSecsFn
+	c.instanceID = instanceID
+	c.sessionID = sessionID
+	c.externalUsageFn = externalUsageFn
+	c.nextLiveInstanceIDFn = nextLiveInstanceIDFn
 	return stopper.RunAsyncTask(ctx, "cost-controller", func(ctx context.Context) {
 		c.mainLoop(ctx)
 	})
@@ -242,9 +267,10 @@ func (c *tenantSideCostController) initRunState(ctx context.Context) {
 
 	now := c.timeSource.Now()
 	c.run.now = now
-	c.run.cpuSecs = c.cpuSecsFn(ctx)
+	c.run.externalUsage = c.externalUsageFn(ctx)
 	c.run.lastRequestTime = now
 	c.run.avgRUPerSec = initialRUs / c.run.targetPeriod.Seconds()
+	c.run.requestSeqNum = 1
 }
 
 // updateRunState is called whenever the main loop awakens and accounts for the
@@ -253,11 +279,11 @@ func (c *tenantSideCostController) updateRunState(ctx context.Context) {
 	c.run.targetPeriod = TargetPeriodSetting.Get(&c.settings.SV)
 
 	newTime := c.timeSource.Now()
-	newCPUSecs := c.cpuSecsFn(ctx)
+	newExternalUsage := c.externalUsageFn(ctx)
 
 	// Update CPU consumption.
 
-	deltaCPU := newCPUSecs - c.run.cpuSecs
+	deltaCPU := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
 
 	// Subtract any allowance that we consider free background usage.
 	if deltaTime := newTime.Sub(c.run.now); deltaTime > 0 {
@@ -266,21 +292,28 @@ func (c *tenantSideCostController) updateRunState(ctx context.Context) {
 	if deltaCPU < 0 {
 		deltaCPU = 0
 	}
-	cpuRU := deltaCPU * float64(c.costCfg.PodCPUSecond)
+	ru := deltaCPU * float64(c.costCfg.PodCPUSecond)
+
+	var deltaPGWireBytes uint64
+	if newExternalUsage.PGWireBytes > c.run.externalUsage.PGWireBytes {
+		deltaPGWireBytes = newExternalUsage.PGWireBytes - c.run.externalUsage.PGWireBytes
+		ru += float64(deltaPGWireBytes) * float64(c.costCfg.PGWireByte)
+	}
 
 	c.mu.Lock()
 	c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
-	c.mu.consumption.RU += cpuRU
+	c.mu.consumption.PGWireBytes += deltaPGWireBytes
+	c.mu.consumption.RU += ru
 	newConsumption := c.mu.consumption
 	c.mu.Unlock()
 
 	c.run.now = newTime
-	c.run.cpuSecs = newCPUSecs
+	c.run.externalUsage = newExternalUsage
 	c.run.consumption = newConsumption
 
 	// TODO(radu): figure out how to "smooth out" this debt over a longer period
 	// (so we don't have periodic stalls).
-	c.limiter.AdjustTokens(newTime, -tenantcostmodel.RU(cpuRU))
+	c.limiter.AdjustTokens(newTime, -tenantcostmodel.RU(ru))
 }
 
 // updateAvgRUPerSec is called exactly once per mainLoopUpdateInterval.
@@ -335,13 +368,16 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	}
 
 	req := roachpb.TokenBucketRequest{
-		TenantID: c.tenantID.ToUint64(),
-		// TODO(radu): populate instance ID.
-		InstanceID:                  1,
+		TenantID:                    c.tenantID.ToUint64(),
+		InstanceID:                  uint32(c.instanceID),
+		InstanceLease:               c.sessionID.UnsafeBytes(),
+		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
+		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
 		RequestedRU:                 requested,
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
+	c.run.requestSeqNum++
 
 	c.run.lastRequestTime = c.run.now
 	// TODO(radu): in case of an error, we undercount some consumption.

@@ -92,6 +92,11 @@ ALTER TABLE db.rbt SET LOCALITY REGIONAL BY TABLE IN "us-west-1";
 wait-for-zone-config-changes db-name=db table-name=rbt num-voters=3 num-non-voters=3 leaseholder=3 voter=4,5
 ----
 
+refresh-range-descriptor-cache idx=3 table-name=rbt
+SELECT * FROM db.rbt WHERE k = 2
+----
+LAG_BY_CLUSTER_SETTING
+
 # Reads from us-west-1 now should be local since we're homed in us-west-1.
 trace-sql idx=3
 SELECT * FROM db.rbt WHERE k = 1

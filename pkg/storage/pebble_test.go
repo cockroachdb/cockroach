@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -781,4 +783,35 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 
 	// A fatal error was captured by the logger.
 	require.True(t, l.caught.Load().(bool))
+}
+
+func TestPebbleBackgroundError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	loc := Location{
+		dir: "",
+		fs: &errorFS{
+			FS:         vfs.NewMem(),
+			errorCount: 3,
+		},
+	}
+	eng, err := Open(context.Background(), loc)
+	require.NoError(t, err)
+	defer eng.Close()
+
+	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), hlc.Timestamp{WallTime: 1}}, []byte("a")))
+	require.NoError(t, eng.db.Flush())
+}
+
+type errorFS struct {
+	vfs.FS
+	errorCount int32
+}
+
+func (fs *errorFS) Create(name string) (vfs.File, error) {
+	if filepath.Ext(name) == ".sst" && atomic.AddInt32(&fs.errorCount, -1) >= 0 {
+		return nil, errors.New("background error")
+	}
+	return fs.FS.Create(name)
 }

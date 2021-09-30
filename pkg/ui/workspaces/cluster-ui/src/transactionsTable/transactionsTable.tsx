@@ -20,28 +20,30 @@ import {
   transactionsCountBarChart,
   transactionsRowsReadBarChart,
   transactionsBytesReadBarChart,
+  transactionsRowsWrittenBarChart,
   transactionsLatencyBarChart,
   transactionsContentionBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
+import {
+  formatStartIntervalColumn,
+  statisticsTableTitles,
+} from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { textCell } from "./transactionsCells";
-import { FixLong, longToInt } from "src/util";
+import { FixLong, longToInt, TimestampToNumber } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
-  getStatementsByFingerprintId,
+  getStatementsByFingerprintIdAndTime,
   collectStatementsText,
   statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
-import Long from "long";
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
@@ -65,10 +67,7 @@ export function makeTransactionsColumns(
   transactions: TransactionInfo[],
   statements: Statement[],
   isTenant: boolean,
-  handleDetails: (
-    statementFingerprintIds: Long[] | null,
-    transactionStats: TransactionStats,
-  ) => void,
+  handleDetails: (txn?: TransactionInfo) => void,
   search?: string,
 ): ColumnDescriptor<TransactionInfo>[] {
   const defaultBarChartOptions = {
@@ -90,6 +89,10 @@ export function makeTransactionsColumns(
     defaultBarChartOptions,
   );
   const bytesReadBar = transactionsBytesReadBarChart(
+    transactions,
+    defaultBarChartOptions,
+  );
+  const rowsWrittenBar = transactionsRowsWrittenBarChart(
     transactions,
     defaultBarChartOptions,
   );
@@ -122,19 +125,28 @@ export function makeTransactionsColumns(
             item.stats_data.statement_fingerprint_ids,
             statements,
           ),
-          transactionFingerprintIds: item.stats_data.statement_fingerprint_ids,
-          transactionStats: item.stats_data.stats,
-          handleDetails,
+          onClick: () => handleDetails(item),
           search,
         }),
       sort: (item: TransactionInfo) =>
         collectStatementsText(
-          getStatementsByFingerprintId(
+          getStatementsByFingerprintIdAndTime(
             item.stats_data.statement_fingerprint_ids,
+            item.stats_data.aggregated_ts,
             statements,
           ),
         ),
       alwaysShow: true,
+    },
+    {
+      name: "intervalStartTime",
+      title: statisticsTableTitles.intervalStartTime("transaction"),
+      cell: (item: TransactionInfo) =>
+        formatStartIntervalColumn(
+          TimestampToNumber(item.stats_data?.aggregated_ts),
+        ),
+      sort: (item: TransactionInfo) =>
+        TimestampToNumber(item.stats_data?.aggregated_ts),
     },
     {
       name: "executionCount",
@@ -158,6 +170,15 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-bytes-read"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.bytes_read.mean)),
+    },
+    {
+      name: "rowsWritten",
+      title: statisticsTableTitles.rowsWritten(statType),
+      cell: rowsWrittenBar,
+      className: cx("statements-table__col-rows-written"),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.rows_written?.mean)),
+      showByDefault: false,
     },
     {
       name: "time",

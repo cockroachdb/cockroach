@@ -1133,9 +1133,19 @@ eval
 ----
 'hello t'
 
-# Test that numeric jsonb values can be cast to a numeric data type
+# Test that numeric jsonb values can be cast to a numeric data type.
 eval
 '1'::jsonb::int
+----
+1
+
+eval
+'1'::jsonb::int4
+----
+1
+
+eval
+'1'::jsonb::int2
 ----
 1
 
@@ -1160,6 +1170,11 @@ eval
 2
 
 eval
+'1.5'::jsonb::int
+----
+2
+
+eval
 '2.0'::jsonb::float
 ----
 2.0
@@ -1180,29 +1195,65 @@ eval
 3.14
 
 eval
+'3.14'::jsonb::float4
+----
+3.14
+
+eval
 '3.14'::jsonb::decimal
 ----
 3.14
 
 eval
+'9223372036854775808'::jsonb::int
+----
+integer out of range
+
+eval
+'"1"'::jsonb::int
+----
+cannot cast jsonb string to type int
+
+eval
 'true'::jsonb::float
 ----
-invalid cast: jsonb -> float
+cannot cast jsonb boolean to type float
 
 eval
 'null'::jsonb::float
 ----
-invalid cast: jsonb -> float
+cannot cast jsonb null to type float
 
 eval
 '{}'::jsonb::float
 ----
-invalid cast: jsonb -> float
+cannot cast jsonb object to type float
 
 eval
 '[]'::jsonb::float
 ----
-invalid cast: jsonb -> float
+cannot cast jsonb array to type float
+
+eval
+'"1"'::jsonb::decimal
+----
+cannot cast jsonb string to type decimal
+
+# Test that boolean jsonb values can be cast to a BOOL.
+eval
+'true'::jsonb::bool
+----
+true
+
+eval
+'false'::jsonb::bool
+----
+false
+
+eval
+'1'::jsonb::bool
+----
+cannot cast jsonb numeric to type bool
 
 # "char" is supposed to truncate long values
 eval
