@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -174,7 +175,7 @@ func (b *buildContext) checkIfNodeExists(
 	// Check if any existing node matches the new node we are
 	// trying to add.
 	for idx, node := range b.output {
-		if scpb.EqualElements(node.Element(), elem) {
+		if screl.EqualElements(node.Element(), elem) {
 			return true, idx
 		}
 	}

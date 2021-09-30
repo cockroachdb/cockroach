@@ -44,6 +44,7 @@ go_test(
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils/serverutils",
