@@ -43,6 +43,7 @@ go_test(
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scgraphviz",
+        "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/tree",
