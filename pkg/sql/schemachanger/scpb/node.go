@@ -24,13 +24,8 @@ var NumStatus = len(Status_name)
 
 // Node represents a Target with a given status.
 type Node struct {
-	Target *Target
+	*Target
 	Status Status
-}
-
-// Element returns the target's element.
-func (n *Node) Element() Element {
-	return n.Target.Element()
 }
 
 // Element represents a logical component of a catalog entry's schema (e.g., an
