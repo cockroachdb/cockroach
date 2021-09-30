@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -242,7 +242,6 @@ GRANT admin TO has_admin2;
 
 func TestCancelQueryPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 63547, "https://cockroachlabs.slack.com/archives/C016CAD2HQ8/p1627290710022700")
 	defer log.Scope(t).Close(t)
 
 	// getQueryIDs retrieves the IDs of any currently running queries for the
@@ -312,8 +311,13 @@ GRANT admin TO has_admin2;
 		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
 			"this operation requires CANCELQUERY privilege"},
 	}
+	// Avoid using subtests with t.Run since we may need to access `t` after the
+	// subtest is done. Use a WaitGroup to make sure the error from the pg_sleep
+	// goroutine is checked.
+	wg := sync.WaitGroup{}
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+		func() {
+			wg.Add(1)
 			// Start a query with the target user.
 			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
 			defer targetDB.Close()
@@ -326,7 +330,11 @@ GRANT admin TO has_admin2;
 					// end of the test.
 					errRE = "sql: database is closed"
 				}
-				sqlutils.MakeSQLRunner(targetDB).ExpectErr(t, errRE, "SELECT pg_sleep(1000000)")
+				_, err := targetDB.ExecContext(context.Background(), "SELECT pg_sleep(100)")
+				if !testutils.IsError(err, errRE) {
+					t.Errorf("expected error '%s', got: %v", errRE, err)
+				}
+				wg.Done()
 			}()
 
 			// Retrieve the query ID.
@@ -353,8 +361,10 @@ GRANT admin TO has_admin2;
 			} else {
 				runner.ExpectErr(t, tc.expectedErrRE, `CANCEL QUERY $1`, queryID)
 			}
-		})
+		}()
 	}
+	testCluster.Stopper().Stop(ctx)
+	wg.Wait()
 }
 
 func TestCancelIfExists(t *testing.T) {
