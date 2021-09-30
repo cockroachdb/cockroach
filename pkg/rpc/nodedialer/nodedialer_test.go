@@ -83,11 +83,10 @@ func TestDialNoBreaker(t *testing.T) {
 	// Now trip the breaker and check that DialNoBreaker will go ahead
 	// and dial anyway, and on top of that open the breaker again (since
 	// the dial will succeed).
-	breaker.Trip()
-	require.True(t, breaker.Tripped())
+	breaker.Report(errors.New("explody"))
+	require.Error(t, breaker.Err())
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	require.NoError(t, err)
-	require.False(t, breaker.Tripped())
 
 	// Test that resolver errors also trip the breaker, just like
 	// they would for regular Dial.
@@ -154,7 +153,7 @@ func TestConnHealth(t *testing.T) {
 
 	// Tripping the breaker should return ErrBreakerOpen.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
+	br.Report(errors.New("explody"))
 	{
 		err := nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
@@ -207,7 +206,7 @@ func TestConnHealthTryDial(t *testing.T) {
 
 	// Tripping the breaker should return ErrBreakerOpen.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
+	br.Report(errors.New("explody"))
 	{
 		err := nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass)
 		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
@@ -250,7 +249,7 @@ func TestConnHealthInternal(t *testing.T) {
 
 	// However, it does respect the breaker.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
+	br.Report(errors.New("explody"))
 	{
 		err := nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 		require.True(t, errors.Is(err, circuit.ErrBreakerOpen()), "%+v", err)
@@ -307,9 +306,9 @@ func TestResolverErrorsTrip(t *testing.T) {
 		return nil, boom
 	})
 	_, err := nd.Dial(context.Background(), staticNodeID, rpc.DefaultClass)
-	assert.Equal(t, errors.Cause(err), boom)
+	require.True(t, errors.Is(err, boom), "%+v", err)
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.False(t, breaker.Ready())
+	assert.Error(t, breaker.Err())
 }
 
 /*
