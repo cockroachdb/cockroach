@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -208,7 +210,7 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 		"SELECT 1, 1, 1",
 	}
 
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */)
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
 	defer testHelper.cleanup(ctx, t)
 
 	testCluster := testHelper.testCluster()
@@ -318,7 +320,8 @@ func TestContentionEventsForTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */)
+	testHelper :=
+		newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
 	defer testHelper.cleanup(ctx, t)
 
 	testingCluster := testHelper.testCluster()
@@ -382,4 +385,87 @@ SET TRACING=off;
 			t.Errorf("did not expect contention event in controlled cluster, but it was found")
 		}
 	}
+}
+
+func TestIndexUsageForTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlledCluster := testHelper.controlCluster()
+
+	testingCluster.tenantConn(0).Exec(t, `
+CREATE TABLE test (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+)
+`)
+
+	testingCluster.tenantConn(0).Exec(t, `
+INSERT INTO test
+VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+`)
+
+	// Record scan on primary index.
+	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+
+	// Record scan on secondary index.
+	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+	testTableID, err := strconv.Atoi(testTableIDStr)
+	require.NoError(t, err)
+
+	// Wait for the stats to be ingested.
+	require.NoError(t,
+		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 1,
+			}: {},
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 2,
+			}: {},
+		}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+	)
+
+	query := `
+SELECT
+  table_id,
+  index_id,
+  total_reads,
+  extract_duration('second', now() - last_read) < 5
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+	actual := testingCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	expected := [][]string{
+		{testTableIDStr, "1", "1", "true"},
+		{testTableIDStr, "2", "1", "true"},
+	}
+
+	require.Equal(t, expected, actual)
+
+	// Ensure tenant data isolation.
+	actual = controlledCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	expected = [][]string{}
+
+	require.Equal(t, expected, actual)
 }
