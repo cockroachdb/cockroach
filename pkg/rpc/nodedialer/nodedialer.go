@@ -113,7 +113,7 @@ func (n *Dialer) Dial(
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
-		breaker.Fail(err)
+		breaker.Report(err)
 		return nil, err
 	}
 	return n.dial(ctx, nodeID, addr, breaker, true /* checkBreaker */, class)
@@ -132,7 +132,7 @@ func (n *Dialer) DialNoBreaker(
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		if ctx.Err() == nil {
-			n.getBreaker(nodeID, class).Fail(err)
+			n.getBreaker(nodeID, class).Report(err)
 		}
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (n *Dialer) dial(
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
 		if breaker != nil {
-			breaker.Fail(err)
+			breaker.Report(err)
 		}
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (n *Dialer) dial(
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
 		if breaker != nil {
-			breaker.Fail(err)
+			breaker.Report(err)
 		}
 		return nil, err
 	}

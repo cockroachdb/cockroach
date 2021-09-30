@@ -15,9 +15,3 @@ package circuit
 func (b *BreakerV2) Ready() bool {
 	return b.Err() == nil
 }
-
-// Fail ...
-// TODO(tbg): remove, use Report instead.
-func (b *BreakerV2) Fail(err error) {
-	b.Report(err)
-}
