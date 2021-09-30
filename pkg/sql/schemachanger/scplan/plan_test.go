@@ -178,9 +178,13 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 
 // marshalOps marshals operations in scplan.Plan to a string.
 func marshalOps(t *testing.T, plan *scplan.Plan) string {
-	stages := ""
+	var stages strings.Builder
 	for stageIdx, stage := range plan.Stages {
-		stages += fmt.Sprintf("Stage %d\n", stageIdx)
+		_, _ = fmt.Fprintf(&stages, "Stage %d", stageIdx)
+		if !stage.Revertible {
+			stages.WriteString(" (non-revertible)")
+		}
+		stages.WriteString("\n")
 		stageOps := ""
 		for _, op := range stage.Ops.Slice() {
 			opMap, err := scgraphviz.ToMap(op)
@@ -189,9 +193,9 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages += indentText(stageOps, "  ")
+		stages.WriteString(indentText(stageOps, "  "))
 	}
-	return stages
+	return stages.String()
 }
 
 func newTestingPlanDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {

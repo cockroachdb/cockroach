@@ -165,9 +165,10 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 			}
 		}
 		return Stage{
-			Before: cur,
-			After:  next,
-			Ops:    scop.MakeOps(ops...),
+			Before:     cur,
+			After:      next,
+			Ops:        scop.MakeOps(ops...),
+			Revertible: isStageRevertible,
 		}, true
 	}
 
