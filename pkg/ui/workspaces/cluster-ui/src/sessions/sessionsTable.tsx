@@ -97,11 +97,12 @@ const AgeLabel = (props: { start: Moment; thingName: string }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
+  isCloud?: boolean,
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
 ): ColumnDescriptor<SessionInfo>[] {
-  return [
+  const columns: ColumnDescriptor<SessionInfo>[] = [
     {
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
@@ -168,6 +169,9 @@ export function makeSessionsColumns(
         return shortStatement(summary, stmt);
       },
     },
+  ];
+
+  const actions: ColumnDescriptor<SessionInfo> =
     {
       name: "actions",
       title: SessionTableTitle.actions,
@@ -229,6 +233,7 @@ export function makeSessionsColumns(
           />
         );
       },
-    },
-  ];
+    };
+
+  return isCloud ? columns : columns.concat([actions]);
 }
