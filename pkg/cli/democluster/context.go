@@ -53,6 +53,10 @@ type Context struct {
 	// WorkloadGenerator is the desired workload generator.
 	WorkloadGenerator workload.Generator
 
+	// WorkloadMaxQPS controls the amount of queries that can be run per
+	// second.
+	WorkloadMaxQPS int
+
 	// Localities configures the list of localities available for use
 	// by instantiated servers.
 	Localities DemoLocalityList

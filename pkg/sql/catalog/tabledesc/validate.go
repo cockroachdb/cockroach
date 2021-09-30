@@ -273,65 +273,6 @@ func (desc *wrapper) validateOutboundFK(
 	if found {
 		return nil
 	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(referencedTable, catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		if len(referencedIdx.IndexDesc().ReferencedBy) > 0 {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a unique index that
-		// could support this FK constraint.
-		if !referencedIdx.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) {
-			return nil
-		}
-		// Now check the backreferences. Backreferences in ReferencedBy only had
-		// Index and Table populated.
-		for i := range referencedIdx.IndexDesc().ReferencedBy {
-			backref := &referencedIdx.IndexDesc().ReferencedBy[i]
-			if backref.Table != desc.ID {
-				continue
-			}
-			// Look up the index that the un-upgraded reference refers to and
-			// see if that index could support the foreign key reference. (Note
-			// that it shouldn't be possible for this index to not exist. See
-			// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-			// called from the drop index implementation.)
-			originalOriginIndex, err := desc.FindIndexWithID(backref.Index)
-			if err != nil {
-				return errors.AssertionFailedf(
-					"missing index %d on %q from pre-19.2 foreign key "+
-						"backreference %q on %q",
-					backref.Index, desc.Name, fk.Name, referencedTable.GetName(),
-				)
-			}
-			if originalOriginIndex.IsValidOriginIndex(fk.OriginColumnIDs) {
-				found = true
-				break
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk back reference %q to %q "+
-			"from %q (un-upgraded foreign key references present)",
-			fk.Name, desc.Name, referencedTable.GetName())
-	}
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
 }
@@ -353,60 +294,6 @@ func (desc *wrapper) validateInboundFK(
 	})
 	if found {
 		return nil
-	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(originTable, catalog.IndexOpts{}, func(originIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		fk := originIdx.IndexDesc().ForeignKey
-		if fk.IsSet() {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a index that could
-		// support this FK constraint on the referencing side. Such an index would
-		// have been required in earlier versions.
-		if !originIdx.IsValidOriginIndex(backref.OriginColumnIDs) {
-			return nil
-		}
-		if fk.Table != desc.ID {
-			return nil
-		}
-		// Look up the index that the un-upgraded reference refers to and
-		// see if that index could support the foreign key reference. (Note
-		// that it shouldn't be possible for this index to not exist. See
-		// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-		// called from the drop index implementation.)
-		originalReferencedIndex, err := desc.FindIndexWithID(fk.Index)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"missing index %d on %q from pre-19.2 foreign key forward reference %q on %q",
-				fk.Index, desc.Name, backref.Name, originTable.GetName(),
-			)
-		}
-		if originalReferencedIndex.IsValidReferencedUniqueConstraint(backref.ReferencedColumnIDs) {
-			found = true
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk forward reference %q to %q from %q "+
-			"(un-upgraded foreign key references present)",
-			backref.Name, desc.Name, originTable.GetName())
 	}
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
@@ -644,44 +531,35 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
-	if err := ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
-		vea.Report(err)
-	}
+	ValidateOnUpdate(desc, vea.Report)
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
 // key constraint and an ON UPDATE expression, nil otherwise.
-func ValidateOnUpdate(cols []catalog.Column, outboundFks []descpb.ForeignKeyConstraint) error {
+func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error)) {
 	var onUpdateCols catalog.TableColSet
-	for _, col := range cols {
+	for _, col := range desc.AllColumns() {
 		if col.HasOnUpdate() {
 			onUpdateCols.Add(col.GetID())
 		}
 	}
 
-	var foundErrors []error
-	for _, fk := range outboundFks {
+	_ = desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		if fk.OnUpdate == descpb.ForeignKeyReference_NO_ACTION ||
 			fk.OnUpdate == descpb.ForeignKeyReference_RESTRICT {
-			continue
+			return nil
 		}
 		for _, fkCol := range fk.OriginColumnIDs {
 			if onUpdateCols.Contains(fkCol) {
-				foundErrors = append(foundErrors, pgerror.Newf(pgcode.InvalidTableDefinition,
+				errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
 					"cannot specify both ON UPDATE expression and a foreign key"+
 						" ON UPDATE action for column with ID %d",
 					fkCol,
 				))
 			}
 		}
-	}
-
-	var combinedError error
-	for i := 0; i < len(foundErrors); i++ {
-		combinedError = errors.CombineErrors(combinedError, foundErrors[i])
-	}
-
-	return combinedError
+		return nil
+	})
 }
 
 func (desc *wrapper) validateColumns(
@@ -967,6 +845,10 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		}
 		if idx.GetID() == 0 {
 			return errors.Newf("invalid index ID %d", idx.GetID())
+		}
+
+		if idx.IndexDesc().ForeignKey.IsSet() || len(idx.IndexDesc().ReferencedBy) > 0 {
+			return errors.AssertionFailedf("index %q contains deprecated foreign key representation", idx.GetName())
 		}
 
 		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {

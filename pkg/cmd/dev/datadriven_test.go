@@ -29,10 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func init() {
-	isTesting = true
-}
-
 // TestDatadriven makes use of datadriven to play back all operations executed
 // by individual `dev` invocations. The testcases are defined under testdata/*,
 // where each test files corresponds to a recording capture found in
@@ -88,7 +84,6 @@ func TestDatadriven(t *testing.T) {
 			dev := makeDevCmd()
 			dev.exec = devExec
 			dev.os = devOS
-			require.NoError(t, setupPath(dev))
 
 			if !verbose {
 				dev.cli.SetErr(ioutil.Discard)

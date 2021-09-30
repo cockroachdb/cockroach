@@ -510,6 +510,43 @@ vectorized: true
       spans: LIMITED SCAN
       limit: 1
 
+query T
+EXPLAIN SELECT min(a), max(a) FROM abc
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: abc@primary
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: abc@primary
+              spans: LIMITED SCAN
+              limit: 1
+
 statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
@@ -713,6 +750,100 @@ vectorized: true
           table: xyz@zyx
           spans: /3/2-/3/3
           limit: 1
+
+# MULTIPLE MIN/MAX
+
+query T
+EXPLAIN SELECT min(x), max(z) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: xyz@zyx
+              spans: (/NULL - ]
+              limit: 1
+
+# The SUM disables ReplaceScalarMinMaxWithScalarSubqueries.
+query T
+EXPLAIN SELECT min(x), max(z), sum(x) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+
+# We don't yet support the optimization to convert multiple aggregates to
+# subqueries with limit 1 when there is a filter.
+query T
+EXPLAIN SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/0 - /0] [/4 - /4] [/7 - /7]
+
+query T
+EXPLAIN SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/1 - /1]
+
+query T
+EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@zyx
+      spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
 
 # VARIANCE/STDDEV
 

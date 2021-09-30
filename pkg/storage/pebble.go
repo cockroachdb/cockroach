@@ -404,10 +404,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
 		diskHealthCheckInterval = maxSyncDurationDefault
 	}
-	// If we encounter ENOSPC, exit with an informative exit code.
-	opts.FS = vfs.OnDiskFull(opts.FS, func() {
-		exit.WithCode(exit.DiskFull())
-	})
 	// Instantiate a file system with disk health checking enabled. This FS wraps
 	// vfs.Default, and can be wrapped for encryption-at-rest.
 	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
@@ -417,6 +413,10 @@ func DefaultPebbleOptions() *pebble.Options {
 				Duration: duration,
 			})
 		})
+	// If we encounter ENOSPC, exit with an informative exit code.
+	opts.FS = vfs.OnDiskFull(opts.FS, func() {
+		exit.WithCode(exit.DiskFull())
+	})
 	return opts
 }
 
@@ -1477,7 +1477,12 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	// corresponding format major version, ratcheting Pebble's format
 	// major version if necessary.
 	formatVers := pebble.FormatMostCompatible
+	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.PebbleSetWithDelete)):
+		if formatVers < pebble.FormatSetWithDelete {
+			formatVers = pebble.FormatSetWithDelete
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatVersioned)):
 		if formatVers < pebble.FormatVersioned {
 			formatVers = pebble.FormatVersioned

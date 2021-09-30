@@ -2,6 +2,21 @@
 # groupby.opt contains exploration rules for the groupby operators
 # =============================================================================
 
+# ReplaceScalarMinMaxWithScalarSubqueries replaces a scalar group by having a
+# single ScanExpr and n > 1 MIN/MAX expressions with n scalar subqueries, so
+# that each subquery may take advantage of the ReplaceScalarMinMaxWithLimit
+# rule.
+# NOTE: The input relation must be a simple scan as currently no other cases,
+#       such as joins, can take advantage of this rewrite.
+[ReplaceScalarMinMaxWithScalarSubqueries, Explore]
+(ScalarGroupBy
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $aggregations:* & (TwoOrMoreMinOrMax $aggregations)
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(MakeMinMaxScalarSubqueries $scanPrivate $aggregations)
+
 # ReplaceScalarMinMaxWithLimit replaces a min or max group by aggregation with a
 # limit 1 on an ordered set. This rule may result in a lower cost plan if the
 # aggregated column (e.g. the "x" in min(x)) is indexed.

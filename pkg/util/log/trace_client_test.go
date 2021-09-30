@@ -37,7 +37,7 @@ func TestTrace(t *testing.T) {
 				return ctxWithSpan, sp
 			},
 			check: func(t *testing.T, _ context.Context, sp *tracing.Span) {
-				if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+				if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: test1
@@ -105,7 +105,7 @@ func TestTraceWithTags(t *testing.T) {
 	log.Info(ctxWithSpan, "log")
 
 	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+	if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: [tag=1] test1

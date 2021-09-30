@@ -388,7 +388,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.Locality,
 		&cfg.DefaultZoneConfig,
 	)
-	nodeDialer := nodedialer.New(rpcContext, gossip.AddressResolver(g))
+
+	var dialerKnobs nodedialer.DialerTestingKnobs
+	if dk := cfg.TestingKnobs.DialerKnobs; dk != nil {
+		dialerKnobs = dk.(nodedialer.DialerTestingKnobs)
+	}
+
+	nodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
+		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
@@ -640,7 +647,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	tenantUsage := NewTenantUsageServer(db, internalExecutor)
+	tenantUsage := NewTenantUsageServer(st, db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
 	node := NewNode(

@@ -3,6 +3,9 @@
 statement ok
 SET sql_safe_updates = true
 
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
 # Test dropping sequences with/without CASCADE
 subtest drop_sequence
 

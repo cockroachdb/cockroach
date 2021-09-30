@@ -118,6 +118,12 @@ func TestSetMinVersion(t *testing.T) {
 	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatVersioned))
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatVersioned, p.db.FormatMajorVersion())
+
+	// Advancing the store cluster version to PebbleSetWithDelete
+	// should also advance the store's format major version.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleSetWithDelete))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
 }
 
 func TestMinVersion_IsNotEncrypted(t *testing.T) {

@@ -508,8 +508,8 @@ func TestExamineDescriptors(t *testing.T) {
 			expected: `Examining 6 descriptors and 6 namespace entries...
   ParentID  57, ParentSchemaID 29: relation "a" (58): failed to upgrade descriptor: index-id "2" does not exist
   ParentID  57, ParentSchemaID 29: relation "b" (59): failed to upgrade descriptor: referenced table ID 52: descriptor not found
-  ParentID  57, ParentSchemaID 29: relation "a" (58): primary index "primary" has invalid version 0, expected 4
-  ParentID  57, ParentSchemaID 29: relation "b" (59): primary index "primary" has invalid version 0, expected 4
+  ParentID  57, ParentSchemaID 29: relation "a" (58): index "primary" contains deprecated foreign key representation
+  ParentID  57, ParentSchemaID 29: relation "b" (59): index "primary" contains deprecated foreign key representation
   ParentID  57, ParentSchemaID 29: relation "c" (60): missing fk back reference "fk_i_ref_b" to "c" from "a"
 `,
 		},

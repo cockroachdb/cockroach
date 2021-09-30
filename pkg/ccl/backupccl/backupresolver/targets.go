@@ -10,6 +10,7 @@ package backupresolver
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -38,6 +39,29 @@ type DescriptorsMatched struct {
 
 	// Explicitly requested DBs (e.g. DATABASE a).
 	RequestedDBs []catalog.DatabaseDescriptor
+}
+
+// MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting()
+// is called in DescriptorsMatchingTargets
+type MissingTableErr struct {
+	wrapped   error
+	tableName string
+}
+
+// Error() implements the erorr interface for MissingTableErr and outputs an error string
+func (e *MissingTableErr) Error() string {
+	return fmt.Sprintf("table %q does not exist, or invalid RESTORE timestamp: %v", e.GetTableName(), e.wrapped.Error())
+}
+
+// Unwrap() implements the erorr interface for MissingTableErr and outputs wrapped error
+// implemented so that errors.As can be used with MissingTableErr
+func (e *MissingTableErr) Unwrap() error {
+	return e.wrapped
+}
+
+// GetTableName is an accessor function for the member variable tableName
+func (e *MissingTableErr) GetTableName() string {
+	return e.tableName
 }
 
 // CheckExpansions determines if matched targets are covered by the specified
@@ -397,7 +421,7 @@ func DescriptorsMatchingTargets(
 				if asOf.IsEmpty() {
 					return ret, doesNotExistErr
 				}
-				return ret, errors.Wrapf(invalidRestoreTsErr, `table %q does not exist, or invalid RESTORE timestamp`, tree.ErrString(p))
+				return ret, &MissingTableErr{invalidRestoreTsErr, tree.ErrString(p)}
 			}
 			tableDesc, isTable := descI.(catalog.TableDescriptor)
 			// If the type assertion didn't work, then we resolved a type instead, so

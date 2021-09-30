@@ -1,41 +1,11 @@
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
 ----
 
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
@@ -49,10 +19,10 @@ This line is ignored.
 ----
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //docs/generated:gen-logging-md //docs/generated/sql
+bazel build //docs/generated:gen-logging-md //docs/generated/sql
 ----
 
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 
@@ -132,22 +102,7 @@ MOCK_REDACT_SAFE_OUTPUT
 echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/generated/redact_safe.md
 ----
 
-getenv PATH
-----
-/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-
-which cc
-----
-/usr/local/opt/ccache/libexec/cc
-
-readlink /usr/local/opt/ccache/libexec/cc
-----
-../bin/ccache
-
-export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
-----
-
-bazel info workspace --color=no --config=dev
+bazel info workspace --color=no
 ----
 go/src/github.com/cockroachdb/cockroach
 
@@ -161,10 +116,10 @@ cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.
 ----
 ----
 
-bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
+bazel build //pkg/roachpb:gen-batch-generated //pkg/sql/opt/optgen/lang:gen-expr //pkg/sql/opt/optgen/lang:gen-operator
 ----
 
-bazel info bazel-bin --color=no --config=dev
+bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
 

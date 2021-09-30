@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -233,6 +234,7 @@ type Metrics struct {
 	Running *metric.Gauge
 
 	FrontierUpdates *metric.Counter
+	ThrottleMetrics cdcutils.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -270,7 +272,9 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 
 		Running:         metric.NewGauge(metaChangefeedRunning),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
 	}
+
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
 	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {

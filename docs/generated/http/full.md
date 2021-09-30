@@ -3276,6 +3276,7 @@ Request object for issuing a SQL stats reset request.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.ResetSQLStatsRequest-string) |  |  | [reserved](#support-status) |
+| reset_persisted_stats | [bool](#cockroach.server.serverpb.ResetSQLStatsRequest-bool) |  | reset_persisted_stats specifies if the persisted SQL Stats will be reset along with the in-memory SQL stats. | [reserved](#support-status) |
 
 
 

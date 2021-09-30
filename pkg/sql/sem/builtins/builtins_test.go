@@ -12,17 +12,24 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"math/bits"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +68,102 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 			t.Fatalf("%d > %d", tc, prev)
 		}
 	}
+}
+
+// TestMapToUniqueUnorderedID verifies that the mapping preserves the ones count.
+func TestMapToUniqueUnorderedID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for i := 0; i < 30; i++ {
+		// RandInput is [0][63 random bits].
+		randInput := uint64(rand.Int63())
+		output := mapToUnorderedUniqueInt(randInput)
+
+		inputOnesCount := bits.OnesCount64(randInput)
+		outputOnesCount := bits.OnesCount64(output)
+		require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
+			"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
+			outputOnesCount)
+	}
+}
+
+// TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
+// normalization can use unique_unordered_id() and a split in a table followed
+// by insertions guarantees a (somewhat) uniform distribution of the data.
+func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	// Create a new table with serial primary key i (unordered_rowid) and int j (index).
+	tdb.Exec(t, `
+SET serial_normalization TO 'unordered_rowid';
+CREATE DATABASE t;
+USE t;
+CREATE TABLE t (
+  i SERIAL PRIMARY KEY,
+  j INT
+)`)
+
+	numberOfRows := 10000
+	if util.RaceEnabled {
+		// We use a small number of rows because inserting rows under race is slow.
+		numberOfRows = 100
+	}
+
+	// Enforce 3 bits worth of range splits in the high order to collect range
+	// statistics after row insertions.
+	tdb.Exec(t, fmt.Sprintf(`
+ALTER TABLE t SPLIT AT SELECT i<<(60) FROM generate_series(1, 7) as t(i);
+INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
+`, numberOfRows))
+
+	// Derive range statistics.
+	var keyCounts pq.Int64Array
+	tdb.QueryRow(t, "SELECT "+
+		"array_agg((crdb_internal.range_stats(start_key)->>'key_count')::int) AS rows "+
+		"FROM crdb_internal.ranges_no_leases WHERE table_id"+
+		"='t'::regclass;").Scan(&keyCounts)
+
+	t.Log("Key counts in each split range")
+	for i, keyCount := range keyCounts {
+		t.Logf("range %d: %d\n", i, keyCount)
+	}
+
+	// To check that the distribution over ranges is not uniform, we use a
+	// chi-square goodness of fit statistic. We'll set our null hypothesis as
+	// 'each range in the distribution should have the same probability of getting
+	// a row inserted' and we'll check if we can reject the null hypothesis if
+	// chi-square is greater than the critical value we currently set as 19.5114,
+	// a deliberate choice that gives us a p-value of 0.00001 according to
+	// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
+	// able to reject the null hypothesis, then the distribution is not uniform,
+	// and we raise an error.
+	chiSquared := discreteUniformChiSquared(keyCounts)
+	criticalValue := 19.5114
+	require.Lessf(t, chiSquared, criticalValue, "chiSquared value of %f must be"+
+		" less than criticalVal %f to guarantee distribution is relatively uniform",
+		chiSquared, criticalValue)
+}
+
+// discreteUniformChiSquared calculates the chi-squared statistic (ref:
+// https://www.itl.nist.gov/div898/handbook/eda/section3/eda35f.htm) to be used
+// in our hypothesis testing for the distribution of rows among ranges.
+func discreteUniformChiSquared(counts []int64) float64 {
+	var n int64
+	for _, c := range counts {
+		n += c
+	}
+	p := float64(1) / float64(len(counts))
+	var stat float64
+	for _, c := range counts {
+		oSubE := float64(c)/float64(n) - p
+		stat += (oSubE * oSubE) / p
+	}
+	stat *= float64(n)
+	return stat
 }
 
 func TestStringToArrayAndBack(t *testing.T) {

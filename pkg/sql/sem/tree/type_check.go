@@ -698,8 +698,13 @@ func (expr *ColumnAccessExpr) TypeCheck(
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	if resolvedType.Family() != types.TupleFamily || (!expr.ByIndex && len(resolvedType.TupleLabels()) == 0) {
+	if resolvedType.Family() != types.TupleFamily {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
+	}
+
+	if !expr.ByIndex && len(resolvedType.TupleLabels()) == 0 {
+		return nil, pgerror.Newf(pgcode.UndefinedColumn, "could not identify column %q in record data type",
+			expr.ColName)
 	}
 
 	if expr.ByIndex {
@@ -720,7 +725,7 @@ func (expr *ColumnAccessExpr) TypeCheck(
 			}
 		}
 		if expr.ColIndex < 0 {
-			return nil, pgerror.Newf(pgcode.DatatypeMismatch,
+			return nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"could not identify column %q in %s",
 				ErrString(&expr.ColName), resolvedType,
 			)

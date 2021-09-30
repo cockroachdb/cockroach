@@ -805,7 +805,7 @@ func TruncateInterleavedIndexes(
 					execCfg.GetRowMetrics(true /* internal */),
 				)
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &execCfg.Settings.SV); err != nil {
 					return err
 				}
 				resume, err := td.deleteIndex(
@@ -887,7 +887,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
 				)
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
 					return err
 				}
 				if !canClearRangeForDrop(idx) {
@@ -2502,7 +2502,7 @@ func indexTruncateInTxn(
 			execCfg.GetRowMetrics(internal),
 		)
 		td := tableDeleter{rd: rd, alloc: alloc}
-		if err := td.init(ctx, txn, evalCtx); err != nil {
+		if err := td.init(ctx, txn, evalCtx, &evalCtx.Settings.SV); err != nil {
 			return err
 		}
 		var err error

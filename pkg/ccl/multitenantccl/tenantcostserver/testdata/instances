@@ -18,10 +18,10 @@ instance_id: 10
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire=0 bytes
 Last update: 00:00:00.000
 First active instance: 10
-  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 10:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 token-bucket-request tenant=5
 instance_id: 10
@@ -30,10 +30,10 @@ instance_id: 10
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire=0 bytes
 Last update: 00:00:00.000
 First active instance: 10
-  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 10:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 token-bucket-request tenant=5
 instance_id: 20
@@ -42,11 +42,11 @@ instance_id: 20
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire=0 bytes
 Last update: 00:00:00.000
 First active instance: 10
-  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=20  last-update=00:00:00.000
-  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 10:  lease="foo"  seq=2  shares=0.0  next-instance=20  last-update=00:00:00.000
+  Instance 20:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 token-bucket-request tenant=5
 instance_id: 15
@@ -55,12 +55,12 @@ instance_id: 15
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire=0 bytes
 Last update: 00:00:00.000
 First active instance: 10
-  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=15  last-update=00:00:00.000
-  Instance 15:  lease='\x'  seq=0  shares=0.0  next-instance=20  last-update=00:00:00.000
-  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 10:  lease="foo"  seq=2  shares=0.0  next-instance=15  last-update=00:00:00.000
+  Instance 15:  lease="foo"  seq=4  shares=0.0  next-instance=20  last-update=00:00:00.000
+  Instance 20:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 token-bucket-request tenant=5
 instance_id: 1
@@ -69,10 +69,10 @@ instance_id: 1
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=10  last-update=00:00:00.000
-  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=15  last-update=00:00:00.000
-  Instance 15:  lease='\x'  seq=0  shares=0.0  next-instance=20  last-update=00:00:00.000
-  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=5  shares=0.0  next-instance=10  last-update=00:00:00.000
+  Instance 10:  lease="foo"  seq=2  shares=0.0  next-instance=15  last-update=00:00:00.000
+  Instance 15:  lease="foo"  seq=4  shares=0.0  next-instance=20  last-update=00:00:00.000
+  Instance 20:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:00.000

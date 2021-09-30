@@ -22,6 +22,7 @@ import {
   countBarChart,
   rowsReadBarChart,
   bytesReadBarChart,
+  rowsWrittenBarChart,
   latencyBarChart,
   contentionBarChart,
   maxMemUsageBarChart,
@@ -42,6 +43,7 @@ import {
   statisticsTableTitles,
   NodeNames,
   StatisticType,
+  formatStartIntervalColumn,
 } from "../statsTableUtil/statsTableUtil";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -71,6 +73,10 @@ function makeCommonColumns(
   const countBar = countBarChart(statements, defaultBarChartOptions);
   const rowsReadBar = rowsReadBarChart(statements, defaultBarChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
+  const rowsWrittenBar = rowsWrittenBarChart(
+    statements,
+    defaultBarChartOptions,
+  );
   const latencyBar = latencyBarChart(statements, defaultBarChartOptions);
   const contentionBar = contentionBarChart(
     statements,
@@ -87,6 +93,14 @@ function makeCommonColumns(
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
   return [
+    {
+      name: "intervalStartTime",
+      title: statisticsTableTitles.intervalStartTime(statType),
+      className: cx("statements-table__interval_time"),
+      cell: (stmt: AggregateStatistics) =>
+        formatStartIntervalColumn(stmt.aggregatedTs),
+      sort: (stmt: AggregateStatistics) => stmt.aggregatedTs,
+    },
     {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
@@ -116,6 +130,14 @@ function makeCommonColumns(
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
+    },
+    {
+      name: "rowsWritten",
+      title: statisticsTableTitles.rowsWritten(statType),
+      cell: rowsWrittenBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.rows_written?.mean)),
+      showByDefault: false,
     },
     {
       name: "time",
@@ -181,6 +203,7 @@ function makeCommonColumns(
 export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  aggregatedTs: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;

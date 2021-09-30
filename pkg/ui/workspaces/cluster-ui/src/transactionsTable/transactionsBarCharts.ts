@@ -39,6 +39,14 @@ const bytesReadBar = [
 const bytesReadStdDev = bar(cx("bytes-read-dev"), (d: Transaction) =>
   stdDevLong(d.stats_data.stats.bytes_read, d.stats_data.stats.count),
 );
+const rowsWrittenBar = [
+  bar("rows-written", (d: Transaction) =>
+    longToInt(d.stats_data.stats.rows_written?.mean),
+  ),
+];
+const rowsWrittenStdDev = bar(cx("rows-written-dev"), (d: Transaction) =>
+  stdDevLong(d.stats_data.stats.rows_written, d.stats_data.stats.count),
+);
 const latencyBar = [
   bar(
     "bar-chart__service-lat",
@@ -104,6 +112,12 @@ export const transactionsBytesReadBarChart = barChartFactory(
   bytesReadBar,
   Bytes,
   bytesReadStdDev,
+);
+export const transactionsRowsWrittenBarChart = barChartFactory(
+  "grey",
+  rowsWrittenBar,
+  approximify,
+  rowsWrittenStdDev,
 );
 export const transactionsLatencyBarChart = barChartFactory(
   "grey",

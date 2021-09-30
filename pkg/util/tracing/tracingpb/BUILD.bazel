@@ -8,7 +8,10 @@ go_library(
     embed = [":tracingpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//types"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//types",
+    ],
 )
 
 proto_library(
@@ -30,5 +33,8 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
     proto = ":tracingpb_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )

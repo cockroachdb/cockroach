@@ -3340,21 +3340,6 @@ type SequenceOperators interface {
 	// Returns an empty string if the sequence name does not exist.
 	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
 
-	// IncrementSequence increments the given sequence and returns the result.
-	// It returns an error if the given name is not a sequence.
-	// The caller must ensure that seqName is fully qualified already.
-	IncrementSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// GetLatestValueInSessionForSequence returns the value most recently obtained by
-	// nextval() for the given sequence in this session.
-	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// SetSequenceValue sets the sequence's value.
-	// If isCalled is false, the sequence is set such that the next time nextval() is called,
-	// `newVal` is returned. Otherwise, the next call to nextval will return
-	// `newVal + seqOpts.Increment`.
-	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
-
 	// IncrementSequenceByID increments the given sequence and returns the result.
 	// It returns an error if the given ID is not a sequence.
 	// Takes in a sequence ID rather than a name, unlike IncrementSequence.

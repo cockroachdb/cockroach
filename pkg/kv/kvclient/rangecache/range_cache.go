@@ -77,6 +77,7 @@ type RangeDescriptorDB interface {
 type RangeCache struct {
 	st      *cluster.Settings
 	stopper *stop.Stopper
+	tracer  *tracing.Tracer
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db RangeDescriptorDB
@@ -175,9 +176,13 @@ func makeLookupRequestKey(
 // NewRangeCache returns a new RangeCache which uses the given RangeDescriptorDB
 // as the underlying source of range descriptors.
 func NewRangeCache(
-	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
+	st *cluster.Settings,
+	db RangeDescriptorDB,
+	size func() int64,
+	stopper *stop.Stopper,
+	tracer *tracing.Tracer,
 ) *RangeCache {
-	rdc := &RangeCache{st: st, db: db, stopper: stopper}
+	rdc := &RangeCache{st: st, db: db, stopper: stopper, tracer: tracer}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -634,9 +639,7 @@ func (rc *RangeCache) tryLookup(
 		return returnToken, nil
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "lookup range descriptor: key=%s (reverse: %t)", key, useReverseScan)
-	}
+	log.VEventf(ctx, 2, "looking up range descriptor: key=%s", key)
 
 	var prevDesc *roachpb.RangeDescriptor
 	if evictToken.Valid() {
@@ -646,7 +649,7 @@ func (rc *RangeCache) tryLookup(
 	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
 		var lookupRes EvictionToken
 		if err := rc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
-			ctx, reqSpan := tracing.ForkSpan(ctx, "range lookup")
+			ctx, reqSpan := tracing.EnsureChildSpan(ctx, rc.tracer, "range lookup")
 			defer reqSpan.Finish()
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
@@ -761,9 +764,9 @@ func (rc *RangeCache) tryLookup(
 		s = res.Val.(EvictionToken).String()
 	}
 	if res.Shared {
-		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor with shared request: %s", s)
 	} else {
-		log.Eventf(ctx, "looked up range descriptor: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
 		return EvictionToken{}, res.Err

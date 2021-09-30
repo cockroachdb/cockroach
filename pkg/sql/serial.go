@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -30,6 +32,10 @@ import (
 // uniqueRowIDExpr is used as default expression when
 // SessionNormalizationMode is SerialUsesRowID.
 var uniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unique_rowid")}
+
+// unorderedUniqueRowIDExpr is used when SessionNormalizationMode is
+// SerialUsesUnorderedRowID.
+var unorderedUniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unordered_unique_rowid")}
 
 // realSequenceOpts (nil) is used when SessionNormalizationMode is
 // SerialUsesSQLSequences.
@@ -130,17 +136,38 @@ func (p *planner) generateSerialInColumnDef(
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
 
+	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
 	// Find the integer type that corresponds to the specification.
 	switch serialNormalizationMode {
-	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesVirtualSequences:
-		// If unique_rowid() or virtual sequences are requested, we have
-		// no choice but to use the full-width integer type, no matter
-		// which serial size was requested, otherwise the values will not fit.
+	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesUnorderedRowID, sessiondatapb.SerialUsesVirtualSequences:
+		// If unique_rowid() or unordered_unique_rowid() or virtual sequences are
+		// requested, we have no choice but to use the full-width integer type, no
+		// matter which serial size was requested, otherwise the values will not
+		// fit.
 		//
 		// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
 		// when the default is inverted to determine if we should also
 		// switch this behavior around.
-		newSpec.Type = types.Int
+		upgradeType := types.Int
+		if defType.Width() < upgradeType.Width() {
+			p.noticeSender.BufferNotice(
+				errors.WithHintf(
+					pgnotice.Newf(
+						"upgrading the column %s to %s to utilize the session serial_normalization setting",
+						d.Name.String(),
+						upgradeType.SQLString(),
+					),
+					"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
+						"to use a smaller sized serial column at the cost of performance. See %s",
+					docs.URL("serial.html"),
+				),
+			)
+		}
+		newSpec.Type = upgradeType
 
 	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
@@ -149,11 +176,6 @@ func (p *planner) generateSerialInColumnDef(
 		return nil, nil, nil, nil,
 			errors.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
 	}
-
-	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
 	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
 		defType.Name(), serialNormalizationMode.String()))
 
@@ -161,6 +183,9 @@ func (p *planner) generateSerialInColumnDef(
 		// We're not constructing a sequence for this SERIAL column.
 		// Use the "old school" CockroachDB default.
 		newSpec.DefaultExpr.Expr = uniqueRowIDExpr
+		return &newSpec, nil, nil, nil, nil
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesUnorderedRowID {
+		newSpec.DefaultExpr.Expr = unorderedUniqueRowIDExpr
 		return &newSpec, nil, nil, nil, nil
 	}
 

@@ -241,8 +241,9 @@ func registerAutoUpgrade(r registry.Registry) {
 			t.Fatalf("cluster setting cluster.preserve_downgrade_option is %s, should be an empty string", downgradeVersion)
 		}
 
-		// Start n3 again to satisfy the dead node detector.
-		c.Start(ctx, c.Node(nodeDecommissioned))
+		// Wipe n3 to exclude it from the dead node check the roachtest harness
+		// will perform after the test.
+		c.Wipe(ctx, c.Node(nodeDecommissioned))
 	}
 
 	r.Add(registry.TestSpec{

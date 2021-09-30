@@ -110,9 +110,6 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Stop(ctx, c.Range(1, 3))
 	c.Start(ctx, c.Range(1, 2))
 
-	// Wait for the cluster to come back up.
-	WaitFor3XReplication(t, db)
-
 	waitUntil([]string{
 		"is_available is_live",
 		"true true",

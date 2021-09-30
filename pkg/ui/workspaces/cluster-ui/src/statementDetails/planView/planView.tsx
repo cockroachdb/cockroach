@@ -8,13 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React, { Fragment } from "react";
+import _ from "lodash";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import styles from "./planView.module.scss";
 import { Fraction } from "../statementDetails";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import {
+  getAttributeTooltip,
+  getOperatorTooltip,
+  getAttributeValueTooltip,
+} from "./planTooltips";
+import styles from "./planView.module.scss";
 
 type IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 type IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
@@ -139,6 +144,24 @@ function shouldHideNode(nodeName: string): boolean {
   return nodeName === "row source to plan node";
 }
 
+// standardizeKey converts strings separated by whitespace and/or
+// hyphens to camel case. '(anti)' is also removed from the resulting string.
+export function standardizeKey(str: string): string {
+  return str
+    .toLowerCase()
+    .split(/[ -]+/)
+    .filter(str => str !== "(anti)")
+    .map((str, i) =>
+      i === 0
+        ? str
+        : str
+            .charAt(0)
+            .toUpperCase()
+            .concat(str.substring(1)),
+    )
+    .join("");
+}
+
 /* ************************* PLAN NODES ************************* */
 
 function NodeAttribute({
@@ -148,17 +171,40 @@ function NodeAttribute({
 }): React.ReactElement {
   if (!attribute.values.length || !attribute.values[0].length) return null;
 
-  const attrClassName = attribute.warn ? "warn" : "";
-
   const values =
     attribute.values.length > 1
       ? `[${attribute.values.join(", ")}]`
       : attribute.values[0];
 
+  const tooltipContent = getAttributeTooltip(standardizeKey(attribute.key));
+  const attributeValTooltip =
+    attribute.values.length > 1
+      ? null
+      : getAttributeValueTooltip(standardizeKey(attribute.values[0]));
+
   return (
-    <div key={attribute.key}>
-      <span className={cx("nodeAttributeKey")}>{attribute.key}:</span>{" "}
-      <span className={cx(attrClassName)}>{values}</span>
+    <div>
+      <span
+        className={cx(
+          "node-attribute-key",
+          tooltipContent && "underline-tooltip",
+        )}
+      >
+        <Tooltip content={tooltipContent} placement="bottom">
+          {`${attribute.key}:`}
+        </Tooltip>
+      </span>{" "}
+      <span
+        className={cx(
+          "node-attribute",
+          attribute.warn && "warn",
+          attributeValTooltip && "underline-tooltip",
+        )}
+      >
+        <Tooltip placement="bottom" content={attributeValTooltip}>
+          {values}
+        </Tooltip>
+      </span>
     </div>
   );
 }
@@ -167,33 +213,26 @@ interface PlanNodeDetailProps {
   node: FlatPlanNode;
 }
 
-class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
-  constructor(props: PlanNodeDetailProps) {
-    super(props);
-  }
+function PlanNodeDetails({ node }: PlanNodeDetailProps): React.ReactElement {
+  const tooltipContent = getOperatorTooltip(standardizeKey(node.name));
 
-  renderNodeDetails() {
-    const node = this.props.node;
-    if (node.attrs && node.attrs.length > 0) {
-      return (
-        <div className={cx("nodeAttributes")}>
+  return (
+    <div className={cx("node-details")}>
+      {NODE_ICON}{" "}
+      <b className={tooltipContent && cx("underline-tooltip")}>
+        <Tooltip placement="bottom" content={tooltipContent}>
+          {node.name}
+        </Tooltip>
+      </b>
+      {node.attrs && node.attrs.length > 0 && (
+        <div className={cx("node-attributes")}>
           {node.attrs.map((attr, idx) => (
             <NodeAttribute key={idx} attribute={attr} />
           ))}
         </div>
-      );
-    }
-  }
-
-  render() {
-    const node = this.props.node;
-    return (
-      <div className={cx("nodeDetails")}>
-        {NODE_ICON} <b>{node.name}</b>
-        {this.renderNodeDetails()}
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
 }
 
 type PlanNodeProps = { node: FlatPlanNode };
@@ -227,110 +266,76 @@ interface PlanViewProps {
   globalProperties: GlobalPropertiesType;
 }
 
-interface PlanViewState {
-  expanded: boolean;
-  showExpandDirections: boolean;
-}
+export function PlanView({
+  title,
+  plan,
+  globalProperties,
+}: PlanViewProps): React.ReactElement {
+  const flattenedPlanNodeRoot = flattenTreeAttributes(plan);
 
-export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
-  private readonly innerContainer: React.RefObject<HTMLDivElement>;
-  constructor(props: PlanViewProps) {
-    super(props);
-    this.state = {
-      expanded: false,
-      showExpandDirections: true,
-    };
-    this.innerContainer = React.createRef();
-  }
+  const globalAttrs: FlatPlanNodeAttribute[] = [
+    {
+      key: "distribution",
+      values: [fractionToString(globalProperties.distribution)],
+      warn: false, // distribution is never warned
+    },
+    {
+      key: "vectorized",
+      values: [fractionToString(globalProperties.vectorized)],
+      warn: false, // vectorized is never warned
+    },
+  ];
 
-  toggleExpanded = () => {
-    this.setState(state => ({
-      expanded: !state.expanded,
-    }));
-  };
+  const lastSampledHelpText = (
+    <Fragment>
+      If the time from the last sample is greater than 5 minutes, a new plan
+      will be sampled. This frequency can be configured with the cluster setting{" "}
+      <code>
+        <pre style={{ display: "inline-block" }}>
+          sql.metrics.statement_details.plan_collection.period
+        </pre>
+      </code>
+      .
+    </Fragment>
+  );
 
-  showExpandDirections() {
-    // Only show directions to show/hide the full plan if content is longer than its max-height.
-    const containerObj = this.innerContainer.current;
-    return containerObj.scrollHeight > containerObj.clientHeight;
-  }
-
-  componentDidMount() {
-    this.setState({ showExpandDirections: this.showExpandDirections() });
-  }
-
-  render() {
-    const { plan, globalProperties } = this.props;
-    const flattenedPlanNodeRoot = flattenTreeAttributes(plan);
-
-    const globalAttrs: FlatPlanNodeAttribute[] = [
-      {
-        key: "distribution",
-        values: [fractionToString(globalProperties.distribution)],
-        warn: false, // distribution is never warned
-      },
-      {
-        key: "vectorized",
-        values: [fractionToString(globalProperties.vectorized)],
-        warn: false, // vectorized is never warned
-      },
-    ];
-
-    const lastSampledHelpText = (
-      <Fragment>
-        If the time from the last sample is greater than 5 minutes, a new plan
-        will be sampled. This frequency can be configured with the cluster
-        setting{" "}
-        <code>
-          <pre style={{ display: "inline-block" }}>
-            sql.metrics.statement_details.plan_collection.period
-          </pre>
-        </code>
-        .
-      </Fragment>
-    );
-
-    return (
-      <table className={cx("plan-view-table")}>
-        <thead>
-          <tr>
-            <th className={cx("plan-view-table__cell")}>
-              <h2 className={cx("base-heading", "summary--card__title")}>
-                {this.props.title}
-              </h2>
-              <div className={cx("plan-view-table__tooltip")}>
-                <Tooltip content={lastSampledHelpText}>
-                  <div className={cx("plan-view-table__tooltip-hover-area")}>
-                    <div className={cx("plan-view-table__info-icon")}>i</div>
-                  </div>
-                </Tooltip>
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className={cx("plan-view-table__row--body")}>
-            <td
-              className={cx("plan-view", "plan-view-table__cell")}
-              style={{ textAlign: "left" }}
-            >
-              <div className={cx("plan-view-container")}>
-                <div
-                  className={cx("plan-view-inner-container")}
-                  ref={this.innerContainer}
-                >
-                  <div className={cx("nodeAttributes", "globalAttributes")}>
-                    {globalAttrs.map((attr, idx) => (
-                      <NodeAttribute key={idx} attribute={attr} />
-                    ))}
-                  </div>
-                  <PlanNode node={flattenedPlanNodeRoot} />
+  return (
+    <table className={cx("plan-view-table")}>
+      <thead>
+        <tr>
+          <th className={cx("plan-view-table__cell")}>
+            <h2 className={cx("base-heading", "summary--card__title")}>
+              {title}
+            </h2>
+            <div className={cx("plan-view-table__tooltip")}>
+              <Tooltip content={lastSampledHelpText}>
+                <div className={cx("plan-view-table__tooltip-hover-area")}>
+                  <div className={cx("plan-view-table__info-icon")}>i</div>
                 </div>
+              </Tooltip>
+            </div>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr className={cx("plan-view-table__row--body")}>
+          <td
+            className={cx("plan-view", "plan-view-table__cell")}
+            style={{ textAlign: "left" }}
+          >
+            <div className={cx("plan-view-container")}>
+              <div className={cx("plan-view-inner-container")}>
+                <div className={cx("node-attributes", "global-attributes")}>
+                  {globalAttrs.map((attr, idx) => (
+                    <NodeAttribute key={idx} attribute={attr} />
+                  ))}
+                </div>
+                <PlanNode node={flattenedPlanNodeRoot} />
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    );
-  }
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
 }

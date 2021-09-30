@@ -663,24 +663,24 @@ func getFilteredBucket(
 	}
 }
 
-// getRangesBeforeAndAfter returns the size of the ranges before and after the
-// given bucket is filtered by the given span. If swap is true, the upper and
-// lower bounds should be swapped for the bucket and the span. Returns ok=true
-// if these range sizes are calculated successfully, and false otherwise.
-// The calculations for rangeBefore and rangeAfter are datatype dependent.
+// getRangesBeforeAndAfter returns the size of the before and after ranges based
+// on the lower and upper bounds provided. If swap is true, the upper and lower
+// bounds of both ranges are swapped. Returns ok=true if these range sizes are
+// calculated successfully, and false otherwise. The calculations for
+// rangeBefore and rangeAfter are datatype dependent.
 //
-// For numeric types, we can simply find the difference between the bucket/span
-// bounds for rangeBefore/rangeAfter.
+// For numeric types, we can simply find the difference between the lower and
+// upper bounds for rangeBefore/rangeAfter.
 //
-// For non-numeric types, we can convert each bound into sorted key bytes
-// (CRDB key representation) to find their range. As we do need a lot of
-// precision in our range estimate, we can remove the common prefix between
-// bucket/span bounds, and limit the byte array to 8 bytes. This also simplifies
-// our implementation since we won't need to handle an arbitrary length of
-// bounds. Following the conversion, we must zero extend the byte arrays to
-// ensure the length is uniform between bucket/span bounds. This process is
-// highlighted below, where [\bear - \bobcat] represents the original bucket and
-// [\bluejay - \boar] represents the span.
+// For non-numeric types, we can convert each bound into sorted key bytes (CRDB
+// key representation) to find their range. As we do need a lot of precision in
+// our range estimate, we can remove the common prefix between the lower and
+// upper bounds, and limit the byte array to 8 bytes. This also simplifies our
+// implementation since we won't need to handle an arbitrary length of bounds.
+// Following the conversion, we must zero extend the byte arrays to ensure the
+// length is uniform between lower and upper bounds. This process is highlighted
+// below, where [\bear - \bobcat] represents the before range and
+// [\bluejay - \boar] represents the after range.
 //
 //   bear    := [18  98  101 97  114 0   1          ]
 //           => [101 97  114 0   0   0   0   0      ]
@@ -695,7 +695,7 @@ func getFilteredBucket(
 //           => [111 98  99  97  116 0   0   0      ]
 //
 // We can now find the range before/after by finding the difference between
-// the bucket/span bounds:
+// the lower and upper bounds:
 //
 //	 rangeBefore := [111 98  99  97  116 0   1   0] -
 //                  [101 97  114 0   1   0   0   0]
@@ -713,96 +713,113 @@ func getFilteredBucket(
 //              := 210,557,119,328,878,600
 //
 func getRangesBeforeAndAfter(
-	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum, swap bool,
+	beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound tree.Datum, swap bool,
 ) (rangeBefore, rangeAfter float64, ok bool) {
 	// If the data types don't match, don't bother trying to calculate the range
 	// sizes. This should almost never happen, but we want to avoid type
 	// assertion errors below.
 	typesMatch :=
-		bucketLowerBound.ResolvedType().Equivalent(bucketUpperBound.ResolvedType()) &&
-			bucketUpperBound.ResolvedType().Equivalent(spanLowerBound.ResolvedType()) &&
-			spanLowerBound.ResolvedType().Equivalent(spanUpperBound.ResolvedType())
+		beforeLowerBound.ResolvedType().Equivalent(beforeUpperBound.ResolvedType()) &&
+			beforeUpperBound.ResolvedType().Equivalent(afterLowerBound.ResolvedType()) &&
+			afterLowerBound.ResolvedType().Equivalent(afterUpperBound.ResolvedType())
 	if !typesMatch {
 		return 0, 0, false
 	}
 
 	if swap {
-		bucketLowerBound, bucketUpperBound = bucketUpperBound, bucketLowerBound
-		spanLowerBound, spanUpperBound = spanUpperBound, spanLowerBound
+		beforeLowerBound, beforeUpperBound = beforeUpperBound, beforeLowerBound
+		afterLowerBound, afterUpperBound = afterUpperBound, afterLowerBound
 	}
 
+	// The calculations below assume that all bounds are inclusive.
 	// TODO(rytaft): handle more types here.
-	// Note: the calculations below assume that bucketLowerBound is inclusive and
-	// Span.PreferInclusive() has been called on the span.
+	switch beforeLowerBound.ResolvedType().Family() {
+	case types.IntFamily:
+		rangeBefore = float64(*beforeUpperBound.(*tree.DInt)) - float64(*beforeLowerBound.(*tree.DInt))
+		rangeAfter = float64(*afterUpperBound.(*tree.DInt)) - float64(*afterLowerBound.(*tree.DInt))
+		return rangeBefore, rangeAfter, true
 
-	getRange := func(lowerBound, upperBound tree.Datum) (rng float64, ok bool) {
-		switch lowerBound.ResolvedType().Family() {
-		case types.IntFamily:
-			rng = float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
-			return rng, true
-
-		case types.DateFamily:
-			lower := lowerBound.(*tree.DDate)
-			upper := upperBound.(*tree.DDate)
-			if lower.IsFinite() && upper.IsFinite() {
-				rng = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
-				return rng, true
-			}
-			return 0, false
-
-		case types.DecimalFamily:
-			lower, err := lowerBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			upper, err := upperBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			rng = upper - lower
-			return rng, true
-
-		case types.FloatFamily:
-			rng = float64(*upperBound.(*tree.DFloat)) - float64(*lowerBound.(*tree.DFloat))
-			return rng, true
-
-		case types.TimestampFamily:
-			lower := lowerBound.(*tree.DTimestamp).Time
-			upper := upperBound.(*tree.DTimestamp).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		case types.TimestampTZFamily:
-			lower := lowerBound.(*tree.DTimestampTZ).Time
-			upper := upperBound.(*tree.DTimestampTZ).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		case types.TimeFamily:
-			lower := lowerBound.(*tree.DTime)
-			upper := upperBound.(*tree.DTime)
-			rng = float64(*upper) - float64(*lower)
-			return rng, true
-
-		case types.TimeTZFamily:
-			lower := lowerBound.(*tree.DTimeTZ).TimeOfDay
-			upper := upperBound.(*tree.DTimeTZ).TimeOfDay
-			rng = float64(upper) - float64(lower)
-			return rng, true
-
-		default:
-			return 0, false
+	case types.DateFamily:
+		lowerBefore := beforeLowerBound.(*tree.DDate)
+		upperBefore := beforeUpperBound.(*tree.DDate)
+		lowerAfter := afterLowerBound.(*tree.DDate)
+		upperAfter := afterUpperBound.(*tree.DDate)
+		if lowerBefore.IsFinite() && upperBefore.IsFinite() && lowerAfter.IsFinite() && upperAfter.IsFinite() {
+			rangeBefore = float64(upperBefore.PGEpochDays()) - float64(lowerBefore.PGEpochDays())
+			rangeAfter = float64(upperAfter.PGEpochDays()) - float64(lowerAfter.PGEpochDays())
+			return rangeBefore, rangeAfter, true
 		}
-	}
+		return 0, 0, false
 
-	getRangeNonNumeric := func(
-		lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter tree.Datum,
-	) (rngBefore, rngAfter float64, ok bool) {
+	case types.DecimalFamily:
+		lowerBefore, err := beforeLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperBefore, err := beforeUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		lowerAfter, err := afterLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperAfter, err := afterUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		rangeBefore = upperBefore - lowerBefore
+		rangeAfter = upperAfter - lowerAfter
+		return rangeBefore, rangeAfter, true
 
-		// Utilizes an array to simplify number of repetitive calls.
-		boundArr := []tree.Datum{lowerBoundBefore, upperBoundBefore, lowerBoundAfter,
-			upperBoundAfter}
-		boundArrByte := make([][]byte, 4)
+	case types.FloatFamily:
+		rangeBefore = float64(*beforeUpperBound.(*tree.DFloat)) - float64(*beforeLowerBound.(*tree.DFloat))
+		rangeAfter = float64(*afterUpperBound.(*tree.DFloat)) - float64(*afterLowerBound.(*tree.DFloat))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimestamp).Time
+		upperBefore := beforeUpperBound.(*tree.DTimestamp).Time
+		lowerAfter := afterLowerBound.(*tree.DTimestamp).Time
+		upperAfter := afterUpperBound.(*tree.DTimestamp).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampTZFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimestampTZ).Time
+		upperBefore := beforeUpperBound.(*tree.DTimestampTZ).Time
+		lowerAfter := afterLowerBound.(*tree.DTimestampTZ).Time
+		upperAfter := afterUpperBound.(*tree.DTimestampTZ).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTime)
+		upperBefore := beforeUpperBound.(*tree.DTime)
+		lowerAfter := afterLowerBound.(*tree.DTime)
+		upperAfter := afterUpperBound.(*tree.DTime)
+		rangeBefore = float64(*upperBefore) - float64(*lowerBefore)
+		rangeAfter = float64(*upperAfter) - float64(*lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeTZFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperBefore := beforeUpperBound.(*tree.DTimeTZ).TimeOfDay
+		lowerAfter := afterLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperAfter := afterUpperBound.(*tree.DTimeTZ).TimeOfDay
+		rangeBefore = float64(upperBefore) - float64(lowerBefore)
+		rangeAfter = float64(upperAfter) - float64(lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
+		// For non-numeric types, convert the datums to encoded keys to
+		// approximate the range. We utilize an array to reduce repetitive code.
+		boundArr := [4]tree.Datum{
+			beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound,
+		}
+		var boundArrByte [4][]byte
 
 		for i := range boundArr {
 			var err error
@@ -820,27 +837,17 @@ func getRangesBeforeAndAfter(
 			boundArrByte[i] = getFixedLenArr(boundArrByte[i], ind, 8 /* fixLen */)
 		}
 
-		rngBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
+		rangeBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
 			binary.BigEndian.Uint64(boundArrByte[0]))
-		rngAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
+		rangeAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
 			binary.BigEndian.Uint64(boundArrByte[2]))
 
-		return rngBefore, rngAfter, true
-	}
+		return rangeBefore, rangeAfter, true
 
-	// For non-numeric types, compute the prefix across all bucket/span bounds.
-	ok = false
-	if isNonNumeric(bucketLowerBound.ResolvedType()) {
-		rangeBefore, rangeAfter, ok = getRangeNonNumeric(
-			bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound,
-		)
-	} else {
-		okBefore, okAfter := false, false
-		rangeBefore, okBefore = getRange(bucketLowerBound, bucketUpperBound)
-		rangeAfter, okAfter = getRange(spanLowerBound, spanUpperBound)
-		ok = okBefore && okAfter
+	default:
+		// Range calculations are not supported for the given type family.
+		return 0, 0, false
 	}
-	return rangeBefore, rangeAfter, ok
 }
 
 // isDiscrete returns true if the given data type is discrete.
@@ -852,26 +859,10 @@ func isDiscrete(typ *types.T) bool {
 	return false
 }
 
-// isNonNumeric returns true if the given data type is non-numeric.
-// Note: this function does not support all non-numeric data-types within
-// cockroach db.
-func isNonNumeric(typ *types.T) bool {
-	switch typ.Family() {
-	case types.StringFamily, types.UuidFamily, types.INetFamily:
-		return true
-	}
-	return false
-}
-
 // getCommonPrefix returns the first index where the value at said index differs
 // across all byte arrays in byteArr. byteArr must contain at least one element
 // to compute a common prefix.
-func getCommonPrefix(byteArr [][]byte) int {
-
-	if len(byteArr) <= 0 {
-		panic(errors.AssertionFailedf("byteArr must have at least one element"))
-	}
-
+func getCommonPrefix(byteArr [4][]byte) int {
 	// Checks if the current value at index is the same between all byte arrays.
 	currIndMatching := func(ind int) bool {
 		for i := 0; i < len(byteArr); i++ {

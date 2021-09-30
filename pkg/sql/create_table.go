@@ -544,7 +544,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext(), &params.p.EvalContext().Settings.SV); err != nil {
 				return err
 			}
 
@@ -1641,6 +1641,9 @@ func NewTableDesc(
 					)
 				}
 			}
+			if err := checkTypeIsSupported(ctx, st, defType); err != nil {
+				return nil, err
+			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
@@ -2289,8 +2292,12 @@ func NewTableDesc(
 	// constructing the table descriptor so that we can check all foreign key
 	// constraints in on place as opposed to traversing the input and finding all
 	// inline/explicit foreign key constraints.
-	if err := tabledesc.ValidateOnUpdate(desc.AllColumns(), desc.GetOutboundFKs()); err != nil {
-		return nil, err
+	var onUpdateErr error
+	tabledesc.ValidateOnUpdate(&desc, func(err error) {
+		onUpdateErr = err
+	})
+	if onUpdateErr != nil {
+		return nil, onUpdateErr
 	}
 
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
@@ -2912,4 +2919,16 @@ func hashShardedIndexesOnRegionalByRowError() error {
 
 func interleaveOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
+}
+
+func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {
+	version := settings.Version.ActiveVersionOrEmpty(ctx)
+	if supported := types.IsTypeSupportedInVersion(version, typ); !supported {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"type %s is not supported until version upgrade is finalized",
+			typ.SQLString(),
+		)
+	}
+	return nil
 }
