@@ -44,15 +44,12 @@ func makeDevCmd() *dev {
 		Short:   "Dev is the general-purpose dev tool for working on cockroach/cockroachdb.",
 		Version: "v0.0",
 		Long: `
-Dev is the general-purpose dev tool for working cockroachdb/cockroach. It
-lets engineers do a few things:
+Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With dev you can:
 
 - build various binaries (cockroach, optgen, ...)
 - run arbitrary tests (unit tests, logic tests, ...)
 - run tests under arbitrary configurations (under stress, using race builds, ...)
-- generate code (bazel files, protobufs, ...)
-
-...and much more.
+- generate code (bazel files, docs, ...)
 `,
 		// Disable automatic printing of usage information whenever an error
 		// occurs. We presume that most errors will not the result of bad
@@ -98,12 +95,6 @@ lets engineers do a few things:
 			}
 		}
 	}
-
-	// Hide the `help` sub-command.
-	ret.cli.SetHelpCommand(&cobra.Command{
-		Use:    "noop-help",
-		Hidden: true,
-	})
 
 	return &ret
 }

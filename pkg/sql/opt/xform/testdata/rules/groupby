@@ -105,7 +105,7 @@ scalar-group-by
            └── b:2
 
 opt expect=ReplaceScalarMinMaxWithLimit
-SELECT min(y) FROM xyz where z=7
+SELECT min(y) FROM xyz WHERE z=7
 ----
 scalar-group-by
  ├── columns: min:6
@@ -125,7 +125,7 @@ scalar-group-by
 # ReplaceScalarMaxWithLimit has the same behavior with max() as
 # the previous min() query because z is the prefix of a unique key
 opt expect=ReplaceScalarMinMaxWithLimit
-SELECT max(y) FROM xyz where z=7
+SELECT max(y) FROM xyz WHERE z=7
 ----
 scalar-group-by
  ├── columns: max:6
@@ -142,7 +142,7 @@ scalar-group-by
       └── const-agg [as=max:6, outer=(2)]
            └── y:2
 
-# We expect ReplaceScalarMinWithLimit not to be preferred here.
+# We expect ReplaceScalarMinMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
 # on the index xy after a scan on xy with x>7.
 opt expect=ReplaceScalarMinMaxWithLimit
@@ -1184,29 +1184,8 @@ scalar-group-by
       └── sum [as=sum:8, outer=(3)]
            └── z:3
 
-# ReplaceScalarMinMaxWithScalarSubqueries can only be applied to canonical
-# scans.
-opt expect-not=ReplaceScalarMinMaxWithScalarSubqueries
-SELECT min(y), max(x) FROM xyz WHERE z > 0
-----
-scalar-group-by
- ├── columns: min:6 max:7
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(6,7)
- ├── scan xyz@zyx
- │    ├── columns: x:1!null y:2 z:3!null
- │    ├── constraint: /3/2/1: [/5e-324 - ]
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- └── aggregations
-      ├── min [as=min:6, outer=(2)]
-      │    └── y:2
-      └── max [as=max:7, outer=(1)]
-           └── x:1
-
 # ReplaceScalarMinMaxWithScalarSubqueries cannot be applied on MIN/MAX
-# expressions which are not a simple variable expression.
+# expressions which are projections.
 opt expect-not=ReplaceScalarMinMaxWithScalarSubqueries
 SELECT min(y+1), max(x+1) FROM xyz
 ----
@@ -1231,6 +1210,362 @@ scalar-group-by
       │    └── column6:6
       └── max [as=max:9, outer=(8)]
            └── column8:8
+
+# Scalar subquery in having clause filter is supported.
+opt expect=ReplaceScalarMinMaxWithScalarSubqueries
+SELECT max(z), min(x) FROM xyz HAVING (max(z),min(x)) = (SELECT max(z), min(x) FROM xyz)
+----
+select
+ ├── columns: max:6 min:7
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── values
+ │    ├── columns: max:6 min:7
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6,7)
+ │    └── tuple
+ │         ├── subquery
+ │         │    └── scalar-group-by
+ │         │         ├── columns: max:6
+ │         │         ├── cardinality: [1 - 1]
+ │         │         ├── key: ()
+ │         │         ├── fd: ()-->(6)
+ │         │         ├── scan xyz@zyx,rev
+ │         │         │    ├── columns: z:18!null
+ │         │         │    ├── constraint: /18/17/16: (/NULL - ]
+ │         │         │    ├── limit: 1(rev)
+ │         │         │    ├── key: ()
+ │         │         │    └── fd: ()-->(18)
+ │         │         └── aggregations
+ │         │              └── const-agg [as=max:6, outer=(18)]
+ │         │                   └── z:18
+ │         └── subquery
+ │              └── scalar-group-by
+ │                   ├── columns: min:7
+ │                   ├── cardinality: [1 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(7)
+ │                   ├── scan xyz@xy
+ │                   │    ├── columns: x:21!null
+ │                   │    ├── limit: 1
+ │                   │    ├── key: ()
+ │                   │    └── fd: ()-->(21)
+ │                   └── aggregations
+ │                        └── const-agg [as=min:7, outer=(21)]
+ │                             └── x:21
+ └── filters
+      └── eq [outer=(6,7), immutable, subquery]
+           ├── (max:6, min:7)
+           └── subquery
+                └── project
+                     ├── columns: column15:15
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(15)
+                     ├── values
+                     │    ├── columns: max:13 min:14
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(13,14)
+                     │    └── tuple
+                     │         ├── subquery
+                     │         │    └── scalar-group-by
+                     │         │         ├── columns: max:13
+                     │         │         ├── cardinality: [1 - 1]
+                     │         │         ├── key: ()
+                     │         │         ├── fd: ()-->(13)
+                     │         │         ├── scan xyz@zyx,rev
+                     │         │         │    ├── columns: z:28!null
+                     │         │         │    ├── constraint: /28/27/26: (/NULL - ]
+                     │         │         │    ├── limit: 1(rev)
+                     │         │         │    ├── key: ()
+                     │         │         │    └── fd: ()-->(28)
+                     │         │         └── aggregations
+                     │         │              └── const-agg [as=max:13, outer=(28)]
+                     │         │                   └── z:28
+                     │         └── subquery
+                     │              └── scalar-group-by
+                     │                   ├── columns: min:14
+                     │                   ├── cardinality: [1 - 1]
+                     │                   ├── key: ()
+                     │                   ├── fd: ()-->(14)
+                     │                   ├── scan xyz@xy
+                     │                   │    ├── columns: x:31!null
+                     │                   │    ├── limit: 1
+                     │                   │    ├── key: ()
+                     │                   │    └── fd: ()-->(31)
+                     │                   └── aggregations
+                     │                        └── const-agg [as=min:14, outer=(31)]
+                     │                             └── x:31
+                     └── projections
+                          └── (max:13, min:14) [as=column15:15, outer=(13,14)]
+
+# --------------------------------------------------
+# ReplaceFilteredScalarMinMaxWithSubqueries
+# --------------------------------------------------
+
+opt expect=ReplaceFilteredScalarMinMaxWithSubqueries
+SELECT min(z), max(x) FROM xyz WHERE y > 0
+----
+values
+ ├── columns: min:6 max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ └── tuple
+      ├── subquery
+      │    └── scalar-group-by
+      │         ├── columns: min:6
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6)
+      │         ├── limit
+      │         │    ├── columns: y:9!null z:10!null
+      │         │    ├── internal-ordering: +10
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(9,10)
+      │         │    ├── select
+      │         │    │    ├── columns: y:9!null z:10!null
+      │         │    │    ├── ordering: +10
+      │         │    │    ├── limit hint: 1.00
+      │         │    │    ├── scan xyz@zyx
+      │         │    │    │    ├── columns: y:9 z:10!null
+      │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
+      │         │    │    │    ├── ordering: +10
+      │         │    │    │    └── limit hint: 2.97
+      │         │    │    └── filters
+      │         │    │         └── y:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+      │         │    └── 1
+      │         └── aggregations
+      │              └── const-agg [as=min:6, outer=(10)]
+      │                   └── z:10
+      └── subquery
+           └── scalar-group-by
+                ├── columns: max:7
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── limit
+                │    ├── columns: x:13!null y:14!null
+                │    ├── internal-ordering: -13
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(13,14)
+                │    ├── select
+                │    │    ├── columns: x:13!null y:14!null
+                │    │    ├── key: (13)
+                │    │    ├── fd: (13)-->(14)
+                │    │    ├── ordering: -13
+                │    │    ├── limit hint: 1.00
+                │    │    ├── scan xyz@xy,rev
+                │    │    │    ├── columns: x:13!null y:14
+                │    │    │    ├── key: (13)
+                │    │    │    ├── fd: (13)-->(14)
+                │    │    │    ├── ordering: -13
+                │    │    │    └── limit hint: 3.00
+                │    │    └── filters
+                │    │         └── y:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
+                │    └── 1
+                └── aggregations
+                     └── const-agg [as=max:7, outer=(13)]
+                          └── x:13
+
+opt expect=ReplaceFilteredScalarMinMaxWithSubqueries
+SELECT max(z), min(x) FROM xyz WHERE y IS NOT NULL
+----
+values
+ ├── columns: max:6 min:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ └── tuple
+      ├── subquery
+      │    └── scalar-group-by
+      │         ├── columns: max:6
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6)
+      │         ├── limit
+      │         │    ├── columns: y:9!null z:10!null
+      │         │    ├── internal-ordering: -10
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(9,10)
+      │         │    ├── select
+      │         │    │    ├── columns: y:9!null z:10!null
+      │         │    │    ├── ordering: -10
+      │         │    │    ├── limit hint: 1.00
+      │         │    │    ├── scan xyz@zyx,rev
+      │         │    │    │    ├── columns: y:9 z:10!null
+      │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
+      │         │    │    │    ├── ordering: -10
+      │         │    │    │    └── limit hint: 1.00
+      │         │    │    └── filters
+      │         │    │         └── y:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │         │    └── 1
+      │         └── aggregations
+      │              └── const-agg [as=max:6, outer=(10)]
+      │                   └── z:10
+      └── subquery
+           └── scalar-group-by
+                ├── columns: min:7
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── limit
+                │    ├── columns: x:13!null y:14!null
+                │    ├── internal-ordering: +13
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(13,14)
+                │    ├── select
+                │    │    ├── columns: x:13!null y:14!null
+                │    │    ├── key: (13)
+                │    │    ├── fd: (13)-->(14)
+                │    │    ├── ordering: +13
+                │    │    ├── limit hint: 1.00
+                │    │    ├── scan xyz@xy
+                │    │    │    ├── columns: x:13!null y:14
+                │    │    │    ├── key: (13)
+                │    │    │    ├── fd: (13)-->(14)
+                │    │    │    ├── ordering: +13
+                │    │    │    └── limit hint: 1.01
+                │    │    └── filters
+                │    │         └── y:14 IS NOT NULL [outer=(14), constraints=(/14: (/NULL - ]; tight)]
+                │    └── 1
+                └── aggregations
+                     └── const-agg [as=min:7, outer=(13)]
+                          └── x:13
+
+# ReplaceFilteredScalarMinMaxWithSubqueries cannot be applied on MIN/MAX
+# expressions which are projections.
+opt expect-not=ReplaceFilteredScalarMinMaxWithSubqueries
+SELECT max(z+1), min(x) FROM xyz WHERE y IS NOT NULL
+----
+scalar-group-by
+ ├── columns: max:7 min:8
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(7,8)
+ ├── project
+ │    ├── columns: column6:6 x:1!null
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── select
+ │    │    ├── columns: x:1!null y:2!null z:3
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── scan xyz
+ │    │    │    ├── columns: x:1!null y:2 z:3
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,3)
+ │    │    └── filters
+ │    │         └── y:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    └── projections
+ │         └── z:3 + 1.0 [as=column6:6, outer=(3), immutable]
+ └── aggregations
+      ├── max [as=max:7, outer=(6)]
+      │    └── column6:6
+      └── min [as=min:8, outer=(1)]
+           └── x:1
+
+# ORDER BY should not disable ReplaceFilteredScalarMinMaxWithSubqueries.
+opt expect=ReplaceFilteredScalarMinMaxWithSubqueries
+SELECT max(z), min(x) FROM xyz WHERE y IS NOT NULL ORDER BY 1
+----
+values
+ ├── columns: max:6 min:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ └── tuple
+      ├── subquery
+      │    └── scalar-group-by
+      │         ├── columns: max:6
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6)
+      │         ├── limit
+      │         │    ├── columns: y:9!null z:10!null
+      │         │    ├── internal-ordering: -10
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(9,10)
+      │         │    ├── select
+      │         │    │    ├── columns: y:9!null z:10!null
+      │         │    │    ├── ordering: -10
+      │         │    │    ├── limit hint: 1.00
+      │         │    │    ├── scan xyz@zyx,rev
+      │         │    │    │    ├── columns: y:9 z:10!null
+      │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
+      │         │    │    │    ├── ordering: -10
+      │         │    │    │    └── limit hint: 1.00
+      │         │    │    └── filters
+      │         │    │         └── y:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │         │    └── 1
+      │         └── aggregations
+      │              └── const-agg [as=max:6, outer=(10)]
+      │                   └── z:10
+      └── subquery
+           └── scalar-group-by
+                ├── columns: min:7
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── limit
+                │    ├── columns: x:13!null y:14!null
+                │    ├── internal-ordering: +13
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(13,14)
+                │    ├── select
+                │    │    ├── columns: x:13!null y:14!null
+                │    │    ├── key: (13)
+                │    │    ├── fd: (13)-->(14)
+                │    │    ├── ordering: +13
+                │    │    ├── limit hint: 1.00
+                │    │    ├── scan xyz@xy
+                │    │    │    ├── columns: x:13!null y:14
+                │    │    │    ├── key: (13)
+                │    │    │    ├── fd: (13)-->(14)
+                │    │    │    ├── ordering: +13
+                │    │    │    └── limit hint: 1.01
+                │    │    └── filters
+                │    │         └── y:14 IS NOT NULL [outer=(14), constraints=(/14: (/NULL - ]; tight)]
+                │    └── 1
+                └── aggregations
+                     └── const-agg [as=min:7, outer=(13)]
+                          └── x:13
+
+# We expect the ReplaceFilteredScalarMinMaxWithSubqueries and
+# ReplaceScalarMinMaxWithLimit rules to fire, however, as we know nothing about
+# the ordering of y on the index zyx after a scan on xyz with z > 0, a sort is
+# required, making the new plan more expensive and therefore not selected.
+opt expect=(ReplaceFilteredScalarMinMaxWithSubqueries, ReplaceScalarMinMaxWithLimit)
+SELECT min(y), max(x) FROM xyz@zyx WHERE z > 0
+----
+scalar-group-by
+ ├── columns: min:6 max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── scan xyz@zyx
+ │    ├── columns: x:1!null y:2 z:3!null
+ │    ├── constraint: /3/2/1: [/5e-324 - ]
+ │    ├── flags: force-index=zyx
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── min [as=min:6, outer=(2)]
+      │    └── y:2
+      └── max [as=max:7, outer=(1)]
+           └── x:1
 
 # --------------------------------------------------
 # GenerateStreamingGroupBy

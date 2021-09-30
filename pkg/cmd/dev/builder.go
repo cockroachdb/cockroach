@@ -46,6 +46,7 @@ func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	if err != nil {
 		return err
 	}
+	logCommand("docker", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
