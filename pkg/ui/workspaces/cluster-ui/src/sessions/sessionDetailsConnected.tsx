@@ -32,6 +32,7 @@ export const SessionDetailsPageConnected = withRouter(
       sessionError: state.adminUI.sessions.lastError,
       uiConfig: selectSessionDetailsUiConfig(state),
       isTenant: selectIsTenant(state),
+      isCloud: true,
     }),
     {
       refreshSessions: sessionsActions.refresh,
