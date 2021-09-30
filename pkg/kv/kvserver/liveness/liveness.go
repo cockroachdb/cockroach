@@ -1082,6 +1082,31 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (_ Record, ok b
 	return Record{}, false
 }
 
+func (nl *NodeLiveness) GetLivenessRecordFromKV(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (Record, bool, error) {
+	kv, err := nl.db.Get(ctx, keys.NodeLivenessKey(nodeID))
+	if err != nil {
+		return Record{}, false, errors.Wrap(err, "unable to get liveness")
+	}
+	if kv.Value == nil {
+		return Record{}, false, nil
+	}
+	var liveness livenesspb.Liveness
+	if err := kv.Value.GetProto(&liveness); err != nil {
+		return Record{}, false, errors.Wrap(err, "invalid liveness record")
+	}
+
+	livenessRec := Record{
+		Liveness: liveness,
+		raw:      kv.Value.TagAndDataBytes(),
+	}
+
+	// Update our cache with the liveness record we just found.
+	nl.maybeUpdate(ctx, livenessRec)
+	return livenessRec, true, nil
+}
+
 // getLivenessFromKV fetches the liveness record from KV for a given node, and
 // updates the internal in-memory cache when doing so.
 func (nl *NodeLiveness) getLivenessFromKV(

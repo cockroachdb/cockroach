@@ -2218,9 +2218,14 @@ func (s *adminServer) DecommissionStatus(
 	var res serverpb.DecommissionStatusResponse
 
 	for nodeID := range replicaCounts {
-		l, ok := s.server.nodeLiveness.GetLiveness(nodeID)
+		l, ok, err := s.server.nodeLiveness.GetLivenessRecordFromKV(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
-			return nil, errors.Newf("unable to get liveness for %d", nodeID)
+			// Decommissioning an unknown node is ok, but we don't have an appropriate
+			// membership value for that case, so we simply omit a response.
+			continue
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
 			NodeID:       l.NodeID,
