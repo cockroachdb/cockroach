@@ -581,13 +581,14 @@ func InspectTenantMetadata(
 		tenant.Bucket.RUCurrent,
 		tenant.Bucket.CurrentShareSum,
 	)
-	fmt.Fprintf(&buf, "Consumption: ru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g\n",
+	fmt.Fprintf(&buf, "Consumption: ru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g secs  pgwire=%d bytes\n",
 		tenant.Consumption.RU,
 		tenant.Consumption.ReadRequests,
 		tenant.Consumption.ReadBytes,
 		tenant.Consumption.WriteRequests,
 		tenant.Consumption.WriteBytes,
 		tenant.Consumption.SQLPodsCPUSeconds,
+		tenant.Consumption.PGWireBytes,
 	)
 	fmt.Fprintf(&buf, "Last update: %s\n", tenant.LastUpdate.Time.Format(timeFormat))
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)

@@ -28,16 +28,27 @@ type TenantSideCostController interface {
 		stopper *stop.Stopper,
 		instanceID base.SQLInstanceID,
 		sessionID sqlliveness.SessionID,
-		cpuSecsFn CPUSecsFn,
+		externalUsageFn ExternalUsageFn,
 		nextLiveInstanceIDFn NextLiveInstanceIDFn,
 	) error
 
 	TenantSideKVInterceptor
 }
 
-// CPUSecsFn is a function used to get the cumulative CPU usage in seconds for
-// the SQL instance.
-type CPUSecsFn func(ctx context.Context) float64
+// ExternalUsage contains information about usage that is not tracked through
+// TenantSideKVInterceptor.
+type ExternalUsage struct {
+	// CPUSecs is the cumulative CPU usage in seconds for the SQL instance.
+	CPUSecs float64
+
+	// PGWireBytes is the total bytes transferred between the client and the SQL
+	// instance (both ingress and egress).
+	PGWireBytes uint64
+}
+
+// ExternalUsageFn is a function used to retrieve usage that is not tracked
+// through TenantSideKVInterceptor.
+type ExternalUsageFn func(ctx context.Context) ExternalUsage
 
 // NextLiveInstanceIDFn is a function used to get the next live instance ID
 // for this tenant. The information is used as a cleanup trigger on the server
