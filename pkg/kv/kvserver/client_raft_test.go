@@ -2564,7 +2564,21 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
 				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
-				cb.Trip()
+				// TestCluster sets up its breakers as untrippable, but we want them
+				// to trip here.
+				//
+				// See:
+				// https://github.com/cockroachdb/cockroach/blob/885075b9c16ae04f537ffe4a0cfe7113c28c4811/pkg/server/testserver.go#L1304-L1310
+				opts := cb.Opts()
+				opts.ShouldTrip = func(err error) error {
+					return err // trip on any error
+				}
+				opts.AsyncProbe = func(_ func(error), done func()) {
+					done() // never reset via probe
+				}
+				cb.Reconfigure(opts)
+				cb.Report(errors.New("tripped on purpose"))
+				require.Error(t, cb.Err())
 			}
 		}
 
