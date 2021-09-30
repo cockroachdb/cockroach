@@ -30,6 +30,7 @@ import { SortSetting, ISortedTablePagination } from "src/sortedtable";
 import { Loading } from "src/loading";
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
+import { UIConfigState } from "src/store";
 
 import TerminateQueryModal, {
   TerminateQueryModalRef,
@@ -57,6 +58,7 @@ export interface OwnProps {
   refreshSessions: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
+  isTenant?: UIConfigState["isTenant"];
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (columnName: string) => void;
   onSessionClick?: () => void;
@@ -191,6 +193,7 @@ export class SessionsPage extends React.Component<
             columns={makeSessionsColumns(
               this.terminateSessionRef,
               this.terminateQueryRef,
+              this.props.isTenant,
               this.props.onSessionClick,
               this.props.onTerminateStatementClick,
               this.props.onTerminateSessionClick,

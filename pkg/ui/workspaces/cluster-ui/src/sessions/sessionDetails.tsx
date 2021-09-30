@@ -136,11 +136,12 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       sessionError,
       cancelSession,
       cancelQuery,
+      isTenant,
       onTerminateSessionClick,
       onTerminateStatementClick,
     } = this.props;
     const session = this.props.session?.session;
-    const showActionButtons = !!session && !sessionError;
+    const showActionButtons = !!session && !sessionError && !isTenant;
     return (
       <div className={cx("sessions-details")}>
         <Helmet title={`Details | ${sessionID} | Sessions`} />

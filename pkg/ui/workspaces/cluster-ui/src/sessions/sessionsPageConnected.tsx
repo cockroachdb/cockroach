@@ -22,6 +22,7 @@ import {
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
+import { selectIsTenant } from "src/store/uiConfig";
 import { Dispatch } from "redux";
 
 export const selectSessions = createSelector(
@@ -41,6 +42,7 @@ export const SessionsPageConnected = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
+      isTenant: selectIsTenant(state),
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: () => dispatch(sessionsActions.refresh()),

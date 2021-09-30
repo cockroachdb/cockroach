@@ -25,6 +25,7 @@ type ISession = cockroach.server.serverpb.Session;
 import { TerminateSessionModalRef } from "./terminateSessionModal";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
+import { UIConfigState } from "src/store";
 
 import { Icon } from "antd";
 import {
@@ -97,11 +98,12 @@ const AgeLabel = (props: { start: Moment; thingName: string }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
+  isTenant?: UIConfigState["isTenant"],
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
 ): ColumnDescriptor<SessionInfo>[] {
-  return [
+  const columns: ColumnDescriptor<SessionInfo>[] = [
     {
       name: "sessionAge",
       title: SessionTableTitle.sessionAge,
@@ -231,4 +233,6 @@ export function makeSessionsColumns(
       },
     },
   ];
+
+  return columns.filter(c => !(isTenant && c.hideIfTenant));
 }
