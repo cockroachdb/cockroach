@@ -67,6 +67,11 @@ func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
 }
 
+// RandInt63InRange returns a value in [min, max)
+func RandInt63InRange(r *rand.Rand, min, max int64) int64 {
+	return min + r.Int63n(max-min)
+}
+
 var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 // RandBytes returns a byte slice of the given length with random

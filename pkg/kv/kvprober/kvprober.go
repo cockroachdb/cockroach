@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -172,8 +173,9 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return stopper.RunAsyncTask(ctx, opName, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
+			rnd, _ /* seed */ := randutil.NewPseudoRand()
 			d := func() time.Duration {
-				return withJitter(interval.Get(&p.settings.SV), rand.Int63n)
+				return withJitter(interval.Get(&p.settings.SV), rnd)
 			}
 			t := timeutil.NewTimer()
 			defer t.Stop()
@@ -324,11 +326,8 @@ func (p *Prober) writeProbeImpl(ctx context.Context, db dbTxner, pl planner) {
 }
 
 // Returns a random duration pulled from the uniform distribution given below:
-// [d - 0.2*d, d + 0.2*d]
-func withJitter(d time.Duration, intn func(n int64) int64) time.Duration {
-	jitter := time.Duration(intn(d.Milliseconds()/5)) * time.Millisecond
-	if intn(2) == 1 {
-		return d + jitter
-	}
-	return d - jitter
+// [d - 0.25*d, d + 0.25*d).
+func withJitter(d time.Duration, rnd *rand.Rand) time.Duration {
+	amplitudeNanos := d.Nanoseconds() / 4
+	return d + time.Duration(randutil.RandInt63InRange(rnd, -amplitudeNanos, amplitudeNanos))
 }
