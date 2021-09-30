@@ -1,13 +1,13 @@
 {
-  "pgVersion": "8.0.25",
+  "version": "8.0.25",
   "diffSummary": {
     "TotalTables": 48,
     "TotalColumns": 476,
     "MissingTables": 0,
-    "MissingColumns": 80,
+    "MissingColumns": 0,
     "DatatypeMismatches": 0
   },
-  "pgMetadata": {
+  "diffs": {
     "administrable_role_authorizations": {
       "grantee_host": null,
       "host": null,
@@ -125,5 +125,7 @@
       "security_type": null
     }
   },
-  "unimplementedTypes": null
+  "unimplementedTypes": {
+    "0": "varchar"
+  }
 }

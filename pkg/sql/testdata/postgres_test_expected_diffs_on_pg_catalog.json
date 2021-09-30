@@ -1,13 +1,13 @@
 {
-  "pgVersion": "13.3",
+  "version": "13.3",
   "diffSummary": {
     "TotalTables": 129,
     "TotalColumns": 1192,
     "MissingTables": 0,
     "MissingColumns": 0,
-    "DatatypeMismatches": 19
+    "DatatypeMismatches": 0
   },
-  "pgMetadata": {
+  "diffs": {
     "pg_am": {
       "amhandler": {
         "oid": 26,
@@ -145,5 +145,5 @@
       }
     }
   },
-  "unimplementedTypes": null
+  "unimplementedTypes": {}
 }
