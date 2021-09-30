@@ -2155,10 +2155,20 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Drop the table descriptors that were created at the start of the restore.
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
+	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
+	// immediately.
+	dropTime := int64(1)
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
+		// If the DropTime is set, a table uses RangeClear for fast data removal. This
+		// operation starts at DropTime + the GC TTL. If we used now() here, it would
+		// not clean up data until the TTL from the time of the error. Instead, use 1
+		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
+		// possible. This is safe since the table data was never visible to users,
+		// and so we don't need to preserve MVCC semantics.
+		tableToDrop.DropTime = dropTime
 		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.AddDeletedDescriptor(tableToDrop)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
@@ -2192,9 +2202,6 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	// Queue a GC job.
-	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
-	// immediately.
-	dropTime := int64(1)
 	gcDetails := jobspb.SchemaChangeGCDetails{}
 	for _, tableID := range tablesToGC {
 		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{

@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ui"
 )
 
-//go:embed assets
+//go:embed assets/*
 var assets embed.FS
 
 func init() {
