@@ -51,6 +51,8 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	var pkRevStr string
 	const batchSize = 1000
 
+	metrics := p.ExecCfg().JobRegistry.MetricsStruct().TTL
+
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(ctx, txn, details.TableID, tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
@@ -75,6 +77,11 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	for {
 		var rows []tree.Datums
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			startTime := timeutil.Now()
+			defer func() {
+				metrics.DeletionTotalNanos.RecordValue(timeutil.Now().Sub(startTime).Nanoseconds())
+			}()
+
 			// TODO(XXX): order by directions.
 			// TODO(XXX): prevent full table scans?
 			_, err := ie.Exec(ctx, "ttl-begin", txn, "SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()")
@@ -120,6 +127,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				lastRows...,
 			)
 			//fmt.Printf("initial query:%s\nargs: %#v\n", q, args)
+			selectStartTime := timeutil.Now()
 			rows, err = ie.QueryBuffered(
 				ctx,
 				"ttl",
@@ -127,6 +135,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				q,
 				args...,
 			)
+			metrics.DeletionSelectNanos.RecordValue(timeutil.Now().Sub(selectStartTime).Nanoseconds())
 			return err
 		}); err != nil {
 			return err
@@ -164,6 +173,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// TODO(XXX): we should probably do a secondary check here if we decide against strict TTL.
 			q := fmt.Sprintf(`DELETE FROM [%d AS t] WHERE (%s) IN (%s)`, details.TableID, pkStr, placeholderStr)
 			//	fmt.Printf("%s\n", q)
+			deletionStartTime := timeutil.Now()
 			if _, err := ie.Exec(
 				ctx,
 				"ttl_delete",
@@ -173,6 +183,8 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			); err != nil {
 				return err
 			}
+			metrics.DeletionDeleteNanos.RecordValue(timeutil.Now().Sub(deletionStartTime).Nanoseconds())
+			metrics.RowDeletions.Inc(int64(len(rows)))
 			return nil
 		}); err != nil {
 			return err
