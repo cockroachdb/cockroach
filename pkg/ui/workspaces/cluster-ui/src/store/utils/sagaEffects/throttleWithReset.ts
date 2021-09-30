@@ -25,7 +25,7 @@ import { Action } from "redux";
  * Extended version of default `redux-saga/effects/throttle` effect implementation
  * with ability to provide actions that trigger reset on delay timer.
  *
- * For example, `initRequest` sata has to be throttled by specified amount of time and
+ * For example, `initRequest` saga has to be throttled by specified amount of time and
  * also `initRequest` call when specific action dispatched (even if timeout doesn't
  * occur).
  *

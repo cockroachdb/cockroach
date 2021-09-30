@@ -146,9 +146,6 @@ export class TransactionsPage extends React.Component<
   componentDidMount(): void {
     this.refreshData();
   }
-  componentDidUpdate(): void {
-    this.refreshData();
-  }
 
   syncHistory = (params: Record<string, string | undefined>) => {
     const { history } = this.props;

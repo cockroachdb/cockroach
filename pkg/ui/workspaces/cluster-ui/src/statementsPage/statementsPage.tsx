@@ -264,10 +264,6 @@ export class StatementsPage extends React.Component<
     if (this.state.search && this.state.search !== prevState.search) {
       this.props.onSearchComplete(this.filteredStatementsData());
     }
-    this.refreshStatements();
-    if (!this.props.isTenant) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
   };
 
   componentWillUnmount(): void {
