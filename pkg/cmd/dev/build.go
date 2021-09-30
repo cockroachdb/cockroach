@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +28,11 @@ const (
 	crossFlag              = "cross"
 	hoistGeneratedCodeFlag = "hoist-generated-code"
 )
+
+type buildTarget struct {
+	fullName   string
+	isGoBinary bool
+}
 
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
 func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -58,20 +64,21 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 // above, and in usage docs.
 
 var buildTargetMapping = map[string]string{
-	"cockroach":        "//pkg/cmd/cockroach",
-	"cockroach-oss":    "//pkg/cmd/cockroach-oss",
-	"cockroach-short":  "//pkg/cmd/cockroach-short",
-	"dev":              "//pkg/cmd/dev",
-	"docgen":           "//pkg/cmd/docgen",
-	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen",
-	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen",
-	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt",
-	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen",
-	"roachprod":        "//pkg/cmd/roachprod",
-	"roachprod-stress": "//pkg/cmd/roachprod-stress",
-	"short":            "//pkg/cmd/cockroach-short",
-	"workload":         "//pkg/cmd/workload",
-	"roachtest":        "//pkg/cmd/roachtest",
+	"cockroach":        "//pkg/cmd/cockroach:cockroach",
+	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
+	"dev":              "//pkg/cmd/dev:dev",
+	"docgen":           "//pkg/cmd/docgen:docgen",
+	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
+	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen:optgen",
+	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
+	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen:langgen",
+	"roachprod":        "//pkg/cmd/roachprod:roachprod",
+	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
+	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
+	"workload":         "//pkg/cmd/workload:workload",
+	"roachtest":        "//pkg/cmd/roachtest:roachtest",
 }
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
@@ -80,7 +87,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	cross := mustGetFlagString(cmd, crossFlag)
 	hoistGeneratedCode := mustGetFlagBool(cmd, hoistGeneratedCodeFlag)
 
-	args, fullTargets, err := getBasicBuildArgs(targets)
+	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
 	}
@@ -91,9 +98,16 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
-		return d.stageArtifacts(ctx, fullTargets, hoistGeneratedCode)
+		return d.stageArtifacts(ctx, buildTargets, hoistGeneratedCode)
 	}
 	// Cross-compilation case.
+	for _, target := range buildTargets {
+		if !target.isGoBinary {
+			// We can't cross-compile these targets because we can't be sure where
+			// Bazel is going to stage their output files.
+			return fmt.Errorf("cannot cross-compile target %s because it is not a go binary", target.fullName)
+		}
+	}
 	cross = "cross" + cross
 	volume := mustGetFlagString(cmd, volumeFlag)
 	args = append(args, fmt.Sprintf("--config=%s", cross))
@@ -109,20 +123,22 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	// but that's hard and I don't think it's necessary for now.
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
 	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
-	for _, target := range fullTargets {
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target)))
+	for _, target := range buildTargets {
+		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target.fullName)))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {
 		return err
 	}
-	for _, target := range fullTargets {
-		logSuccessfulBuild(target, filepath.Join("artifacts", targetToBinBasename(target)))
+	for _, target := range buildTargets {
+		logSuccessfulBuild(target.fullName, filepath.Join("artifacts", targetToBinBasename(target.fullName)))
 	}
 	return nil
 }
 
-func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGeneratedCode bool) error {
+func (d *dev) stageArtifacts(
+	ctx context.Context, targets []buildTarget, hoistGeneratedCode bool,
+) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -137,8 +153,12 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 	}
 
 	for _, target := range targets {
-		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target))
-		base := targetToBinBasename(target)
+		if !target.isGoBinary {
+			// Skip staging for these.
+			continue
+		}
+		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName))
+		base := targetToBinBasename(target.fullName)
 		var symlinkPath string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
@@ -159,7 +179,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []string, hoistGenerat
 		if err != nil {
 			rel = symlinkPath
 		}
-		logSuccessfulBuild(target, rel)
+		logSuccessfulBuild(target.fullName, rel)
 	}
 
 	if hoistGeneratedCode {
@@ -256,7 +276,9 @@ func targetToBinBasename(target string) string {
 // The first string slice returned is the list of arguments (i.e. to pass to
 // `CommandContext`), and the second is the full list of targets to be built
 // (e.g. after translation, so short -> "//pkg/cmd/cockroach-short").
-func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error) {
+func (d *dev) getBasicBuildArgs(
+	ctx context.Context, targets []string,
+) (args []string, buildTargets []buildTarget, err error) {
 	if len(targets) == 0 {
 		// Default to building the cockroach binary.
 		targets = append(targets, "cockroach")
@@ -269,23 +291,42 @@ func getBasicBuildArgs(targets []string) (args, fullTargets []string, err error)
 	}
 
 	for _, target := range targets {
+		target = strings.TrimPrefix(target, "./")
 		target = strings.TrimRight(target, "/")
-		// Assume that targets beginning with `//` or containing `/`
-		// don't need to be munged.
-		if strings.HasPrefix(target, "//") || strings.Contains(target, "/") {
-			args = append(args, target)
-			fullTargets = append(fullTargets, target)
+		// For targets beginning with // or containing / or :, we need to ask Bazel
+		// what kind of target it is.
+		if strings.HasPrefix(target, "//") || strings.ContainsAny(target, "/:") {
+			queryArgs := []string{"query", target, "--output=label_kind"}
+			labelKind, queryErr := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+			if queryErr != nil {
+				err = fmt.Errorf("could not run `bazel %s` (%w)", shellescape.QuoteCommand(queryArgs), queryErr)
+				return
+			}
+			fields := strings.Fields(strings.TrimSpace(string(labelKind)))
+			fullTargetName := fields[len(fields)-1]
+			typ := fields[0]
+			args = append(args, fullTargetName)
+			buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
 			continue
 		}
-		buildTarget, ok := buildTargetMapping[target]
+		aliased, ok := buildTargetMapping[target]
 		if !ok {
 			err = fmt.Errorf("unrecognized target: %s", target)
 			return
 		}
 
-		fullTargets = append(fullTargets, buildTarget)
-		args = append(args, buildTarget)
+		args = append(args, aliased)
+		buildTargets = append(buildTargets, buildTarget{fullName: aliased, isGoBinary: true})
 	}
+
+	// Add --config=with_ui iff we're building a target that needs it.
+	for _, target := range buildTargets {
+		if target.fullName == buildTargetMapping["cockroach"] || target.fullName == buildTargetMapping["cockroach-oss"] {
+			args = append(args, "--config=with_ui")
+			break
+		}
+	}
+
 	return
 }
 

@@ -1,4 +1,4 @@
-bazel build //pkg/cmd/cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -18,7 +18,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short
+bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -38,7 +38,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build //pkg/cmd/cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -58,7 +58,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short
+bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short:cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -78,7 +78,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build //pkg/cmd/cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short
 ----
 
 bazel info workspace --color=no
@@ -133,7 +133,7 @@ cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/b
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/operator-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator.og.go
 ----
 
-bazel build //pkg/cmd/cockroach-short -s
+bazel build //pkg/cmd/cockroach-short:cockroach-short -s
 ----
 
 bazel info workspace --color=no
@@ -153,7 +153,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build //pkg/cmd/cockroach --verbose_failures --sandbox_debug
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
 ----
 
 bazel info workspace --color=no
@@ -171,4 +171,28 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach
 ----
 
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach/cockroach_/cockroach go/src/github.com/cockroachdb/cockroach/cockroach
+----
+
+bazel query @com_github_cockroachdb_stress//:stress --output=label_kind
+----
+go_binary rule @com_github_cockroachdb_stress//:stress
+
+bazel build @com_github_cockroachdb_stress//:stress
+----
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+mkdir go/src/github.com/cockroachdb/cockroach/bin
+----
+
+bazel info bazel-bin --color=no
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+rm go/src/github.com/cockroachdb/cockroach/bin/stress
+----
+
+ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress go/src/github.com/cockroachdb/cockroach/bin/stress
 ----
