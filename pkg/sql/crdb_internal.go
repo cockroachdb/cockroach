@@ -156,6 +156,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalRegionsTable:                     crdbInternalRegionsTable,
 		catconstants.CrdbInternalDefaultPrivilegesTable:           crdbInternalDefaultPrivilegesTable,
 		catconstants.CrdbInternalActiveRangeFeedsTable:            crdbInternalActiveRangeFeedsTable,
+		catconstants.CrdbInternalTenantUsageDetailsViewID:         crdbInternalTenantUsageDetailsView,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -5299,5 +5300,39 @@ CREATE TABLE crdb_internal.transaction_statistics (
 			})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+// crdbInternalTenantUsageDetailsView, exposes system ranges.
+var crdbInternalTenantUsageDetailsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.tenant_usage_details AS
+  SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds
+  FROM
+    (
+      SELECT
+        tenant_id,
+        crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption) AS j
+      FROM
+        system.tenant_usage
+      WHERE
+        instance_id = 0
+    )
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "tenant_id", Typ: types.Int},
+		{Name: "total_ru", Typ: types.Float},
+		{Name: "total_read_bytes", Typ: types.Int},
+		{Name: "total_read_requests", Typ: types.Int},
+		{Name: "total_write_bytes", Typ: types.Int},
+		{Name: "total_write_requests", Typ: types.Int},
+		{Name: "total_sql_pod_seconds", Typ: types.Float},
 	},
 }

@@ -285,6 +285,9 @@ const (
 	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
 	// and #69891.
 	PebbleSetWithDelete
+	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
+	// use a single consumption column (encoding a proto).
+	TenantUsageSingleConsumptionColumn
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -481,6 +484,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleSetWithDelete,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
+	},
+	{
+		Key:     TenantUsageSingleConsumptionColumn,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
