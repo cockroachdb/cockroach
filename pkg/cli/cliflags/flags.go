@@ -318,6 +318,12 @@ accidents. This can also be overridden in a session with SET
 sql_safe_updates = FALSE.`,
 	}
 
+	ReadOnly = FlagInfo{
+		Name: "read-only",
+		Description: `
+Set the session variable default_transaction_read_only to on.`,
+	}
+
 	Set = FlagInfo{
 		Name: "set",
 		Description: `
