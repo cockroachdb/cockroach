@@ -35,5 +35,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpccchecks"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ttl/logger"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 )

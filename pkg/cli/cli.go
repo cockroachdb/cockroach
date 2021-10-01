@@ -28,12 +28,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/examples" // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"       // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"     // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"     // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"     // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"     // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"   // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"         // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"       // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"       // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"       // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ttl/logger" // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"       // registers workloads
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )

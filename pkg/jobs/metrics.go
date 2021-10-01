@@ -27,6 +27,7 @@ type Metrics struct {
 
 	Changefeed   metric.Struct
 	StreamIngest metric.Struct
+	TTL          TTLMetrics
 
 	// AdoptIterations counts the number of adopt loops executed by Registry.
 	AdoptIterations *metric.Counter
@@ -38,6 +39,72 @@ type Metrics struct {
 	// correlate with the ClaimedJobs counter because a job can be resumed
 	// without an adopt loop, e.g., through a StartableJob.
 	ResumedJobs *metric.Counter
+}
+
+type TTLMetrics struct {
+	DeletionTotalNanos  *metric.Histogram
+	DeletionSelectNanos *metric.Histogram
+	DeletionDeleteNanos *metric.Histogram
+	RowDeletions        *metric.Counter
+	NumWorkers          *metric.Gauge
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (TTLMetrics) MetricStruct() {}
+
+func makeTTLMetrics(histogramWindowInterval time.Duration) TTLMetrics {
+	maxVal := int64(time.Minute.Nanoseconds())
+	sigFigs := 2
+	return TTLMetrics{
+		DeletionTotalNanos: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.ttl.deletion_total",
+				Measurement: "seconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			histogramWindowInterval,
+			maxVal,
+			sigFigs,
+		),
+		DeletionSelectNanos: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.ttl.deletion_select",
+				Measurement: "seconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			histogramWindowInterval,
+			maxVal,
+			sigFigs,
+		),
+		DeletionDeleteNanos: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.ttl.deletion_delete",
+				Measurement: "seconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			histogramWindowInterval,
+			maxVal,
+			sigFigs,
+		),
+		RowDeletions: metric.NewCounter(
+			metric.Metadata{
+				Name:        "jobs.ttl.rows_deleted",
+				Measurement: "num_rows",
+				Unit:        metric.Unit_COUNT,
+				MetricType:  io_prometheus_client.MetricType_COUNTER,
+			},
+		),
+		NumWorkers: metric.NewGauge(
+			metric.Metadata{
+				Name:        "jobs.ttl.num_workers",
+				Measurement: "num_workers",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+	}
 }
 
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
@@ -173,6 +240,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	if MakeStreamIngestMetricsHook != nil {
 		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
 	}
+	m.TTL = makeTTLMetrics(histogramWindowInterval)
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
 	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)

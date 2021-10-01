@@ -46,6 +46,7 @@ var _ Details = NewSchemaChangeDetails{}
 var _ Details = MigrationDetails{}
 var _ Details = AutoSpanConfigReconciliationDetails{}
 var _ Details = ImportDetails{}
+var _ Details = TTLDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -119,6 +120,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeAutoSpanConfigReconciliation
 	case *Payload_AutoSQLStatsCompaction:
 		return TypeAutoSQLStatsCompaction
+	case *Payload_TTLDetails:
+		return TypeTTL
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -159,6 +162,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
 	case AutoSQLStatsCompactionProgress:
 		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
+	case TTLProgress:
+		return &Progress_TTLProgress{TTLProgress: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -194,6 +199,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoSpanConfigReconciliation
 	case *Payload_AutoSQLStatsCompaction:
 		return *d.AutoSQLStatsCompaction
+	case *Payload_TTLDetails:
+		return *d.TTLDetails
 	default:
 		return nil
 	}
@@ -229,6 +236,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.AutoSpanConfigReconciliation
 	case *Progress_AutoSQLStatsCompaction:
 		return *d.AutoSQLStatsCompaction
+	case *Progress_TTLProgress:
+		return *d.TTLProgress
 	default:
 		return nil
 	}
@@ -277,6 +286,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
 	case AutoSQLStatsCompactionDetails:
 		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
+	case TTLDetails:
+		return &Payload_TTLDetails{TTLDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -312,7 +323,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 15
+const NumJobTypes = 16
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
 // parameters from ChangefeedDetails.
