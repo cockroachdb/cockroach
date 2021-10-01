@@ -138,6 +138,11 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
+
+	// tablesMutated is the set of all tables mutated by the statement, mapping to
+	// true when all mutations of the table are inserts (without ON CONFLICT) and
+	// false otherwise.
+	tablesMutated map[cat.StableID]bool
 }
 
 // New creates a new Builder structure initialized with the given
