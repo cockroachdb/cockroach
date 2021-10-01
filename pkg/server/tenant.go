@@ -245,6 +245,7 @@ func StartTenant(
 		goroutineDumpDirName: args.GoroutineDumpDirName,
 		heapProfileDirName:   args.HeapProfileDirName,
 		runtime:              args.runtime,
+		sessionRegistry:      args.sessionRegistry,
 	}); err != nil {
 		return nil, "", "", err
 	}
