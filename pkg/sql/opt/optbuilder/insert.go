@@ -212,6 +212,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		}
 	}
 
+	// Check if this table has already been mutated in another subquery.
+	b.checkMultipleMutations(tab, ins.OnConflict == nil /* simpleInsert */)
+
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
 		mb.init(b, "upsert", tab, alias)
