@@ -17,7 +17,7 @@ import {
   ExecutionStatistics,
   flattenStatementStats,
   formatDate,
-  queryByName,
+  getMatchParamByName,
   statementKey,
   StatementStatistics,
   TimestampToMoment,
@@ -144,7 +144,7 @@ export const selectStatements = createSelector(
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
-    const app = queryByName(props.location, appAttr);
+    const app = getMatchParamByName(props.match, appAttr);
     const isInternal = (statement: ExecutionStatistics) =>
       statement.app.startsWith(state.data.internal_app_name_prefix);
 
