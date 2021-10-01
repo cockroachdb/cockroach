@@ -96,6 +96,10 @@ type Context struct {
 	// ListeningURLFile can be set to a file which is written to after
 	// the demo cluster has started, to contain a valid connection URL.
 	ListeningURLFile string
+
+	// Multitenant is true if we're starting the demo cluster in
+	// multi-tenant mode.
+	Multitenant bool
 }
 
 // IsInteractive returns true if the demo cluster configuration
