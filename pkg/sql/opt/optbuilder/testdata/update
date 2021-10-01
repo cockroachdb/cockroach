@@ -514,58 +514,47 @@ error (42703): statement source "UPDATE abcde SET a = 1" does not return any col
 
 # Non-referenced CTE with mutation.
 build
-WITH cte AS (SELECT b FROM [UPDATE abcde SET a=b RETURNING *]) UPDATE abcde SET a=b
+WITH cte AS (SELECT y FROM [UPDATE xyz SET y = y + 1 RETURNING *]) UPDATE abcde SET a=b
 ----
 with &1
- ├── project
- │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5
- │    └── update abcde
- │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
- │         ├── fetch columns: abcde.a:9 abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14
- │         ├── update-mapping:
- │         │    ├── abcde.b:10 => abcde.a:1
- │         │    ├── d_comp:17 => abcde.d:4
- │         │    └── abcde.b:10 => abcde.e:5
- │         └── project
- │              ├── columns: d_comp:17 abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │              ├── scan abcde
- │              │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │              │    └── computed column expressions
- │              │         ├── abcde.d:12
- │              │         │    └── (abcde.b:10 + abcde.c:11) + 1
- │              │         └── abcde.e:13
- │              │              └── abcde.a:9
- │              └── projections
- │                   └── (abcde.b:10 + abcde.c:11) + 1 [as=d_comp:17]
+ ├── update xyz
+ │    ├── columns: xyz.x:1!null xyz.y:2 xyz.z:3
+ │    ├── fetch columns: xyz.x:6 xyz.y:7 xyz.z:8
+ │    ├── update-mapping:
+ │    │    └── y_new:11 => xyz.y:2
+ │    └── project
+ │         ├── columns: y_new:11 xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
+ │         ├── scan xyz
+ │         │    └── columns: xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
+ │         └── projections
+ │              └── xyz.y:7 + 1 [as=y_new:11]
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:19
+      │    ├── columns: y:13
       │    └── with-scan &1
-      │         ├── columns: a:18!null b:19 c:20 d:21 e:22
+      │         ├── columns: x:12!null y:13 z:14
       │         └── mapping:
-      │              ├──  abcde.a:1 => a:18
-      │              ├──  abcde.b:2 => b:19
-      │              ├──  abcde.c:3 => c:20
-      │              ├──  abcde.d:4 => d:21
-      │              └──  abcde.e:5 => e:22
+      │              ├──  xyz.x:1 => x:12
+      │              ├──  xyz.y:2 => y:13
+      │              └──  xyz.z:3 => z:14
       └── update abcde
            ├── columns: <none>
-           ├── fetch columns: abcde.a:31 abcde.b:32 abcde.c:33 abcde.d:34 abcde.e:35 rowid:36
+           ├── fetch columns: a:23 b:24 c:25 d:26 e:27 rowid:28
            ├── update-mapping:
-           │    ├── abcde.b:32 => abcde.a:23
-           │    ├── d_comp:39 => abcde.d:26
-           │    └── abcde.b:32 => abcde.e:27
+           │    ├── b:24 => a:15
+           │    ├── d_comp:31 => d:18
+           │    └── b:24 => e:19
            └── project
-                ├── columns: d_comp:39 abcde.a:31!null abcde.b:32 abcde.c:33 abcde.d:34 abcde.e:35 rowid:36!null crdb_internal_mvcc_timestamp:37 tableoid:38
+                ├── columns: d_comp:31 a:23!null b:24 c:25 d:26 e:27 rowid:28!null abcde.crdb_internal_mvcc_timestamp:29 abcde.tableoid:30
                 ├── scan abcde
-                │    ├── columns: abcde.a:31!null abcde.b:32 abcde.c:33 abcde.d:34 abcde.e:35 rowid:36!null crdb_internal_mvcc_timestamp:37 tableoid:38
+                │    ├── columns: a:23!null b:24 c:25 d:26 e:27 rowid:28!null abcde.crdb_internal_mvcc_timestamp:29 abcde.tableoid:30
                 │    └── computed column expressions
-                │         ├── abcde.d:34
-                │         │    └── (abcde.b:32 + abcde.c:33) + 1
-                │         └── abcde.e:35
-                │              └── abcde.a:31
+                │         ├── d:26
+                │         │    └── (b:24 + c:25) + 1
+                │         └── e:27
+                │              └── a:23
                 └── projections
-                     └── (abcde.b:32 + abcde.c:33) + 1 [as=d_comp:39]
+                     └── (b:24 + c:25) + 1 [as=d_comp:31]
 
 # With alias, original table name should be inaccessible.
 build
