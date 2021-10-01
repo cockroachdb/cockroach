@@ -87,6 +87,9 @@ const (
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
 
+	// loadStatusVars exposes prometheus metrics for instant monitoring of CPU load.
+	loadStatusVars = statusPrefix + "load"
+
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 

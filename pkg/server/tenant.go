@@ -219,6 +219,8 @@ func StartTenant(
 		})
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
+		ff := loadVarsHandler(ctx, args.runtime)
+		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
 		tlsConnManager := netutil.MakeServer(
 			args.stopper,
@@ -277,8 +279,12 @@ func StartTenant(
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
+		userTimeMillis, _, err := status.GetCPUTime(ctx)
+		if err != nil {
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		}
 		return multitenant.ExternalUsage{
-			CPUSecs:     status.GetUserCPUSeconds(ctx),
+			CPUSecs:     float64(userTimeMillis) * 1e-3,
 			PGWireBytes: s.pgServer.BytesInAndOut(),
 		}
 	}
@@ -306,6 +312,39 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+// Construct a handler responsible for serving the instant values of selected
+// load metrics. These include user and system CPU time currently.
+func loadVarsHandler(
+	ctx context.Context, rsr *status.RuntimeStatSampler,
+) func(http.ResponseWriter, *http.Request) {
+	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
+	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
+	registry := metric.NewRegistry()
+	registry.AddMetric(cpuUserNanos)
+	registry.AddMetric(cpuSysNanos)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+		if err != nil {
+			// Just log but don't return an error to match the _status/vars metrics handler.
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		}
+		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
+		utime := userTimeMillis * 1e6
+		stime := sysTimeMillis * 1e6
+		cpuUserNanos.Update(utime)
+		cpuSysNanos.Update(stime)
+
+		exporter := metric.MakePrometheusExporter()
+		exporter.ScrapeRegistry(registry, true)
+		if err := exporter.PrintAsText(w); err != nil {
+			log.Errorf(r.Context(), "%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func makeTenantSQLServerArgs(
