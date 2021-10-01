@@ -53,7 +53,7 @@ type spanOptions struct {
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
-	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.traceID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.traceID
@@ -62,7 +62,7 @@ func (opts *spanOptions) parentTraceID() uint64 {
 }
 
 func (opts *spanOptions) parentSpanID() uint64 {
-	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.spanID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.spanID
@@ -71,7 +71,7 @@ func (opts *spanOptions) parentSpanID() uint64 {
 }
 
 func (opts *spanOptions) deriveRootSpan() *crdbSpan {
-	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.rootSpan
 	}
 	return nil
@@ -79,7 +79,7 @@ func (opts *spanOptions) deriveRootSpan() *crdbSpan {
 
 func (opts *spanOptions) recordingType() RecordingType {
 	recordingType := RecordingOff
-	if opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {
 		recordingType = opts.RemoteParent.recordingType
@@ -121,7 +121,8 @@ type parentAndAutoCollectionOption Span
 // from a parent Span.
 //
 // WithParentAndAutoCollection can be called with a nil `sp`, in which case
-// it'll be a no-op.
+// it'll be a no-op. It can also be called with a "no-op span", in which case
+// the option will also be a no-op (i.e. the upcoming span will be a root).
 //
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
@@ -143,6 +144,9 @@ type parentAndAutoCollectionOption Span
 // WithParentAndManualCollection should be used, which incurs an
 // obligation to manually propagate the trace data to the parent Span.
 func WithParentAndAutoCollection(sp *Span) SpanOption {
+	if sp == nil || sp.IsNoop() {
+		return (*parentAndAutoCollectionOption)(nil)
+	}
 	return (*parentAndAutoCollectionOption)(sp)
 }
 

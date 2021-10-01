@@ -431,6 +431,12 @@ func (t *Tracer) startSpanGeneric(
 		if !opts.RemoteParent.Empty() {
 			panic("can't specify both Parent and RemoteParent")
 		}
+		if opts.Parent.IsNoop() {
+			// This method relies on the parent, if any, not being a no-op. A no-op
+			// parent should have been optimized away by the
+			// WithParentAndAutoCollection option.
+			panic("invalid no-op parent")
+		}
 	}
 
 	// Are we tracing everything, or have a parent, or want a real span? Then
@@ -443,7 +449,7 @@ func (t *Tracer) startSpanGeneric(
 		opts.LogTags = logtags.FromContext(ctx)
 	}
 
-	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
+	if opts.LogTags == nil && opts.Parent != nil {
 		// If no log tags are specified in the options, use the parent
 		// span's, if any. This behavior is the reason logTags are
 		// fundamentally different from tags, which are strictly per span,
@@ -565,15 +571,15 @@ func (t *Tracer) startSpanGeneric(
 	// spans contained in Span.
 	//
 	// NB: this could be optimized.
-	if opts.Parent != nil {
-		if !opts.Parent.i.isNoop() {
-			opts.Parent.i.crdb.mu.Lock()
-			m := opts.Parent.i.crdb.mu.baggage
-			opts.Parent.i.crdb.mu.Unlock()
+	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
+	// the moment, but let's not rely on that.
+	if opts.Parent != nil && opts.Parent.i.crdb != nil {
+		opts.Parent.i.crdb.mu.Lock()
+		m := opts.Parent.i.crdb.mu.baggage
+		opts.Parent.i.crdb.mu.Unlock()
 
-			for k, v := range m {
-				s.SetBaggageItem(k, v)
-			}
+		for k, v := range m {
+			s.SetBaggageItem(k, v)
 		}
 	} else {
 		// Local root span - put it into the registry of active local root
