@@ -33,10 +33,11 @@ var (
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution = "OSS"
-	typ          string // Type of this build: <empty>, "development", or "release"
-	channel      = "unknown"
-	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	Distribution  = "OSS"
+	typ           string // Type of this build: <empty>, "development", or "release"
+	channel       = "unknown"
+	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	binaryVersion = computeVersion(tag)
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -50,8 +51,21 @@ func SeemsOfficial() bool {
 	return channel == "official-binary" || channel == "source-archive"
 }
 
-// VersionPrefix returns the version prefix of the current build.
-func VersionPrefix() string {
+func computeVersion(tag string) string {
+	v, err := version.Parse(tag)
+	if err != nil {
+		return "dev"
+	}
+	return v.String()
+}
+
+// BinaryVersion returns the version prefix, patch number and metadata of the current build.
+func BinaryVersion() string {
+	return binaryVersion
+}
+
+// BinaryVersionPrefix returns the version prefix of the current build.
+func BinaryVersionPrefix() string {
 	v, err := version.Parse(tag)
 	if err != nil {
 		return "dev"
@@ -115,11 +129,13 @@ func GetInfo() Info {
 // TestingOverrideTag allows tests to override the build tag.
 func TestingOverrideTag(t string) func() {
 	prev := tag
+	prevVersion := binaryVersion
 	tag = t
-	return func() { tag = prev }
+	binaryVersion = computeVersion(tag)
+	return func() { tag = prev; binaryVersion = prevVersion }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.
 func MakeIssueURL(issue int) string {
-	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, VersionPrefix())
+	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, BinaryVersionPrefix())
 }

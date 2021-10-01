@@ -145,6 +145,7 @@ go_test(
     embed = [":log"],
     tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
         "//pkg/util/caller",
