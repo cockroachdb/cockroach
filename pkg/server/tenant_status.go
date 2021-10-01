@@ -582,12 +582,68 @@ func (t *tenantStatusServer) Profile(
 }
 
 func (t *tenantStatusServer) IndexUsageStatistics(
-	ctx context.Context, request *serverpb.IndexUsageStatisticsRequest,
+	ctx context.Context, req *serverpb.IndexUsageStatisticsRequest,
 ) (*serverpb.IndexUsageStatisticsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
 	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
-	idxUsageStats := t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
-	return indexUsageStatsLocal(idxUsageStats)
+	localReq := &serverpb.IndexUsageStatisticsRequest{
+		NodeID: "local",
+	}
+
+	if len(req.NodeID) > 0 {
+		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			statsReader := t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+			return indexUsageStatsLocal(statsReader)
+		}
+
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		// We issue a localReq instead of the incoming req to other nodes. This is
+		// to instruct other nodes to only return us their node-local stats and
+		// do not further propagates the RPC call.
+		return statusClient.IndexUsageStatistics(ctx, localReq)
+	}
+
+	fetchIndexUsageStats := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.IndexUsageStatistics(ctx, localReq)
+	}
+
+	resp := &serverpb.IndexUsageStatisticsResponse{}
+	aggFn := func(_ base.SQLInstanceID, nodeResp interface{}) {
+		stats := nodeResp.(*serverpb.IndexUsageStatisticsResponse)
+		resp.Statistics = append(resp.Statistics, stats.Statistics...)
+	}
+
+	var combinedError error
+	errFn := func(_ base.SQLInstanceID, nodeFnError error) {
+		combinedError = errors.CombineErrors(combinedError, nodeFnError)
+	}
+
+	if err := t.iteratePods(ctx, fmt.Sprintf("requesting index usage stats for instance %s", req.NodeID),
+		t.dialCallback,
+		fetchIndexUsageStats,
+		aggFn,
+		errFn,
+	); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
