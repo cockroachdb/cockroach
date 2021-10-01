@@ -57,6 +57,7 @@ export interface OwnProps {
   refreshSessions: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
+  isCloud?: boolean;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (columnName: string) => void;
   onSessionClick?: () => void;
@@ -191,6 +192,7 @@ export class SessionsPage extends React.Component<
             columns={makeSessionsColumns(
               this.terminateSessionRef,
               this.terminateQueryRef,
+              this.props.isCloud,
               this.props.onSessionClick,
               this.props.onTerminateStatementClick,
               this.props.onTerminateSessionClick,
