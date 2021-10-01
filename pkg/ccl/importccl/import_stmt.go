@@ -2324,6 +2324,27 @@ func (r *importResumer) checkForUDTModification(
 	if details.Types == nil {
 		return nil
 	}
+	// areEquivalentTypes returns true if a and b are the same types save for the
+	// version, modification time, privileges, or referencing descriptors.
+	areEquivalentTypes := func(a, b *descpb.TypeDescriptor) (bool, error) {
+		clearIgnoredFields := func(d *descpb.TypeDescriptor) *descpb.TypeDescriptor {
+			d = protoutil.Clone(d).(*descpb.TypeDescriptor)
+			d.ModificationTime = hlc.Timestamp{}
+			d.Privileges = nil
+			d.Version = 0
+			d.ReferencingDescriptorIDs = nil
+			return d
+		}
+		aData, err := protoutil.Marshal(clearIgnoredFields(a))
+		if err != nil {
+			return false, err
+		}
+		bData, err := protoutil.Marshal(clearIgnoredFields(b))
+		if err != nil {
+			return false, err
+		}
+		return bytes.Equal(aData, bData), nil
+	}
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn,
 		col *descs.Collection) error {
 		for _, savedTypeDesc := range details.Types {
@@ -2332,12 +2353,22 @@ func (r *importResumer) checkForUDTModification(
 			if err != nil {
 				return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 			}
-			if typeDesc.GetModificationTime() != savedTypeDesc.Desc.GetModificationTime() {
-				return errors.Newf("type descriptor %d has a different modification time than what"+
-					" was saved during import planning; unsafe to import since the type"+
-					" has changed during the course of the import",
-					typeDesc.GetID())
+			if typeDesc.GetModificationTime() == savedTypeDesc.Desc.GetModificationTime() {
+				return nil
 			}
+			equivalent, err := areEquivalentTypes(typeDesc.TypeDesc(), savedTypeDesc.Desc)
+			if err != nil {
+				errors.NewAssertionErrorWithWrappedErrf(
+					err, "failed to check for type descriptor equivalence for type %q (%d)",
+					typeDesc.GetName(), typeDesc.GetID())
+			}
+			if equivalent {
+				return nil
+			}
+			return errors.Newf("type descriptor %q (%d) has been modified"+
+				" potentially incompatibly way since import planning; aborting to"+
+				" avoid possible corruption",
+				typeDesc.GetName(), typeDesc.GetID())
 		}
 		return nil
 	})
