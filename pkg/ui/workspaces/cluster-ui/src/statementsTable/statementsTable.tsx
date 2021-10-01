@@ -237,6 +237,18 @@ export function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
+export function detailedShortStatement(
+  summary: StatementSummary,
+  original: string,
+) {
+  switch (summary.statement) {
+    case "select":
+      return "SELECT " + summary.columns + " FROM " + summary.table;
+    default:
+      return shortStatement(summary, original);
+  }
+}
+
 export function makeStatementFingerprintColumn(
   statType: StatisticType,
   selectedApp: string,
