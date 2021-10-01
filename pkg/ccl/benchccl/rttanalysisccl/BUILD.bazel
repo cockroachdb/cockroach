@@ -19,6 +19,7 @@ go_library(
 
 go_test(
     name = "rttanalysisccl_test",
+    size = "large",
     srcs = [
         "bench_test.go",
         "multi_region_bench_test.go",
