@@ -138,6 +138,8 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
+
+	tablesMutated map[cat.StableID]struct{}
 }
 
 // New creates a new Builder structure initialized with the given

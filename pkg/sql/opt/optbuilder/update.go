@@ -84,6 +84,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// Check Select permission as well, since existing values must be read.
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
+	b.checkMultipleMutations(tab)
+
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)
 

@@ -212,6 +212,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		}
 	}
 
+	b.checkMultipleMutations(tab)
+
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
 		mb.init(b, "upsert", tab, alias)

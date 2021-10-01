@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -25,6 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
+
+var multipleModificationSubstatementsOfTableEnabled = settings.RegisterBoolSetting(
+	"sql.multiple_modification_substatements_of_table.enabled",
+	"if true, allow statements containing multiple modification substatements of the same table, "+
+		"at the risk of corruption if the same row is modified multiple times by a single statement",
+	false,
+).WithPublic()
 
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.
@@ -468,6 +476,24 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	}
 
 	return sch, resName
+}
+
+func (b *Builder) checkMultipleMutations(tab cat.Table) {
+	if b.tablesMutated == nil {
+		b.tablesMutated = make(map[cat.StableID]struct{})
+	}
+	if _, ok := b.tablesMutated[tab.ID()]; ok {
+		if !multipleModificationSubstatementsOfTableEnabled.Get(&b.evalCtx.Settings.SV) {
+			err := pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"multiple modification substatements of the same table %q are not supported unless "+
+					"sql.multiple_modification_substatements_of_table.enabled is true", tab.Name(),
+			)
+			panic(err)
+		}
+	} else {
+		b.tablesMutated[tab.ID()] = struct{}{}
+	}
 }
 
 // resolveTableForMutation is a helper method for building mutations. It returns

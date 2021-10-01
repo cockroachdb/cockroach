@@ -49,6 +49,8 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	// Check Select permission as well, since existing values must be read.
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
+	b.checkMultipleMutations(tab)
+
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, alias)
 
