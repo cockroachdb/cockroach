@@ -203,8 +203,3 @@ CREATE TABLE c (c INT8 PRIMARY KEY, p INT8 REFERENCES p (p))
 
 query error pgcode 23503 insert on table \"c\" violates foreign key constraint \"fk_p_ref_p\"
 EXPLAIN ANALYZE (DISTSQL) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) AS v (x)
-
-# Regression test for the vectorized engine not playing nicely with
-# LocalPlanNodes (#62261).
-query error pgcode 23503 insert on table \"c\" violates foreign key constraint \"fk_p_ref_p\"
-EXPLAIN ANALYZE (DEBUG) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) AS v (x)
