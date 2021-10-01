@@ -735,6 +735,18 @@ message AutoSQLStatsCompactionDetails {
 message AutoSQLStatsCompactionProgress {
 }
 
+message TTLDetails {
+  uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  string column_name = 2;
+  int64 until_unix = 3;
+}
+
+message TTLProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -780,6 +792,7 @@ message Payload {
     MigrationDetails migration = 25;
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
+    TTLDetails ttl_details = 33 [(gogoproto.customname)="TTLDetails"];
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -791,7 +804,7 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 33.
+  // NEXT ID: 34.
 }
 
 message Progress {
@@ -816,6 +829,7 @@ message Progress {
     MigrationProgress migration = 20;
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
+    TTLProgress ttl_progress = 24 [(gogoproto.customname)="TTLProgress"];
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -842,6 +856,7 @@ enum Type {
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
+  TTL = 15 [(gogoproto.enumvalue_customname)="TypeTTL"];
 }
 
 message Job {
