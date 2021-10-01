@@ -68,6 +68,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Statements":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/CombinedStatementStats":
+		return a.authTenant(tenID)
+
 	case "/cockroach.server.serverpb.Status/ResetSQLStats":
 		return a.authTenant(tenID)
 
