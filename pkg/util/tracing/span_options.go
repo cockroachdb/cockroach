@@ -71,13 +71,6 @@ func (opts *spanOptions) parentSpanID() uint64 {
 	return 0
 }
 
-func (opts *spanOptions) deriveRootSpan() *crdbSpan {
-	if opts.Parent != nil && !opts.Parent.IsNoop() {
-		return opts.Parent.i.crdb.rootSpan
-	}
-	return nil
-}
-
 func (opts *spanOptions) recordingType() RecordingType {
 	recordingType := RecordingOff
 	if opts.Parent != nil && !opts.Parent.IsNoop() {
