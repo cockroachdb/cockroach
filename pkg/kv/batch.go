@@ -281,14 +281,10 @@ func (b *Batch) fillResults(ctx context.Context) {
 				}
 			}
 			// Fill up the resume span.
-			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
-				result.ResumeSpan = reply.Header().ResumeSpan
-				result.ResumeReason = reply.Header().ResumeReason
-				// The ResumeReason might be missing when talking to a 1.1 node; assume
-				// it's the key limit (which was the only reason why 1.1 would return a
-				// resume span). This can be removed in 2.1.
-				if result.ResumeReason == roachpb.RESUME_UNKNOWN {
-					result.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			if result.Err == nil && reply != nil {
+				if h := reply.Header(); h.ResumeSpan != nil {
+					result.ResumeSpan = h.ResumeSpan
+					result.ResumeReason = h.ResumeReason
 				}
 			}
 		}

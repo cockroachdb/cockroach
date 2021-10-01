@@ -1219,7 +1219,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If couldHaveSkippedResponses is set, resumeReason indicates the reason why
 	// the ResumeSpan is necessary. This reason is common to all individual
 	// responses that carry a ResumeSpan.
-	var resumeReason roachpb.ResponseHeader_ResumeReason
+	var resumeReason roachpb.ResumeReason
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
@@ -1370,7 +1370,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					ba.TargetBytes -= replyBytes
 					if ba.TargetBytes <= 0 {
 						couldHaveSkippedResponses = true
-						resumeReason = roachpb.RESUME_KEY_LIMIT
+						resumeReason = roachpb.RESUME_BYTE_LIMIT
 						return
 					}
 				}
@@ -1694,7 +1694,7 @@ func fillSkippedResponses(
 	ba roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	nextKey roachpb.RKey,
-	resumeReason roachpb.ResponseHeader_ResumeReason,
+	resumeReason roachpb.ResumeReason,
 ) {
 	// Some requests might have no response at all if we used a batch-wide
 	// limit; simply create trivial responses for those. Note that any type
