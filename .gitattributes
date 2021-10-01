@@ -1,3 +1,5 @@
 *.pb.* -diff
 *.eg.go -diff
 pkg/BUILD.bazel -diff
+pkg/sql/logictest/testdata/* diff
+pkg/sql/opt/optbuilder/testdata/* diff
