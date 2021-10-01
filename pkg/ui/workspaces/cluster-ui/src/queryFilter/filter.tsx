@@ -258,10 +258,15 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       control: (provided: any) => ({
         ...provided,
         width: "100%",
+        borderColor: "#C0C6D9",
+      }),
+      dropdownIndicator: (provided: any) => ({
+        ...provided,
+        color: "#C0C6D9",
       }),
       singleValue: (provided: any) => ({
         ...provided,
-        color: "hsl(0, 0%, 50%)",
+        color: "#475872",
       }),
     };
     const customStylesSmall = { ...customStyles };

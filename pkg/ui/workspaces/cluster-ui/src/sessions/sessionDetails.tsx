@@ -153,6 +153,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Sessions
           </Button>
