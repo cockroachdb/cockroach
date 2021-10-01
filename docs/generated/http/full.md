@@ -1578,7 +1578,9 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 #### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse.
+ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+implemented on a tenant, the `node_id` field refers to the instanceIDs that
+identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -1651,7 +1653,9 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 #### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse.
+ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+implemented on a tenant, the `node_id` field refers to the instanceIDs that
+identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -1743,7 +1747,9 @@ Info contains an information about a single DistSQL remote flow.
 #### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse.
+ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+implemented on a tenant, the `node_id` field refers to the instanceIDs that
+identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -1834,7 +1840,9 @@ Info contains an information about a single DistSQL remote flow.
 #### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse.
+ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+implemented on a tenant, the `node_id` field refers to the instanceIDs that
+identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
