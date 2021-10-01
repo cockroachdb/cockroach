@@ -219,6 +219,10 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
+// getRecording returns the Span's recording, including its children.
+//
+// When wantTags is false, no tags will be added. This is a performance
+// optimization as stringifying the tag values can be expensive.
 func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	if s == nil {
 		return nil // noop span
@@ -241,7 +245,7 @@ func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	for i := 0; i < s.mu.recording.children.len(); i++ {
 		children = append(children, s.mu.recording.children.get(i))
 	}
-	result = append(result, s.getRecordingLocked(wantTags))
+	result = append(result, s.getRecordingNoChildrenLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
@@ -400,12 +404,12 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 	s.mu.baggage[restrictedKey] = value
 }
 
-// getRecordingLocked returns the Span's recording. This does not include
+// getRecordingNoChildrenLocked returns the Span's recording without including
 // children.
 //
 // When wantTags is false, no tags will be added. This is a performance
 // optimization as stringifying the tag values can be expensive.
-func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
+func (s *crdbSpan) getRecordingNoChildrenLocked(wantTags bool) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:        s.traceID,
 		SpanID:         s.spanID,
