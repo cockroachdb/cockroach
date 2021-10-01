@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	_ "github.com/xitongsys/parquet-go-source/writerfile"
+	_ "github.com/xitongsys/parquet-go/reader"
+	_ "github.com/xitongsys/parquet-go/tool/parquet-tools/schematool"
+	_ "github.com/xitongsys/parquet-go/writer"
 )
 
 const exportFilePatternPart = "%part%"

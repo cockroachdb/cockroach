@@ -144,8 +144,8 @@ def go_deps():
         name = "com_github_apache_thrift",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/apache/thrift",
-        sum = "h1:vhEK14bs3+zQEDMftA8BVc7uwAIkoqK/kGtoqs8kjks=",
-        version = "v0.0.0-20151001171628-53dd39833a08",
+        sum = "h1:Jz3KVLYY5+JO7rDiX0sAuRGtuv2vG01r17Y9nLMWNUw=",
+        version = "v0.13.1-0.20201008052519-daf620915714",
     )
     go_repository(
         name = "com_github_armon_circbuf",
@@ -803,6 +803,13 @@ def go_deps():
         importpath = "github.com/codegangsta/inject",
         sum = "h1:sDMmm+q/3+BukdIpxwO365v/Rbspp2Nt5XntgQRXq8Q=",
         version = "v0.0.0-20150114235600-33e0aa1cb7c0",
+    )
+    go_repository(
+        name = "com_github_colinmarc_hdfs_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/colinmarc/hdfs/v2",
+        sum = "h1:x0hw/m+o3UE20Scso/KCkvYNc9Di39TBlCfGMkJ1/a0=",
+        version = "v2.1.1",
     )
 
     go_repository(
@@ -1597,6 +1604,13 @@ def go_deps():
         sum = "h1:tpom+2CJmpzAWj5/VEHync2rJGi+epHNIeRSWjzGA+4=",
         version = "v0.0.0-20190224160051-33c29581e754",
     )
+    go_repository(
+        name = "com_github_gobwas_glob",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/gobwas/glob",
+        sum = "h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=",
+        version = "v0.2.3",
+    )
 
     go_repository(
         name = "com_github_gobwas_httphead",
@@ -2189,6 +2203,13 @@ def go_deps():
         sum = "h1:KyZDvZ/GGn+r+Y3DKZ7UOQ/TP4xV6HNkrwiVMB1GnNY=",
         version = "v0.0.0-20200120041712-dcc25e7acd91",
     )
+    go_repository(
+        name = "com_github_iancoleman_strcase",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/iancoleman/strcase",
+        sum = "h1:dJBk1m2/qjL1twPLf68JND55vvivMupZ4wIzE8CTdBw=",
+        version = "v0.1.3",
+    )
 
     go_repository(
         name = "com_github_ianlancetaylor_demangle",
@@ -2751,6 +2772,13 @@ def go_deps():
         sum = "h1:MNApn+Z+fIT4NPZopPfCc1obT6aY3SVM6DOctz1A9ZU=",
         version = "v0.0.0-20190426140909-c40012f20018",
     )
+    go_repository(
+        name = "com_github_lyft_protoc_gen_star",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/lyft/protoc-gen-star",
+        sum = "h1:ICQPpOr4uO46eme1Y5Jj0fnJkc9/upQ9xxt0+2AmUDQ=",
+        version = "v0.5.2",
+    )
 
     go_repository(
         name = "com_github_magiconair_properties",
@@ -3184,8 +3212,8 @@ def go_deps():
         name = "com_github_nbutton23_zxcvbn_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/nbutton23/zxcvbn-go",
-        sum = "h1:AREM5mwr4u1ORQBMvzfzBgpsctsbQikCVpvC+tX285E=",
-        version = "v0.0.0-20180912185939-ae427f1e4c1d",
+        sum = "h1:4kuARK6Y6FxaNu/BnU2OAaLF86eTVhP2hjTB6iMvItA=",
+        version = "v0.0.0-20210217022336-fa2cb2858354",
     )
 
     go_repository(
@@ -3393,6 +3421,13 @@ def go_deps():
         sum = "h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=",
         version = "v2.1.0+incompatible",
     )
+    go_repository(
+        name = "com_github_pborman_getopt",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/pborman/getopt",
+        sum = "h1:7822vZ646Atgxkp3tqrSufChvAAYgIy+iFEGpQntwlI=",
+        version = "v0.0.0-20180729010549-6fdd0a2c7117",
+    )
 
     go_repository(
         name = "com_github_pborman_uuid",
@@ -3446,6 +3481,14 @@ def go_deps():
         sum = "h1:Ix9yFKn1nSPBLFl/yZknTp8TU5G4Ps0JDmguYK6iH1A=",
         version = "v2.6.0+incompatible",
     )
+    go_repository(
+        name = "com_github_pierrec_lz4_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/pierrec/lz4/v4",
+        sum = "h1:ueMTcBBFrbT8K4uGDNNZPa8Z7LtPV7Cl0TDjaeHxP44=",
+        version = "v4.1.6",
+    )
+
     go_repository(
         name = "com_github_pierrre_compare",
         build_file_proto_mode = "disable_global",
@@ -3501,8 +3544,8 @@ def go_deps():
         name = "com_github_pkg_sftp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pkg/sftp",
-        sum = "h1:VasscCm72135zRysgrJDKsntdmPN+OuU3+nnHYA9wyc=",
-        version = "v1.10.1",
+        sum = "h1:Riw6pgOKK41foc1I1Uu03CjvbLZDXeGpInycM4shXoI=",
+        version = "v1.13.0",
     )
 
     go_repository(
@@ -4197,6 +4240,20 @@ def go_deps():
         importpath = "github.com/xiang90/probing",
         sum = "h1:eY9dn8+vbi4tKz5Qo6v2eYzo7kUS51QINcR5jNpbZS8=",
         version = "v0.0.0-20190116061207-43a291ad63a2",
+    )
+    go_repository(
+        name = "com_github_xitongsys_parquet_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/xitongsys/parquet-go",
+        sum = "h1:F1snhlfL5U1hC1yE7Op8qLWFIZEzqmM46pCEspu9OC0=",
+        version = "v1.6.1",
+    )
+    go_repository(
+        name = "com_github_xitongsys_parquet_go_source",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/xitongsys/parquet-go-source",
+        sum = "h1:a742S4V5A15F93smuVxA60LQWsrCnN8bKeWDBARU1/k=",
+        version = "v0.0.0-20200817004010-026bad9b25d0",
     )
 
     go_repository(

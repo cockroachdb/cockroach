@@ -14,10 +14,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/xitongsys/parquet-go-source/local"
+	"github.com/xitongsys/parquet-go/reader"
 	"io"
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -37,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	_ "github.com/xitongsys/parquet-go/parquet"
 )
 
 const exportFilePattern = "export*-n*.0.csv"
+const parquetExportFilePattern = "export*-n*.0.parquet"
 
 func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, string, func()) {
 	ctx := context.Background()
@@ -260,6 +265,77 @@ func TestExportOrder(t *testing.T) {
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
+}
+
+func TestExportParquetOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://0/order_parquet' FROM SELECT *
+		FROM foo ORDER BY y ASC LIMIT 2`)
+
+
+	/*readerSchema := `
+			{
+				"Tag": "name=parquet-go-root, repetitiontype=REQUIRED",
+				"Fields": [
+										{"Tag":"name=0, inname=0, type=INT32, repetitiontype=REQUIRED"},
+										{"Tag":"name=1, inname=1, type=INT32, repetitiontype=REQUIRED"},
+										{"Tag":"name=2, inname=2, type=INT32, repetitiontype=REQUIRED"},
+										{"Tag":"name=3, inname=3, type=INT32, repetitiontype=REQUIRED"}
+									]
+			}
+	`*/
+	/*readerSchema := []string{"name=0, type=INT32","name=1, type=INT32","name=2, type=INT32",
+		"name=3, type=INT32"}*/
+	paths, err := filepath.Glob(filepath.Join(dir, "order_parquet",
+		parquetExportFilePattern))
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(paths))
+	fr, err := local.NewLocalFileReader(paths[0])
+	if err != nil {
+		fmt.Println("Can't open file",err)
+	}
+
+	pr, err := reader.NewParquetReader(fr,nil,4)
+	if err != nil {
+		fmt.Println("Can't create parquet reader",err)
+	}
+	num := int(pr.GetNumRows())
+	res, err := pr.ReadByNumber(num)
+	//SHOULD PRINT:
+	//{3 32 1 34}
+	//{2 22 2 24}
+	for _, row :=  range res{
+		fmt.Println(row)
+		// MB: easy way to iterate through this, or convert this to string? it prints easily!
+
+		arr := reflect.ValueOf(row)
+		fmt.Println(arr)
+		/*for j:= 0; j<arr.Len();j++{
+			v :=arr.Index(j)
+			fmt.Println(v)
+		}*/
+	}
+
+	if err != nil{
+		fmt.Println("can't read stuff",err)
+	}
+
+
+	pr.ReadStop()
+	fr.Close()
+
 }
 
 func TestExportUniqueness(t *testing.T) {
