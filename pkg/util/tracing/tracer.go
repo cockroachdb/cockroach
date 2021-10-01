@@ -583,8 +583,9 @@ func (t *Tracer) startSpanGeneric(
 		span     Span
 		crdbSpan crdbSpan
 		octx     optimizedContext
-		// tagsAlloc preallocates space for crdbSpan.mu.tags.
-		tagsAlloc [3]attribute.KeyValue
+		// Pre-allocated buffers for the span.
+		tagsAlloc     [3]attribute.KeyValue
+		childrenAlloc [4]*crdbSpan
 	}{}
 
 	helper.crdbSpan = crdbSpan{
@@ -596,13 +597,14 @@ func (t *Tracer) startSpanGeneric(
 		logTags:      opts.LogTags,
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
+			tags:     helper.tagsAlloc[:0],
 		},
 		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
 	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
-	helper.crdbSpan.mu.tags = helper.tagsAlloc[:0]
+	helper.crdbSpan.mu.recording.openChildren = helper.childrenAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
@@ -636,6 +638,7 @@ func (t *Tracer) startSpanGeneric(
 		// We inherit the recording type of the local parent, if any, over the
 		// remote parent, if any. If neither are specified, we're not recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
+			s.i.crdb.parent = opts.Parent.i.crdb
 			defer opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())

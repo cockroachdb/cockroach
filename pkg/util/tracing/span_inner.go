@@ -12,7 +12,6 @@ package tracing
 
 import (
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -91,7 +90,7 @@ func (s *spanInner) GetRecording() Recording {
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
-	s.crdb.importRemoteSpans(remoteSpans)
+	s.crdb.recordFinishedChildren(remoteSpans)
 }
 
 func (s *spanInner) Finish() {
@@ -101,22 +100,13 @@ func (s *spanInner) Finish() {
 	if s.isNoop() {
 		return
 	}
-	finishTime := timeutil.Now()
-	duration := finishTime.Sub(s.crdb.startTime)
-	if duration == 0 {
-		duration = time.Nanosecond
-	}
 
-	s.crdb.mu.Lock()
-	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
-		s.crdb.mu.Unlock()
-
-		// External spans and net/trace are not always forgiving about spans getting
-		// finished twice, but it may happen so let's be resilient to it.
+	if !s.crdb.finish() {
+		// The span was already finished. External spans and net/trace are not
+		// always forgiving about spans getting finished twice, but it may happen so
+		// let's be resilient to it.
 		return
 	}
-	s.crdb.mu.duration = duration
-	s.crdb.mu.Unlock()
 
 	if s.otelSpan != nil {
 		s.otelSpan.End()
