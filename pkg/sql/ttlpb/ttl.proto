@@ -1,0 +1,20 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.sql.ttl;
+option go_package = "ttlpb";
+
+import "gogoproto/gogo.proto";
+
+// TTLDetails contains metadata about the scheduled TTL deletion job.
+message TTLDetails {
+  uint32 table_id = 1 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID", (gogoproto.customname)="TableID"];
+
+  string ttl_column = 2 [(gogoproto.customname)="TTLColumn"];
+}

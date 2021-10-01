@@ -2316,7 +2316,26 @@ func newTableDesc(
 			n.Persistence,
 		)
 	})
+	if err != nil {
+		return nil, err
+	}
 
+	// TODO(XXX): move this to NewTableDesc.
+	if n.TTL != nil {
+		env := CreateScheduledJobEnv(params.p.ExecCfg())
+		j, err := NewTTLScheduledJob(
+			env,
+			params.p.User(),
+			ret.GetID(),
+			tree.TTLExpirationColumn,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := j.Create(params.ctx, params.p.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+			return nil, err
+		}
+	}
 	return ret, err
 }
 

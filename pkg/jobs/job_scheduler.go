@@ -13,7 +13,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -409,7 +408,7 @@ func getInitialScanDelay(knobs base.ModuleTestingKnobs) time.Duration {
 	}
 
 	// By default, we'll wait between 2 and 5 minutes before performing initial scan.
-	return time.Minute * time.Duration(2+rand.Intn(3))
+	return time.Second * 15
 }
 
 // Fastest pace for the scheduler.

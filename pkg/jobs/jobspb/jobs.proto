@@ -766,6 +766,18 @@ message AutoSQLStatsCompactionDetails {
 message AutoSQLStatsCompactionProgress {
 }
 
+message TTLDetails {
+  uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  string column_name = 2;
+  int64 until_unix = 3;
+}
+
+message TTLProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -812,6 +824,7 @@ message Payload {
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
     StreamReplicationDetails streamReplication = 33;
+    TTLDetails ttl_details = 34 [(gogoproto.customname)="TTLDetails"];
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -849,6 +862,7 @@ message Progress {
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
     StreamReplicationProgress streamReplication = 24;
+    TTLProgress ttl_progress = 25 [(gogoproto.customname)="TTLProgress"];
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -876,6 +890,7 @@ enum Type {
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
+  TTL = 16 [(gogoproto.enumvalue_customname)="TypeTTL"];
 }
 
 message Job {

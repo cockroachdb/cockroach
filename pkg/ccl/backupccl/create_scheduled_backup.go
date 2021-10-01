@@ -300,12 +300,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	env := scheduledjobs.ProdJobSchedulerEnv
-	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.JobSchedulerEnv != nil {
-			env = knobs.JobSchedulerEnv
-		}
-	}
+	env := sql.CreateScheduledJobEnv(p.ExecCfg())
 
 	// Evaluate incremental and full recurrence.
 	incRecurrence, err := computeScheduleRecurrence(env.Now(), eval.recurrence)

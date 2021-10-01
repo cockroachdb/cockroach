@@ -775,12 +775,17 @@ const (
 	// ScheduledSQLStatsCompactionExecutor is an executor responsible for the
 	// execution of the scheduled SQL Stats compaction.
 	ScheduledSQLStatsCompactionExecutor
+
+	// ScheduledTTLExecutor is an executor responsible for the execution of
+	// row-level TTL cleanup.
+	ScheduledTTLExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
 	InvalidExecutor:                     "unknown-executor",
 	ScheduledBackupExecutor:             "scheduled-backup-executor",
 	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
+	ScheduledTTLExecutor:                "scheduled-ttl-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -796,6 +801,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 		return "BACKUP"
 	case ScheduledSQLStatsCompactionExecutor:
 		return "SQL STATISTICS"
+	case ScheduledTTLExecutor:
+		return "TTL"
 	}
 	return "unsupported-executor"
 }
