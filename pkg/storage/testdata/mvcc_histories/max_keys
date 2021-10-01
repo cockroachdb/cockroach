@@ -23,9 +23,9 @@ with ts=300,0 k=a end=z max=1
   scan reverse=true
 ----
 scan: "a" -> /BYTES/val-a @1.000000000,0
-scan: resume span ["aa","z")
+scan: resume span ["aa","z") RESUME_KEY_LIMIT
 scan: "e" -> /BYTES/val-e @1.000000000,0
-scan: resume span ["a","c\x00")
+scan: resume span ["a","c\x00") RESUME_KEY_LIMIT
 
 # Limit -1 works: nothing is returned, go straight to resume span. We use this
 # when executing the remaining scans in a batch after already exhausting the
@@ -35,9 +35,9 @@ with ts=300,0 k=a end=z max=-1
   scan
   scan reverse=true
 ----
-scan: resume span ["a","z")
+scan: resume span ["a","z") RESUME_KEY_LIMIT
 scan: "a"-"z" -> <no data>
-scan: resume span ["a","z")
+scan: resume span ["a","z") RESUME_KEY_LIMIT
 scan: "a"-"z" -> <no data>
 
 # Limit and tombstones: the tombstones count.
@@ -47,7 +47,7 @@ with ts=300,0 k=a end=z max=2 tombstones=true
 ----
 scan: "a" -> /BYTES/val-a @1.000000000,0
 scan: "aa" -> /<empty> @2.000000000,0
-scan: resume span ["c","z")
+scan: resume span ["c","z") RESUME_KEY_LIMIT
 
 # Ditto in reverse.
 run ok
@@ -56,7 +56,7 @@ with ts=300,0 k=a end=d max=2 tombstones=true reverse=true
 ----
 scan: "c" -> /BYTES/val-c @1.000000000,0
 scan: "aa" -> /<empty> @2.000000000,0
-scan: resume span ["a","a\x00")
+scan: resume span ["a","a\x00") RESUME_KEY_LIMIT
 
 # No limit = zero limit = infinity limit (zero is preferred).
 run ok
@@ -115,11 +115,11 @@ with t=A ts=11,0 max=3
 scan: "k" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
-scan: resume span ["n","o")
+scan: resume span ["n","o") RESUME_KEY_LIMIT
 scan: "n" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
-scan: resume span ["k","k\x00")
+scan: resume span ["k","k\x00") RESUME_KEY_LIMIT
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a
@@ -179,7 +179,7 @@ with t=B ts=12,0 max=3
 scan: "k" -> /BYTES/b @12.000000000,0
 scan: "l" -> /BYTES/b @12.000000000,0
 scan: "m" -> /BYTES/b @12.000000000,0
-scan: resume span ["n","o")
+scan: resume span ["n","o") RESUME_KEY_LIMIT
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a
