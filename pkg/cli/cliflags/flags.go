@@ -318,6 +318,13 @@ accidents. This can also be overridden in a session with SET
 sql_safe_updates = FALSE.`,
 	}
 
+	ReadOnly = FlagInfo{
+		Name: "read-only",
+		Description: `
+Disable SQL statements which perform writes. This works by setting the session
+variable default_transaction_read_only to true.`,
+	}
+
 	Set = FlagInfo{
 		Name: "set",
 		Description: `
