@@ -7286,6 +7286,18 @@ func TestUDTChangeDuringImport(t *testing.T) {
 			"cannot drop type \"greeting\"",
 			false,
 		},
+		{
+			"use-in-table",
+			"CREATE TABLE d.foo (i INT PRIMARY KEY, j d.greeting)",
+			"",
+			false,
+		},
+		{
+			"grant",
+			"CREATE USER u; GRANT USAGE ON TYPE d.greeting TO u;",
+			"",
+			false,
+		},
 	}
 
 	for _, test := range testCases {
