@@ -42,9 +42,10 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 // other than configuring separated intents. So the fact that we have two
 // inconsistent cluster.Settings is harmless.
 
-// NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
-// the default configuration. The caller must call the engine's Close method
-// when the engine is no longer needed. This method randomizes whether separated intents are written.
+// NewDefaultInMemForTesting allocates and returns a new, opened in-memory
+// engine with the default configuration. The caller must call the engine's
+// Close method when the engine is no longer needed. This method randomizes
+// whether separated intents are written.
 func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20), CombineOptions(opts...))
 	if err != nil {

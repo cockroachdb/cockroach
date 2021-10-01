@@ -121,15 +121,16 @@ func computeMinIntentTimestamp(
 		}
 		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
 		if err != nil {
-			continue
+			return hlc.Timestamp{}, nil, errors.Wrapf(err, "decoding LockTable key: %v", lockedKey)
 		}
 		// Unmarshal.
 		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
 			return hlc.Timestamp{}, nil, errors.Wrapf(err, "unmarshaling mvcc meta: %v", lockedKey)
 		}
 		if meta.Txn == nil {
-			return hlc.Timestamp{}, nil, errors.Errorf("nil transaction in LockTable. Key: %v, mvcc meta: %v",
-				lockedKey, meta)
+			return hlc.Timestamp{}, nil,
+				errors.AssertionFailedf("nil transaction in LockTable. Key: %v,"+"mvcc meta: %v",
+					lockedKey, meta)
 		}
 
 		if minTS.IsEmpty() {

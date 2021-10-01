@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"regexp"
 	"testing"
 	"time"
 
@@ -213,7 +212,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	}
 }
 
-func TestSeparatedIntentErrors(t *testing.T) {
+func TestQueryResolvedTimestampErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -254,7 +253,7 @@ func TestSeparatedIntentErrors(t *testing.T) {
 		require.NoError(t, db.PutEngineKey(engineKey, buf))
 		_, err := QueryResolvedTimestamp(ctx, db, cArgs, &resp)
 		require.Error(t, err)
-		require.Regexp(t, regexp.MustCompile(`unmarshaling mvcc meta`), err.Error())
+		require.Regexp(t, "unmarshaling mvcc meta", err.Error())
 	})
 	t.Run("LockTable entry without txn in metadata", func(t *testing.T) {
 		var meta enginepb.MVCCMetadata
@@ -265,6 +264,6 @@ func TestSeparatedIntentErrors(t *testing.T) {
 		resp.Reset()
 		_, err = QueryResolvedTimestamp(ctx, db, cArgs, &resp)
 		require.Error(t, err)
-		require.Regexp(t, regexp.MustCompile(`nil transaction in LockTable`), err.Error())
+		require.Regexp(t, "nil transaction in LockTable", err.Error())
 	})
 }
