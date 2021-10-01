@@ -286,7 +286,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				}
 			}
 
-			if params.p.execCfg.TenantTestingKnobs != nil {
+			if knobs := params.p.execCfg.TenantTestingKnobs; knobs != nil && knobs.ClusterSettingsUpdater != nil {
 				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, n.name, encoded, n.setting.Typ()); err != nil {
 					return err
 				}

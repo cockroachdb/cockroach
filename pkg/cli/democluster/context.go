@@ -96,6 +96,21 @@ type Context struct {
 	// ListeningURLFile can be set to a file which is written to after
 	// the demo cluster has started, to contain a valid connection URL.
 	ListeningURLFile string
+
+	// Multitenant is true if we're starting the demo cluster in
+	// multi-tenant mode.
+	Multitenant bool
+}
+
+func NewDemoCtx() *Context {
+	return &Context{
+		NumNodes:            1,
+		SQLPoolMemorySize:   128 << 20, // 128MB, chosen to fit 9 nodes on 2GB machine.
+		CacheSize:           64 << 20,  // 64MB, chosen to fit 9 nodes on 2GB machine.
+		DefaultKeySize:      1024,
+		DefaultCALifetime:   24 * time.Hour,
+		DefaultCertLifetime: 2 * time.Hour,
+	}
 }
 
 // IsInteractive returns true if the demo cluster configuration

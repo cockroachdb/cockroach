@@ -1206,6 +1206,14 @@ More information about the geo-partitioned replicas topology can be found at:
 		`, docs.URL("topology-geo-partitioned-replicas.html")),
 	}
 
+	DemoMultitenant = FlagInfo{
+		Name: "multitenant",
+		Description: `
+If set, cockroach demo will start separate in-memory KV and SQL servers in multi-tenancy mode.
+The SQL shell will be connected to the first tenant, and can be switched between tenants
+and the system tenant.`,
+	}
+
 	DemoNoLicense = FlagInfo{
 		Name: "disable-demo-license",
 		Description: `
