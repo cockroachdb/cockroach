@@ -207,7 +207,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
+			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true, false)
 			require.NoError(t, err)
 			sqlConnCtx := clisqlclient.Context{}
 			conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())

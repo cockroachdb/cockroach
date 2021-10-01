@@ -12,6 +12,7 @@ package clierror
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -32,6 +33,7 @@ func CheckAndMaybeLog(
 		severity = ec.GetSeverity()
 		cause = ec.Unwrap()
 	}
+	debug.PrintStack()
 	logger(context.Background(), severity, "%v", cause)
 	return err
 }

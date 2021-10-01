@@ -28,6 +28,10 @@ type Context struct {
 	// modified when adding new nodes.
 	NumNodes int
 
+	// NumKVNodes is the number of nodes in NumNodes that are KV; the rest are
+	// tenant nodes.
+	NumKVNodes int
+
 	// SQLPoolMemorySize is the size of the memory pool for each SQL
 	// server.
 	SQLPoolMemorySize int64
@@ -96,6 +100,10 @@ type Context struct {
 	// ListeningURLFile can be set to a file which is written to after
 	// the demo cluster has started, to contain a valid connection URL.
 	ListeningURLFile string
+
+	// Multitenant is true if we're starting the demo cluster in
+	// multi-tenant mode.
+	Multitenant bool
 }
 
 // IsInteractive returns true if the demo cluster configuration
