@@ -17,7 +17,10 @@ import {
   DiagnosticStatusBadge,
 } from "src/statementsDiagnostics";
 import { getHighlightedText } from "src/highlightedText";
-import { AggregateStatistics } from "src/statementsTable";
+import {
+  AggregateStatistics,
+  detailedShortStatement,
+} from "src/statementsTable";
 import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
 
@@ -27,10 +30,9 @@ import {
   databaseAttr,
   aggregatedTsAttr,
   propsToQueryString,
-  summarize,
+  detailedSummarize,
   TimestampToMoment,
 } from "src/util";
-import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Download } from "@cockroachlabs/icons";
@@ -176,7 +178,7 @@ export const StatementLink = ({
   database,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
-  const summary = summarize(statement);
+  const summary = detailedSummarize(statement);
   const onStatementClick = React.useCallback(() => {
     if (onClick) {
       onClick(statement);
@@ -205,7 +207,7 @@ export const StatementLink = ({
         >
           <div className="cl-table-link__tooltip-hover-area">
             {getHighlightedText(
-              shortStatement(summary, statement),
+              detailedShortStatement(summary, statement),
               search,
               false,
               true,

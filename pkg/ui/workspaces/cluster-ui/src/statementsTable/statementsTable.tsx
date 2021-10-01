@@ -218,7 +218,10 @@ export interface AggregateStatistics {
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-export function shortStatement(summary: StatementSummary, original: string) {
+export function shortStatement(
+  summary: StatementSummary,
+  original: string,
+): string {
   switch (summary.statement) {
     case "update":
       return "UPDATE " + summary.table;
@@ -234,6 +237,18 @@ export function shortStatement(summary: StatementSummary, original: string) {
       return "SET " + summary.table;
     default:
       return original;
+  }
+}
+
+export function detailedShortStatement(
+  summary: StatementSummary,
+  original: string,
+): string {
+  switch (summary.statement) {
+    case "select":
+      return "SELECT " + summary.columns + " FROM " + summary.table;
+    default:
+      return shortStatement(summary, original);
   }
 }
 
