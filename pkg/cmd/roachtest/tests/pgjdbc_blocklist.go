@@ -14,11 +14,14 @@ var pgjdbcBlocklists = blocklistsForVersion{
 	{"v20.2", "pgjdbcBlockList20_2", pgjdbcBlockList20_2, "pgjdbcIgnoreList20_2", pgjdbcIgnoreList20_2},
 	{"v21.1", "pgjdbcBlockList21_1", pgjdbcBlockList21_1, "pgjdbcIgnoreList21_1", pgjdbcIgnoreList21_1},
 	{"v21.2", "pgjdbcBlockList21_2", pgjdbcBlockList21_2, "pgjdbcIgnoreList21_2", pgjdbcIgnoreList21_2},
+	{"v22.1", "pgjdbcBlockList22_1", pgjdbcBlockList22_1, "pgjdbcIgnoreList22_1", pgjdbcIgnoreList22_1},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var pgjdbcBlockList22_1 = pgjdbcBlockList21_2
+
 var pgjdbcBlockList21_2 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator":                                                                                                                      "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":                                                                                                                                "26508",
@@ -2526,6 +2529,8 @@ var pgjdbcBlockList20_2 = blocklist{
 	"org.postgresql.test.xa.XADataSourceTest.testTwoPhaseCommit":                                                                                                               "22329",
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
+
+var pgjdbcIgnoreList22_1 = pgjdbcIgnoreList21_2
 
 var pgjdbcIgnoreList21_2 = pgjdbcIgnoreList21_1
 
