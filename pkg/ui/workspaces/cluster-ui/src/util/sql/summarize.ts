@@ -12,6 +12,7 @@ import _ from "lodash";
 
 export interface StatementSummary {
   statement?: string;
+  columns?: string;
   table?: string;
   error?: string;
 }
@@ -53,4 +54,72 @@ export function summarize(statement: string): StatementSummary {
   return {
     error: "unimplemented",
   };
+}
+
+// detailedSummarize takes a string SQL statement and produces a
+// structured summary of the query, with columns and join/nested table info
+export function detailedSummarize(statement: string): StatementSummary {
+  const statementTypes: { [key: string]: RegExp } = {
+    select: /^select\s+(?<columns>.+)\s+from\s+(?<table>.+)/i,
+  };
+
+  const sqlKeywords = new Set(["ON", "WHERE", "ORDER BY"]);
+
+  function simplifySubquery(subquery: string) {
+    const innerSelectRegex = /^\(select.+from\s+(?<table>.+)\)(\s+as\s+(?<alias>\S+))?/i;
+    const match = subquery.match(innerSelectRegex);
+    if (match && match.groups.table) {
+      subquery = "(SELECT FROM " + match.groups.table + ")";
+      if (match.groups.alias) {
+        subquery += " AS " + match.groups.alias;
+      }
+    }
+    return subquery;
+  }
+
+  for (const [statementType, pattern] of Object.entries(statementTypes)) {
+    const statementMatch = statement.match(pattern);
+    if (
+      statementMatch &&
+      statementMatch.groups.columns &&
+      statementMatch.groups.table
+    ) {
+      // get columns from regex
+      let columns = statementMatch.groups.columns
+        .split(", ")
+        .map(col => simplifySubquery(col)) // simplify nested selects
+        .join(", ");
+
+      const columnLimit = 15;
+      if (columns.length > columnLimit) {
+        columns = columns.slice(0, columnLimit) + "...";
+      }
+
+      // get tables from regex
+      let table = statementMatch.groups.table;
+      for (const keyword of sqlKeywords) {
+        const keywordIndex = table.indexOf(keyword);
+        if (keywordIndex !== -1) {
+          table = table.slice(0, keywordIndex - 1);
+        }
+      }
+      table = table
+        .split(", ")
+        .map(table => simplifySubquery(table)) // simplify nested selects
+        .join(", ");
+
+      const tableLimit = 30;
+      if (table.length > tableLimit) {
+        table = table.slice(0, tableLimit) + "...";
+      }
+
+      return {
+        statement: statementType,
+        columns,
+        table,
+      };
+    }
+  }
+
+  return summarize(statement);
 }
