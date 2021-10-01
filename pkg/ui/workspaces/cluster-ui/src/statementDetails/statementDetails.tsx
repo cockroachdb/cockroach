@@ -401,10 +401,11 @@ export class StatementDetails extends React.Component<
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
+            className="small-margin"
           >
             Statements
           </Button>
-          <h3 className={cx("base-heading", "page--header__title")}>
+          <h3 className={cx("base-heading", "no-margin-bottom")}>
             Statement Details
           </h3>
         </div>
@@ -782,7 +783,7 @@ export class StatementDetails extends React.Component<
           className={cx("fit-content-width")}
         >
           <SummaryCard>
-            <h2
+            <h3
               className={classNames(
                 cx("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
@@ -800,7 +801,7 @@ export class StatementDetails extends React.Component<
                   </div>
                 </Tooltip>
               </div>
-            </h2>
+            </h3>
             <NumericStatTable
               title="Phase"
               measure="Latency"
@@ -825,14 +826,14 @@ export class StatementDetails extends React.Component<
             />
           </SummaryCard>
           <SummaryCard>
-            <h2
+            <h3
               className={classNames(
                 cx("base-heading"),
                 summaryCardStylesCx("summary--card__title"),
               )}
             >
               Other Execution Statistics
-            </h2>
+            </h3>
             <NumericStatTable
               title="Stat"
               measure="Quantity"
@@ -875,7 +876,7 @@ export class StatementDetails extends React.Component<
           </SummaryCard>
           {!isTenant && (
             <SummaryCard className={cx("fit-content-width")}>
-              <h2
+              <h3
                 className={classNames(
                   cx("base-heading"),
                   summaryCardStylesCx("summary--card__title"),
@@ -893,7 +894,7 @@ export class StatementDetails extends React.Component<
                     </div>
                   </Tooltip>
                 </div>
-              </h2>
+              </h3>
               <StatementsSortedTable
                 className={cx("statements-table")}
                 data={statsByNode}
