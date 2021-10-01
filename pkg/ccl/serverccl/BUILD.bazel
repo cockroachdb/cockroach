@@ -49,6 +49,8 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/idxusage",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
