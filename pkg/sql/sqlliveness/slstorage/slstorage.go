@@ -402,7 +402,7 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		k := s.makeSessionKey(sid)
-		kv, err := s.db.Get(ctx, k)
+		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
 		}
@@ -410,7 +410,7 @@ func (s *Storage) Update(
 			return nil
 		}
 		v := encodeValue(expiration)
-		return s.db.Put(ctx, k, &v)
+		return txn.Put(ctx, k, &v)
 	})
 	if err != nil || !sessionExists {
 		s.metrics.WriteFailures.Inc(1)
