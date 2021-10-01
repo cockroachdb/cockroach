@@ -198,9 +198,6 @@ type TracerTestingKnobs struct {
 	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
 	// is otherwise disabled.
 	ForceRealSpans bool
-	// RecordEmptyTraces, if set, forces the Tracer to generate recordings for
-	// "empty" traces.
-	RecordEmptyTraces bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -588,9 +585,9 @@ func (t *Tracer) startSpanGeneric(
 		span     Span
 		crdbSpan crdbSpan
 		octx     optimizedContext
-		// tagsAlloc preallocates space for crdbSpan.mu.tags.
-		tagsAlloc [3]attribute.KeyValue
-		// structuredEventsAlloc preallocates space for structured events.
+		// Pre-allocated buffers for the span.
+		tagsAlloc             [3]attribute.KeyValue
+		childrenAlloc         [4]*crdbSpan
 		structuredEventsAlloc [3]interface{}
 	}{}
 
@@ -603,13 +600,14 @@ func (t *Tracer) startSpanGeneric(
 		logTags:      opts.LogTags,
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
+			tags:     helper.tagsAlloc[:0],
 		},
 		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
 	helper.crdbSpan.mu.recording.structured = makeSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
-	helper.crdbSpan.mu.tags = helper.tagsAlloc[:0]
+	helper.crdbSpan.mu.recording.openChildren = helper.childrenAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
@@ -621,20 +619,6 @@ func (t *Tracer) startSpanGeneric(
 		sterile:  opts.Sterile,
 	}
 
-	// Copy over the parent span's root span reference, and if there isn't one
-	// (we're creating a new root span), set a reference to ourselves.
-	//
-	// TODO(irfansharif): Given we have a handle on the root span, we should
-	// reconsider the maxChildrenPerSpan limit, which only limits the branching
-	// factor. To bound the total memory usage for pkg/tracing, we could instead
-	// limit the number of spans per trace (no-oping all subsequent ones) and
-	// do the same for the total number of root spans.
-	if rootSpan := opts.deriveRootSpan(); rootSpan != nil {
-		helper.crdbSpan.rootSpan = rootSpan
-	} else {
-		helper.crdbSpan.rootSpan = &helper.crdbSpan
-	}
-
 	s := &helper.span
 
 	{
@@ -644,6 +628,7 @@ func (t *Tracer) startSpanGeneric(
 		// We inherit the recording type of the local parent, if any, over the
 		// remote parent, if any. If neither are specified, we're not recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
+			s.i.crdb.parent = opts.Parent.i.crdb
 			defer opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
