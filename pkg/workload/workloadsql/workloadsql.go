@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -101,6 +102,18 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 		return err
 	}
 
+	// Check to see if we're allowed to perform any splits - if we're in a tenant,
+	// we can't perform splits.
+	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
+	if err != nil {
+		if strings.Contains(err.Error(), "not fully contained in tenant") {
+			log.Infof(ctx, `not perform workload splits; can't split on tenants'`)
+			//nolint:returnerrcheck
+			return nil
+		}
+		return err
+	}
+
 	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
@@ -116,6 +129,8 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	splitCh := make(chan pair, len(splitPoints)/2+1)
 	splitCh <- pair{0, len(splitPoints)}
 	doneCh := make(chan struct{})
+
+	// Check to see if we're on a tenant;
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
@@ -143,6 +158,12 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// not) help you.
 					stmt := buf.String()
 					if _, err := db.Exec(stmt); err != nil {
+						mtErr := errorutil.UnsupportedWithMultiTenancy(0)
+						if strings.Contains(err.Error(), mtErr.Error()) {
+							// We don't care about split errors if we're running a workload
+							// in multi-tenancy mode; we can't do them so we'll just continue
+							break
+						}
 						return errors.Wrapf(err, "executing %s", stmt)
 					}
 
