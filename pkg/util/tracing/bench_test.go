@@ -121,8 +121,6 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 func BenchmarkSpanCreation(b *testing.B) {
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{
 		ForceRealSpans: true,
-		// Disable optimizations for empty traces.
-		RecordEmptyTraces: true,
 	}))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

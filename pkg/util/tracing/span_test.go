@@ -406,8 +406,9 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
-	require.Equal(t, 1, sp.i.crdb.mu.recording.children.len())
-	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children.get(0))
+	children := sp.i.crdb.mu.recording.openChildren
+	require.Len(t, children, 1)
+	require.Equal(t, ch.i.crdb, children[0])
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
@@ -422,13 +423,12 @@ func TestSpanMaxChildren(t *testing.T) {
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 	for i := 0; i < maxChildrenPerSpan+123; i++ {
-		ch := tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
-		ch.Finish()
+		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
 		exp := i + 1
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
-		require.Equal(t, exp, sp.i.crdb.mu.recording.children.len())
+		require.Len(t, sp.i.crdb.mu.recording.openChildren, exp)
 	}
 }
 
@@ -516,7 +516,7 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	sp.SetTag("foo2", attribute.StringValue("bar2"))
 	sp.Record("dummy recording")
 	rec := sp.GetRecording()
-	require.Len(t, rec, 0)
+	require.Len(t, rec, 1)
 	// We didn't stringify the log tag.
 	require.Zero(t, int(counter))
 

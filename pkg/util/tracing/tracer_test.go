@@ -70,7 +70,9 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	if err := CheckRecordedSpans(s1.GetRecording(), ``); err != nil {
+	if err := CheckRecordedSpans(s1.GetRecording(), `
+		span: a
+	`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,6 +139,8 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+	// We Finish() s3, but note that the recording shows it as _unfinished. That's
+	// because s2's recording was snapshotted at the time s2 was finished, above.
 	s3.Finish()
 	if err := CheckRecordedSpans(s1.GetRecording(), `
 		span: a
@@ -146,7 +150,7 @@ func TestTracerRecording(t *testing.T) {
 				tags: _verbose=1
 				event: x=3
 				span: c
-					tags: _verbose=1 tag=val
+					tags: _unfinished=1 _verbose=1 tag=val
 					event: x=4
 	`); err != nil {
 		t.Fatal(err)
@@ -640,4 +644,58 @@ func TestConcurrentChildAndRecording(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestFinishedSpanInRecording(t *testing.T) {
+	tr := NewTracer()
+	s1 := tr.StartSpan("a", WithForceRealSpan())
+	s1.SetVerbose(true)
+	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
+	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
+
+	// Check that s2 is included in the recording both before and after it's
+	// finished.
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+span: a
+    tags: _unfinished=1 _verbose=1
+    span: b
+        tags: _unfinished=1 _verbose=1
+        span: c
+            tags: _unfinished=1 _verbose=1
+`))
+	s3.Finish()
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+span: a
+    tags: _unfinished=1 _verbose=1
+    span: b
+        tags: _unfinished=1 _verbose=1
+        span: c
+            tags: _verbose=1
+`))
+	s2.Finish()
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+span: a
+    tags: _unfinished=1 _verbose=1
+    span: b
+        tags: _verbose=1
+        span: c
+            tags: _verbose=1
+`))
+
+	// Now the same thing, but finish s2 first.
+	s1 = tr.StartSpan("a", WithForceRealSpan())
+	s1.SetVerbose(true)
+	s2 = tr.StartSpan("b", WithParentAndAutoCollection(s1))
+	tr.StartSpan("c", WithParentAndAutoCollection(s2))
+
+	s2.Finish()
+	s1.Finish()
+	require.NoError(t, CheckRecordedSpans(s1.GetRecording(), `
+span: a
+    tags: _verbose=1
+    span: b
+        tags: _verbose=1
+        span: c
+            tags: _unfinished=1 _verbose=1
+`))
 }
