@@ -146,8 +146,8 @@ type Memo struct {
 	dateStyle               pgdate.DateStyle
 	intervalStyle           duration.IntervalStyle
 
-	// curID is the highest currently in-use scalar expression ID.
-	curID opt.ScalarID
+	// curRank is the highest currently in-use scalar expression rank.
+	curRank opt.ScalarRank
 
 	// curWithID is the highest currently in-use WITH ID.
 	curWithID opt.WithID
@@ -368,15 +368,15 @@ func (m *Memo) IsOptimized() bool {
 	return ok && rel.RequiredPhysical() != nil
 }
 
-// NextID returns a new unique ScalarID to number expressions with.
-func (m *Memo) NextID() opt.ScalarID {
-	m.curID++
-	return m.curID
+// NextRank returns a new rank that can be assigned to a scalar expression.
+func (m *Memo) NextRank() opt.ScalarRank {
+	m.curRank++
+	return m.curRank
 }
 
-// CopyNextIDFrom copies the next ScalarID from the other memo.
-func (m *Memo) CopyNextIDFrom(other *Memo) {
-	m.curID = other.curID
+// CopyNextRankFrom copies the next ScalarRank from the other memo.
+func (m *Memo) CopyNextRankFrom(other *Memo) {
+	m.curRank = other.curRank
 }
 
 // RequestColStat calculates and returns the column statistic calculated on the
