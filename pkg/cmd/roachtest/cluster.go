@@ -1737,6 +1737,26 @@ fi
 		branch))
 }
 
+// GitCloneWithRecurseSubmodules clones a git repo from src into dest and checks out origin's
+// version of the given branch, but with a --recurse-submodules flag.
+// The src, dest, and branch arguments must not contain shell special characters.
+func (c *clusterImpl) GitCloneWithRecurseSubmodules(
+	ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
+) error {
+	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
+if ! test -d %s; then
+  git clone --recurse-submodules -b %s --depth 1 %s %s
+else
+  cd %s
+  git fetch origin
+  git checkout origin/%s
+fi
+'`, dest,
+		branch, src, dest,
+		dest,
+		branch))
+}
+
 func roachprodArgs(opts []option.Option) []string {
 	var args []string
 	for _, opt := range opts {

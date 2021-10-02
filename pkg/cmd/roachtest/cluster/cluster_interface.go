@@ -118,4 +118,7 @@ type Cluster interface {
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
+	GitCloneWithRecurseSubmodules(
+		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
+	) error
 }
