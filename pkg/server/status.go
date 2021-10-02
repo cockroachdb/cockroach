@@ -994,6 +994,24 @@ func checkFilePattern(pattern string) error {
 }
 
 // LogFilesList returns a list of available log files.
+//
+// Note that even though the FileInfo struct does not store the path
+// to the log file(s), each file can be mapped back to its directory
+// reliably via LogFile(), thanks to the unique file group names in
+// the log configuration. For example, consider the following config:
+//
+// file-groups:
+//    groupA:
+//      dir: dir1
+//    groupB:
+//      dir: dir2
+//
+// The result of ListLogFiles on this config will return the list
+// {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without
+// directory information. This can be mapped back to dir1 and dir2 via the
+// configuration. We know that groupA files cannot be in dir2 because
+// the group names are unique under file-groups and so there cannot be
+// two different groups with the same name and different directories.
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
@@ -1024,6 +1042,9 @@ func (s *statusServer) LogFilesList(
 }
 
 // LogFile returns a single log file.
+//
+// See the comment on LogfilesList() to understand why+how log file
+// names are mapped to their full path.
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
@@ -1053,7 +1074,7 @@ func (s *statusServer) LogFile(
 	log.Flush()
 
 	// Read the logs.
-	reader, err := log.GetLogReader(req.File, true /* restricted */)
+	reader, err := log.GetLogReader(req.File)
 	if err != nil {
 		return nil, errors.Wrapf(err, "log file %q could not be opened", req.File)
 	}
