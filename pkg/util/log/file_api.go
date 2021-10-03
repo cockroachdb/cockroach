@@ -168,6 +168,22 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	return dir, results, nil
 }
 
+func lockAndGetLogReader(filename string, restricted bool) (io.ReadCloser, *fileSink, error) {
+	fileSink := debugLog.getFileSink()
+	if fileSink == nil || !fileSink.enabled.Get() {
+		return nil, nil, errNoFileLogging
+	}
+
+	// Lock access to the file sink.
+	fileSink.mu.Lock()
+	dir := fileSink.mu.logDir
+	if dir == "" {
+		return nil, nil, errDirectoryNotSet
+	}
+
+	return getLogReader(filename, dir, fileSink, restricted)
+}
+
 // GetLogReader returns a reader for the specified filename. In
 // restricted mode, the filename must be the base name of a file in
 // this process's log directory (this is safe for cases when the
@@ -184,6 +200,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		return nil, errNoFileLogging
 	}
 
+	// Lock access to the directory name.
 	fileSink.mu.Lock()
 	dir := fileSink.mu.logDir
 	fileSink.mu.Unlock()
@@ -191,64 +208,89 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		return nil, errDirectoryNotSet
 	}
 
+	reader, _, err := getLogReader(filename, dir, nil /* fileSink */, restricted)
+
+	return reader, err
+}
+
+func getLogReader(
+	filename string, dir string, fileSink *fileSink, restricted bool,
+) (io.ReadCloser, *fileSink, error) {
 	switch restricted {
 	case true:
 		// Verify there are no path separators in a restricted-mode pathname.
 		if filepath.Base(filename) != filename {
-			return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
+			muUnlock(fileSink)
+			return nil, nil, errors.Errorf("pathnames must be basenames only: %s", filename)
 		}
 		filename = filepath.Join(dir, filename)
 		// Symlinks are not followed in restricted mode.
 		info, err := os.Lstat(filename)
 		if err != nil {
+			muUnlock(fileSink)
 			if oserror.IsNotExist(err) {
-				return nil, errors.Errorf("no such file %s in the log directory", filename)
+				return nil, nil, errors.Errorf("no such file %s in the log directory", filename)
 			}
-			return nil, errors.Wrapf(err, "Lstat: %s", filename)
+			return nil, nil, errors.Wrapf(err, "Lstat: %s", filename)
 		}
 		mode := info.Mode()
 		if mode&os.ModeSymlink != 0 {
-			return nil, errors.Errorf("symlinks are not allowed")
+			muUnlock(fileSink)
+			return nil, nil, errors.Errorf("symlinks are not allowed")
 		}
 		if !mode.IsRegular() {
-			return nil, errors.Errorf("not a regular file")
+			muUnlock(fileSink)
+			return nil, nil, errors.Errorf("not a regular file")
 		}
 	case false:
 		info, err := os.Stat(filename)
 		if err != nil {
+			muUnlock(fileSink)
 			if !oserror.IsNotExist(err) {
-				return nil, errors.Wrapf(err, "Stat: %s", filename)
+				return nil, nil, errors.Wrapf(err, "Stat: %s", filename)
 			}
 			// The absolute filename didn't work, so try within the log
 			// directory if the filename isn't a path.
 			if filepath.IsAbs(filename) {
-				return nil, errors.Errorf("no such file %s", filename)
+				return nil, nil, errors.Errorf("no such file %s", filename)
 			}
 			filenameAttempt := filepath.Join(dir, filename)
 			info, err = os.Stat(filenameAttempt)
 			if err != nil {
+				muUnlock(fileSink)
 				if oserror.IsNotExist(err) {
-					return nil, errors.Errorf("no such file %s either in current directory or in %s", filename, dir)
+					return nil, nil, errors.Errorf("no such file %s either in current directory or in %s", filename, dir)
 				}
-				return nil, errors.Wrapf(err, "Stat: %s", filename)
+				return nil, nil, errors.Wrapf(err, "Stat: %s", filename)
 			}
 			filename = filenameAttempt
 		}
 		filename, err = filepath.EvalSymlinks(filename)
 		if err != nil {
-			return nil, err
+			muUnlock(fileSink)
+			return nil, nil, err
 		}
 		if !info.Mode().IsRegular() {
-			return nil, errors.Errorf("not a regular file")
+			muUnlock(fileSink)
+			return nil, nil, errors.Errorf("not a regular file")
 		}
 	}
 
 	// Check that the file name is valid.
 	if _, err := ParseLogFilename(filepath.Base(filename)); err != nil {
-		return nil, err
+		muUnlock(fileSink)
+		return nil, nil, err
 	}
 
-	return os.Open(filename)
+	file, err := os.Open(filename)
+
+	return file, fileSink, err
+}
+
+func muUnlock(fileSink *fileSink) {
+	if fileSink != nil {
+		fileSink.mu.Unlock()
+	}
 }
 
 // sortablelogpb.FileInfoSlice is required so we can sort logpb.FileInfos.
@@ -373,11 +415,12 @@ func readAllEntriesFromFile(
 	editMode EditSensitiveData,
 	format string,
 ) ([]logpb.Entry, bool, error) {
-	reader, err := GetLogReader(file.Name, true /* restricted */)
+	reader, fileSink, err := lockAndGetLogReader(file.Name, true /* restricted */)
 	if err != nil {
 		return nil, false, err
 	}
 	defer reader.Close()
+	defer fileSink.mu.Unlock()
 	entries := []logpb.Entry{}
 	decoder, err := NewEntryDecoderWithFormat(reader, editMode, format)
 	if err != nil {
