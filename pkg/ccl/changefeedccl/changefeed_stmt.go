@@ -741,7 +741,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

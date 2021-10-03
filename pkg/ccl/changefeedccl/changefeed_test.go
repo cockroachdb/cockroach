@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2338,6 +2339,72 @@ func TestChangefeedRetryableError(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
+}
+
+type alwaysAliveSession string
+
+func (f alwaysAliveSession) ID() sqlliveness.SessionID                              { return sqlliveness.SessionID(f) }
+func (f alwaysAliveSession) Expiration() hlc.Timestamp                              { return hlc.MaxTimestamp }
+func (f alwaysAliveSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}
+
+func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set TestingKnobs to return a known session for easier
+	// comparison.
+	testSession := alwaysAliveSession("known-test-session")
+	adoptionInterval := 20 * time.Minute
+	sessionOverride := withKnobsFn(func(knobs *base.TestingKnobs) {
+		knobs.SQLLivenessKnobs = &sqlliveness.TestingKnobs{
+			SessionOverride: func(_ context.Context) (sqlliveness.Session, error) {
+				return testSession, nil
+			},
+		}
+		// This is a hack to avoid the job adoption loop from
+		// immediately re-adopting the job that is running. The job
+		// adoption loop basically just sets the claim ID, which will
+		// undo our deletion of the claim ID below.
+		knobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.Adopt = &adoptionInterval
+	})
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().TestingKnobs().DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		errChan := make(chan error, 1)
+		knobs.HandleDistChangefeedError = func(err error) error {
+			errChan <- err
+			return err
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+		sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (1, 1)`)
+
+		cf := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
+		defer closeFeed(t, cf)
+
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"a": 1, "b": 1}}`,
+		})
+
+		// Mimic the claim dying and being cleaned up by
+		// another node.
+		jobID := cf.(cdctest.EnterpriseTestFeed).JobID()
+		sqlDB.Exec(t, `UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`, jobID)
+
+		// Expect that the distflow fails since it can't
+		// update the checkpoint.
+		select {
+		case err := <-errChan:
+			require.Error(t, err)
+			// TODO(ssd): Replace this error in the jobs system with
+			// an error type we can check against.
+			require.Contains(t, err.Error(), fmt.Sprintf("expected session '%s' but found NULL", testSession.ID().String()))
+		case <-time.After(5 * time.Second):
+			t.Fatal("expected distflow to fail but it hasn't after 5 seconds")
+		}
+
+	}
+	RunRandomSinkTest(t, "fails as expected", testFn, feedTestNoTenants, sessionOverride)
 }
 
 // TestChangefeedDataTTL ensures that changefeeds fail with an error in the case
