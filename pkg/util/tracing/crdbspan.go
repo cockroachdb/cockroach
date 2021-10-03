@@ -55,11 +55,7 @@ type crdbSpan struct {
 	logTags *logtags.Buffer
 
 	mu      crdbSpanMu
-	testing *testingKnob
-}
-
-type testingKnob struct {
-	clock timeutil.TimeSource
+	testing *TracerTestingKnobs
 }
 
 type crdbSpanMu struct {
@@ -290,8 +286,8 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	}
 
 	var now time.Time
-	if s.testing != nil {
-		now = s.testing.clock.Now()
+	if clock := s.testing.Clock; clock != nil {
+		now = s.testing.Clock.Now()
 	} else {
 		now = time.Now()
 	}

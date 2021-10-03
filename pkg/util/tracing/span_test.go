@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -275,8 +276,7 @@ func TestSpanRecordLimit(t *testing.T) {
 	// Logs include the timestamp, and we want to fix them so they're not
 	// variably sized (needed for the test below).
 	clock := &timeutil.ManualTime{}
-	tr := NewTracer()
-	tr.testing = &testingKnob{clock}
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
@@ -329,8 +329,7 @@ func TestSpanReset(t *testing.T) {
 	// Logs include the timestamp, and we want to fix them so they're not
 	// variably sized (needed for the test below).
 	clock := &timeutil.ManualTime{}
-	tr := NewTracer()
-	tr.testing = &testingKnob{clock}
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
