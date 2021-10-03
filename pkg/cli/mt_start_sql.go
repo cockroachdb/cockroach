@@ -14,12 +14,13 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -63,13 +64,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	const clusterName = ""
 
-	// Remove the default store, which avoids using it to set up logging.
-	// Instead, we'll default to logging to stderr unless --log-dir is
-	// specified. This makes sense since the standalone SQL server is
-	// at the time of writing stateless and may not be provisioned with
-	// suitable storage.
-	serverCfg.Stores.Specs = nil
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
@@ -94,20 +88,36 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	tempStorageMaxSizeBytes := int64(base.DefaultInMemTempStorageMaxSizeBytes)
-	if err := diskTempStorageSizeValue.Resolve(
-		&tempStorageMaxSizeBytes, memoryPercentResolver,
+	// Initialize the target directory for temporary storage. If encryption at
+	// rest is enabled in any fashion, we'll want temp storage to be encrypted
+	// too. To achieve this, we use the first encrypted store as temp dir target,
+	// if any. If we can't find one, we use the first StoreSpec in the list.
+	//
+	// While we look, we also clean up any abandoned temporary directories. We
+	// don't know which store spec was used previously—and it may change if
+	// encryption gets enabled after the fact—so we check each store.
+	var specIdx = 0
+	for i, spec := range serverCfg.Stores.Specs {
+		if spec.IsEncrypted() {
+			// TODO(jackson): One store's EncryptionOptions may say to encrypt
+			// with a real key, while another store's say to use key=plain.
+			// This provides no guarantee that we'll use the encrypted one's.
+			specIdx = i
+		}
+		if spec.InMemory {
+			continue
+		}
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		if err := storage.CleanupTempDirs(recordPath); err != nil {
+			return errors.Wrap(err, "could not cleanup temporary directories from record file")
+		}
+	}
+
+	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
+		ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[specIdx],
 	); err != nil {
 		return err
 	}
-
-	serverCfg.SQLConfig.TempStorageConfig = base.TempStorageConfigFromEnv(
-		ctx,
-		st,
-		base.StoreSpec{InMemory: true},
-		"", // parentDir
-		tempStorageMaxSizeBytes,
-	)
 
 	initGEOS(ctx)
 
