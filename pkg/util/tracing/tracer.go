@@ -198,6 +198,9 @@ type TracerTestingKnobs struct {
 	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
 	// is otherwise disabled.
 	ForceRealSpans bool
+	// RecordEmptyTraces, if set, forces the Tracer to generate recordings for
+	// "empty" traces.
+	RecordEmptyTraces bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead

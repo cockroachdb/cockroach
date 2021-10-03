@@ -222,7 +222,7 @@ func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	// no recordings or baggage. If the trace is verbose, we'll still recurse in
 	// order to pick up all the operations that were part of the trace, despite
 	// nothing having any actual data in them.
-	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() {
+	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() && !s.testing.RecordEmptyTraces {
 		return nil
 	}
 

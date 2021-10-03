@@ -99,3 +99,26 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 		run(b, sp)
 	})
 }
+
+// BenchmarkSpanCreation creates traces with a couple of spans in them.
+func BenchmarkSpanCreation(b *testing.B) {
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{
+		ForceRealSpans: true,
+		// Disable optimizations for empty traces.
+		RecordEmptyTraces: true,
+	}))
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sps := make([]*Span, 0, 10)
+		ctx, sp := tr.StartSpanCtx(context.Background(), "root")
+		sps = append(sps, sp)
+		for j := 0; j < 5; j++ {
+			var sp *Span
+			ctx, sp = EnsureChildSpan(ctx, tr, "child")
+			sps = append(sps, sp)
+		}
+		for j := len(sps) - 1; j >= 0; j-- {
+			sps[j].Finish()
+		}
+	}
+}
