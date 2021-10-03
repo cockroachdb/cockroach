@@ -15,13 +15,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +35,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	db := storage.NewDefaultInMemForTesting()
+	db := storage.NewInMemForTesting(true)
 	defer db.Close()
 
 	makeTS := func(ts int64) hlc.Timestamp {
@@ -47,7 +52,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, nil))
 	}
 
-	// Setup:
+	// Setup: (with separated intents the actual key layout in the store is not what is listed below.)
 	//
 	//  a: intent @ 5
 	//  a: value  @ 3
@@ -205,4 +210,60 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			require.Equal(t, cfg.expEncounteredIntents, enc)
 		})
 	}
+}
+
+func TestQueryResolvedTimestampErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	db := storage.NewInMemForTesting(true)
+	defer db.Close()
+
+	txnUUID := uuid.FromUint128(uint128.FromInts(0, 12345))
+
+	lockTableKey := storage.LockTableKey{
+		Key:      roachpb.Key("a"),
+		Strength: lock.Exclusive,
+		TxnUUID:  txnUUID.GetBytes(),
+	}
+	engineKey, buf := lockTableKey.ToEngineKey(nil)
+
+	st := cluster.MakeTestingClusterSettings()
+
+	manual := hlc.NewManualClock(10)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	evalCtx := &MockEvalCtx{
+		ClusterSettings: st,
+		Clock:           clock,
+		ClosedTimestamp: hlc.Timestamp{WallTime: 5},
+	}
+	cArgs := CommandArgs{
+		EvalCtx: evalCtx.EvalContext(),
+		Args: &roachpb.QueryResolvedTimestampRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    roachpb.Key("a"),
+				EndKey: roachpb.Key("z"),
+			},
+		},
+	}
+	var resp roachpb.QueryResolvedTimestampResponse
+	t.Run("LockTable entry without MVCC metadata", func(t *testing.T) {
+		require.NoError(t, db.PutEngineKey(engineKey, buf))
+		_, err := QueryResolvedTimestamp(ctx, db, cArgs, &resp)
+		require.Error(t, err)
+		require.Regexp(t, "unmarshaling mvcc meta", err.Error())
+	})
+	t.Run("LockTable entry without txn in metadata", func(t *testing.T) {
+		var meta enginepb.MVCCMetadata
+		// we're omitting meta.TxnMeta
+		val, err := protoutil.Marshal(&meta)
+		require.NoError(t, err)
+		require.NoError(t, db.PutEngineKey(engineKey, val))
+		resp.Reset()
+		_, err = QueryResolvedTimestamp(ctx, db, cArgs, &resp)
+		require.Error(t, err)
+		require.Regexp(t, "nil transaction in LockTable", err.Error())
+	})
 }

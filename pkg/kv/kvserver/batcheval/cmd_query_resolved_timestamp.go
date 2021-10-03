@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -99,57 +100,54 @@ func computeMinIntentTimestamp(
 	maxEncounteredIntentKeyBytes int64,
 	intentCleanupThresh hlc.Timestamp,
 ) (hlc.Timestamp, []roachpb.Intent, error) {
-	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-		LowerBound: span.Key,
-		UpperBound: span.EndKey,
-	})
+	ltStart, _ := keys.LockTableSingleKey(span.Key, nil)
+	ltEnd, _ := keys.LockTableSingleKey(span.EndKey, nil)
+	iter := reader.NewEngineIterator(storage.IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
 	defer iter.Close()
 
-	// Iterate through all keys using NextKey. This will look at the first MVCC
-	// version for each key. We're only looking for MVCCMetadata versions, which
-	// will always be the first version of a key if it exists, so its fine that
-	// we skip over all other versions of keys.
 	var meta enginepb.MVCCMetadata
 	var minTS hlc.Timestamp
 	var encountered []roachpb.Intent
 	var encounteredKeyBytes int64
-	for iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key)); ; iter.NextKey() {
-		if ok, err := iter.Valid(); err != nil {
+	for valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = iter.NextEngineKey() {
+		if err != nil {
 			return hlc.Timestamp{}, nil, err
-		} else if !ok {
+		} else if !valid {
 			break
 		}
-
-		// If the key is not a metadata key, ignore it.
-		unsafeKey := iter.UnsafeKey()
-		if unsafeKey.IsValue() {
+		engineKey, err := iter.EngineKey()
+		if err != nil {
 			continue
 		}
-
-		// Found a metadata key. Unmarshal.
+		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		if err != nil {
+			return hlc.Timestamp{}, nil, errors.Wrapf(err, "decoding LockTable key: %v", lockedKey)
+		}
+		// Unmarshal.
 		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
-			return hlc.Timestamp{}, nil, errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+			return hlc.Timestamp{}, nil, errors.Wrapf(err, "unmarshaling mvcc meta: %v", lockedKey)
+		}
+		if meta.Txn == nil {
+			return hlc.Timestamp{}, nil,
+				errors.AssertionFailedf("nil transaction in LockTable. Key: %v,"+"mvcc meta: %v",
+					lockedKey, meta)
 		}
 
-		// If this is an intent, account for it.
-		if meta.Txn != nil {
-			if minTS.IsEmpty() {
-				minTS = meta.Txn.WriteTimestamp
-			} else {
-				minTS.Backward(meta.Txn.WriteTimestamp)
-			}
+		if minTS.IsEmpty() {
+			minTS = meta.Txn.WriteTimestamp
+		} else {
+			minTS.Backward(meta.Txn.WriteTimestamp)
+		}
 
-			// Also, add the intent to the encountered intents set if it is old enough
-			// and we have room, both in terms of the number of intents and the size
-			// of the intent keys.
-			oldEnough := meta.Txn.WriteTimestamp.Less(intentCleanupThresh)
-			intentFitsByCount := int64(len(encountered)) < maxEncounteredIntents
-			intentFitsByBytes := encounteredKeyBytes < maxEncounteredIntentKeyBytes
-			if oldEnough && intentFitsByCount && intentFitsByBytes {
-				key := iter.Key().Key
-				encountered = append(encountered, roachpb.MakeIntent(meta.Txn, key))
-				encounteredKeyBytes += int64(len(key))
-			}
+		// Also, add the intent to the encountered intents set if it is old enough
+		// and we have room, both in terms of the number of intents and the size
+		// of the intent keys.
+		oldEnough := meta.Txn.WriteTimestamp.Less(intentCleanupThresh)
+		intentFitsByCount := int64(len(encountered)) < maxEncounteredIntents
+		intentFitsByBytes := encounteredKeyBytes < maxEncounteredIntentKeyBytes
+		if oldEnough && intentFitsByCount && intentFitsByBytes {
+			encountered = append(encountered, roachpb.MakeIntent(meta.Txn, lockedKey))
+			encounteredKeyBytes += int64(len(lockedKey))
 		}
 	}
 	return minTS, encountered, nil
