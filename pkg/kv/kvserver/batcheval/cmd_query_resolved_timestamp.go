@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,7 +37,19 @@ var QueryResolvedTimestampIntentCleanupAge = settings.RegisterDurationSetting(
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.QueryResolvedTimestamp, DefaultDeclareKeys, QueryResolvedTimestamp)
+	RegisterReadOnlyCommand(roachpb.QueryResolvedTimestamp, declareKeysQueryResolvedTimestamp,
+		QueryResolvedTimestamp)
+}
+
+func declareKeysQueryResolvedTimestamp(
+	_ ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+) {
+	qr := req.(*roachpb.QueryResolvedTimestampRequest)
+	span := qr.Span()
+	ltStart, _ := keys.LockTableSingleKey(span.Key, nil)
+	ltEnd, _ := keys.LockTableSingleKey(span.EndKey, nil)
+	lockTableSpan := roachpb.Span{Key: ltStart, EndKey: ltEnd}
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, lockTableSpan)
 }
 
 // QueryResolvedTimestamp requests a resolved timestamp for the key span it is
