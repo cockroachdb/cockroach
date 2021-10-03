@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -346,6 +347,14 @@ func (a sortableEntries) Less(i, j int) bool {
 	return a[i].Time > a[j].Time
 }
 
+type ioReader struct {
+	mu struct {
+		syncutil.Mutex
+
+		reader io.ReadCloser
+	}
+}
+
 // readAllEntriesFromFile reads in all log entries from a given file that are
 // between the 'startTimestamp' and 'endTimestamp' and match the 'pattern' if it
 // exists. It returns the entries in the reverse chronological order. It also
@@ -361,13 +370,18 @@ func readAllEntriesFromFile(
 	editMode EditSensitiveData,
 	format string,
 ) ([]logpb.Entry, bool, error) {
-	reader, err := GetLogReader(file.Name)
-	if err != nil {
+	var r ioReader
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var err error
+	if r.mu.reader, err = GetLogReader(file.Name); err != nil {
 		return nil, false, err
 	}
-	defer reader.Close()
+	defer r.mu.reader.Close()
+
 	entries := []logpb.Entry{}
-	decoder, err := NewEntryDecoderWithFormat(reader, editMode, format)
+	decoder, err := NewEntryDecoderWithFormat(r.mu.reader, editMode, format)
 	if err != nil {
 		return nil, false, err
 	}
