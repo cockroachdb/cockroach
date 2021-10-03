@@ -190,6 +190,8 @@ func (p parentAndManualCollectionOption) apply(opts spanOptions) spanOptions {
 
 type followsFromOpt struct{}
 
+var followsFromSingleton = SpanOption(followsFromOpt{})
+
 // WithFollowsFrom instructs StartSpan to link the child span to its parent
 // using a different kind of relationship than the regular parent-child one,
 // should a child span be created (i.e. should WithParentAndAutoCollection or
@@ -214,7 +216,7 @@ type followsFromOpt struct{}
 // There is no penalty for getting this wrong, but it can help external trace
 // systems visualize the traces better.
 func WithFollowsFrom() SpanOption {
-	return followsFromOpt{}
+	return followsFromSingleton
 }
 
 func (o followsFromOpt) apply(opts spanOptions) spanOptions {
@@ -224,6 +226,8 @@ func (o followsFromOpt) apply(opts spanOptions) spanOptions {
 
 type forceRealSpanOption struct{}
 
+var forceRealSpanSingleton = SpanOption(forceRealSpanOption{})
+
 // WithForceRealSpan forces StartSpan to create of a real Span instead of
 // a low-overhead non-recordable noop span.
 //
@@ -231,7 +235,7 @@ type forceRealSpanOption struct{}
 // capable of recording, so this option should be passed to StartSpan if the
 // caller wants to be able to call StartRecording on the resulting Span.
 func WithForceRealSpan() SpanOption {
-	return forceRealSpanOption{}
+	return forceRealSpanSingleton
 }
 
 func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
