@@ -81,14 +81,6 @@ message RecordedSpan {
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
-  // DeprecatedInternalStructured are payloads attached to this Span.
-  //
-  // Do not use directly, but call Structured() instead.
-  //
-  // TODO(adityamaru): Remove in 22.1 as all nodes in 21.2+ will be using
-  // StructuredRecords instead.
-  repeated google.protobuf.Any deprecated_internal_structured = 11;
-
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
 
@@ -101,7 +93,7 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
-  reserved 10;
+  reserved 10,11;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

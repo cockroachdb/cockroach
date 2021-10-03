@@ -385,7 +385,6 @@ go_test(
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//proto",
-        "@com_github_gogo_protobuf//types",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",

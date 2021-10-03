@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
-	ptypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -95,20 +94,19 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		// that may leak from the KV layer to tenants. If it does, update
 		// redactRecordingForTenant appropriately.
 		type calcifiedRecordedSpan struct {
-			TraceID                      uint64
-			SpanID                       uint64
-			ParentSpanID                 uint64
-			Operation                    string
-			Baggage                      map[string]string
-			Tags                         map[string]string
-			StartTime                    time.Time
-			Duration                     time.Duration
-			RedactableLogs               bool
-			Logs                         []tracingpb.LogRecord
-			DeprecatedInternalStructured []*ptypes.Any
-			GoroutineID                  uint64
-			Finished                     bool
-			StructuredRecords            []tracingpb.StructuredRecord
+			TraceID           uint64
+			SpanID            uint64
+			ParentSpanID      uint64
+			Operation         string
+			Baggage           map[string]string
+			Tags              map[string]string
+			StartTime         time.Time
+			Duration          time.Duration
+			RedactableLogs    bool
+			Logs              []tracingpb.LogRecord
+			GoroutineID       uint64
+			Finished          bool
+			StructuredRecords []tracingpb.StructuredRecord
 		}
 		_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
 	})
