@@ -57,7 +57,7 @@ go_test(
     name = "tracing_test",
     size = "small",
     srcs = [
-        "alloc_test.go",
+        "bench_test.go",
         "grpc_interceptor_test.go",
         "span_test.go",
         "tags_test.go",
