@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -63,13 +62,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	const clusterName = ""
 
-	// Remove the default store, which avoids using it to set up logging.
-	// Instead, we'll default to logging to stderr unless --log-dir is
-	// specified. This makes sense since the standalone SQL server is
-	// at the time of writing stateless and may not be provisioned with
-	// suitable storage.
-	serverCfg.Stores.Specs = nil
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
@@ -94,20 +86,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	tempStorageMaxSizeBytes := int64(base.DefaultInMemTempStorageMaxSizeBytes)
-	if err := diskTempStorageSizeValue.Resolve(
-		&tempStorageMaxSizeBytes, memoryPercentResolver,
+	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
+		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
 	}
-
-	serverCfg.SQLConfig.TempStorageConfig = base.TempStorageConfigFromEnv(
-		ctx,
-		st,
-		base.StoreSpec{InMemory: true},
-		"", // parentDir
-		tempStorageMaxSizeBytes,
-	)
 
 	initGEOS(ctx)
 
