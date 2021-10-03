@@ -138,7 +138,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
 	if params.Tracer == nil {
-		tr = tracing.NewTracerWithOpt(context.TODO(), &st.SV)
+		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
 	}
 	cfg := makeTestConfig(st, tr)
 	cfg.TestingKnobs = params.Knobs
@@ -588,7 +588,7 @@ func (ts *TestServer) StartTenant(
 	}
 	tr := params.Tracer
 	if params.Tracer == nil {
-		tr = tracing.NewTracerWithOpt(ctx, &st.SV)
+		tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	}
 	baseCfg := makeTestBaseConfig(st, tr)
 	baseCfg.TestingKnobs = params.TestingKnobs
