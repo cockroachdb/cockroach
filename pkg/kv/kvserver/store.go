@@ -757,6 +757,9 @@ type StoreConfig struct {
 	// SpanConfigsEnabled determines whether we're able to use the span configs
 	// infrastructure.
 	SpanConfigsEnabled bool
+
+	// KVAdmissionController is an optional field used for admission control.
+	KVAdmissionController KVAdmissionController
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -2955,4 +2958,19 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// KVAdmissionController provides admission control for the KV layer.
+type KVAdmissionController interface {
+	// AdmitKVWork must be called before performing KV work.
+	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
+	// populated for admission to work correctly. If err is non-nil, the
+	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
+	// called after the KV work is done executing.
+	AdmitKVWork(
+		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
+	) (handle interface{}, err error)
+	// AdmittedKVWorkDone is called after the admitted KV work is done
+	// executing.
+	AdmittedKVWorkDone(handle interface{})
 }

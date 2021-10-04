@@ -344,6 +344,7 @@ func NewNode(
 		tenantUsage:        tenantUsage,
 		spanConfigAccessor: spanConfigAccessor,
 	}
+	n.storeCfg.KVAdmissionController = n
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -961,74 +962,16 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	var callAdmittedWorkDoneOnKVAdmissionQ bool
-	var tenantID roachpb.TenantID
-	var storeAdmissionQ *admission.WorkQueue
-	if n.kvAdmissionQ != nil {
-		var ok bool
-		tenantID, ok = roachpb.TenantFromContext(ctx)
-		if !ok {
-			tenantID = roachpb.SystemTenantID
-		}
-		bypassAdmission := args.IsAdmin()
-		source := args.AdmissionHeader.Source
-		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-			// Request is from a SQL node.
-			bypassAdmission = false
-			source = roachpb.AdmissionHeader_FROM_SQL
-		}
-		if source == roachpb.AdmissionHeader_OTHER {
-			bypassAdmission = true
-		}
-		createTime := args.AdmissionHeader.CreateTime
-		if !bypassAdmission && createTime == 0 {
-			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-			// of zero CreateTime needs to be revisited. It should use high priority.
-			createTime = timeutil.Now().UnixNano()
-		}
-		admissionInfo := admission.WorkInfo{
-			TenantID:        tenantID,
-			Priority:        admission.WorkPriority(args.AdmissionHeader.Priority),
-			CreateTime:      createTime,
-			BypassAdmission: bypassAdmission,
-		}
-		var err error
-		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
-		// it would bypass admission, it would consume a slot. When writes are
-		// throttled, we start generating more txn heartbeats, which then consume
-		// all the slots, causing no useful work to happen. We do want useful work
-		// to continue even when throttling since there are often significant
-		// number of tokens available.
-		if args.IsWrite() && !isSingleHeartbeatTxnRequest(args) {
-			storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(args.Replica.StoreID))
-		}
-		admissionEnabled := true
-		if storeAdmissionQ != nil {
-			if admissionEnabled, err = storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
-				return nil, err
-			}
-			if !admissionEnabled {
-				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
-				// on it. Additionally, the code below will not call
-				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
-				// stay false.
-				storeAdmissionQ = nil
-			}
-		}
-		if admissionEnabled {
-			callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
-			if err != nil {
-				return nil, err
-			}
-		}
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+	handle, err := n.AdmitKVWork(ctx, tenantID, args)
+	if err != nil {
+		return nil, err
 	}
 	br, err := n.batchInternal(ctx, tenantID, args)
-	if callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(tenantID)
-	}
-	if storeAdmissionQ != nil {
-		storeAdmissionQ.AdmittedWorkDone(tenantID)
-	}
+	n.AdmittedKVWorkDone(handle)
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC
@@ -1045,6 +988,86 @@ func (n *Node) Batch(
 		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
+}
+
+var _ kvserver.KVAdmissionController = &Node{}
+
+type admissionHandle struct {
+	tenantID                           roachpb.TenantID
+	callAdmittedWorkDoneOnKVAdmissionQ bool
+	storeAdmissionQ                    *admission.WorkQueue
+}
+
+// AdmitKVWork implements the kvserver.KVAdmissionController interface.
+func (n *Node) AdmitKVWork(
+	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
+) (handle interface{}, err error) {
+	ah := admissionHandle{tenantID: tenantID}
+	if n.kvAdmissionQ != nil {
+		bypassAdmission := ba.IsAdmin()
+		source := ba.AdmissionHeader.Source
+		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+			// Request is from a SQL node.
+			bypassAdmission = false
+			source = roachpb.AdmissionHeader_FROM_SQL
+		}
+		if source == roachpb.AdmissionHeader_OTHER {
+			bypassAdmission = true
+		}
+		createTime := ba.AdmissionHeader.CreateTime
+		if !bypassAdmission && createTime == 0 {
+			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+			// of zero CreateTime needs to be revisited. It should use high priority.
+			createTime = timeutil.Now().UnixNano()
+		}
+		admissionInfo := admission.WorkInfo{
+			TenantID:        tenantID,
+			Priority:        admission.WorkPriority(ba.AdmissionHeader.Priority),
+			CreateTime:      createTime,
+			BypassAdmission: bypassAdmission,
+		}
+		var err error
+		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
+		// it would bypass admission, it would consume a slot. When writes are
+		// throttled, we start generating more txn heartbeats, which then consume
+		// all the slots, causing no useful work to happen. We do want useful work
+		// to continue even when throttling since there are often significant
+		// number of tokens available.
+		if ba.IsWrite() && !isSingleHeartbeatTxnRequest(ba) {
+			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+		}
+		admissionEnabled := true
+		if ah.storeAdmissionQ != nil {
+			if admissionEnabled, err = ah.storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
+				return admissionHandle{}, err
+			}
+			if !admissionEnabled {
+				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
+				// on it. Additionally, the code below will not call
+				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
+				// stay false.
+				ah.storeAdmissionQ = nil
+			}
+		}
+		if admissionEnabled {
+			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return admissionHandle{}, err
+			}
+		}
+	}
+	return ah, nil
+}
+
+// AdmittedKVWorkDone implement the kvserver.KVAdmissionController interface.
+func (n *Node) AdmittedKVWorkDone(handle interface{}) {
+	ah := handle.(admissionHandle)
+	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
+	}
+	if ah.storeAdmissionQ != nil {
+		ah.storeAdmissionQ.AdmittedWorkDone(ah.tenantID)
+	}
 }
 
 // setupSpanForIncomingRPC takes a context and returns a derived context with a
