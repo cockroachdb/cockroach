@@ -186,41 +186,11 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 	orders := ordering.DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
-		o := ord.ToOrdering()
-		// We are looking for a prefix of o that satisfies the intra-group ordering
-		// if we ignore grouping columns.
-		oIdx, intraIdx := 0, 0
-		for ; oIdx < len(o); oIdx++ {
-			oCol := o[oIdx].ID()
-			if private.GroupingCols.Contains(oCol) || intraOrd.Optional.Contains(oCol) {
-				// Grouping or optional column.
-				continue
-			}
-
-			if intraIdx < len(intraOrd.Columns) &&
-				intraOrd.Group(intraIdx).Contains(oCol) &&
-				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
-				// Column matches the one in the ordering.
-				intraIdx++
-				continue
-			}
-			break
-		}
-		if oIdx == 0 || intraIdx < len(intraOrd.Columns) {
-			// No match.
+		newOrd, fullPrefix, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input,
+			func(id opt.ColumnID) bool { return private.GroupingCols.Contains(id) })
+		if !found || !fullPrefix {
 			continue
 		}
-		o = o[:oIdx]
-
-		var newOrd props.OrderingChoice
-		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
-
-		// Simplify the ordering according to the input's FDs. Note that this is not
-		// necessary for correctness because buildChildPhysicalProps would do it
-		// anyway, but doing it here once can make things more efficient (and we may
-		// generate fewer expressions if some of these orderings turn out to be
-		// equivalent).
-		newOrd.Simplify(&input.Relational().FuncDeps)
 
 		newPrivate := *private
 		newPrivate.Ordering = newOrd
@@ -420,6 +390,8 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
+	var sb indexScanBuilder
+	sb.Init(c, sp.Table)
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
@@ -463,13 +435,11 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// If the index is not covering, scan the needed index columns plus
 		// primary key columns.
 		newScanPrivate.Cols.UnionWith(pkCols)
-		input := c.e.f.ConstructScan(&newScanPrivate)
+		sb.SetScan(&newScanPrivate)
 		// Construct an IndexJoin operator that provides the columns missing from
 		// the index.
-		input = c.e.f.ConstructIndexJoin(input, &memo.IndexJoinPrivate{
-			Table: sp.Table,
-			Cols:  sp.Cols,
-		})
+		sb.AddIndexJoin(sp.Cols)
+		input := sb.BuildNewExpr()
 		// Reconstruct the GroupBy and Limit so the new expression in the memo is
 		// equivalent.
 		input = c.e.f.ConstructGroupBy(input, aggs, gp)
