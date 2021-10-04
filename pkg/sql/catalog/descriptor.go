@@ -402,9 +402,6 @@ type TableDescriptor interface {
 	// in preparation to add a new one. In CockroachDB, all tables have primary
 	// keys, even if they're not defined by the user.
 	HasPrimaryKey() bool
-	// PrimaryKeyString returns the pretty-printed primary key declaration for a
-	// table descriptor.
-	PrimaryKeyString() string
 
 	// AllColumns returns a slice of Column interfaces containing the
 	// table's public columns and column mutations, in the canonical order:
