@@ -239,22 +239,6 @@ PREPARE a (INT8) AS RESUME JOBS SELECT $1 -- literals removed
 PREPARE _ (INT8) AS RESUME JOBS SELECT $1 -- identifiers removed
 
 parse
-PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
-----
-PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
-PREPARE a AS IMPORT TABLE a CREATE USING ('b') CSV DATA (('c')) WITH temp = ('d') -- fully parenthesized
-PREPARE a AS IMPORT TABLE a CREATE USING '_' CSV DATA ('_') WITH temp = '_' -- literals removed
-PREPARE _ AS IMPORT TABLE _ CREATE USING 'b' CSV DATA ('c') WITH _ = 'd' -- identifiers removed
-
-parse
-PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3
-----
-PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3
-PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING ($1) CSV DATA (($2)) WITH temp = ($3) -- fully parenthesized
-PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3 -- literals removed
-PREPARE _ (STRING, STRING, STRING) AS IMPORT TABLE _ CREATE USING $1 CSV DATA ($2) WITH _ = $3 -- identifiers removed
-
-parse
 PREPARE a AS OPT PLAN 'some-string'
 ----
 PREPARE a AS OPT PLAN 'some-string'
