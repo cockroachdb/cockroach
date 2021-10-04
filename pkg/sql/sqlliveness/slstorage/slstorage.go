@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -271,6 +272,7 @@ func (s *Storage) deleteOrFetchSession(
 	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
 ) (alive bool, expiration hlc.Timestamp, err error) {
 	var deleted bool
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleted = false
 		k := s.makeSessionKey(sid)
@@ -334,6 +336,7 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	now := s.clock.Now()
 	var deleted int64
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleted = 0 // reset for restarts
 		start := s.makeTablePrefix()
@@ -386,6 +389,7 @@ func (s *Storage) Insert(
 ) (err error) {
 	k := s.makeSessionKey(sid)
 	v := encodeValue(expiration)
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.InitPut(ctx, k, &v, true); err != nil {
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
@@ -400,6 +404,7 @@ func (s *Storage) Insert(
 func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, err error) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		k := s.makeSessionKey(sid)
 		kv, err := txn.Get(ctx, k)
