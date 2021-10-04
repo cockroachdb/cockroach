@@ -162,7 +162,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		NodeID:       base.NewSQLIDContainer(0, &nodeIDContainer),
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
-	transport := kvserver.NewDummyRaftTransport(cfg.Settings)
+	transport := kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
