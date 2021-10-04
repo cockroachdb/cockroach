@@ -839,7 +839,7 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
 				return err
 			}
-			condef = tree.NewDString(table.PrimaryKeyString())
+			condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
 
 		case descpb.ConstraintTypeFK:
 			oid = h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
