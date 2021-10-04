@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
@@ -7251,13 +7252,14 @@ func TestAllocatorFullDisks(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
@@ -7275,7 +7277,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	mockNodeLiveness := newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE)
 	sp := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
+		log.AmbientContext{Tracer: tr},
 		st,
 		g,
 		clock,
@@ -7399,13 +7401,14 @@ func Example_rebalancing() {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
@@ -7423,7 +7426,7 @@ func Example_rebalancing() {
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
 	sp := NewStorePool(
-		log.AmbientContext{Tracer: st.Tracer},
+		log.AmbientContext{Tracer: tr},
 		st,
 		g,
 		clock,

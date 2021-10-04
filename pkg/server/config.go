@@ -162,9 +162,10 @@ type BaseConfig struct {
 
 // MakeBaseConfig returns a BaseConfig with default values.
 func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+	tracer := tracing.NewTracerWithOpt(context.TODO(), &st.SV)
 	baseCfg := BaseConfig{
-		Tracer:            st.Tracer,
-		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Tracer:            tracer,
+		AmbientCtx:        log.AmbientContext{Tracer: tracer},
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),

@@ -213,11 +213,12 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+	tracer := tracing.NewTracerWithOpt(context.TODO(), &st.SV)
 	sc := StoreConfig{
 		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
 		DefaultSystemSpanConfig:     zonepb.DefaultSystemZoneConfigRef().AsSpanConfig(),
 		Settings:                    st,
-		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		AmbientCtx:                  log.AmbientContext{Tracer: tracer},
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
