@@ -173,3 +173,11 @@ INSERT INTO t1 VALUES ('hello')
 
 statement error unimplemented: ALTER COLUMN TYPE from string to timestamp is prohibited until v21.1
 ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+statement ok
+CREATE TABLE parent_71089 (id INT PRIMARY KEY);
+CREATE TABLE child_71089 (a INT, b INT REFERENCES parent_71089 (id) NOT NULL)
+
+statement ok
+ALTER TABLE child_71089 ALTER COLUMN a TYPE FLOAT;
+
