@@ -86,7 +86,7 @@ NULL       /1       {1}       1
 query T
 EXPLAIN (DISTSQL) CREATE STATISTICS s1 ON a FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: false
 ·
 • create statistics
@@ -115,7 +115,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVdFO2zAUfd9XW
 query T retry
 EXPLAIN (DISTSQL, TYPES) SELECT * FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • scan

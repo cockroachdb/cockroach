@@ -180,7 +180,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -208,7 +208,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -239,7 +239,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom && 'POINT(3.0 3.0)'::geometry
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter
@@ -263,7 +263,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter
@@ -287,7 +287,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter
@@ -311,7 +311,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter

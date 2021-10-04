@@ -47,7 +47,7 @@ SET experimental_distsql_planning = always
 query T
 EXPLAIN (DISTSQL) SELECT * FROM kv
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • scan
@@ -147,25 +147,8 @@ query T
 EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ----
 │
-├ Node 1
-│ └ *colexecbase.castNativeToDatumOp
-│   └ *colexec.ParallelUnorderedSynchronizer
-│     ├ *colfetcher.ColBatchScan
-│     ├ *colrpc.Inbox
-│     ├ *colrpc.Inbox
-│     ├ *colrpc.Inbox
-│     └ *colrpc.Inbox
-├ Node 2
-│ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
-├ Node 3
-│ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
-├ Node 4
-│ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
-└ Node 5
-  └ *colrpc.Outbox
+└ Node 1
+  └ *colexecbase.castNativeToDatumOp
     └ *colfetcher.ColBatchScan
 
 statement ok

@@ -185,7 +185,7 @@ SELECT *
 FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -217,7 +217,7 @@ SELECT *
 FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -388,7 +388,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3K
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -419,7 +419,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • cross join (inner)
@@ -441,7 +441,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -504,7 +504,7 @@ ALTER TABLE large INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -527,7 +527,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -564,7 +564,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (left outer)
@@ -583,7 +583,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -609,7 +609,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (left outer)
@@ -629,7 +629,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2z4Uxd__n
 query T
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -652,7 +652,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -685,7 +685,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -711,7 +711,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -757,7 +757,7 @@ CREATE INDEX idx ON u (d)
 query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -791,7 +791,7 @@ CREATE UNIQUE INDEX idx ON u (d)
 query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -827,7 +827,7 @@ CREATE INDEX idx ON u (d, a)
 query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -861,7 +861,7 @@ CREATE INDEX idx ON u (d, b)
 query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -895,7 +895,7 @@ CREATE INDEX idx ON u (d, c)
 query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -1115,7 +1115,7 @@ query T
  EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -1134,7 +1134,7 @@ query T
  EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -1705,7 +1705,7 @@ GROUP BY s_name
 ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • top-k
@@ -1778,7 +1778,7 @@ query T
 EXPLAIN (VERBOSE)
   SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project

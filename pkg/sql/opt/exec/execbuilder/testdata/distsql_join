@@ -32,7 +32,7 @@ NULL       /1       {1}       1
 query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -123,7 +123,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -152,7 +152,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort

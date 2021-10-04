@@ -81,7 +81,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1ro0AUfd9fc
 query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • index join

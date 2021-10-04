@@ -74,7 +74,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -131,7 +131,7 @@ SELECT j1.*, j2.* FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
 ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -191,7 +191,7 @@ SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
 ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -223,7 +223,7 @@ SELECT * FROM json_tab AS j2 WHERE EXISTS (
 )
 ORDER BY j2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -251,7 +251,7 @@ SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
 )
 ORDER BY j2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (anti)
@@ -298,7 +298,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -354,7 +354,7 @@ INNER INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -415,7 +415,7 @@ LEFT INVERTED JOIN array_tab@foo_inv AS a1
 ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -447,7 +447,7 @@ SELECT a2.* FROM array_tab@primary AS a2 WHERE EXISTS (
 )
 ORDER BY a2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -475,7 +475,7 @@ SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
 )
 ORDER BY a2.a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (anti)

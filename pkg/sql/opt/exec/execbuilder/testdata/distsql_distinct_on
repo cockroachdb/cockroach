@@ -67,7 +67,7 @@ NULL             /NULL/NULL/NULL  {5}       5
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -84,7 +84,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -101,7 +101,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lU1v4jAQhu_7K
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -124,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -145,7 +145,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lkFv2kAQhe_9F
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -170,7 +170,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -191,7 +191,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9r4kwUxu_fT
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • scan
@@ -203,7 +203,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • scan
@@ -216,7 +216,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0-L2zAQxe_9F
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -240,7 +240,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct

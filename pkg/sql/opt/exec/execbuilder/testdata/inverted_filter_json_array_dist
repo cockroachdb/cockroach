@@ -81,7 +81,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -121,7 +121,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -143,7 +143,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -193,7 +193,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -267,7 +267,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -288,7 +288,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -363,7 +363,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{}' ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -385,7 +385,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -406,7 +406,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -438,7 +438,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -474,7 +474,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter

@@ -1242,7 +1242,7 @@ func (a PlanDistribution) String() string {
 func (a PlanDistribution) compose(
 	b PlanDistribution, allowPartialDistribution bool,
 ) PlanDistribution {
-	if allowPartialDistribution && a != b {
+	if a != b {
 		return PartiallyDistributedPlan
 	}
 	// TODO(yuzefovich): this is not quite correct - using

@@ -47,7 +47,7 @@ query T
 EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -74,7 +74,7 @@ query T
 EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -101,7 +101,7 @@ query T
 EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -130,7 +130,7 @@ SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
 AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -155,7 +155,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -179,7 +179,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (left outer)
@@ -203,7 +203,7 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -231,7 +231,7 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -317,7 +317,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (anti)
@@ -343,7 +343,7 @@ WHERE NOT EXISTS (
   SELECT * FROM rtable WHERE ST_Covers(ltable.geom1, rtable.geom) AND lk > 5 AND rk > 12
 ) ORDER BY lk
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (anti)
@@ -371,7 +371,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -394,7 +394,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -417,7 +417,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join
@@ -461,7 +461,7 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable2@geom_index
 ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -489,7 +489,7 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk1, rk2 FROM ltable LEFT JOIN rtable2@geom_index
 ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -517,7 +517,7 @@ EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable2@geom_index
 WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (semi)
@@ -541,7 +541,7 @@ EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable2@geom_index
 WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • lookup join (anti)

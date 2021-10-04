@@ -49,7 +49,7 @@ EXPLAIN (DISTSQL) SELECT
   bit_or(_bit)
 FROM data GROUP BY b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -70,7 +70,7 @@ ALTER TABLE data DROP COLUMN _bit;
 query T
 EXPLAIN (DISTSQL) SELECT sum(a) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -85,7 +85,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF1r2zAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000 + (b-1)*100 + (c::INT-1)*10 + (d-1)) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -102,7 +102,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVUGL4kwQvX-_o
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), count(a), max(a) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -117,7 +117,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF2L2kAUhu_7K
 query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), count(a+b), max(a+b) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -134,7 +134,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF1r4kAUhu_3V
 query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000) + sum((b-1)*100) + sum((c::INT-1)*10) + sum(d-1) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -153,7 +153,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVdGK2kAUfe9XD
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -170,7 +170,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF2L2kAUhu_7K
 query T
 EXPLAIN (DISTSQL) SELECT avg(a+b+c::INT+d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -189,7 +189,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF2L2kAUhu_7K
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(stddev(b), 1) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -206,7 +206,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF-L4jwUxu_fT
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(variance(b), 1) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -223,7 +223,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF-L4jwUxu_fT
 query T
 EXPLAIN (DISTSQL) SELECT stddev(a+b+c::INT+d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -240,7 +240,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFq4kAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT variance(a+b+c::INT+d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -259,7 +259,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFq4kAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(c), avg(d), stddev(a), variance(b), sum(a+b+c::INT+d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -276,7 +276,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVl9r6k4Qff99i
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -294,7 +294,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVl9r6k4Qff99i
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), stddev(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -311,7 +311,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsls9v6jgQx-_7V
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(DISTINCT a), variance(a) FILTER (WHERE a > 0) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -328,7 +328,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k1GLm0AQgN_7K
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(a), count(a), stddev(a), variance(a) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -343,7 +343,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF9ro0AUxd_3U
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(a), sum(a), avg(b) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -358,7 +358,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF-L2kAUxd_7K
 query T
 EXPLAIN (DISTSQL) SELECT avg(c), sum(c), avg(d), sum(d) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -414,7 +414,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1L80AQx-_Pp
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT (a) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -431,7 +431,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVuL4jAYhu_3V
 query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -450,7 +450,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9r4kAUxd_3U
 query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A), SUM (DISTINCT B) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -465,7 +465,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslFGL2kAUhd_7K
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY a,b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • distinct
@@ -485,7 +485,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lt9r4koUx9_vX
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY b,a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -508,7 +508,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9voloUxd_vp
 query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -528,7 +528,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlltv2kAQhd_7K
 query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d ORDER BY c, d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -553,7 +553,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl11r-kgUh-_3U
 query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data WHERE a > 9 GROUP BY c, d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -573,7 +573,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl-vk0AQxd_9F
 query T
 EXPLAIN (DISTSQL) SELECT sum(a), sum(b), sum(c) FROM data GROUP BY d HAVING sum(a+b) > 10
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter
@@ -594,7 +594,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll1vok4Uxu__n
 query T
 EXPLAIN (DISTSQL) SELECT avg(a+b), c FROM data GROUP BY c, d HAVING c = d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -615,7 +615,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMl9tr4zgUxt_3r
 query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data GROUP BY d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -634,7 +634,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9v2jAUxd_3K
 query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -653,7 +653,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFr2zAQx9_3K
 query T
 EXPLAIN (DISTSQL) SELECT xor_agg(to_hex(a)::bytes) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -671,7 +671,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF1v2jAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT xor_agg(a) FROM data
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -725,7 +725,7 @@ CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
 query T
 EXPLAIN (DISTSQL) SELECT array_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -743,7 +743,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlWFr2kAYx9_vU
 query T
 EXPLAIN (DISTSQL) SELECT json_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -790,7 +790,7 @@ NULL       /1       {1}       1
 query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -806,7 +806,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkV-LozAUxd_3U
 query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -823,7 +823,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlkFv2jAUx-_7F
 query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -840,7 +840,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlltv2jAUx9_3K
 query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -857,7 +857,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMllFrIj0Yhe-_X
 query T
 EXPLAIN (DISTSQL) SELECT b, max(c) FROM sorted_data@foo GROUP BY b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -877,7 +877,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUktFq2zAUhu_3F
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -912,7 +912,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMl_Fv4jYUx3_fX
 query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) GROUP BY a ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -931,7 +931,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMllFv2jAUhd_3K
 query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) WHERE a > x GROUP BY a ORDER BY a
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -1006,7 +1006,7 @@ group-by
 query T
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -1027,7 +1027,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b;
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group
@@ -1049,7 +1049,7 @@ INSERT INTO uv SELECT x, x*10 FROM generate_series(2, 8) AS g(x);
 query T
 EXPLAIN (DISTSQL) SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group

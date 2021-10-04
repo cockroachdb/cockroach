@@ -34,7 +34,7 @@ subtest Union
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • union all
@@ -60,7 +60,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll-L2kAUxd_7K
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -84,7 +84,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslk-P2jAQxe_9F
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -114,7 +114,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysl99u2kwQxe-_p
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -144,7 +144,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysl99u2kwQxe-_p
 query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • union all
@@ -165,7 +165,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslVGLm0AUhd_7K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • union all
@@ -191,7 +191,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll1v2jwUx--fT
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -215,7 +215,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslkuP2jAUhff9F
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • union all
@@ -262,7 +262,7 @@ subtest Intersect
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) INTERSECT ALL (SELECT y FROM xyz) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -285,7 +285,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9v2jwUh-_fT
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) INTERSECT (SELECT y FROM xyz) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -309,7 +309,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mF1v4kYYhe_7K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) INTERSECT ALL (SELECT y FROM xyz ORDER BY y)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect all
@@ -329,7 +329,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElkFv2jAYhu_7F
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) INTERSECT (SELECT y FROM xyz ORDER BY y)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect
@@ -350,7 +350,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmMFu6kYUhvd9C
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) INTERSECT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -379,7 +379,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmF2P2kYYhe_7K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) INTERSECT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -409,7 +409,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy82Ftv4kYYBuD7_
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x < 3) INTERSECT ALL (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -438,7 +438,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmF1v4kYYhe_7K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x < 3) INTERSECT (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -468,7 +468,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy82F1v2lYcBvD7f
 query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz INTERSECT ALL SELECT y, x from xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect all
@@ -488,7 +488,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll2L2kAUhu_7K
 query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz INTERSECT SELECT y, x from xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect
@@ -509,7 +509,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmFFv4kYUhd_7K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -532,7 +532,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9v2jAQwN_3K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -556,7 +556,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mE1v6kYUhvf9F
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -579,7 +579,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9v2jAQwN_3K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -603,7 +603,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mE9v6kYUxff9F
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect all
@@ -623,7 +623,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElkFv2jAYhu_7F
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect all
@@ -644,7 +644,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElkFv2jAYhu_7F
 query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect all
@@ -664,7 +664,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElkGPmkAYhu_9F
 query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • intersect
@@ -687,7 +687,7 @@ subtest Except
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -710,7 +710,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lt9uokAUh-_3K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) EXCEPT (SELECT x AS y FROM xyz) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -734,7 +734,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mF1v4kYYhe_7K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) EXCEPT ALL (SELECT y FROM xyz ORDER BY y)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except all
@@ -754,7 +754,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lkFv2jAYhu_7F
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) EXCEPT (SELECT y FROM xyz ORDER BY y)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except
@@ -775,7 +775,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mNFu4kYUhu_7F
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) EXCEPT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -804,7 +804,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmF1v2kgUhu_3V
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) EXCEPT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -834,7 +834,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy82F9v4kYUBfD3f
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x >= 1) EXCEPT ALL (SELECT y FROM xyz WHERE x < 3) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -863,7 +863,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmF1v4kYYhe_7K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x >= 1) EXCEPT (SELECT y FROM xyz WHERE x < 3) ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -893,7 +893,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy82N9v2lYcBfD3_
 query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz EXCEPT ALL SELECT y, x from xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except all
@@ -913,7 +913,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1v2jAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz EXCEPT SELECT y, x from xyz
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except
@@ -934,7 +934,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmFFv4kYUhd_7K
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -957,7 +957,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lk9v2koQwO_vU
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -981,7 +981,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mE1v6kYYhff9F
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -1004,7 +1004,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9v2jwUh-_fT
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -1028,7 +1028,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mF9v6jYYxu_3K
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) EXCEPT ALL (SELECT y FROM xyz ORDER BY z)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except all
@@ -1048,7 +1048,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lkFv2jAYhu_7F
 query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) EXCEPT (SELECT y FROM xyz ORDER BY z)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except
@@ -1069,7 +1069,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mNFu4kYUhu_7F
 query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT ALL (SELECT x, y FROM xyz))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except all
@@ -1089,7 +1089,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEllFr4kwUhu-_X
 query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT (SELECT x, y FROM xyz))
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • except

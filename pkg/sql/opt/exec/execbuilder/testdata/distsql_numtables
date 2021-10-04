@@ -67,7 +67,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkFFL-0AQxN__n
 query T
 EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • render
@@ -106,7 +106,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-x
 query T
 EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • filter
@@ -126,7 +126,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlGGL2jAYx9_vU
 query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • hash join
@@ -148,7 +148,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ld-K2kAUh-_7F
 query T
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -192,7 +192,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -226,7 +226,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEluFr2kAYxr_vr
 query T
 EXPLAIN (DISTSQL) SELECT sum(y) FROM NumToStr
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -242,7 +242,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF1r2zAUhu_3K
 query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -258,7 +258,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF2Lm0AUhu_7K
 query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%'
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • group (scalar)
@@ -309,7 +309,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FLxDAUhO_-i
 query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • revscan
@@ -350,7 +350,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT81K9EAQvH9PM
 query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -375,7 +375,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • top-k
