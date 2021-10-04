@@ -1192,3 +1192,163 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: xyz@xyz_z_y_idx
           spans: /1/!NULL-/2
+
+# ------------------------------------------------------------------------------
+# NULLS FIRST, NULLS LAST test cases.
+# ------------------------------------------------------------------------------
+# subtest nulls_ordering
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS FIRST
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b)
+│ ordering: +b
+│ estimated row count: 1,000 (missing stats)
+│ order: +b
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • sort
+    │ columns: (nulls_ordering, a, b)
+    │ ordering: +nulls_ordering,+b
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +nulls_ordering,+b
+    │
+    └── • render
+        │ columns: (nulls_ordering, a, b)
+        │ estimated row count: 1,000 (missing stats)
+        │ render nulls_ordering: b IS NULL
+        │ render a: a
+        │ render b: b
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • sort
+    │ columns: (nulls_ordering, a, b)
+    │ ordering: -nulls_ordering,-b
+    │ estimated row count: 1,000 (missing stats)
+    │ order: -nulls_ordering,-b
+    │
+    └── • render
+        │ columns: (nulls_ordering, a, b)
+        │ estimated row count: 1,000 (missing stats)
+        │ render nulls_ordering: b IS NULL
+        │ render a: a
+        │ render b: b
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS LAST
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b)
+│ ordering: -b
+│ estimated row count: 1,000 (missing stats)
+│ order: -b
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST, c NULLS LAST
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • sort
+    │ columns: (nulls_ordering, nulls_ordering, a, b, c)
+    │ ordering: -nulls_ordering,-b,+nulls_ordering,+c
+    │ estimated row count: 1,000 (missing stats)
+    │ order: -nulls_ordering,-b,+nulls_ordering,+c
+    │
+    └── • render
+        │ columns: (nulls_ordering, nulls_ordering, a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ render nulls_ordering: b IS NULL
+        │ render nulls_ordering: c IS NULL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+statement ok
+CREATE INDEX b_idx ON t(b);
+
+# TODO(nehageorge): Right now the optimizer does a sort even though there is an
+# index on column b. We should eliminate this sort in a future PR.
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • sort
+    │ columns: (nulls_ordering, a, b)
+    │ ordering: +nulls_ordering,+b
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +nulls_ordering,+b
+    │
+    └── • render
+        │ columns: (nulls_ordering, a, b)
+        │ estimated row count: 1,000 (missing stats)
+        │ render nulls_ordering: b IS NULL
+        │ render a: a
+        │ render b: b
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@b_idx
+              spans: FULL SCAN
