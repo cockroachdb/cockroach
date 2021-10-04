@@ -825,10 +825,17 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 
 # Test that stats are not collected for virtual columns.
 statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
 CREATE TABLE virt (
   a INT,
+  b INT,
   v INT AS (a + 10) VIRTUAL,
-  INDEX (v)
+  INDEX (v),
+  INDEX (a, v),
+  INDEX (a, v, b),
+  INDEX (a) WHERE v > 0
 )
 
 statement ok
@@ -850,7 +857,9 @@ ORDER BY
   column_names::STRING, created
 ----
 statistics_name  column_names  row_count  null_count  has_histogram
+s                {a,b}         3          0           false
 s                {a}           3          0           true
+s                {b}           3          3           true
 s                {rowid}       3          0           true
 
 # Test that stats are not collect for inaccessible virtual columns that
@@ -861,7 +870,9 @@ CREATE TABLE expression (
   b INT,
   j JSON,
   INDEX a_plus_b ((a + b)),
-  INVERTED INDEX j_a ((j->'a'))
+  INDEX a_a_plus_b (a, (a + b)),
+  INVERTED INDEX j_a ((j->'a')),
+  INVERTED INDEX a_j_a (a, (j->'a'))
 );
 INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1, '{"e": "f"}');
 
@@ -1037,6 +1048,7 @@ ORDER BY
 column_names  has_histogram
 {id}          true
 {j}           true
+{s,j}         false
 {s}           true
 
 statement ok
@@ -1181,3 +1193,28 @@ CREATE TABLE t63387 (
 );
 INSERT INTO t63387 VALUES (1, '{}');
 CREATE STATISTICS s FROM t63387;
+
+# Regression test for #71080. Stats collection should succeed on tables with NOT
+# NULL virtual columns.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE TABLE t71080 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT NOT NULL AS (a + 10) VIRTUAL,
+  INDEX (a, b)
+);
+
+statement ok
+INSERT INTO t71080 VALUES (1, 2);
+
+statement ok
+CREATE STATISTICS s FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON b FROM t71080;
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON a, b FROM t71080;
