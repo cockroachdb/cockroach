@@ -45,7 +45,7 @@ NULL       /2       {3}       3
 query T
 EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join (left outer)

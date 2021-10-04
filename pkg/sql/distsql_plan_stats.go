@@ -232,7 +232,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if len(p.ResultRouters) == 1 {
 		node = p.Processors[p.ResultRouters[0]].Node
 	}
-	p.AddSingleGroupStage(
+	p.AddSingleGroupStageKeepDistribution(
 		node,
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},

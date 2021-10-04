@@ -68,7 +68,7 @@ distribution: local
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: partial
 
 # Limit after sort (i.e. top K sort) - don't distribute.
 query T
@@ -86,7 +86,7 @@ distribution: full
 query T
 SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: partial
 
 statement ok
 CREATE TABLE kw (k INT PRIMARY KEY, w INT);

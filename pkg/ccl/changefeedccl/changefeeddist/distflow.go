@@ -103,7 +103,7 @@ func StartDistChangefeed(
 
 	p := planCtx.NewPhysicalPlan()
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
-	p.AddSingleGroupStage(
+	p.AddSingleGroupStageKeepDistribution(
 		dsp.GatewayID(),
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 		execinfrapb.PostProcessSpec{},

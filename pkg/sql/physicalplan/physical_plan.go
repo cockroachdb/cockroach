@@ -411,6 +411,21 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	p.MergeOrdering = execinfrapb.Ordering{}
 }
 
+// AddSingleGroupStageKeepDistribution is the same as AddSingleGroupStage but
+// doesn't update the distribution of p. This should be used when planning a
+// single processor that we really want to plan as a single processor (in
+// contrast with not being able to distribute a particular stage of the plan).
+func (p *PhysicalPlan) AddSingleGroupStageKeepDistribution(
+	nodeID roachpb.NodeID,
+	core execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
+	outputTypes []*types.T,
+) {
+	distribution := p.Distribution
+	p.AddSingleGroupStage(nodeID, core, post, outputTypes)
+	p.Distribution = distribution
+}
+
 // EnsureSingleStreamOnGateway ensures that there is only one stream on the
 // gateway node in the plan (meaning it possibly merges multiple streams or
 // brings a single stream from a remote node to the gateway).
@@ -419,7 +434,7 @@ func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
 	// single grouping stage.
 	if len(p.ResultRouters) != 1 ||
 		p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID {
-		p.AddSingleGroupStage(
+		p.AddSingleGroupStageKeepDistribution(
 			p.GatewayNodeID,
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			execinfrapb.PostProcessSpec{},
@@ -1242,7 +1257,7 @@ func (a PlanDistribution) String() string {
 func (a PlanDistribution) compose(
 	b PlanDistribution, allowPartialDistribution bool,
 ) PlanDistribution {
-	if allowPartialDistribution && a != b {
+	if a != b {
 		return PartiallyDistributedPlan
 	}
 	// TODO(yuzefovich): this is not quite correct - using

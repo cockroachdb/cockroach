@@ -114,7 +114,7 @@ func distStreamIngest(
 
 	// The ResultRouters from the previous stage will feed in to the
 	// StreamIngestionFrontier processor.
-	p.AddSingleGroupStage(gatewayNodeID,
+	p.AddSingleGroupStageKeepDistribution(gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 

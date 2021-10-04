@@ -1562,7 +1562,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	if parallelizeLocal {
 		// If we planned multiple table readers, we need to merge the streams
 		// into one.
-		p.AddSingleGroupStage(dsp.gatewayNodeID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
+		p.AddSingleGroupStageKeepDistribution(dsp.gatewayNodeID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
 	}
 
 	p.PlanToStreamColMap = planToStreamColMap
@@ -2157,7 +2157,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		if prevStageNode != 0 {
 			node = prevStageNode
 		}
-		p.AddSingleGroupStage(
+		p.AddSingleGroupStageKeepDistribution(
 			node,
 			execinfrapb.ProcessorCoreUnion{Aggregator: &finalAggsSpec},
 			finalAggsPost,
@@ -2286,7 +2286,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		)
 	} else {
 		// We have a single stream, so use a single join reader on that node.
-		plan.AddSingleGroupStage(
+		plan.AddSingleGroupStageKeepDistribution(
 			plan.Processors[plan.ResultRouters[0]].Node,
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
@@ -3440,7 +3440,7 @@ func (dsp *DistSQLPlanner) addProjectSet(
 	// filtered), we could try to detect these cases and use AddNoGroupingStage
 	// instead.
 	outputTypes := append(plan.GetResultTypes(), projectSetSpec.GeneratedColumns...)
-	plan.AddSingleGroupStage(dsp.gatewayNodeID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
+	plan.AddSingleGroupStageKeepDistribution(dsp.gatewayNodeID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	// Add generated columns to PlanToStreamColMap.
 	for i := range projectSetSpec.GeneratedColumns {
@@ -4146,7 +4146,7 @@ func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
 	plan.PlanToStreamColMap = nil
 
 	if len(metadataSenders) > 0 {
-		plan.AddSingleGroupStage(
+		plan.AddSingleGroupStageKeepDistribution(
 			dsp.gatewayNodeID,
 			execinfrapb.ProcessorCoreUnion{
 				MetadataTestReceiver: &execinfrapb.MetadataTestReceiverSpec{

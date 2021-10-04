@@ -446,7 +446,7 @@ EXPLAIN (VERBOSE)
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -488,7 +488,7 @@ EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -518,7 +518,7 @@ EXPLAIN (VERBOSE)
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -560,7 +560,7 @@ EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -589,7 +589,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 31 AND pid1 <= 33
   OR pa1 > 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -623,7 +623,7 @@ EXPLAIN (DISTSQL)
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -656,7 +656,7 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -1070,7 +1070,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckUFr2zAUx-_7F
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -1092,7 +1092,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1r2zwUx--fT
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • hash join

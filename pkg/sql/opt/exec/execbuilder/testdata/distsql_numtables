@@ -126,7 +126,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlGGL2jAYx9_vU
 query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • hash join
@@ -148,7 +148,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ld-K2kAUh-_7F
 query T
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • project
@@ -192,7 +192,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • merge join
@@ -375,7 +375,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • top-k

@@ -60,7 +60,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll-L2kAUxd_7K
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -84,7 +84,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslk-P2jAQxe_9F
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -114,7 +114,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysl99u2kwQxe-_p
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
@@ -191,7 +191,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll1v2jwUx--fT
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
-distribution: full
+distribution: partial
 vectorized: true
 ·
 • sort
