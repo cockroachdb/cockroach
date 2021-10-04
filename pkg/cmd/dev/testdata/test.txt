@@ -1,5 +1,6 @@
 dev test pkg/util/tracing
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test //pkg/util/tracing:tracing_test --test_output errors
 
 dev test pkg/util/tracing/...
@@ -9,32 +10,49 @@ bazel test //pkg/util/tracing:tracing_test --test_output errors
 
 dev test pkg/util/tracing -f TestStartChild*
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
 
 dev test pkg/util/tracing -f TestStartChild* -v
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
 
 dev test pkg/util/tracing -f TestStartChild* --remote-cache 127.0.0.1:9092
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test '--test_filter=TestStartChild*' --test_output errors
 
 dev test pkg/util/tracing -f TestStartChild* --ignore-cache
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test //pkg/util/tracing:tracing_test --nocache_test_results '--test_filter=TestStartChild*' --test_output errors
 
 dev test --stress pkg/util/tracing --filter TestStartChild*
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output errors
 
 dev test --stress pkg/util/tracing --filter TestStartChild* --timeout=10s -v
 ----
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
 bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' --test_timeout=11 '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
 
 dev test //pkg/testutils --timeout=10s
 ----
+bazel query 'kind(go_test, //pkg/testutils:all)'
 bazel test //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
 
 dev test pkg/util/tracing -- -s
 ----
-bazel test -s //pkg/util/tracing:tracing_test --test_output errors
+bazel query 'kind(go_test, //pkg/util/tracing:all)'
+bazel test //pkg/util/tracing:tracing_test --test_output errors -s
+
+dev test ./pkg/roachpb
+----
+bazel query 'kind(go_test, //pkg/roachpb:all)'
+bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output errors
+
+dev test pkg/roachpb:string_test
+----
+bazel test pkg/roachpb:string_test --test_output errors

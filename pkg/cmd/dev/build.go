@@ -291,6 +291,7 @@ func (d *dev) getBasicBuildArgs(
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 
+	shouldBuildWithTestConfig := false
 	for _, target := range targets {
 		target = strings.TrimPrefix(target, "./")
 		target = strings.TrimRight(target, "/")
@@ -308,6 +309,9 @@ func (d *dev) getBasicBuildArgs(
 			typ := fields[0]
 			args = append(args, fullTargetName)
 			buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
+			if typ == "go_test" {
+				shouldBuildWithTestConfig = true
+			}
 			continue
 		}
 		aliased, ok := buildTargetMapping[target]
@@ -326,6 +330,9 @@ func (d *dev) getBasicBuildArgs(
 			args = append(args, "--config=with_ui")
 			break
 		}
+	}
+	if shouldBuildWithTestConfig {
+		args = append(args, "--config=test")
 	}
 
 	return
