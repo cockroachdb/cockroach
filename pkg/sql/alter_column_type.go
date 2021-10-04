@@ -203,9 +203,18 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
-			if col.GetID() == id {
-				return colWithConstraintNotSupportedErr
+		if fk.OriginTableID == tableDesc.GetID() {
+			for _, id := range fk.OriginColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
+			}
+		}
+		if fk.ReferencedTableID == tableDesc.GetID() {
+			for _, id := range fk.ReferencedColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
 			}
 		}
 	}
