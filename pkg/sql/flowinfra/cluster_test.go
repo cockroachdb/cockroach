@@ -90,7 +90,7 @@ func TestClusterFlow(t *testing.T) {
 		// that doesn't matter for the purposes of this test.
 
 		// Start a span (useful to look at spans using Lightstep).
-		sp := tc.Server(0).ClusterSettings().Tracer.StartSpan("cluster test")
+		sp := tc.Server(0).Tracer().(*tracing.Tracer).StartSpan("cluster test")
 		ctx := tracing.ContextWithSpan(context.Background(), sp)
 		defer sp.Finish()
 

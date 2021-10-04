@@ -65,7 +65,7 @@ func TestDBAddSSTable(t *testing.T) {
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
 
-		tr := s.ClusterSettings().Tracer
+		tr := s.Tracer().(*tracing.Tracer)
 		runTestDBAddSSTable(ctx, t, db, tr, nil)
 	})
 	t.Run("store=on-disk", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestDBAddSSTable(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tr := s.ClusterSettings().Tracer
+		tr := s.Tracer().(*tracing.Tracer)
 		runTestDBAddSSTable(ctx, t, db, tr, store)
 	})
 }

@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -1169,6 +1170,11 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 
 // Tracer is part of the TestServerInterface.
 func (ts *TestServer) Tracer() interface{} {
+	return ts.TracerTyped()
+}
+
+// TracerTyped is like Tracer(), but returns the actual type.
+func (ts *TestServer) TracerTyped() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 

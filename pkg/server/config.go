@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -111,6 +112,7 @@ type BaseConfig struct {
 	Settings *cluster.Settings
 	*base.Config
 
+	Tracer *tracing.Tracer
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
@@ -161,6 +163,7 @@ type BaseConfig struct {
 // MakeBaseConfig returns a BaseConfig with default values.
 func MakeBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg := BaseConfig{
+		Tracer:            st.Tracer,
 		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
 		Config:            new(base.Config),
 		Settings:          st,
