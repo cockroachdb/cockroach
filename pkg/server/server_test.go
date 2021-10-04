@@ -1039,3 +1039,75 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.NoError(t, batch.Commit(false))
 	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }
+
+func Test_makeFakeNodeStatuses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	n1Desc := roachpb.NodeDescriptor{NodeID: 1}
+	n9Desc := roachpb.NodeDescriptor{NodeID: 9}
+	tests := []struct {
+		name       string
+		mapping    map[roachpb.StoreID]roachpb.NodeID
+		storesSeen map[string]struct{}
+
+		exp    []statuspb.NodeStatus
+		expErr string
+	}{
+		{
+			name:       "store-missing-in-mapping",
+			mapping:    map[roachpb.StoreID]roachpb.NodeID{1: 1},
+			storesSeen: map[string]struct{}{"1": {}, "2": {}},
+			expErr:     `need to map the remaining stores`,
+		},
+		{
+			name:       "store-only-in-mapping",
+			mapping:    map[roachpb.StoreID]roachpb.NodeID{1: 1, 3: 9},
+			storesSeen: map[string]struct{}{"9": {}},
+			expErr:     `s1 supplied in input mapping, but no timeseries found for it`,
+		},
+		{
+			name:       "success",
+			mapping:    map[roachpb.StoreID]roachpb.NodeID{1: 1, 3: 9},
+			storesSeen: map[string]struct{}{"1": {}, "3": {}},
+			exp: []statuspb.NodeStatus{
+				{Desc: n1Desc, StoreStatuses: []statuspb.StoreStatus{{Desc: roachpb.StoreDescriptor{
+					StoreID: 1,
+					Node:    n1Desc,
+				}}}},
+				{Desc: n9Desc, StoreStatuses: []statuspb.StoreStatus{{Desc: roachpb.StoreDescriptor{
+					StoreID: 3,
+					Node:    n9Desc,
+				}}}},
+			},
+		},
+		{
+			name: "success-multi-store",
+			// n1 has [s1,s12], n3 has [s3,s6].
+			mapping:    map[roachpb.StoreID]roachpb.NodeID{1: 1, 3: 9, 12: 1, 6: 9},
+			storesSeen: map[string]struct{}{"1": {}, "3": {}, "6": {}, "12": {}},
+			exp: []statuspb.NodeStatus{
+				{Desc: n1Desc, StoreStatuses: []statuspb.StoreStatus{
+					{Desc: roachpb.StoreDescriptor{StoreID: 1, Node: n1Desc}},
+					{Desc: roachpb.StoreDescriptor{StoreID: 12, Node: n1Desc}},
+				}},
+				{Desc: n9Desc, StoreStatuses: []statuspb.StoreStatus{
+					{Desc: roachpb.StoreDescriptor{StoreID: 3, Node: n9Desc}},
+					{Desc: roachpb.StoreDescriptor{StoreID: 6, Node: n9Desc}},
+				}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := makeFakeNodeStatuses(tt.mapping)
+			if err == nil {
+				err = checkFakeStatuses(result, tt.storesSeen)
+			}
+			if err != nil {
+				result = nil
+			}
+			require.Equal(t, tt.exp, result)
+			require.True(t, testutils.IsError(err, tt.expErr), "%+v didn't match expectation %s", err, tt.expErr)
+		})
+	}
+}
