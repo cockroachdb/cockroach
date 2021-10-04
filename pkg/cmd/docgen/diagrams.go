@@ -1190,21 +1190,17 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "set_var",
-		stmt:   "preparable_set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
+		name: "set_session_stmt",
+		stmt: "set_session_stmt",
 		exclude: []*regexp.Regexp{
-			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'SESSION' var_name`),
-			regexp.MustCompile(`'SET' 'SESSION' 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'SESSION' 'CHARACTERISTICS'`),
-			regexp.MustCompile("'SET' 'CLUSTER'"),
+			regexp.MustCompile("'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list"),
 		},
-		replace: map[string]string{
-			"'=' 'DEFAULT'":  "'=' 'DEFAULT' | 'SET' 'TIME' 'ZONE' ( var_value | 'DEFAULT' | 'LOCAL' )",
-			"'SET' var_name": "'SET' ( 'SESSION' | ) var_name",
-		},
+		inline: []string{"set_rest_more", "set_rest", "generic_set", "var_list", "to_or_eq"},
+	},
+	{
+		name:   "set_local_stmt",
+		stmt:   "set_local_stmt",
+		inline: []string{"set_rest", "generic_set", "var_list", "to_or_eq"},
 	},
 	{
 		name:   "set_cluster_setting",
