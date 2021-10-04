@@ -462,7 +462,7 @@ memo (optimized, ~5KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1) (top-k G2 &{1 +1})
+ ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1) (top-k G2 &{1 +1 })
  │    └── []
  │         ├── best: (scan abc,cols=(1),lim=1)
  │         └── cost: 5.06
@@ -488,9 +488,9 @@ memo (optimized, ~6KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=+2) (top-k G7 &{1 +2})
+ ├── G4: (limit G7 G8 ordering=+2) (top-k G7 &{1 +2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 +2})
+ │         ├── best: (top-k G7 &{1 +2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
@@ -524,7 +524,7 @@ memo (optimized, ~5KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev)) (top-k G2 &{1 -1})
+ ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev)) (top-k G2 &{1 -1 })
  │    └── []
  │         ├── best: (scan abc,rev,cols=(1),lim=1(rev))
  │         └── cost: 5.06
@@ -550,9 +550,9 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 -2})
+ │         ├── best: (top-k G7 &{1 -2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
@@ -663,9 +663,9 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 -2})
+ │         ├── best: (top-k G7 &{1 -2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
@@ -3447,12 +3447,12 @@ memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY count(*) LIMIT 10
 ----
 memo (optimized, ~5KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
- ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8})
+ ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8 })
  │    ├── [presentation: d:1,e:2,count:8] [ordering: +8]
- │    │    ├── best: (top-k G2 &{10 +8})
+ │    │    ├── best: (top-k G2 &{10 +8 })
  │    │    └── cost: 1231.64
  │    └── []
- │         ├── best: (top-k G2 &{10 +8})
+ │         ├── best: (top-k G2 &{10 +8 })
  │         └── cost: 1231.64
  ├── G2: (group-by G4 G5 cols=(1,2)) (group-by G4 G5 cols=(1,2),ordering=+1)
  │    ├── [ordering: +8] [limit hint: 10.00]
