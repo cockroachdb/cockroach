@@ -807,7 +807,11 @@ pg_statio_sys_tables                   NULL
 pg_statio_user_indexes                 NULL
 pg_statio_user_sequences               NULL
 pg_statio_user_tables                  NULL
+pg_statistic                           NULL
 pg_statistic_ext                       NULL
+pg_statistic_ext_data                  NULL
+pg_stats                               NULL
+pg_stats_ext                           NULL
 pg_subscription                        NULL
 pg_subscription_rel                    NULL
 pg_tables                              NULL
