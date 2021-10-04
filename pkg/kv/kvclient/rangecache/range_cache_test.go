@@ -245,6 +245,7 @@ func staticSize(size int64) func() int64 {
 
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		// Create splits on each character:
@@ -258,7 +259,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	}
 	// TODO(andrei): don't leak this Stopper. Someone needs to Stop() it.
 	db.stopper = stop.NewStopper()
-	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper, st.Tracer)
+	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper, tr)
 	return db
 }
 
@@ -481,9 +482,10 @@ func TestLookupByKeyMin(t *testing.T) {
 	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	startToMeta2Desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
@@ -1009,9 +1011,10 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &CacheEntry{desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1185,9 +1188,10 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper, st.Tracer)
+			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper, tr)
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
@@ -1237,9 +1241,10 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	cache.Insert(ctx,
 		roachpb.RangeInfo{Desc: firstDesc},
 		roachpb.RangeInfo{Desc: restDesc})
@@ -1275,9 +1280,10 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	for _, rd := range testData {
 		cache.Insert(ctx, roachpb.RangeInfo{
 			Desc: rd,
@@ -1413,9 +1419,10 @@ func TestRangeCacheGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *descAM2}, roachpb.RangeInfo{Desc: *descMZ4})
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
@@ -1479,9 +1486,10 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 
 	ri := roachpb.RangeInfo{Desc: desc1}
 	cache.Insert(ctx, ri)
@@ -1590,9 +1598,10 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, st.Tracer)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 
 	cache.Insert(ctx, roachpb.RangeInfo{
 		Desc:                  desc1,
