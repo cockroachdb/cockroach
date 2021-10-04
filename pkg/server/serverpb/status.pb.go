@@ -1585,6 +1585,10 @@ func (m *LogFilesListRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_LogFilesListRequest proto.InternalMessageInfo
 
 type LogFilesListResponse struct {
+	// files is the list of log files under this node's configured logging
+	// directories. Note that the response does not contain detail about
+	// which directory contains which file. The location of each file
+	// is known to the server based on its name and the logging configuration.
 	Files []logpb.FileInfo `protobuf:"bytes,1,rep,name=files,proto3" json:"files"`
 }
 
@@ -1621,7 +1625,11 @@ type LogFileRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
 	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	File   string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	// file is the name of the log file to retrieve. Note that it
+	// must not be prefixed by a directory name. The full path to
+	// the file is computed by the server based on the base name
+	// and the logging configuration.
+	File string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
 	// redact, if true, requests redaction of sensitive data away
 	// from the retrieved log entries.
 	// Only admin users can send a request with redact = false.
@@ -2522,7 +2530,9 @@ func (m *ListContentionEventsRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_ListContentionEventsRequest proto.InternalMessageInfo
 
 // An error wrapper object for ListContentionEventsResponse and
-// ListDistSQLFlowsResponse.
+// ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+// implemented on a tenant, the `node_id` field refers to the instanceIDs that
+// identify individual tenant pods.
 type ListActivityError struct {
 	// ID of node that was being contacted when this error occurred.
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`

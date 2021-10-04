@@ -14,7 +14,10 @@ var libPQBlocklists = blocklistsForVersion{
 	{"v20.2", "libPQBlocklist20_2", libPQBlocklist20_2, "libPQIgnorelist20_2", libPQIgnorelist20_2},
 	{"v21.1", "libPQBlocklist21_1", libPQBlocklist21_1, "libPQIgnorelist21_1", libPQIgnorelist21_1},
 	{"v21.2", "libPQBlocklist21_2", libPQBlocklist21_2, "libPQIgnorelist21_2", libPQIgnorelist21_2},
+	{"v22.1", "libPQBlocklist22_1", libPQBlocklist22_1, "libPQIgnorelist22_1", libPQIgnorelist22_1},
 }
+
+var libPQBlocklist22_1 = libPQBlocklist21_2
 
 var libPQBlocklist21_2 = blocklist{
 	"pq.ExampleConnectorWithNoticeHandler":           "unknown",
@@ -89,6 +92,8 @@ var libPQBlocklist20_2 = blocklist{
 	"pq.TestRuntimeParameters":                       "12137",
 	"pq.TestStringWithNul":                           "26366",
 }
+
+var libPQIgnorelist22_1 = libPQIgnorelist21_2
 
 var libPQIgnorelist21_2 = libPQIgnorelist21_1
 

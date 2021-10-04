@@ -22,6 +22,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
         "//pkg/roachpb:with-mocks",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",

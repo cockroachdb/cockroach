@@ -2956,8 +2956,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-// TestingDefaultSpanConfig exposes the default span config for testing purposes.
-func TestingDefaultSpanConfig() roachpb.SpanConfig {
-	return zonepb.DefaultZoneConfigRef().AsSpanConfig()
-}

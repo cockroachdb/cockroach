@@ -43,6 +43,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		RunE: runE,
 	}
 	// Attach flags for the test sub-command.
+	addCommonBuildFlags(testCmd)
 	addCommonTestFlags(testCmd)
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
@@ -72,7 +73,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, additionalBazelArgs...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
@@ -85,13 +85,14 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	for _, pkg := range pkgs {
 		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
 
 		if !strings.HasPrefix(pkg, "pkg/") {
 			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
-		if strings.HasSuffix(pkg, "...") {
+		if strings.HasSuffix(pkg, "/...") {
 			// Similar to `go test`, we implement `...` expansion to allow
 			// callers to use the following pattern to test all packages under a
 			// named one:
@@ -124,10 +125,15 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 				targets := strings.TrimSpace(string(out))
 				args = append(args, strings.Split(targets, "\n")...)
 			}
+		} else if strings.Contains(pkg, ":") {
+			args = append(args, pkg)
 		} else {
-			components := strings.Split(pkg, "/")
-			pkgName := components[len(components)-1]
-			args = append(args, fmt.Sprintf("//%s:%s_test", pkg, pkgName))
+			out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", pkg))
+			if err != nil {
+				return err
+			}
+			tests := strings.Split(strings.TrimSpace(string(out)), "\n")
+			args = append(args, tests...)
 		}
 	}
 
@@ -156,6 +162,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	} else {
 		args = append(args, "--test_output", "errors")
 	}
+	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)

@@ -17,6 +17,28 @@
 =>
 (MakeMinMaxScalarSubqueries $scanPrivate $aggregations)
 
+# ReplaceFilteredScalarMinMaxWithSubqueries replaces a scalar group by from a
+# SelectExpr with a ScanExpr as input and n > 1 MIN/MAX expressions with n
+# scalar subqueries, so that each subquery may take advantage of the
+# ReplaceScalarMinMaxWithLimit rule.
+# NOTE: The input relation must be a select from a simple scan as currently no
+#       other cases, such as joins, can take advantage of this rewrite.
+[ReplaceFilteredScalarMinMaxWithSubqueries, Explore]
+(ScalarGroupBy
+    (Select
+        (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+        $filters:*
+    )
+    $aggregations:* & (TwoOrMoreMinOrMax $aggregations)
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(MakeMinMaxScalarSubqueriesWithFilter
+    $scanPrivate
+    $aggregations
+    $filters
+)
+
 # ReplaceScalarMinMaxWithLimit replaces a min or max group by aggregation with a
 # limit 1 on an ordered set. This rule may result in a lower cost plan if the
 # aggregated column (e.g. the "x" in min(x)) is indexed.

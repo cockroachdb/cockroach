@@ -31,6 +31,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type stubTime struct {
+	syncutil.RWMutex
+	t time.Time
+}
+
+func (s *stubTime) setTime(t time.Time) {
+	s.RWMutex.Lock()
+	defer s.RWMutex.Unlock()
+	s.t = t
+}
+
+func (s *stubTime) TimeNow() time.Time {
+	s.RWMutex.RLock()
+	defer s.RWMutex.RUnlock()
+	return s.t
+}
+
 func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	// Enable logging channels.
 	log.TestingResetActive()
@@ -52,25 +69,8 @@ func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	return cleanup
 }
 
-type fakeInterval struct {
-	syncutil.RWMutex
-	interval int64
-}
-
-func (i *fakeInterval) setInterval(length int64) {
-	i.RWMutex.Lock()
-	defer i.RWMutex.Unlock()
-	i.interval = length
-}
-
-func (i *fakeInterval) getInterval() int64 {
-	i.RWMutex.RLock()
-	defer i.RWMutex.RUnlock()
-	return i.interval
-}
-
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
-// and their "EffectiveSampleRate" value is logged correctly.
+// and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
@@ -80,15 +80,11 @@ func TestTelemetryLogging(t *testing.T) {
 	defer cleanup()
 
 	st := stubTime{}
-	st.setTime(timeutil.Now())
-	stubInterval := fakeInterval{}
-	stubInterval.setInterval(1)
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getRollingIntervalLength: stubInterval.getInterval,
-				getTimeNow:               st.TimeNow,
+				getTimeNow: st.TimeNow,
 			},
 		},
 	})
@@ -98,108 +94,75 @@ func TestTelemetryLogging(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-
-	samplingRateFail := float64(0)
-	samplingRatePass := float64(1)
-	qpsThresholdExceed := int64(0)
-	qpsThresholdNotExceed := int64(1000000)
+	db.Exec(t, "CREATE TABLE t();")
 
 	// Testing Cases:
 	// - entries that are NOT sampled
 	// 	- cases include:
 	//		- statement type not DML
-	//		- below QPS threshold
-	//		- sampling rate does not pass
 	// - entries that ARE sampled
 	// 	- cases include:
-	//		- statement type DML, above QPS threshold, and sampling rate passes
+	//		- statement type DML, enough time has elapsed
 
 	testData := []struct {
-		name                 string
-		query                string
-		numExec              []int
-		intervalLength       int64
-		expectedLogStatement string
-		stubQPSThreshold     int64
-		stubSamplingRate     float64
-		expectedSkipped      int
+		name                  string
+		query                 string
+		execTimestampsSeconds []float64 // Execute the query with the following timestamps.
+		expectedLogStatement  string
+		stubMaxEventFrequency int64
+		expectedSkipped       []int // Expected skipped query count per expected log line.
 	}{
 		{
 			// Test case with statement that is not of type DML.
-			"create-table-query",
-			"CREATE TABLE t();",
-			[]int{1},
+			// Even though the queries are executed within the required
+			// elapsed interval, we should still see that they were all
+			// logged since  we log all statements that are not of type DML.
+			"truncate-table-query",
+			"TRUNCATE t;",
+			[]float64{1, 1.1, 1.2, 2},
+			`TRUNCATE TABLE`,
 			1,
-			"CREATE TABLE ‹defaultdb›.public.‹t› ()",
-			qpsThresholdExceed,
-			samplingRatePass,
-			0,
+			[]int{0, 0, 0, 0},
 		},
 		{
 			// Test case with statement that is of type DML.
-			// QPS threshold is not expected to be exceeded, therefore,
-			// no sampling will occur.
+			// The first statement should be logged.
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
-			[]int{1},
-			2,
+			[]float64{3},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹1›`,
-			qpsThresholdNotExceed,
-			samplingRatePass,
-			0,
+			1,
+			[]int{0},
 		},
 		{
 			// Test case with statement that is of type DML.
-			// Sampling selection will guaranteed fail, therefore,
-			// no log will appear.
+			// Two timestamps are within the required elapsed interval,
+			// thus 2 log statements are expected, with 2 skipped queries.
 			"select-*-limit-2-query",
 			"SELECT * FROM t LIMIT 2;",
-			[]int{2},
-			1,
+			[]float64{4, 4.1, 4.2, 5},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹2›`,
-			qpsThresholdExceed,
-			samplingRateFail,
-			0,
+			1,
+			[]int{0, 2},
 		},
 		{
 			// Test case with statement that is of type DML.
-			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed.
+			// Once required time has elapsed, the next statement should be logged.
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
-			[]int{2},
-			1,
+			[]float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
 			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹3›`,
-			1,
-			samplingRatePass,
-			2, // sum of exec counts of previous test.
-		},
-		{
-			// Test case with statement that is of type DML.
-			// QPS threshold is expected to be exceeded, and sampling
-			// selection is guaranteed.
-			// Test case executes multiple queries in multiple 1s intervals.
-			"select-*-limit-4-query",
-			"SELECT * FROM t LIMIT 4;",
-			[]int{2, 3, 4},
-			1,
-			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹4›`,
-			1,
-			samplingRatePass,
-			0,
+			10,
+			[]int{0, 3, 0},
 		},
 	}
 
 	for _, tc := range testData {
-		telemetryQPSThreshold.Override(context.Background(), &s.ClusterSettings().SV, tc.stubQPSThreshold)
-		telemetrySampleRate.Override(context.Background(), &s.ClusterSettings().SV, tc.stubSamplingRate)
-		st.setTime(st.TimeNow().Add(time.Second))
-		stubInterval.setInterval(tc.intervalLength)
-		for _, numExec := range tc.numExec {
-			for i := 0; i < numExec; i++ {
-				db.Exec(t, tc.query)
-			}
-			st.setTime(st.TimeNow().Add(time.Second))
+		telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		for _, execTimestamp := range tc.execTimestampsSeconds {
+			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
+			st.setTime(stubTime)
+			db.Exec(t, tc.query)
 		}
 	}
 
@@ -228,33 +191,31 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		logStatementFound := false
-		firstMatch := true
+		logCount := 0
+		expectedLogCount := len(tc.expectedSkipped)
 		// NB: FetchEntriesFromFiles delivers entries in reverse order.
 		for i := len(entries) - 1; i >= 0; i-- {
 			e := entries[i]
 			if strings.Contains(e.Message, tc.expectedLogStatement) {
-				t.Logf("%s: found entry:\n%s", tc.name, e.Message)
-				logStatementFound = true
-				if firstMatch {
-					firstMatch = false
-					if tc.expectedSkipped == 0 {
-						if strings.Contains(e.Message, "SkippedQueries") {
-							t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
-						}
-					} else {
-						if expected := fmt.Sprintf(`"SkippedQueries":%d`, tc.expectedSkipped); !strings.Contains(e.Message, expected) {
-							t.Errorf("%s: expected %s in first log entry, found:\n%s", tc.name, expected, e.Message)
-						}
+				if logCount == expectedLogCount {
+					t.Errorf("%s: found more than %d expected log entries", tc.name, expectedLogCount)
+					break
+				}
+				expectedSkipped := tc.expectedSkipped[logCount]
+				logCount++
+				if expectedSkipped == 0 {
+					if strings.Contains(e.Message, "SkippedQueries") {
+						t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
+					}
+				} else {
+					if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
+						t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
 					}
 				}
 			}
 		}
-		if !logStatementFound && tc.name != "select-*-limit-2-query" {
-			t.Errorf("%s: no matching log entry found", tc.name)
-		}
-		if logStatementFound && tc.name == "select-*-limit-2-query" {
-			t.Errorf("%s: found log entry, was expecting no entry", tc.name)
+		if logCount != expectedLogCount {
+			t.Errorf("%s: expected %d log entries, found %d", tc.name, expectedLogCount, logCount)
 		}
 	}
 }

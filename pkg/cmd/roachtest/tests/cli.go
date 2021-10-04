@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
+	skip.WithIssue(t, 70902, "flaky test")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.Range(1, 3))
 

@@ -19,10 +19,8 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -62,8 +60,12 @@ type fileSink struct {
 	// enabled = true implies logDir != "".
 	enabled syncutil.AtomicBool
 
-	// name prefix for log files.
-	prefix string
+	// groupName is the config-specified file group name - do not use to
+	// generate file names! Use fileNamePrefix instead.
+	groupName string
+
+	// name generator for log files.
+	nameGenerator fileNameGenerator
 
 	// bufferedWrites if false calls file.Flush on every log
 	// write. This can be set per-logger e.g. for audit logging.
@@ -130,18 +132,15 @@ type fileSink struct {
 
 // newFileSink creates a new file sink.
 func newFileSink(
-	dir, fileNamePrefix string,
+	dir, fileGroupName string,
 	bufferedWrites bool,
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []*buffer,
 	filePermissions fs.FileMode,
 ) *fileSink {
-	prefix := program
-	if fileNamePrefix != "" {
-		prefix = program + "-" + fileNamePrefix
-	}
 	f := &fileSink{
-		prefix:                  prefix,
+		groupName:               fileGroupName,
+		nameGenerator:           makeFileNameGenerator(fileGroupName),
 		bufferedWrites:          bufferedWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
@@ -273,61 +272,6 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 	}
 }
 
-var (
-	pid      = os.Getpid()
-	program  = filepath.Base(os.Args[0])
-	host     = "unknownhost"
-	userName = "unknownuser"
-)
-
-func init() {
-	h, err := os.Hostname()
-	if err == nil {
-		host = shortHostname(h)
-	}
-
-	current, err := user.Current()
-	if err == nil {
-		userName = current.Username
-	}
-
-	// Sanitize userName since it may contain filepath separators on Windows.
-	userName = strings.Replace(userName, `\`, "_", -1)
-}
-
-// shortHostname returns its argument, truncating at the first period.
-// For instance, given "www.google.com" it returns "www".
-func shortHostname(hostname string) string {
-	if i := strings.IndexByte(hostname, '.'); i >= 0 {
-		return hostname[:i]
-	}
-	return hostname
-}
-
-// FileTimeFormat is RFC3339 with the colons replaced with underscores.
-// It is the format used for timestamps in log file names.
-// This removal of colons creates log files safe for Windows file systems.
-const FileTimeFormat = "2006-01-02T15_04_05Z07:00"
-
-// removePeriods removes all extraneous periods. This is required to ensure that
-// the only periods in the filename are the ones added by logName so it can
-// be easily parsed.
-func removePeriods(s string) string {
-	return strings.Replace(s, ".", "", -1)
-}
-
-// logName returns a new log file name with start time t, and the name
-// for the symlink.
-func logName(prefix string, t time.Time) (name, link string) {
-	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
-		removePeriods(prefix),
-		removePeriods(host),
-		removePeriods(userName),
-		t.Format(FileTimeFormat),
-		pid)
-	return name, removePeriods(prefix) + ".log"
-}
-
 var errDirectoryNotSet = errors.New("log: log directory not set")
 
 // create creates a new log file and returns the file and its
@@ -336,7 +280,11 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 //
 // It is invalid to call this with an unset output directory.
 func create(
-	dir, prefix string, t time.Time, lastRotation int64, fileMode fs.FileMode,
+	dir string,
+	nameGenerator fileNameGenerator,
+	t time.Time,
+	lastRotation int64,
+	fileMode fs.FileMode,
 ) (f *os.File, updatedRotation int64, filename, symlink string, err error) {
 	if dir == "" {
 		return nil, lastRotation, "", "", errDirectoryNotSet
@@ -352,7 +300,7 @@ func create(
 	t = timeutil.Unix(unix, 0)
 
 	// Generate the file name.
-	name, link := logName(prefix, t)
+	name, link := nameGenerator.logName(t)
 	symlink = filepath.Join(dir, link)
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.

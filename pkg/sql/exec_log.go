@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -142,9 +141,8 @@ func (p *planner) maybeLogStatement(
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
-	rng *rand.Rand,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, rng)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -155,7 +153,6 @@ func (p *planner) maybeLogStatementInternal(
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
-	rng *rand.Rand,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -169,8 +166,7 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
-	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
-	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
+	maxEventFrequency := telemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 
 	// We only consider non-internal SQL statements for telemetry logging.
 	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
@@ -366,28 +362,20 @@ func (p *planner) maybeLogStatementInternal(
 	}
 
 	if telemetryLoggingEnabled {
-		smoothQPS := telemetryMetrics.expSmoothQPS()
-		useSamplingMethod := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
-		alwaysReportQueries := !useSamplingMethod
-		// If we DO NOT need to sample the event, log immediately to the telemetry
-		// channel. Otherwise, log the event to the telemetry channel if it has been
-		// sampled.
-		if alwaysReportQueries {
+		// We only log to the telemetry channel if enough time has elapsed from
+		// the last event emission.
+		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
+		if p.stmt.AST.StatementType() != tree.TypeDML {
+			requiredTimeElapsed = 0
+		}
+		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
 				CommonSQLExecDetails: execDetails,
 				SkippedQueries:       skippedQueries,
 			}})
-		} else if useSamplingMethod {
-			if rng.Float64() < sampleRate {
-				skippedQueries := telemetryMetrics.resetSkippedQueryCount()
-				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
-					CommonSQLExecDetails: execDetails,
-					SkippedQueries:       skippedQueries,
-				}})
-			} else {
-				telemetryMetrics.incSkippedQueryCount()
-			}
+		} else {
+			telemetryMetrics.incSkippedQueryCount()
 		}
 	}
 }

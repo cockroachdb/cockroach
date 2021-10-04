@@ -203,7 +203,7 @@ func evalExport(
 				targetSize = curSizeOfExportedSSTs
 			}
 			reply.NumBytes = targetSize
-			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
 			// NB: This condition means that we will allow another SST to be created
 			// even if we have less room in our TargetBytes than the target size of
 			// the next SST. In the worst case this could lead to us exceeding our
