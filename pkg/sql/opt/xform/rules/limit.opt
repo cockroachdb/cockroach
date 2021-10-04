@@ -124,3 +124,34 @@
 )
 =>
 (TopK $input (MakeTopKPrivate $limit $ordering))
+
+# GenerateLimitedTopKScans generates a set of Scan alternatives for
+# each matching index on the scanned table, and an IndexJoin to supply columns
+# missing from the index. This differs from GenerateIndexScans, which does not
+# generate index joins for non-covering indexes.
+#
+# This rule is useful when there is an index that provides an ordering that
+# partially satisfies TopK's ordering. This lets us explore expressions that
+# allow TopK to process a potentially limited number of rows due to its input
+# being already partially ordered, and allows TopK to pass on a limit hint to
+# its input expressions so that they may not have to process all input rows,
+# either.
+[GenerateLimitedTopKScans, Explore]
+(TopK
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $topKPrivate:*
+)
+=>
+(GenerateLimitedTopKScans $scanPrivate $topKPrivate)
+
+
+# GeneratePartialOrderTopK generates Top K expressions with a partial input
+# ordering using the interesting ordering property. This is useful to explore
+# expressions that allow TopK to potentially process fewer rows, which it can
+# do if the input is already partially ordered. It also allows TopK to pass on
+# a limit hint to its input expressions so that they may not have to process
+# their entire input, either.
+[GeneratePartialOrderTopK, Explore]
+(TopK $input:* $private:*)
+=>
+(GeneratePartialOrderTopK $input $private)

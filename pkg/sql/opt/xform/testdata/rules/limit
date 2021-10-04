@@ -745,6 +745,9 @@ GenerateTopK (higher cost)
   +           │         └── fd: (1)-->(2)
   +           └── filters
   +                └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+--------------------------------------------------------------------------------
+GeneratePartialOrderTopK (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
   Cost: 3571.71
@@ -1657,8 +1660,8 @@ top-k
 memo expect=GenerateTopK
 SELECT * FROM a ORDER BY k LIMIT 1
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
- ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1})
+memo (optimized, ~4KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
+ ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1 })
  │    └── [presentation: k:1,i:2,f:3,s:4,j:5]
  │         ├── best: (scan a,cols=(1-5),lim=1)
  │         └── cost: 5.11
@@ -1785,3 +1788,308 @@ offset
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── 3
+
+# ---------------------------------------------------
+# GenerateLimitedTopKScans
+# ---------------------------------------------------
+
+exec-ddl
+CREATE TABLE defg (
+d INT,
+e INT,
+f INT,
+g INT,
+INDEX dd (d),
+INDEX dfg (d, f, g),
+INDEX df (d, f)
+)
+----
+
+# Generates an index scan on dd, dfg, and df and an index join to get all
+# columns, though these are not the best cost plans.
+memo expect=GenerateLimitedTopKScans
+SELECT d, e FROM defg ORDER BY d, e LIMIT 10
+----
+memo (optimized, ~12KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G4 &{10 +1,+2 }) (top-k G5 &{10 +1,+2 }) (top-k G6 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1}) (top-k G4 &{10 +1,+2 +1}) (top-k G5 &{10 +1,+2 +1}) (top-k G6 &{10 +1,+2 +1})
+ │    ├── [presentation: d:1,e:2] [ordering: +1,+2]
+ │    │    ├── best: (top-k G2 &{10 +1,+2 })
+ │    │    └── cost: 1185.69
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+2 })
+ │         └── cost: 1185.69
+ ├── G2: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1345.17
+ │    ├── [ordering: +1]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1334.20
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G3: (const 10)
+ ├── G4: (index-join G7 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7134.44
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1336.81
+ │    └── []
+ │         ├── best: (index-join G7 defg,cols=(1,2))
+ │         └── cost: 7134.44
+ ├── G5: (index-join G8 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G8="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7154.64
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G8="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1338.90
+ │    └── []
+ │         ├── best: (index-join G8 defg,cols=(1,2))
+ │         └── cost: 7154.64
+ ├── G6: (index-join G9 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G9="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7144.54
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G9="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1337.85
+ │    └── []
+ │         ├── best: (index-join G9 defg,cols=(1,2))
+ │         └── cost: 7144.54
+ ├── G7: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 122.79
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G8: (scan defg@dfg,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 1084.62
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 124.88
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,5))
+ │         └── cost: 1084.62
+ └── G9: (scan defg@df,cols=(1,5))
+      ├── [ordering: +1]
+      │    ├── best: (scan defg@df,cols=(1,5))
+      │    └── cost: 1074.52
+      ├── [ordering: +1] [limit hint: 104.58]
+      │    ├── best: (scan defg@df,cols=(1,5))
+      │    └── cost: 123.83
+      └── []
+           ├── best: (scan defg@df,cols=(1,5))
+           └── cost: 1074.52
+
+# Generates an index scan on df and an index join to get all columns.
+opt expect=GenerateLimitedTopKScans
+SELECT d, f, e FROM defg ORDER BY d, f, e LIMIT 10
+----
+top-k
+ ├── columns: d:1 f:3 e:2
+ ├── internal-ordering: +1,+3,+2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +1,+3,+2
+ └── index-join defg
+      ├── columns: d:1 e:2 f:3
+      ├── ordering: +1,+3
+      ├── limit hint: 100.00
+      └── scan defg@df
+           ├── columns: d:1 f:3 rowid:5!null
+           ├── key: (5)
+           ├── fd: (5)-->(1,3)
+           ├── ordering: +1,+3
+           └── limit hint: 100.00
+
+# Does not generate a limited top K scan because the order by columns are covered.
+opt expect-not=GenerateLimitedTopKScans
+SELECT d FROM defg ORDER BY d LIMIT 10
+----
+scan defg@dd
+ ├── columns: d:1
+ ├── limit: 10
+ └── ordering: +1
+
+# First order column is not the first column in an index.
+opt expect-not=GenerateLimitedTopKScans
+SELECT * FROM defg ORDER BY f LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 f:3 g:4
+ ├── internal-ordering: +3
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +3
+ └── scan defg
+      └── columns: d:1 e:2 f:3 g:4
+
+# ---------------------------------------------------
+# GeneratePartialOrderTopK
+# ---------------------------------------------------
+
+# Index orderings dd, dfg, and df can be used.
+memo expect=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY d, f, e LIMIT 10
+----
+memo (optimized, ~12KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
+ │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
+ │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
+ │    │    └── cost: 737.57
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │         └── cost: 1206.52
+ ├── G2: (scan defg,cols=(1-4))
+ │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1386.46
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1385.37
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1385.37
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-4))
+ │         └── cost: 1114.92
+ ├── G3: (const 10)
+ ├── G4: (index-join G7 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G4="[ordering: +1]")
+ │    │    └── cost: 7290.90
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G4="[ordering: +1]")
+ │    │    └── cost: 7290.90
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1-4))
+ │    │    └── cost: 7154.44
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1-4))
+ │    │    └── cost: 1340.81
+ │    └── []
+ │         ├── best: (index-join G7 defg,cols=(1-4))
+ │         └── cost: 7154.44
+ ├── G5: (index-join G8 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (index-join G8="[ordering: +1,+3]" defg,cols=(1-4))
+ │    │    └── cost: 7174.84
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (index-join G8="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
+ │    │    └── cost: 729.04
+ │    └── []
+ │         ├── best: (index-join G8 defg,cols=(1-4))
+ │         └── cost: 7174.84
+ ├── G6: (index-join G9 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (index-join G9="[ordering: +1,+3]" defg,cols=(1-4))
+ │    │    └── cost: 7164.64
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (index-join G9="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
+ │    │    └── cost: 728.04
+ │    └── []
+ │         ├── best: (index-join G9 defg,cols=(1-4))
+ │         └── cost: 7164.64
+ ├── G7: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 122.79
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G8: (scan defg@dfg,cols=(1,3-5))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
+ │    │    └── cost: 1104.82
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
+ │    │    └── cost: 122.02
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,3-5))
+ │         └── cost: 1104.82
+ └── G9: (scan defg@df,cols=(1,3,5))
+      ├── [ordering: +1,+3]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 1084.62
+      ├── [ordering: +1,+3] [limit hint: 100.00]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 120.02
+      └── []
+           ├── best: (scan defg@df,cols=(1,3,5))
+           └── cost: 1084.62
+
+# Only index ordering dfg can be used for the topk.
+memo expect=GeneratePartialOrderTopK disable=GenerateLimitedTopKScans
+SELECT d, f, g FROM defg ORDER BY d, g LIMIT 10
+----
+memo (optimized, ~4KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
+ ├── G1: (limit G2 G3 ordering=+1,+4) (top-k G2 &{10 +1,+4 }) (top-k G2 &{10 +1,+4 +1})
+ │    ├── [presentation: d:1,f:3,g:4] [ordering: +1,+4]
+ │    │    ├── best: (top-k G2="[ordering: +1] [limit hint: 104.58]" &{10 +1,+4 +1})
+ │    │    └── cost: 135.73
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+4 })
+ │         └── cost: 1185.79
+ ├── G2: (scan defg,cols=(1,3,4)) (scan defg@dfg,cols=(1,3,4))
+ │    ├── [ordering: +1,+4] [limit hint: 10.00]
+ │    │    ├── best: (sort G2="[ordering: +1]")
+ │    │    └── cost: 1221.18
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
+ │    │    └── cost: 1094.72
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
+ │    │    └── cost: 125.92
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,3,4))
+ │         └── cost: 1094.72
+ └── G3: (const 10)
+
+# Ensure that we don't incorrectly use orderings that don't match the direction.
+memo expect-not=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY g DESC LIMIT 10
+----
+memo (optimized, ~3KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: -4])
+ ├── G1: (limit G2 G3 ordering=-4) (top-k G2 &{10 -4 })
+ │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: -4]
+ │    │    ├── best: (top-k G2 &{10 -4 })
+ │    │    └── cost: 1201.77
+ │    └── []
+ │         ├── best: (top-k G2 &{10 -4 })
+ │         └── cost: 1201.77
+ ├── G2: (scan defg,cols=(1-4))
+ │    ├── [ordering: -4] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1374.40
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-4))
+ │         └── cost: 1114.92
+ └── G3: (const 10)
+
+# No index matches.
+opt expect-not=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY e LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 f:3 g:4
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +2
+ └── scan defg
+      └── columns: d:1 e:2 f:3 g:4
