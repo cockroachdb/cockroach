@@ -1,14 +1,21 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
-# TODO (koorosh): genrule produces directory as output, should be changed later.
 genrule(
     name = "genassets",
     srcs = select({
         "//pkg/ui:cockroach_with_ui": ["//pkg/ui/workspaces/db-console:db-console-ccl"],
-        "//conditions:default": ["_empty_assets"],
+        "//conditions:default": ["//pkg/ui:gen-empty-index.html"],
     }),
-    outs = ["assets"],
-    cmd = "cp -R $(SRCS)/* $(OUTS)",
+    outs = ["assets.tar.gz"],
+    cmd = """
+if [ -d $< ]
+then
+  $(location //pkg/util/targz/gen) $</assets $@
+else
+  $(location //pkg/util/targz/gen) $< $@
+fi
+""",
+    exec_tools = ["//pkg/util/targz/gen"],
 )
 
 go_library(
@@ -17,5 +24,8 @@ go_library(
     embedsrcs = [":genassets"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/ui"],
+    deps = [
+        "//pkg/ui",
+        "//pkg/util/targz",
+    ],
 )
