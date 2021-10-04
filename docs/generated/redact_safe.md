@@ -3,6 +3,7 @@ The following types are considered always safe for reporting:
 File | Type
 --|--
 pkg/cli/exit/exit.go | `Code`
+pkg/jobs/jobspb/wrap.go | `JobID`
 pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/closedts/ctpb/service.go | `SeqNum`
@@ -33,6 +34,7 @@ pkg/sql/catalog/descpb/structured.go | `IndexID`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/sql/sem/tree/table_ref.go | `ID`
+pkg/sql/sqlliveness/sqlliveness.go | `SessionID`
 pkg/storage/enginepb/mvcc.go | `TxnEpoch`
 pkg/storage/enginepb/mvcc.go | `TxnSeq`
 pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
