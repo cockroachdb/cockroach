@@ -53,3 +53,10 @@ func NormalizeName(n string) string {
 	}
 	return norm.NFC.String(lower)
 }
+
+//NormalizeBytes normalizes to Unicode Normalization Form C (NFC).
+//This function is specifically for double quoted identifiers.
+
+func NormalizeBytes(n []byte) []byte {
+	return norm.NFC.Bytes(n)
+}
