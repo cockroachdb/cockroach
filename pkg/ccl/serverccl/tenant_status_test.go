@@ -11,6 +11,7 @@ package serverccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"sort"
@@ -468,4 +469,53 @@ WHERE
 	expected = [][]string{}
 
 	require.Equal(t, expected, actual)
+}
+
+func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
+	var sessionIDs []string
+	rows := conn.Query(t, "SELECT session_id FROM crdb_internal.cluster_sessions")
+	defer rows.Close()
+	for rows.Next() {
+		var sessionID string
+		rows.Scan(&sessionID)
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	return sessionIDs
+}
+
+func TestTenantStatusCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
+	defer helper.cleanup(ctx, t)
+
+	// Open a SQL session on tenant 0.
+	sql0 := helper.testCluster().tenantConn(0)
+	sql0.Exec(t, "SELECT 1")
+
+	// See the session over HTTP on tenant 1.
+	http1, err := helper.testCluster().tenantHTTPJSONClient(1)
+	require.NoError(t, err)
+	defer http1.Close()
+	listSessionsResp := serverpb.ListSessionsResponse{}
+	err = http1.GetJSON("/_status/sessions", &listSessionsResp)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(listSessionsResp.Sessions))
+
+	// See the session over SQL on tenant 0.
+	session := listSessionsResp.Sessions[0]
+	require.Contains(t, selectClusterSessionIDs(t, sql0), hex.EncodeToString(session.ID))
+
+	// Cancel the session over HTTP from tenant 1.
+	cancelSessionReq := serverpb.CancelSessionRequest{NodeId: session.NodeID.String(), SessionID: session.ID}
+	cancelSessionResp := serverpb.CancelSessionResponse{}
+	err = http1.PostJSON("/_status/cancel_session/"+session.NodeID.String(), &cancelSessionReq, &cancelSessionResp)
+	require.NoError(t, err)
+	require.Equal(t, true, cancelSessionResp.Canceled, cancelSessionResp.Error)
+
+	// No longer see the session over SQL from tenant 0.
+	// (The SQL client maintains an internal connection pool and automatically reconnects.)
+	require.NotContains(t, selectClusterSessionIDs(t, sql0), hex.EncodeToString(session.ID))
 }
