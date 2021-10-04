@@ -831,7 +831,7 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_table_partition_by",
 		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by"},
+		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
 		replace: map[string]string{"relation_expr": "table_name"},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
@@ -848,7 +848,7 @@ var specs = []stmtSpec{
 	{
 		name:    "create_table_partition_by",
 		stmt:    "create_table_stmt",
-		inline:  []string{"opt_partition_by", "partition_by"},
+		inline:  []string{"opt_partition_by_table", "partition_by_table"},
 		replace: map[string]string{"opt_table_elem_list": "table_definition", "opt_interleave": ""},
 		match:   []*regexp.Regexp{regexp.MustCompile("PARTITION")},
 		unlink:  []string{"table_definition"},
@@ -1033,8 +1033,7 @@ var specs = []stmtSpec{
 		inline: []string{"savepoint_name"},
 	},
 	{
-		name:    "rename_column",
-		stmt:    "alter_rename_table_stmt",
+		name:    "alter_rename_table_stmt",
 		inline:  []string{"opt_column"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'TABLE' .* 'RENAME' ('COLUMN'|name)")},
 		replace: map[string]string{"relation_expr": "table_name", "name 'TO'": "current_name 'TO'"},
@@ -1250,11 +1249,7 @@ var specs = []stmtSpec{
 		inline: []string{"with_comment"},
 	},
 	{
-		name:    "show_constraints",
-		stmt:    "show_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CONSTRAINTS'")},
-		replace: map[string]string{"var_name": "table_name"},
-		unlink:  []string{"table_name"},
+		name: "show_constraints_stmt",
 	},
 	{
 		name:    "show_create_stmt",
@@ -1303,13 +1298,13 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
-		name:   "show_indexes",
+		name:   "show_indexes_stmt",
 		inline: []string{"with_comment"},
 		stmt:   "show_indexes_stmt",
 	},
 	{
 		name:    "show_index",
-		stmt:    "show_stmt",
+		stmt:    "show_indexes_stmt",
 		inline:  []string{"with_comment"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")},
 		replace: map[string]string{"var_name": "table_name"},
@@ -1317,7 +1312,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:  "show_keys",
-		stmt:  "show_stmt",
+		stmt:  "show_indexes_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
 	},
 	{
@@ -1390,7 +1385,7 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'EXPERIMENTAL_REPLICA'")},
 	},
 	{
-		name:  "show_transaction",
+		name:  "show_transactions_stmt",
 		stmt:  "show_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")},
 	},
