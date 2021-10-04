@@ -161,11 +161,13 @@ type BaseConfig struct {
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings) BaseConfig {
-	tracer := tracing.NewTracerWithOpt(context.TODO(), &st.SV)
+func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	baseCfg := BaseConfig{
-		Tracer:            tracer,
-		AmbientCtx:        log.AmbientContext{Tracer: tracer},
+		Tracer:            tr,
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
@@ -399,7 +401,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
-	baseCfg := MakeBaseConfig(st)
+	tr := tracing.NewTracerWithOpt(ctx, &st.SV)
+	baseCfg := MakeBaseConfig(st, tr)
 	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{
