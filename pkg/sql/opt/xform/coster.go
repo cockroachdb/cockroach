@@ -570,9 +570,14 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Required) memo.Cost {
 	rel := topk.Relational()
-	inputRowCount := topk.Input.Relational().Stats.RowCount
 	outputRowCount := rel.Stats.RowCount
 
+	inputRowCount := topk.Input.Relational().Stats.RowCount
+	if !required.Ordering.Any() {
+		// When there is a partial ordering of the input rows' sort columns, we may
+		// be able to reduce the number of input rows needed to find the top K rows.
+		inputRowCount = topKInputLimitHint(c.mem, topk, inputRowCount, outputRowCount, float64(topk.K))
+	}
 	// Add the cost of sorting.
 	// Start with a cost of storing each row; TopK sort only stores K rows in a
 	// max heap.
@@ -1570,6 +1575,30 @@ func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint flo
 	// Round up to the nearest multiple of a batch.
 	expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
 	return math.Min(inputRowCount, expectedLookupCount)
+}
+
+// topKInputLimitHint calculates an appropriate limit hint for the input
+// to a Top K expression when there.
+func topKInputLimitHint(
+	mem *memo.Memo, topk *memo.TopKExpr, inputRowCount, outputRowCount, K float64,
+) float64 {
+	if outputRowCount == 0 {
+		return 0
+	}
+	orderedCols := topk.PartialOrdering.ColSet()
+	if orderedCols.Len() == 0 {
+		return inputRowCount
+	}
+	orderedStats, ok := topk.Relational().Stats.ColStats.Lookup(orderedCols)
+	if !ok {
+		orderedStats, ok = mem.RequestColStat(topk, orderedCols)
+		if !ok {
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", orderedCols))
+		}
+	}
+
+	expectedSegments := math.Ceil(K/orderedStats.DistinctCount) * orderedStats.DistinctCount
+	return math.Min(inputRowCount, expectedSegments)
 }
 
 // lookupExprCost accounts for the extra CPU cost of the lookupExpr.

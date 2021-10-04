@@ -2562,14 +2562,14 @@ project
       ├── internal-ordering: -1
       ├── cardinality: [0 - 100]
       ├── immutable
-      ├── stats: [rows=100]
+      ├── stats: [rows=100, distinct(1)=99.9996148, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3,5-7,10)
       ├── ordering: -1
       ├── select
       │    ├── columns: killmail:1!null ship:2!null cost:3 hi:5!null med:6!null low:7!null items:10!null
       │    ├── immutable
-      │    ├── stats: [rows=243064.333]
+      │    ├── stats: [rows=243064.333, distinct(1)=238597.539, null(1)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3,5-7,10)
       │    ├── ordering: -1
@@ -2614,7 +2614,7 @@ project
       ├── columns: killmail:1!null ship:2!null cost:3 hi:5!null med:6!null low:7!null items:10!null
       ├── cardinality: [0 - 100]
       ├── immutable
-      ├── stats: [rows=100]
+      ├── stats: [rows=100, distinct(1)=99.9996148, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3,5-7,10)
       ├── ordering: -1

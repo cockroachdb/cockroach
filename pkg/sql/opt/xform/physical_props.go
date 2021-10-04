@@ -166,6 +166,24 @@ func BuildChildPhysicalProps(
 
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
 		childProps.LimitHint = parentProps.LimitHint
+
+	case opt.TopKOp:
+		if parentProps.Ordering.Any() {
+			break
+		}
+		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		topk := parent.(*memo.TopKExpr)
+		k := float64(topk.K)
+		if outputRows == 0 || outputRows < k {
+			break
+		}
+		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
+			inputRows := input.Relational().Stats.RowCount
+
+			if limitHint := topKInputLimitHint(mem, topk, inputRows, outputRows, k); limitHint < inputRows {
+				childProps.LimitHint = limitHint
+			}
+		}
 	}
 
 	if childProps.LimitHint < 0 {

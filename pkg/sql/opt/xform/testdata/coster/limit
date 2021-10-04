@@ -61,3 +61,35 @@ offset
  │         │         └── ordering: +4 opt(2) [actual: +4]
  │         └── 1020
  └── 1000
+
+opt
+SELECT * FROM a
+ORDER BY y, z
+LIMIT 10
+----
+top-k
+ ├── columns: x:1!null y:2 z:3 s:4!null
+ ├── internal-ordering: +2,+3
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10, distinct(2)=9.5617925, null(2)=0.1]
+ ├── cost: 642.456666
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +2,+3
+ └── index-join a
+      ├── columns: x:1!null y:2 z:3 s:4!null
+      ├── stats: [rows=1000]
+      ├── cost: 640.311
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── ordering: +2
+      ├── limit hint: 19.12
+      └── scan a@a_y_s_idx
+           ├── columns: x:1!null y:2 s:4!null
+           ├── stats: [rows=1000]
+           ├── cost: 34.2910001
+           ├── key: (1)
+           ├── fd: (1)-->(2,4)
+           ├── ordering: +2
+           └── limit hint: 19.12

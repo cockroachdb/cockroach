@@ -186,41 +186,11 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 	orders := ordering.DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
-		o := ord.ToOrdering()
-		// We are looking for a prefix of o that satisfies the intra-group ordering
-		// if we ignore grouping columns.
-		oIdx, intraIdx := 0, 0
-		for ; oIdx < len(o); oIdx++ {
-			oCol := o[oIdx].ID()
-			if private.GroupingCols.Contains(oCol) || intraOrd.Optional.Contains(oCol) {
-				// Grouping or optional column.
-				continue
-			}
-
-			if intraIdx < len(intraOrd.Columns) &&
-				intraOrd.Group(intraIdx).Contains(oCol) &&
-				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
-				// Column matches the one in the ordering.
-				intraIdx++
-				continue
-			}
-			break
-		}
-		if oIdx == 0 || intraIdx < len(intraOrd.Columns) {
-			// No match.
+		newOrd, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input,
+			func(id opt.ColumnID) bool { return private.GroupingCols.Contains(id) })
+		if !found {
 			continue
 		}
-		o = o[:oIdx]
-
-		var newOrd props.OrderingChoice
-		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
-
-		// Simplify the ordering according to the input's FDs. Note that this is not
-		// necessary for correctness because buildChildPhysicalProps would do it
-		// anyway, but doing it here once can make things more efficient (and we may
-		// generate fewer expressions if some of these orderings turn out to be
-		// equivalent).
-		newOrd.Simplify(&input.Relational().FuncDeps)
 
 		newPrivate := *private
 		newPrivate.Ordering = newOrd
