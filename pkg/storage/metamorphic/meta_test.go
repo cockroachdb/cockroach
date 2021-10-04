@@ -57,7 +57,7 @@ type testRunForEngines struct {
 func runMetaTestForEngines(run testRunForEngines) {
 	tempDir, cleanup := testutils.TempDir(run.t)
 	defer func() {
-		if !*keep {
+		if !*keep && !run.t.Failed() {
 			cleanup()
 		}
 	}()
@@ -86,7 +86,7 @@ func runMetaTest(run testRun) {
 	t := run.t
 	outerTempDir, cleanup := testutils.TempDir(run.t)
 	defer func() {
-		if !*keep {
+		if !*keep && !t.Failed() {
 			cleanup()
 		}
 	}()
@@ -106,7 +106,7 @@ func runMetaTest(run testRun) {
 		t.Run(strings.Join(engineNames, ","), func(t *testing.T) {
 			innerTempDir, cleanup := testutils.TempDir(t)
 			defer func() {
-				if !*keep {
+				if !*keep && !t.Failed() {
 					cleanup()
 				}
 			}()
