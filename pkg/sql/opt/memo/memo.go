@@ -374,6 +374,11 @@ func (m *Memo) NextID() opt.ScalarID {
 	return m.curID
 }
 
+// CopyNextIDFrom copies the next ScalarID from the other memo.
+func (m *Memo) CopyNextIDFrom(other *Memo) {
+	m.curID = other.curID
+}
+
 // RequestColStat calculates and returns the column statistic calculated on the
 // relational expression.
 func (m *Memo) RequestColStat(
