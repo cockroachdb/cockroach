@@ -6,7 +6,7 @@ fallback_rate: 1000
 ----
 
 # Issue a large request, forcing fetching of more RUs.
-write bytes=50000000
+write bytes=10000000
 ----
 
 configure
@@ -19,7 +19,7 @@ advance
 00:00:01.000
 
 # Issue a large request that requires more RUs.
-write bytes=100000000 label=w1
+write bytes=20000000 label=w1
 ----
 
 # Wait until we process the "low RU" notification (where we set the fallback rate
@@ -40,7 +40,7 @@ tick
 
 timers
 ----
-00:00:29.147
+00:00:29.653
 
 advance
 10s
