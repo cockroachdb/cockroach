@@ -1517,6 +1517,14 @@ service Status {
     };
   }
 
+  // CancelLocalSession forcefully terminates a SQL session running on this node given its ID.
+  rpc CancelLocalSession(CancelSessionRequest) returns (CancelSessionResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_session"
+      body: "*"
+    };
+  }
+
   // SpanStats accepts a key span and node ID, and returns a set of stats
   // summed from all ranges on the stores on that node which contain keys
   // in that span. This is designed to compute stats specific to a SQL table:

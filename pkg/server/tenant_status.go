@@ -17,8 +17,10 @@ package server
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -183,6 +185,53 @@ func (t *tenantStatusServer) CancelQuery(
 }
 
 func (t *tenantStatusServer) CancelSession(
+	ctx context.Context, request *serverpb.CancelSessionRequest,
+) (*serverpb.CancelSessionResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		return nil, err
+	}
+
+	response := serverpb.CancelSessionResponse{}
+	distinctErrorMessages := map[string]struct{}{}
+
+	if err := t.iteratePods(
+		ctx,
+		fmt.Sprintf("cancel session ID %s", hex.EncodeToString(request.SessionID)),
+		t.dialCallback,
+		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+			return client.(serverpb.StatusClient).CancelLocalSession(ctx, request)
+		},
+		func(_ base.SQLInstanceID, nodeResp interface{}) {
+			nodeCancelSessionResp := nodeResp.(*serverpb.CancelSessionResponse)
+			if nodeCancelSessionResp.Canceled {
+				response.Canceled = true
+			}
+			distinctErrorMessages[nodeCancelSessionResp.Error] = struct{}{}
+		},
+		func(_ base.SQLInstanceID, err error) {
+			distinctErrorMessages[err.Error()] = struct{}{}
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	if !response.Canceled {
+		var errorMessages []string
+		for errorMessage := range distinctErrorMessages {
+			errorMessages = append(errorMessages, errorMessage)
+		}
+		response.Error = strings.Join(errorMessages, ", ")
+	}
+
+	return &response, nil
+}
+
+func (t *tenantStatusServer) CancelLocalSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
