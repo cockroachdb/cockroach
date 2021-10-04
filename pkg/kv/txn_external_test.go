@@ -139,10 +139,10 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			var tr *tracing.Tracer
 			if leaseHolder.NodeID == 1 {
 				db = tc.Servers[1].DB()
-				tr = tc.Servers[1].Tracer().(*tracing.Tracer)
+				tr = tc.Servers[1].TracerI().(*tracing.Tracer)
 			} else {
 				db = tc.Servers[0].DB()
-				tr = tc.Servers[0].Tracer().(*tracing.Tracer)
+				tr = tc.Servers[0].TracerI().(*tracing.Tracer)
 			}
 
 			txn := db.NewTxn(ctx, "test")

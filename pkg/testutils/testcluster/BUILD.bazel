@@ -59,6 +59,7 @@ go_test(
         "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/tracing",
         "@com_github_stretchr_testify//require",
     ],
 )

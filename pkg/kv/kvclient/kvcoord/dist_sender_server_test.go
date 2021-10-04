@@ -48,7 +48,7 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
+func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -57,7 +57,7 @@ func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv
 			},
 		},
 	})
-	return s, db
+	return s.(*server.TestServer), db
 }
 
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
@@ -76,22 +76,22 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	now := s.Clock().Now()
 	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, now, 0)
 	if err := storage.MVCCPutProto(
-		context.Background(), s.(*server.TestServer).Engines()[0],
+		context.Background(), s.Engines()[0],
 		nil, key, now, &txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
-	ambient := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
+	ambient := log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)}
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.(*server.TestServer).Gossip(),
+		NodeDescs:          s.Gossip(),
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+		FirstRangeProvider: s.Gossip(),
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -965,13 +965,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-					AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+					AmbientCtx:         log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)},
 					Settings:           cluster.MakeTestingClusterSettings(),
 					Clock:              clock,
-					NodeDescs:          s.(*server.TestServer).Gossip(),
+					NodeDescs:          s.Gossip(),
 					RPCContext:         s.RPCContext(),
-					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-					FirstRangeProvider: s.(*server.TestServer).Gossip(),
+					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+					FirstRangeProvider: s.Gossip(),
 				})
 
 				reply, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
@@ -1174,13 +1174,13 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+		AmbientCtx:         log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)},
 		Clock:              s.Clock(),
-		NodeDescs:          s.(*server.TestServer).Gossip(),
+		NodeDescs:          s.Gossip(),
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
 		Settings:           cluster.MakeTestingClusterSettings(),
-		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+		FirstRangeProvider: s.Gossip(),
 	})
 	for _, key := range []string{"c"} {
 		req := &roachpb.AdminSplitRequest{
@@ -2865,10 +2865,11 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			s, _, db := serverutils.StartServer(t,
+			si, _, db := serverutils.StartServer(t,
 				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			ctx := context.Background()
-			defer s.Stopper().Stop(ctx)
+			defer si.Stopper().Stop(ctx)
+			s := si.(*server.TestServer)
 
 			keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
 			require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))
@@ -2940,7 +2941,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			})
 
 			require.Regexp(t, "injected", txn.CommitInBatch(ctx, b))
-			tr := s.Tracer().(*tracing.Tracer)
+			tr := s.Tracer()
 			err = kvclientutils.CheckPushResult(
 				ctx, db, tr, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
 			require.NoError(t, err)
