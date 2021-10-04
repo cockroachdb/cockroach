@@ -191,9 +191,7 @@ type Node struct {
 
 	perReplicaServer kvserver.Server
 
-	// Admission control queues and coordinators. Both should be nil or non-nil.
-	kvAdmissionQ     *admission.WorkQueue
-	storeGrantCoords *admission.StoreGrantCoordinators
+	admissionController kvserver.KVAdmissionController
 
 	tenantUsage multitenant.TenantUsageServer
 
@@ -331,19 +329,19 @@ func NewNode(
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:           cfg,
-		stopper:            stopper,
-		recorder:           recorder,
-		metrics:            makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:             stores,
-		txnMetrics:         txnMetrics,
-		sqlExec:            sqlExec,
-		clusterID:          clusterID,
-		kvAdmissionQ:       kvAdmissionQ,
-		storeGrantCoords:   storeGrantCoords,
-		tenantUsage:        tenantUsage,
-		spanConfigAccessor: spanConfigAccessor,
+		storeCfg:            cfg,
+		stopper:             stopper,
+		recorder:            recorder,
+		metrics:             makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:              stores,
+		txnMetrics:          txnMetrics,
+		sqlExec:             sqlExec,
+		clusterID:           clusterID,
+		admissionController: kvserver.MakeKVAdmissionController(kvAdmissionQ, storeGrantCoords),
+		tenantUsage:         tenantUsage,
+		spanConfigAccessor:  spanConfigAccessor,
 	}
+	n.storeCfg.KVAdmissionController = n.admissionController
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -944,14 +942,6 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
-func isSingleHeartbeatTxnRequest(b *roachpb.BatchRequest) bool {
-	if len(b.Requests) != 1 {
-		return false
-	}
-	_, ok := b.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
-	return ok
-}
-
 // Batch implements the roachpb.InternalServer interface.
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
@@ -961,74 +951,16 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	var callAdmittedWorkDoneOnKVAdmissionQ bool
-	var tenantID roachpb.TenantID
-	var storeAdmissionQ *admission.WorkQueue
-	if n.kvAdmissionQ != nil {
-		var ok bool
-		tenantID, ok = roachpb.TenantFromContext(ctx)
-		if !ok {
-			tenantID = roachpb.SystemTenantID
-		}
-		bypassAdmission := args.IsAdmin()
-		source := args.AdmissionHeader.Source
-		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-			// Request is from a SQL node.
-			bypassAdmission = false
-			source = roachpb.AdmissionHeader_FROM_SQL
-		}
-		if source == roachpb.AdmissionHeader_OTHER {
-			bypassAdmission = true
-		}
-		createTime := args.AdmissionHeader.CreateTime
-		if !bypassAdmission && createTime == 0 {
-			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-			// of zero CreateTime needs to be revisited. It should use high priority.
-			createTime = timeutil.Now().UnixNano()
-		}
-		admissionInfo := admission.WorkInfo{
-			TenantID:        tenantID,
-			Priority:        admission.WorkPriority(args.AdmissionHeader.Priority),
-			CreateTime:      createTime,
-			BypassAdmission: bypassAdmission,
-		}
-		var err error
-		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
-		// it would bypass admission, it would consume a slot. When writes are
-		// throttled, we start generating more txn heartbeats, which then consume
-		// all the slots, causing no useful work to happen. We do want useful work
-		// to continue even when throttling since there are often significant
-		// number of tokens available.
-		if args.IsWrite() && !isSingleHeartbeatTxnRequest(args) {
-			storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(args.Replica.StoreID))
-		}
-		admissionEnabled := true
-		if storeAdmissionQ != nil {
-			if admissionEnabled, err = storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
-				return nil, err
-			}
-			if !admissionEnabled {
-				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
-				// on it. Additionally, the code below will not call
-				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
-				// stay false.
-				storeAdmissionQ = nil
-			}
-		}
-		if admissionEnabled {
-			callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
-			if err != nil {
-				return nil, err
-			}
-		}
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+	handle, err := n.admissionController.AdmitKVWork(ctx, tenantID, args)
+	if err != nil {
+		return nil, err
 	}
 	br, err := n.batchInternal(ctx, tenantID, args)
-	if callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(tenantID)
-	}
-	if storeAdmissionQ != nil {
-		storeAdmissionQ.AdmittedWorkDone(tenantID)
-	}
+	n.admissionController.AdmittedKVWorkDone(handle)
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC

@@ -157,6 +157,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/bufalloc",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
