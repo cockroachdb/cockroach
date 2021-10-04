@@ -12,7 +12,7 @@ throttle: 1000
 ----
 
 # Fire off a write that needs significantly more than the 10000 initial RUs.
-write bytes=100000000 label=w1
+write bytes=20000000 label=w1
 ----
 
 wait-for-event
