@@ -1037,6 +1037,7 @@ CREATE TABLE abcd (
 )
 ----
 
+# Next two plans should be the same.
 build
 SELECT a, b FROM abcd ORDER BY b, c
 ----
@@ -1047,6 +1048,31 @@ sort
       ├── columns: a:1!null b:2 c:3
       └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+build
+SELECT a, b FROM abcd ORDER BY b, c NULLS FIRST
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3]
+ ├── ordering: +2,+3
+ └── project
+      ├── columns: a:1!null b:2 c:3
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+# Should be different from above plan.
+build
+SELECT a, b FROM abcd ORDER BY b NULLS LAST, c
+----
+sort
+ ├── columns: a:1!null b:2  [hidden: c:3 column7:7!null]
+ ├── ordering: +7,+2,+3
+ └── project
+      ├── columns: column7:7!null a:1!null b:2 c:3
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           └── b:2 IS NULL [as=column7:7]
 
 build
 SELECT a FROM abcd ORDER BY b, c
@@ -1081,3 +1107,38 @@ sort
       │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
       └── projections
            └── ARRAY[a:1] [as=array:7]
+
+# Next two plans should be the same.
+build
+SELECT * FROM abcd ORDER BY a DESC
+----
+project
+ ├── columns: a:1!null b:2 c:3 d:4
+ ├── ordering: -1
+ └── scan abcd,rev
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── ordering: -1
+
+build
+SELECT * FROM abcd ORDER BY a DESC NULLS LAST
+----
+project
+ ├── columns: a:1!null b:2 c:3 d:4
+ ├── ordering: -1
+ └── scan abcd,rev
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── ordering: -1
+
+# Should be different from above plan.
+build
+SELECT * FROM abcd ORDER BY a DESC NULLS FIRST
+----
+sort
+ ├── columns: a:1!null b:2 c:3 d:4  [hidden: column7:7!null]
+ ├── ordering: -7,-1
+ └── project
+      ├── columns: column7:7!null a:1!null b:2 c:3 d:4
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── projections
+           └── a:1 IS NULL [as=column7:7]
