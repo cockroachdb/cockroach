@@ -4330,7 +4330,11 @@ value if you rely on the HLC for accuracy.`,
 				verbosity := bool(*(args[1].(*tree.DBool)))
 
 				var rootSpan *tracing.Span
-				if err := ctx.Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+				if ctx.Tracer == nil {
+					// Let's not freak out if the ctx was not initialized fully.
+					return nil, errors.Newf("Tracer not configured")
+				}
+				if err := ctx.Tracer.VisitSpans(func(span *tracing.Span) error {
 					if span.TraceID() == traceID && rootSpan == nil {
 						rootSpan = span
 					}

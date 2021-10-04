@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -3481,6 +3482,8 @@ type EvalContext struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	Tracer *tracing.Tracer
 
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().

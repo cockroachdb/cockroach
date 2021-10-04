@@ -2023,6 +2023,7 @@ func createSchemaChangeEvalCtx(
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
+			Tracer:             execCfg.AmbientCtx.Tracer,
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
