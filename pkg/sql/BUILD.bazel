@@ -478,6 +478,7 @@ go_test(
         "metric_test.go",
         "metric_util_test.go",
         "mutation_test.go",
+        "normalization_test.go",
         "partition_test.go",
         "pg_metadata_test.go",
         "pg_oid_test.go",
