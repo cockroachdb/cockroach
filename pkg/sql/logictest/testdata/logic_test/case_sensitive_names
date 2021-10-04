@@ -251,27 +251,9 @@ DROP INDEX a@I
 
 # Unicode sequences are preserved.
 
-statement ok
+# Check that normalization occurs
+statement error duplicate column name: "Amélie"
 CREATE TABLE Amelie("Amélie" INT, "Amélie" INT); INSERT INTO Amelie VALUES (1, 2)
-
-# Check that the column names were encoded properly
-query I
-SELECT ordinal_position FROM information_schema.columns WHERE table_name = 'amelie' AND column_name::BYTES = b'Ame\xcc\x81lie'
-----
-1
-
-query I
-SELECT ordinal_position FROM information_schema.columns WHERE table_name = 'amelie' AND column_name::BYTES = b'Am\xc3\xa9lie'
-----
-2
-
-# Check that the non-normalized names propagate throughout until results.
-
-query II colnames
-SELECT "Amélie", "Amélie" FROM Amelie
-----
-Amélie Amélie
-2      1
 
 # Check that function names are also recognized case-insensitively.
 query I

@@ -563,7 +563,7 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 	}
 	//fmt.Println("parsed: ", s.in[start:s.pos], isASCII, isLower)
 
-	if isLower {
+	if isLower && isASCII {
 		// Already lowercased - nothing to do.
 		lval.SetStr(s.in[start:s.pos])
 	} else if isASCII {
@@ -830,7 +830,6 @@ func (s *Scanner) scanString(lval ScanSymType, ch int, allowEscapes, requireUTF8
 	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
-
 outer:
 	for {
 		switch s.next() {
@@ -918,7 +917,11 @@ outer:
 		return false
 	}
 
-	lval.SetStr(s.finishString(buf))
+	if ch == identQuote {
+		lval.SetStr(lexbase.NormalizeString(s.finishString(buf)))
+	} else {
+		lval.SetStr(s.finishString(buf))
+	}
 	return true
 }
 
