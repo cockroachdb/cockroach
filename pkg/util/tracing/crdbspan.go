@@ -433,16 +433,10 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 	}
 
 	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
-		// TODO(adityamaru): Stop writing to DeprecatedInternalStructured in 22.1.
-		rs.DeprecatedInternalStructured = make([]*types.Any, numEvents)
 		rs.StructuredRecords = make([]tracingpb.StructuredRecord, numEvents)
 		for i := 0; i < numEvents; i++ {
 			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
 			rs.StructuredRecords[i] = *event
-			// Write the Structured payload stored in the StructuredRecord, since
-			// nodes older than 21.2 expect a Structured event when they fetch
-			// recordings.
-			rs.DeprecatedInternalStructured[i] = event.Payload
 		}
 	}
 

@@ -209,12 +209,6 @@ func TestSpanRecordStructured(t *testing.T) {
 	sp.RecordStructured(&types.Int32Value{Value: 4})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].DeprecatedInternalStructured, 1)
-	deprecatedItem := rec[0].DeprecatedInternalStructured[0]
-	var deprecatedStructured types.DynamicAny
-	require.NoError(t, types.UnmarshalAny(deprecatedItem, &deprecatedStructured))
-	require.IsType(t, (*types.Int32Value)(nil), deprecatedStructured.Message)
-
 	require.Len(t, rec[0].StructuredRecords, 1)
 	item := rec[0].StructuredRecords[0]
 	var d1 types.DynamicAny
@@ -416,7 +410,6 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)
-	require.Len(t, rec[1].DeprecatedInternalStructured, 1)
 	require.Len(t, rec[1].StructuredRecords, 1)
 }
 
