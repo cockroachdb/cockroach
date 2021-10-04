@@ -161,6 +161,9 @@ func (t *tenantStatusServer) ListLocalSessions(
 	if err != nil {
 		return nil, err
 	}
+	for i := range sessions {
+		sessions[i].NodeID = roachpb.NodeID(t.sqlServer.SQLInstanceID())
+	}
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
@@ -185,11 +188,28 @@ func (t *tenantStatusServer) CancelQuery(
 func (t *tenantStatusServer) CancelSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
-	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+	parsedInstanceID, local, err := t.parseInstanceID(request.NodeId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if local {
+		reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+		if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+			return nil, err
+		}
+		return t.sessionRegistry.CancelSession(request.SessionID)
+	}
+
+	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+	if err != nil {
 		return nil, err
 	}
-	return t.sessionRegistry.CancelSession(request.SessionID)
+	statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+	if err != nil {
+		return nil, err
+	}
+	return statusClient.CancelSession(ctx, request)
 }
 
 func (t *tenantStatusServer) ListContentionEvents(

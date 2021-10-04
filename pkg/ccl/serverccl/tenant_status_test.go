@@ -11,6 +11,7 @@ package serverccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"sort"
@@ -468,4 +469,56 @@ WHERE
 	expected = [][]string{}
 
 	require.Equal(t, expected, actual)
+}
+
+func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
+	var sessionIDs []string
+	rows := conn.QueryStr(t, "SELECT session_id FROM crdb_internal.cluster_sessions")
+	for _, row := range rows {
+		sessionIDs = append(sessionIDs, row[0])
+	}
+	return sessionIDs
+}
+
+func TestTenantStatusCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
+	defer helper.cleanup(ctx, t)
+
+	// Open a SQL session on tenant SQL pod 0.
+	sqlPod0 := helper.testCluster().tenantConn(0)
+	sqlPod0.Exec(t, "SELECT 1")
+
+	// See the session over HTTP on tenant SQL pod 1.
+	httpPod1, err := helper.testCluster().tenantHTTPJSONClient(1)
+	require.NoError(t, err)
+	defer httpPod1.Close()
+	listSessionsResp := serverpb.ListSessionsResponse{}
+	err = httpPod1.GetJSON("/_status/sessions", &listSessionsResp)
+	require.NoError(t, err)
+	var session serverpb.Session
+	for _, s := range listSessionsResp.Sessions {
+		if s.LastActiveQuery == "SELECT 1" {
+			session = s
+			break
+		}
+	}
+	require.NotNil(t, session, "Session not found.")
+
+	// See the session over SQL on tenant SQL pod 0.
+	require.Contains(t, selectClusterSessionIDs(t, sqlPod0), hex.EncodeToString(session.ID))
+
+	// Cancel the session over HTTP from tenant SQL pod 1.
+	cancelSessionReq := serverpb.CancelSessionRequest{SessionID: session.ID}
+	cancelSessionResp := serverpb.CancelSessionResponse{}
+	err = httpPod1.PostJSON("/_status/cancel_session/"+session.NodeID.String(), &cancelSessionReq, &cancelSessionResp)
+	require.NoError(t, err)
+	require.Equal(t, true, cancelSessionResp.Canceled, cancelSessionResp.Error)
+
+	// No longer see the session over SQL from tenant SQL pod 0.
+	// (The SQL client maintains an internal connection pool and automatically reconnects.)
+	require.NotContains(t, selectClusterSessionIDs(t, sqlPod0), hex.EncodeToString(session.ID))
 }
