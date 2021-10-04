@@ -202,6 +202,14 @@ func NewTracer() *Tracer {
 	return t
 }
 
+// NewTracerWithOpt creates a Tracer and configures it accourding to the
+// passed-in settings.
+func NewTracerWithOpt(ctx context.Context, sv *settings.Values) *Tracer {
+	t := NewTracer()
+	t.Configure(ctx, sv)
+	return t
+}
+
 // Configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
 func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
