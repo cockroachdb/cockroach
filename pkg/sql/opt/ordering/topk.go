@@ -26,3 +26,29 @@ func topKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Or
 	// TopK orders its own input, so the ordering it provides is its own.
 	return trimProvided(expr.(*memo.TopKExpr).Ordering.ToOrdering(), required, &expr.Relational().FuncDeps)
 }
+
+func topKBuildChildReqOrdering(
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
+	// If Top K has an input ordering to impose on its child for partial order
+	// optimizations, then require the child to have that ordering.
+	topK := parent.(*memo.TopKExpr)
+	return topK.PartialOrdering
+}
+
+// TopKColOrdering returns an ordering on sort columns that is guaranteed on the
+// input of a Top K operator.
+func TopKColOrdering(topk *memo.TopKExpr, required *props.OrderingChoice) opt.Ordering {
+	ordering := make(opt.Ordering, len(required.Columns))
+	for i, rc := range required.Columns {
+		cols := rc.Group.Intersection(topk.Ordering.ColSet())
+		colID, ok := cols.Next(0)
+		if !ok {
+			// This refers to a column that is not in the top K ordering.
+			// The rest of the ordering is not useful.
+			return ordering[:i]
+		}
+		ordering[i] = opt.MakeOrderingColumn(colID, rc.Descending)
+	}
+	return ordering
+}

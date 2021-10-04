@@ -471,7 +471,7 @@ scan a
  ├── columns: x:1(int!null)
  ├── constraint: /1: [/-9223372036854775808 - /0]
  ├── limit: 10
- ├── stats: [rows=10]
+ ├── stats: [rows=10, distinct(1)=9.92462072, null(1)=0]
  ├── key: (1)
  └── ordering: +1
 

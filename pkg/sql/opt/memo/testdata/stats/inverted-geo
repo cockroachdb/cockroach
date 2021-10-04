@@ -96,7 +96,7 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
  │         └── cost: 2652.94
- ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1})
+ ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1 })
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
  │         └── cost: 2652.92
@@ -200,7 +200,7 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
  │         └── cost: 14.15
- ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1})
+ ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1 })
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
  │         └── cost: 14.13
