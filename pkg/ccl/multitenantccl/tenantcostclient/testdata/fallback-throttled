@@ -11,7 +11,7 @@ fallback_rate: 1000
 ----
 
 # Large request that requires more than the initial RUs.
-write bytes=100000000 label=w2
+write bytes=20000000 label=w2
 ----
 
 wait-for-event
@@ -26,8 +26,7 @@ token-bucket-response
 timers
 ----
 00:00:09.000
-00:04:41.479
-
+00:04:46.544
 
 configure
 error: true
@@ -46,7 +45,7 @@ low-ru
 
 timers
 ----
-00:04:41.479
+00:04:46.544
 
 advance
 2s
@@ -61,7 +60,7 @@ tick
 
 timers
 ----
-00:00:38.947
+00:00:39.454
 
 not-completed label=w2
 ----

@@ -47,14 +47,12 @@ var (
 	// We now use it to disallow a single tenant from harnessing a large fraction
 	// of a KV node, in order to avoid very significant fluctuations in
 	// performance depending on what other tenants are using the same KV node.
-	// In this mode, a value of -200 means that we allow 200 RU/s per CPU, or
-	// roughly
-	// 20% of the machine (by design 1 RU roughly maps to 1 CPU-millisecond).
+	// In this mode, a value of -500 means that we allow 500 RU/s per CPU.
 	ruRateLimit = settings.RegisterFloatSetting(
 		"kv.tenant_rate_limiter.rate_limit",
 		"per-tenant rate limit in Request Units per second if positive, "+
 			"or Request Units per second per CPU if negative",
-		-200,
+		-500,
 		func(v float64) error {
 			if v == 0 {
 				return errors.New("cannot set to zero value")
