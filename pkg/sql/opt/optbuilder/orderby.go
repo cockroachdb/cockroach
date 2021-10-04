@@ -158,9 +158,17 @@ func (b *Builder) analyzeOrderByArg(
 		return
 	}
 
+	// Set NULLS ordering
+	nullsDefaultOrder := true
+	if order.NullsOrder != tree.DefaultNullsOrder &&
+		((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
+		(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending)) {
+		nullsDefaultOrder = false
+	}
+
 	// Analyze the ORDER BY column(s).
 	start := len(orderByScope.cols)
-	b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope)
+	b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope, nullsDefaultOrder)
 	for i := start; i < len(orderByScope.cols); i++ {
 		col := &orderByScope.cols[i]
 		col.descending = order.Direction == tree.Descending
@@ -186,7 +194,7 @@ func (b *Builder) buildOrderByArg(
 // Typically this is a single column, with the exception of qualified star
 // (table.*). The resulting typed expression(s) are added to extraColsScope.
 func (b *Builder) analyzeExtraArgument(
-	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope,
+	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope, nullsDefaultOrder bool,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr = tree.StripParens(expr)
@@ -248,6 +256,9 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
+		if !nullsDefaultOrder {
+			extraColsScope.addColumn(scopeColName(""), tree.NewTypedIsNullExpr(e))
+		}
 		extraColsScope.addColumn(scopeColName(""), e)
 	}
 }
