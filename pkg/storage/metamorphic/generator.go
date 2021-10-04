@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 )
@@ -139,6 +140,7 @@ type metaTestRunner struct {
 	tsGenerator     tsGenerator
 	opGenerators    map[operandType]operandGenerator
 	txnGenerator    *txnGenerator
+	spGenerator     *savepointGenerator
 	rwGenerator     *readWriterGenerator
 	iterGenerator   *iteratorGenerator
 	keyGenerator    *keyGenerator
@@ -150,6 +152,7 @@ type metaTestRunner struct {
 	openIters       map[iteratorID]iteratorInfo
 	openBatches     map[readWriterID]storage.ReadWriter
 	openTxns        map[txnID]*roachpb.Transaction
+	openSavepoints  map[txnID][]enginepb.TxnSeq
 	nameToGenerator map[string]*opGenerator
 	ops             []opRun
 	weights         []int
@@ -172,11 +175,16 @@ func (m *metaTestRunner) init() {
 	// Initialize opGenerator structs. These retain all generation time
 	// state of open objects.
 	m.txnGenerator = &txnGenerator{
-		rng:         m.rng,
-		tsGenerator: &m.tsGenerator,
-		txnIDMap:    make(map[txnID]*roachpb.Transaction),
-		openBatches: make(map[txnID]map[readWriterID]struct{}),
-		testRunner:  m,
+		rng:            m.rng,
+		tsGenerator:    &m.tsGenerator,
+		txnIDMap:       make(map[txnID]*roachpb.Transaction),
+		openBatches:    make(map[txnID]map[readWriterID]struct{}),
+		openSavepoints: make(map[txnID]int),
+		testRunner:     m,
+	}
+	m.spGenerator = &savepointGenerator{
+		rng:          m.rng,
+		txnGenerator: m.txnGenerator,
 	}
 	m.rwGenerator = &readWriterGenerator{
 		rng:        m.rng,
@@ -216,6 +224,7 @@ func (m *metaTestRunner) init() {
 		operandIterator:    m.iterGenerator,
 		operandFloat:       m.floatGenerator,
 		operandBool:        m.boolGenerator,
+		operandSavepoint:   m.spGenerator,
 	}
 
 	m.nameToGenerator = make(map[string]*opGenerator)
@@ -228,6 +237,7 @@ func (m *metaTestRunner) init() {
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
+	m.openSavepoints = make(map[txnID][]enginepb.TxnSeq)
 }
 
 func (m *metaTestRunner) closeGenerators() {
@@ -259,6 +269,7 @@ func (m *metaTestRunner) closeAll() {
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
+	m.openSavepoints = make(map[txnID][]enginepb.TxnSeq)
 	if m.engine != nil {
 		m.engine.Close()
 		m.engine = nil
@@ -461,27 +472,38 @@ func (m *metaTestRunner) generateAndAddOp(run opReference) mvccOp {
 
 // Resolve all operands (including recursively queueing openers for operands as
 // necessary) and add the specified operation to the operations list.
-func (m *metaTestRunner) resolveAndAddOp(op *opGenerator) {
+func (m *metaTestRunner) resolveAndAddOp(op *opGenerator, fixedArgs ...string) {
 	argStrings := make([]string, len(op.operands))
+	copy(argStrings, fixedArgs)
 
 	// Operation op depends on some operands to exist in an open state.
 	// If those operands' opGenerators report a zero count for that object's open
 	// instances, recursively call generateAndAddOp with that operand type's
 	// opener.
 	for i, operand := range op.operands {
+		if i < len(fixedArgs) {
+			continue
+		}
 		opGenerator := m.opGenerators[operand]
 		// Special case: if this is an opener operation, and the operand is the
 		// last one in the list of operands, call getNew() to get a new ID instead.
 		if i == len(op.operands)-1 && op.isOpener {
-			argStrings[i] = opGenerator.getNew()
+			argStrings[i] = opGenerator.getNew(argStrings[:i])
 			continue
 		}
-		if opGenerator.count() == 0 {
+		if opGenerator.count(argStrings[:i]) == 0 {
+			var args []string
+			// Special case: Savepoints need to be created on transactions, so affix
+			// the txn when recursing.
+			switch opGenerator.opener() {
+			case "txn_create_savepoint":
+				args = append(args, argStrings[0])
+			}
 			// Add this operation to the list first, so that it creates the
 			// dependency.
-			m.resolveAndAddOp(m.nameToGenerator[opGenerator.opener()])
+			m.resolveAndAddOp(m.nameToGenerator[opGenerator.opener()], args...)
 		}
-		argStrings[i] = opGenerator.get()
+		argStrings[i] = opGenerator.get(argStrings[:i])
 	}
 
 	m.generateAndAddOp(opReference{

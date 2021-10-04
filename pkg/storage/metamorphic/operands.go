@@ -32,6 +32,7 @@ const (
 	operandIterator
 	operandFloat
 	operandBool
+	operandSavepoint
 )
 
 const (
@@ -52,19 +53,23 @@ type operandGenerator interface {
 	// keys), it could also generate and return a new type of an instance. An
 	// operand is represented as a serializable string, that can be converted into
 	// a concrete instance type during execution by calling a get<concrete type>()
-	// or parse() method on the concrete operand generator.
-	get() string
+	// or parse() method on the concrete operand generator. Operands generated
+	// so far are passed in, in case this generator relies on them to generate
+	// new ones.
+	get(args []string) string
 	// getNew retrieves a new instance of this type of operand. Called when an
 	// opener operation (with isOpener = true) needs an ID to store its output.
-	getNew() string
+	getNew(args []string) string
 	// opener returns the name of an operation generator (defined in
 	// operations.go) that always creates a new instance of this object. Called by
 	// the test runner when an operation requires one instance of this
 	// operand to exist, and count() == 0.
 	opener() string
 	// count returns the number of live objects being managed by this generator.
-	// If 0, the opener() operation can be called when necessary.
-	count() int
+	// If this generator depends on some other previously-generated args, those
+	// can be obtained from the args list. If 0, the opener() operation can be
+	// called when necessary.
+	count(args []string) int
 	// closeAll closes all managed operands. Used when the test exits, or when a
 	// restart operation executes.
 	closeAll()
@@ -93,7 +98,7 @@ func (k *keyGenerator) opener() string {
 	return ""
 }
 
-func (k *keyGenerator) count() int {
+func (k *keyGenerator) count(args []string) int {
 	// Always return a nonzero value so opener() is never called directly.
 	return len(k.liveKeys) + 1
 }
@@ -111,7 +116,7 @@ func (k *keyGenerator) toString(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s/%d", key.Key, key.Timestamp.WallTime)
 }
 
-func (k *keyGenerator) get() string {
+func (k *keyGenerator) get(args []string) string {
 	// 15% chance of returning a new key even if some exist.
 	if len(k.liveKeys) == 0 || k.rng.Float64() < 0.30 {
 		return k.toString(k.open())
@@ -120,8 +125,8 @@ func (k *keyGenerator) get() string {
 	return k.toString(k.liveKeys[k.rng.Intn(len(k.liveKeys))])
 }
 
-func (k *keyGenerator) getNew() string {
-	return k.get()
+func (k *keyGenerator) getNew(args []string) string {
+	return k.get(args)
 }
 
 func (k *keyGenerator) closeAll() {
@@ -148,16 +153,16 @@ func (v *valueGenerator) opener() string {
 	return ""
 }
 
-func (v *valueGenerator) count() int {
+func (v *valueGenerator) count(args []string) int {
 	return 1
 }
 
-func (v *valueGenerator) get() string {
+func (v *valueGenerator) get(args []string) string {
 	return v.toString(generateBytes(v.rng, 4, maxValueSize))
 }
 
-func (v *valueGenerator) getNew() string {
-	return v.get()
+func (v *valueGenerator) getNew(args []string) string {
+	return v.get(args)
 }
 
 func (v *valueGenerator) closeAll() {
@@ -175,12 +180,13 @@ func (v *valueGenerator) parse(input string) []byte {
 type txnID string
 
 type txnGenerator struct {
-	rng         *rand.Rand
-	testRunner  *metaTestRunner
-	tsGenerator *tsGenerator
-	liveTxns    []txnID
-	txnIDMap    map[txnID]*roachpb.Transaction
-	openBatches map[txnID]map[readWriterID]struct{}
+	rng            *rand.Rand
+	testRunner     *metaTestRunner
+	tsGenerator    *tsGenerator
+	liveTxns       []txnID
+	txnIDMap       map[txnID]*roachpb.Transaction
+	openBatches    map[txnID]map[readWriterID]struct{}
+	openSavepoints map[txnID]int
 	// Counts "generated" transactions - i.e. how many txn_open()s have been
 	// inserted so far. Could stay 0 in check mode.
 	txnGenCounter uint64
@@ -192,11 +198,11 @@ func (t *txnGenerator) opener() string {
 	return "txn_open"
 }
 
-func (t *txnGenerator) count() int {
+func (t *txnGenerator) count(args []string) int {
 	return len(t.txnIDMap)
 }
 
-func (t *txnGenerator) get() string {
+func (t *txnGenerator) get(args []string) string {
 	if len(t.liveTxns) == 0 {
 		panic("no open txns")
 	}
@@ -206,7 +212,7 @@ func (t *txnGenerator) get() string {
 // getNew returns a transaction ID, and saves this transaction as a "live"
 // transaction for generation purposes. Called only during generation, and
 // must be matched with a generateClose call.
-func (t *txnGenerator) getNew() string {
+func (t *txnGenerator) getNew(args []string) string {
 	t.txnGenCounter++
 	id := txnID(fmt.Sprintf("t%d", t.txnGenCounter))
 	// Increment the timestamp.
@@ -221,6 +227,7 @@ func (t *txnGenerator) getNew() string {
 func (t *txnGenerator) generateClose(id txnID) {
 	delete(t.openBatches, id)
 	delete(t.txnIDMap, id)
+	delete(t.openSavepoints, id)
 
 	for i := range t.liveTxns {
 		if t.liveTxns[i] == id {
@@ -253,6 +260,39 @@ func (t *txnGenerator) closeAll() {
 	t.liveTxns = nil
 	t.txnIDMap = make(map[txnID]*roachpb.Transaction)
 	t.openBatches = make(map[txnID]map[readWriterID]struct{})
+	t.openSavepoints = make(map[txnID]int)
+}
+
+type savepointGenerator struct {
+	rng            *rand.Rand
+	txnGenerator   *txnGenerator
+}
+
+var _ operandGenerator = &savepointGenerator{}
+
+func (s *savepointGenerator) get(args []string) string {
+	id := txnID(args[len(args)-1])
+	n := s.rng.Intn(s.txnGenerator.openSavepoints[id])
+	return strconv.Itoa(n)
+}
+
+func (s *savepointGenerator) getNew(args []string) string {
+	id := txnID(args[len(args)-1])
+	s.txnGenerator.openSavepoints[id]++
+	return strconv.Itoa(s.txnGenerator.openSavepoints[id] - 1)
+}
+
+func (s *savepointGenerator) opener() string {
+	return "txn_create_savepoint"
+}
+
+func (s *savepointGenerator) count(args []string) int {
+	id := txnID(args[len(args)-1])
+	return s.txnGenerator.openSavepoints[id]
+}
+
+func (s *savepointGenerator) closeAll() {
+	// No-op.
 }
 
 type pastTSGenerator struct {
@@ -266,7 +306,7 @@ func (t *pastTSGenerator) opener() string {
 	return ""
 }
 
-func (t *pastTSGenerator) count() int {
+func (t *pastTSGenerator) count(args []string) int {
 	// Always return a non-zero count so opener() is never called.
 	return int(t.tsGenerator.lastTS.WallTime) + 1
 }
@@ -289,12 +329,12 @@ func (t *pastTSGenerator) parse(input string) hlc.Timestamp {
 	return ts
 }
 
-func (t *pastTSGenerator) get() string {
+func (t *pastTSGenerator) get(args []string) string {
 	return t.toString(t.tsGenerator.randomPastTimestamp(t.rng))
 }
 
-func (t *pastTSGenerator) getNew() string {
-	return t.get()
+func (t *pastTSGenerator) getNew(args []string) string {
+	return t.get(args)
 }
 
 // Similar to pastTSGenerator, except it always increments the "current" timestamp
@@ -303,12 +343,12 @@ type nextTSGenerator struct {
 	pastTSGenerator
 }
 
-func (t *nextTSGenerator) get() string {
+func (t *nextTSGenerator) get(args []string) string {
 	return t.toString(t.tsGenerator.generate())
 }
 
-func (t *nextTSGenerator) getNew() string {
-	return t.get()
+func (t *nextTSGenerator) getNew(args []string) string {
+	return t.get(args)
 }
 
 type readWriterID string
@@ -323,7 +363,7 @@ type readWriterGenerator struct {
 
 var _ operandGenerator = &readWriterGenerator{}
 
-func (w *readWriterGenerator) get() string {
+func (w *readWriterGenerator) get(args []string) string {
 	// 25% chance of returning the engine, even if there are live batches.
 	if len(w.liveBatches) == 0 || w.rng.Float64() < 0.25 {
 		return "engine"
@@ -333,7 +373,7 @@ func (w *readWriterGenerator) get() string {
 }
 
 // getNew is called during generation to generate a batch ID.
-func (w *readWriterGenerator) getNew() string {
+func (w *readWriterGenerator) getNew(args []string) string {
 	w.batchGenCounter++
 	id := readWriterID(fmt.Sprintf("batch%d", w.batchGenCounter))
 	w.batchIDMap[id] = nil
@@ -363,7 +403,7 @@ func (w *readWriterGenerator) generateClose(id readWriterID) {
 	w.m.txnGenerator.clearBatch(id)
 }
 
-func (w *readWriterGenerator) count() int {
+func (w *readWriterGenerator) count(args []string) int {
 	return len(w.batchIDMap) + 1
 }
 
@@ -395,7 +435,7 @@ type iteratorGenerator struct {
 
 var _ operandGenerator = &iteratorGenerator{}
 
-func (i *iteratorGenerator) get() string {
+func (i *iteratorGenerator) get(args []string) string {
 	if len(i.liveIters) == 0 {
 		panic("no open iterators")
 	}
@@ -403,7 +443,7 @@ func (i *iteratorGenerator) get() string {
 	return string(i.liveIters[i.rng.Intn(len(i.liveIters))])
 }
 
-func (i *iteratorGenerator) getNew() string {
+func (i *iteratorGenerator) getNew(args []string) string {
 	i.iterGenCounter++
 	id := fmt.Sprintf("iter%d", i.iterGenCounter)
 	return id
@@ -451,7 +491,7 @@ func (i *iteratorGenerator) opener() string {
 	return "iterator_open"
 }
 
-func (i *iteratorGenerator) count() int {
+func (i *iteratorGenerator) count(args []string) int {
 	return len(i.iterInfo)
 }
 
@@ -465,12 +505,12 @@ type floatGenerator struct {
 	rng *rand.Rand
 }
 
-func (f *floatGenerator) get() string {
+func (f *floatGenerator) get(args []string) string {
 	return fmt.Sprintf("%.4f", f.rng.Float32())
 }
 
-func (f *floatGenerator) getNew() string {
-	return f.get()
+func (f *floatGenerator) getNew(args []string) string {
+	return f.get(args)
 }
 
 func (f *floatGenerator) parse(input string) float32 {
@@ -486,7 +526,7 @@ func (f *floatGenerator) opener() string {
 	return ""
 }
 
-func (f *floatGenerator) count() int {
+func (f *floatGenerator) count(args []string) int {
 	return 1
 }
 
