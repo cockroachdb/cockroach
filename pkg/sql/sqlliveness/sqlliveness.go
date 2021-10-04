@@ -54,6 +54,9 @@ func (s SessionID) String() string {
 	return hex.EncodeToString(encoding.UnsafeConvertStringToBytes(string(s)))
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (s SessionID) SafeValue() {}
+
 // UnsafeBytes returns a byte slice representation of the ID. It is unsafe to
 // modify this byte slice. This method is exposed to ease storing the session
 // ID as bytes in SQL.
