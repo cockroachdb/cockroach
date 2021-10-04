@@ -29,28 +29,28 @@ var (
 	readRequestCost = settings.RegisterFloatSetting(
 		"tenant_cost_model.kv_read_request_cost",
 		"base cost of a read request in Request Units",
-		0.7,
+		0.6993,
 		settings.PositiveFloat,
 	)
 
 	readCostPerMB = settings.RegisterFloatSetting(
 		"tenant_cost_model.kv_read_cost_per_megabyte",
 		"cost of a read in Request Units per MB",
-		10.0,
+		107.6563,
 		settings.PositiveFloat,
 	)
 
 	writeRequestCost = settings.RegisterFloatSetting(
 		"tenant_cost_model.kv_write_request_cost",
 		"base cost of a write request in Request Units",
-		1.0,
+		5.7733,
 		settings.PositiveFloat,
 	)
 
 	writeCostPerMB = settings.RegisterFloatSetting(
 		"tenant_cost_model.kv_write_cost_per_megabyte",
 		"cost of a write in Request Units per MB",
-		400.0,
+		2026.3021,
 		settings.PositiveFloat,
 	)
 
@@ -64,7 +64,7 @@ var (
 	pgwireEgressCostPerMB = settings.RegisterFloatSetting(
 		"tenant_cost_model.pgwire_egress_cost_per_megabyte",
 		"cost of client <-> SQL ingress/egress per MB",
-		585.0,
+		878.9063,
 		settings.PositiveFloat,
 	)
 
