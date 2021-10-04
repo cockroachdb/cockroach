@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -1167,8 +1168,13 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
-// Tracer is part of the TestServerInterface.
-func (ts *TestServer) Tracer() interface{} {
+// TracerI is part of the TestServerInterface.
+func (ts *TestServer) TracerI() interface{} {
+	return ts.Tracer()
+}
+
+// Tracer is like TracerI(), but returns the actual type.
+func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
