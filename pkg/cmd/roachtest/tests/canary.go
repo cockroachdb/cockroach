@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -290,4 +291,28 @@ func repeatGetLatestTag(
 		return releaseTags[len(releaseTags)-1].tag, nil
 	}
 	return "", fmt.Errorf("could not get tags from %s, due to error: %s", url, lastError)
+}
+
+// gitCloneWithRecurseSubmodules clones a git repo from src into dest and checks out origin's
+// version of the given branch, but with a --recurse-submodules flag.
+// The src, dest, and branch arguments must not contain shell special characters.
+func gitCloneWithRecurseSubmodules(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	src, dest, branch string,
+	node option.NodeListOption,
+) error {
+	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
+if ! test -d %[1]s; then
+  git clone --recurse-submodules -b %[2]s --depth 1 %[3]s %[1]s
+else
+  cd %[1]s
+  git fetch origin
+  git checkout origin/%[2]s
+fi
+'`, dest,
+		branch,
+		src,
+	))
 }
