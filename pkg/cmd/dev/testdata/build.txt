@@ -76,3 +76,11 @@ mkdir go/src/github.com/cockroachdb/cockroach/bin
 bazel info bazel-bin --color=no
 rm go/src/github.com/cockroachdb/cockroach/bin/stress
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress go/src/github.com/cockroachdb/cockroach/bin/stress
+
+dev build pkg/roachpb:roachpb_test
+----
+bazel query pkg/roachpb:roachpb_test --output=label_kind
+bazel build //pkg/roachpb:roachpb_test --config=test
+bazel info workspace --color=no
+mkdir go/src/github.com/cockroachdb/cockroach/bin
+bazel info bazel-bin --color=no
