@@ -397,7 +397,7 @@ func NewColIndexJoin(
 		cols = table.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithVirtualCol(cols, nil /* virtualCol */)
+	typs := catalog.ColumnTypes(cols)
 
 	// Add all requested system columns to the output.
 	if spec.HasSystemColumns {
@@ -437,7 +437,7 @@ func NewColIndexJoin(
 	}
 
 	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* virtualColumn */
+		flowCtx, fetcherAllocator, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
 		cFetcherArgs{
 			visibility:        spec.Visibility,
 			lockingStrength:   spec.LockingStrength,

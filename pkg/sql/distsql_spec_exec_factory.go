@@ -240,8 +240,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}
-	if vc := getVirtualColumn(colCfg.virtualColumn, cols); vc != nil {
-		trSpec.VirtualColumn = vc.ColumnDesc()
+	if vc := getInvertedColumn(colCfg.invertedColumn, cols); vc != nil {
+		trSpec.InvertedColumn = vc.ColumnDesc()
 	}
 
 	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)

@@ -662,18 +662,18 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 
 // ColumnTypes returns the types of the given columns
 func ColumnTypes(columns []Column) []*types.T {
-	return ColumnTypesWithVirtualCol(columns, nil)
+	return ColumnTypesWithInvertedCol(columns, nil /* invertedCol */)
 }
 
-// ColumnTypesWithVirtualCol returns the types of all given columns,
-// If virtualCol is non-nil, substitutes the type of the virtual
+// ColumnTypesWithInvertedCol returns the types of all given columns,
+// If invertedCol is non-nil, substitutes the type of the inverted
 // column instead of the column with the same ID.
-func ColumnTypesWithVirtualCol(columns []Column, virtualCol Column) []*types.T {
+func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T {
 	t := make([]*types.T, len(columns))
 	for i, col := range columns {
 		t[i] = col.GetType()
-		if virtualCol != nil && col.GetID() == virtualCol.GetID() {
-			t[i] = virtualCol.GetType()
+		if invertedCol != nil && col.GetID() == invertedCol.GetID() {
+			t[i] = invertedCol.GetType()
 		}
 	}
 	return t
