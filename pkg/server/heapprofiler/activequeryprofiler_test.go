@@ -195,6 +195,19 @@ func TestShouldDump(t *testing.T) {
 	}
 }
 
+func TestMaybeDumpQueries_PanicHandler(t *testing.T) {
+	ctx := context.Background()
+	memLimitFn = cgroupFnWithReturn(mbToBytes(256), "", nil)
+	s := &cluster.Settings{}
+
+	profiler, err := NewActiveQueryProfiler(ctx, heapProfilerDirName, nil)
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() {
+		profiler.MaybeDumpQueries(ctx, nil, s)
+	})
+}
+
 func cgroupFnWithReturn(value int64, warnings string, err error) func() (int64, string, error) {
 	return func() (int64, string, error) {
 		return value, warnings, err
