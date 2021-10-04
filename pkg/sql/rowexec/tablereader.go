@@ -105,13 +105,13 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := spec.BuildTableDescriptor()
-	virtualColumn := tabledesc.FindVirtualColumn(tableDesc, spec.VirtualColumn)
+	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = tableDesc.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
+	resultTypes := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 
 	// Add all requested system columns to the output.
 	if spec.HasSystemColumns {
@@ -160,7 +160,7 @@ func newTableReader(
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.HasSystemColumns,
-		virtualColumn,
+		invertedColumn,
 	); err != nil {
 		return nil, err
 	}

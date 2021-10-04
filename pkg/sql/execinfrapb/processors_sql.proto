@@ -89,7 +89,7 @@ message TableReaderSpec {
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 
   // This field used to be an upper bound for the number of rows we will read;
-  // replaced by the parallelize field. 
+  // replaced by the parallelize field.
   reserved 8;
 
   // If set, the TableReader can read all the spans in parallel, without any
@@ -150,11 +150,11 @@ message TableReaderSpec {
   // if is_check is true.
   repeated uint32 needed_columns = 15;
 
-  // Indicates a virtual column which may have a different type than the column
-  // stored in the table descriptor. For example, the inverted column in an
-  // inverted index has a different type than the column it indexes in the base
-  // table.
-  optional sqlbase.ColumnDescriptor virtual_column = 16;
+  // Indicates an inverted column which may have a different type than the
+  // column stored in the table descriptor. For example, the inverted column in
+  // an inverted index has a different type than the column it indexes in the
+  // base table.
+  optional sqlbase.ColumnDescriptor inverted_column = 16;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
