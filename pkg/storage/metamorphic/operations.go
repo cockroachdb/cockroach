@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -412,6 +413,7 @@ type txnCommitOp struct {
 func (t txnCommitOp) run(ctx context.Context) string {
 	txn := t.m.getTxn(t.id)
 	txn.Status = roachpb.COMMITTED
+	txn.Sequence++
 
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
@@ -422,7 +424,74 @@ func (t txnCommitOp) run(ctx context.Context) string {
 		}
 	}
 	delete(t.m.openTxns, t.id)
+	delete(t.m.openSavepoints, t.id)
 
+	return "ok"
+}
+
+type txnAbortOp struct {
+	m  *metaTestRunner
+	id txnID
+}
+
+func (t txnAbortOp) run(ctx context.Context) string {
+	txn := t.m.getTxn(t.id)
+	txn.Status = roachpb.ABORTED
+
+	for _, span := range txn.LockSpans {
+		intent := roachpb.MakeLockUpdate(txn, span)
+		intent.Status = roachpb.ABORTED
+		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		if err != nil {
+			panic(err)
+		}
+	}
+	delete(t.m.openTxns, t.id)
+	delete(t.m.openSavepoints, t.id)
+
+	return "ok"
+}
+
+type txnCreateSavepointOp struct {
+	m         *metaTestRunner
+	id        txnID
+	savepoint int
+}
+
+func (t txnCreateSavepointOp) run(ctx context.Context) string {
+	txn := t.m.getTxn(t.id)
+	txn.Sequence++
+
+	// Append txn.Sequence.
+	if len(t.m.openSavepoints[t.id]) == t.savepoint {
+		t.m.openSavepoints[t.id] = append(t.m.openSavepoints[t.id], txn.Sequence)
+	} else {
+		panic(fmt.Sprintf("mismatching savepoint index: %d != %d", len(t.m.openSavepoints[t.id]), t.savepoint))
+	}
+
+	return fmt.Sprintf("savepoint %d", t.savepoint)
+}
+
+type txnRollbackSavepointOp struct {
+	m         *metaTestRunner
+	id        txnID
+	savepoint int
+}
+
+func (t txnRollbackSavepointOp) run(ctx context.Context) string {
+	txn := t.m.getTxn(t.id)
+	txn.Sequence++
+
+	savepoints := t.m.openSavepoints[t.id]
+	if len(savepoints) == 0 || t.savepoint > len(savepoints) {
+		panic(fmt.Sprintf("got a higher savepoint idx %d than allowed for txn %s", t.savepoint, t.id))
+	}
+
+	ignoredSeqNumRange := enginepb.IgnoredSeqNumRange{
+		Start: savepoints[t.savepoint],
+		End:   txn.Sequence,
+	}
+	txn.AddIgnoredSeqNumRange(ignoredSeqNumRange)
 	return "ok"
 }
 
@@ -515,7 +584,7 @@ func (i iterSeekOp) run(ctx context.Context) string {
 		if i.seekLT {
 			return "noop due to missing seekLT support in rocksdb batch iterators"
 		}
-		// RocksDB batch iterators do not account for lower bounds consistently:
+		// RocksDB batch iterators do not account åfor lower bounds consistently:
 		// https://github.com/cockroachdb/cockroach/issues/44512
 		// In the meantime, ensure the SeekGE key >= lower bound.
 		lowerBound := iterInfo.lowerBound
@@ -812,9 +881,6 @@ var opGenerators = []opGenerator{
 				txn:    txn,
 			}
 		},
-		dependentOps: func(m *metaTestRunner, args ...string) (results []opReference) {
-			return closeItersOnBatch(m, readWriterID(args[0]))
-		},
 		operands: []operandType{
 			operandReadWriter,
 			operandMVCCKey,
@@ -846,9 +912,6 @@ var opGenerators = []opGenerator{
 				startTime: startTime,
 				endTime:   endTime,
 			}
-		},
-		dependentOps: func(m *metaTestRunner, args ...string) (results []opReference) {
-			return closeItersOnBatch(m, readWriterID(args[0]))
 		},
 		operands: []operandType{
 			operandReadWriter,
@@ -986,7 +1049,73 @@ var opGenerators = []opGenerator{
 		operands: []operandType{
 			operandTransaction,
 		},
-		weight: 100,
+		weight: 50,
+	},
+	{
+		name: "txn_abort",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			m.txnGenerator.generateClose(txnID(args[0]))
+			return &txnAbortOp{
+				m:  m,
+				id: txnID(args[0]),
+			}
+		},
+		dependentOps: func(m *metaTestRunner, args ...string) (result []opReference) {
+			txn := txnID(args[0])
+
+			// A transaction could have in-flight writes in some batches. Get a list
+			// of all those batches, and dispatch batch_commit operations for them.
+			for batch := range m.txnGenerator.openBatches[txn] {
+				result = append(result, opReference{
+					generator: m.nameToGenerator["batch_commit"],
+					args:      []string{string(batch)},
+				})
+			}
+			return
+		},
+		operands: []operandType{
+			operandTransaction,
+		},
+		weight: 50,
+	},
+	{
+		name: "txn_create_savepoint",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			savepoint, err := strconv.ParseInt(args[1], 10, 32)
+			if err != nil {
+				panic(err.Error())
+			}
+			return &txnCreateSavepointOp{
+				m:         m,
+				id:        txnID(args[0]),
+				savepoint: int(savepoint),
+			}
+		},
+		operands: []operandType{
+			operandTransaction,
+			operandSavepoint,
+		},
+		isOpener: true,
+		weight: 10,
+	},
+	{
+		name: "txn_rollback_savepoint",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			savepoint, err := strconv.ParseInt(args[1], 10, 32)
+			if err != nil {
+				panic(err.Error())
+			}
+			return &txnRollbackSavepointOp{
+				m:         m,
+				id:        txnID(args[0]),
+				savepoint: int(savepoint),
+			}
+		},
+		operands: []operandType{
+			operandTransaction,
+			operandSavepoint,
+		},
+		weight: 10,
 	},
 	{
 		name: "batch_open",
