@@ -17,8 +17,10 @@ dist*/**
 !dist*/_empty_assets/assets/index.html
 !distccl/assets/.gitkeep
 !distccl/distccl.go
+!distccl/distccl_no_bazel.go
 !distccl/BUILD.bazel
 !distoss/assets/.gitkeep
 !distoss/distoss.go
+!distoss/distoss_no_bazel.go
 !distoss/BUILD.bazel
 *manifest.json

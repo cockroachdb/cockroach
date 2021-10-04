@@ -19,7 +19,6 @@ package ui
 import (
 	"bytes"
 	"context"
-	"embed"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -34,7 +33,7 @@ import (
 // Assets is used for embedded JS assets required for UI.
 // In case the binary is built without UI, it provides single index.html file with
 // the same content as indexHTMLTemplate as a fallback.
-var Assets embed.FS
+var Assets fs.FS
 
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
@@ -115,8 +114,7 @@ type Config struct {
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
-	fs, _ := fs.Sub(Assets, "assets")
-	fileServer := http.FileServer(http.FS(fs))
+	fileServer := http.FileServer(http.FS(Assets))
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
