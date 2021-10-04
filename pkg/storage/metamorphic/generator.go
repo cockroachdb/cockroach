@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 const zipfMax uint64 = 100000
@@ -37,18 +38,27 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestPebbleEngine(path string, seed int64) (storage.Engine, error) {
-	return storage.Open(
-		context.Background(),
-		storage.Filesystem(path),
-		storage.CacheSize(1<<20 /* 1 MiB */),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
-}
-
-func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {
+func createTestPebbleEngine(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
 	pebbleConfig := storage.PebbleConfig{
 		StorageConfig: makeStorageConfig(path),
 		Opts:          storage.DefaultPebbleOptions(),
+	}
+	if fs != nil {
+		pebbleConfig.Opts.FS = fs
+	}
+	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
+	defer pebbleConfig.Opts.Cache.Unref()
+
+	return storage.NewPebble(context.Background(), pebbleConfig)
+}
+
+func createTestPebbleManySSTs(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
+	pebbleConfig := storage.PebbleConfig{
+		StorageConfig: makeStorageConfig(path),
+		Opts:          storage.DefaultPebbleOptions(),
+	}
+	if fs != nil {
+		pebbleConfig.Opts.FS = fs
 	}
 	levels := pebbleConfig.Opts.Levels
 	for i := range levels {
@@ -68,9 +78,12 @@ func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
 	return min + rng.Int63n(max-min)
 }
 
-func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
+func createTestPebbleVarOpts(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
 	opts := storage.DefaultPebbleOptions()
 
+	if fs != nil {
+		opts.FS = fs
+	}
 	rng := rand.New(rand.NewSource(seed))
 	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
 	opts.FlushSplitBytes = 1 << rng.Intn(20)
@@ -111,7 +124,7 @@ func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
 
 type engineImpl struct {
 	name   string
-	create func(path string, seed int64) (storage.Engine, error)
+	create func(path string, seed int64, fs vfs.FS) (storage.Engine, error)
 }
 
 var _ fmt.Stringer = &engineImpl{}
@@ -133,6 +146,7 @@ type metaTestRunner struct {
 	rng             *rand.Rand
 	seed            int64
 	path            string
+	engineFS        vfs.FS
 	engineImpls     []engineImpl
 	curEngine       int
 	restarts        bool
@@ -166,7 +180,7 @@ func (m *metaTestRunner) init() {
 	m.curEngine = 0
 
 	var err error
-	m.engine, err = m.engineImpls[0].create(m.path, m.seed)
+	m.engine, err = m.engineImpls[0].create(m.path, m.seed, m.engineFS)
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
@@ -352,7 +366,7 @@ func (m *metaTestRunner) restart() (string, string) {
 	}
 
 	var err error
-	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed)
+	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed, m.engineFS)
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)

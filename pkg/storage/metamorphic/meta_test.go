@@ -15,7 +15,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,20 +24,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 var (
 	keep    = flag.Bool("keep", false, "keep temp directories after test")
 	check   = flag.String("check", "", "run operations in specified file and check output for equality")
-	seed    = flag.Int64("seed", 456, "specify seed to use for random number generator")
-	opCount = flag.Int("operations", 1000, "number of MVCC operations to generate and run")
+	seed    = flag.Int64("seed", randutil.NewPseudoSeed(), "specify seed to use for random number generator")
+	opCount = flag.Int("operations", 100000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {
 	ctx             context.Context
 	t               *testing.T
 	seed            int64
+	inMem           bool
 	checkFile       string
 	restarts        bool
 	engineSequences [][]engineImpl
@@ -47,6 +49,7 @@ type testRun struct {
 type testRunForEngines struct {
 	ctx            context.Context
 	t              *testing.T
+	inMem          bool
 	seed           int64
 	restarts       bool
 	checkFile      io.Reader
@@ -61,11 +64,16 @@ func runMetaTestForEngines(run testRunForEngines) {
 			cleanup()
 		}
 	}()
+	var fs vfs.FS
+	if run.inMem && !*keep {
+		fs = vfs.NewMem()
+	}
 
 	testRunner := metaTestRunner{
 		ctx:         run.ctx,
 		t:           run.t,
 		w:           run.outputFile,
+		engineFS:    fs,
 		seed:        run.seed,
 		restarts:    run.restarts,
 		engineImpls: run.engineSequence,
@@ -141,6 +149,7 @@ func runMetaTest(run testRun) {
 			engineRun := testRunForEngines{
 				ctx:            run.ctx,
 				t:              t,
+				inMem:          run.inMem,
 				seed:           run.seed,
 				restarts:       run.restarts,
 				checkFile:      checkFileReader,
@@ -163,25 +172,19 @@ func TestPebbleEquivalence(t *testing.T) {
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
 
-	// Have one fixed seed, one user-specified seed, and one random seed.
-	seeds := []int64{123, *seed, rand.Int63()}
-
-	for _, seed := range seeds {
-		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
-			run := testRun{
-				ctx:      ctx,
-				t:        t,
-				seed:     seed,
-				restarts: false,
-				engineSequences: [][]engineImpl{
-					{engineImplPebble},
-					{engineImplPebbleManySSTs},
-					{engineImplPebbleVarOpts},
-				},
-			}
-			runMetaTest(run)
-		})
+	run := testRun{
+		ctx:      ctx,
+		t:        t,
+		seed:     *seed,
+		restarts: false,
+		inMem:    true,
+		engineSequences: [][]engineImpl{
+			{engineImplPebble},
+			{engineImplPebbleManySSTs},
+			{engineImplPebbleVarOpts},
+		},
 	}
+	runMetaTest(run)
 }
 
 // TestPebbleRestarts runs the MVCC Metamorphic test suite with restarts
@@ -194,30 +197,23 @@ func TestPebbleRestarts(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-
-	// Have one fixed seed, one user-specified seed, and one random seed.
-	seeds := []int64{123, *seed, rand.Int63()}
-
-	for _, seed := range seeds {
-		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
-			run := testRun{
-				ctx:      ctx,
-				t:        t,
-				seed:     seed,
-				restarts: true,
-				engineSequences: [][]engineImpl{
-					{engineImplPebble},
-					{engineImplPebble, engineImplPebble},
-					{engineImplPebble, engineImplPebbleManySSTs, engineImplPebbleVarOpts},
-				},
-			}
-			runMetaTest(run)
-		})
+	run := testRun{
+		ctx:      ctx,
+		t:        t,
+		seed:     *seed,
+		inMem:    true,
+		restarts: true,
+		engineSequences: [][]engineImpl{
+			{engineImplPebble},
+			{engineImplPebble, engineImplPebble},
+			{engineImplPebble, engineImplPebbleManySSTs, engineImplPebbleVarOpts},
+		},
 	}
+	runMetaTest(run)
 }
 
 // TestPebbleCheck checks whether the output file specified with --check has
-// matching behavior across rocks/pebble.
+// matching behavior with a standard run of pebble.
 func TestPebbleCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -234,6 +230,7 @@ func TestPebbleCheck(t *testing.T) {
 			t:         t,
 			checkFile: *check,
 			restarts:  true,
+			inMem:     true,
 			engineSequences: [][]engineImpl{
 				{engineImplPebble},
 			},
