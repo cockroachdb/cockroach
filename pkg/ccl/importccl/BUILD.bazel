@@ -117,7 +117,9 @@ go_test(
         "read_import_pgdump_test.go",
         "testutils_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":importccl"],
     # It's a large test, so use 16 shards to run test cases.
     # See https://docs.bazel.build/versions/master/be/common-definitions.html#test.shard_count
