@@ -105,7 +105,6 @@ function filterByRouterParamsPredicate(
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
     stmt.statement === statement &&
-    aggregatedTs == null &&
     (aggregatedTs == null || stmt.aggregated_ts.toString() === aggregatedTs) &&
     stmt.implicit_txn === implicitTxn &&
     (stmt.database === database || database === null);
