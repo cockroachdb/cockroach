@@ -9,6 +9,7 @@
 package tenantcostclient_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -561,6 +564,7 @@ func (tp *testProvider) TokenBucket(
 // TestConsumption verifies consumption reporting from a tenant server process.
 func TestConsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer hostServer.Stopper().Stop(context.Background())
@@ -621,4 +625,67 @@ func TestConsumption(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSQLLivenessExemption verifies that the operations done by the sqlliveness
+// subsystem are exempt from cost control.
+func TestSQLLivenessExemption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{})
+	defer hostServer.Stopper().Stop(context.Background())
+
+	tenantID := serverutils.TestTenantID()
+
+	// Create a tenant with ridiculously low resource limits.
+	host := sqlutils.MakeSQLRunner(hostDB)
+	host.Exec(t, "SELECT crdb_internal.create_tenant($1)", tenantID.ToUint64())
+	host.Exec(t, "SELECT crdb_internal.update_tenant_resource_limits($1, 0, 0.001, 0, now(), 0)", tenantID.ToUint64())
+
+	st := cluster.MakeTestingClusterSettings()
+	// Make the tenant heartbeat like crazy.
+	ctx := context.Background()
+	//slinstance.DefaultTTL.Override(ctx, &st.SV, 20*time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
+
+	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
+		Existing:                    true,
+		TenantID:                    tenantID,
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
+	})
+
+	r := sqlutils.MakeSQLRunner(tenantDB)
+	_ = r
+
+	codec := keys.MakeSQLCodec(tenantID)
+	key := codec.IndexPrefix(keys.SqllivenessID, 1)
+
+	// livenessValue returns the KV value for the one row in the
+	// system.sqlliveness table. The value contains the session expiration time
+	// which changes with every heartbeat.
+	livenessValue := func() []byte {
+		kvs, err := hostKV.Scan(ctx, key, key.PrefixEnd(), 1)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if len(kvs) != 1 {
+			t.Fatal("no entry in system.liveness")
+		}
+		return kvs[0].Value.RawBytes
+	}
+
+	// Verify that heartbeats can go through and update the expiration time.
+	val := livenessValue()
+	time.Sleep(2 * time.Millisecond)
+	testutils.SucceedsSoon(
+		t,
+		func() error {
+			if newValue := livenessValue(); bytes.Equal(val, newValue) {
+				return errors.New("liveness row did not change)")
+			}
+			return nil
+		},
+	)
 }

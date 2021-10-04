@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -471,8 +472,14 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 	//   backpressure client writes when these start to slow down. This
 	//   would be similar to what we do for intent resolution.
 	log.VEventf(ctx, 2, "making txn commit explicit: %s", txn)
+	asyncCtx := context.Background()
+	// If ctx is exempt from cost control, the explicit commit ctx should be
+	// exempt as well.
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		asyncCtx = multitenant.WithTenantCostControlExemption(asyncCtx)
+	}
 	if err := tc.stopper.RunAsyncTask(
-		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
+		asyncCtx, "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
 			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, canFwdRTS); err != nil {
