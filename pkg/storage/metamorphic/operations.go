@@ -293,8 +293,9 @@ type mvccClearTimeRangeOp struct {
 
 func (m mvccClearTimeRangeOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
+	useTBI := m.writer == "engine"
 	span, err := storage.MVCCClearTimeRange(ctx, writer, &enginepb.MVCCStats{}, m.key, m.endKey,
-		m.startTime, m.endTime, math.MaxInt64, math.MaxInt64, true /* useTBI */)
+		m.startTime, m.endTime, math.MaxInt64, math.MaxInt64, useTBI)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -534,7 +535,7 @@ type iterOpenOp struct {
 
 func (i iterOpenOp) run(ctx context.Context) string {
 	rw := i.m.getReadWriter(i.rw)
-	iter := rw.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	iter := rw.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		Prefix:     false,
 		LowerBound: i.key,
 		UpperBound: i.endKey.Next(),
@@ -881,6 +882,9 @@ var opGenerators = []opGenerator{
 				txn:    txn,
 			}
 		},
+		dependentOps: func(m *metaTestRunner, args ...string) []opReference {
+			return closeItersOnBatch(m, readWriterID(args[0]))
+		},
 		operands: []operandType{
 			operandReadWriter,
 			operandMVCCKey,
@@ -912,6 +916,9 @@ var opGenerators = []opGenerator{
 				startTime: startTime,
 				endTime:   endTime,
 			}
+		},
+		dependentOps: func(m *metaTestRunner, args ...string) []opReference {
+			return closeItersOnBatch(m, readWriterID(args[0]))
 		},
 		operands: []operandType{
 			operandReadWriter,
