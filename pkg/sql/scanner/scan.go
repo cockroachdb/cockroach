@@ -830,7 +830,6 @@ func (s *Scanner) scanString(lval ScanSymType, ch int, allowEscapes, requireUTF8
 	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
-
 outer:
 	for {
 		switch s.next() {
@@ -918,7 +917,7 @@ outer:
 		return false
 	}
 
-	lval.SetStr(s.finishString(buf))
+	lval.SetStr(s.finishString(lexbase.NormalizeBytes(buf)))
 	return true
 }
 

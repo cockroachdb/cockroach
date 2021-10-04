@@ -53,3 +53,7 @@ func NormalizeName(n string) string {
 	}
 	return norm.NFC.String(lower)
 }
+
+func NormalizeBytes(n []byte) []byte {
+	return norm.NFC.Bytes(n)
+}
