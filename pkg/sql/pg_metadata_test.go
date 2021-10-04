@@ -96,6 +96,9 @@ const (
 	virtualTablePopulateField              = "populate"
 )
 
+// This message will appear when there is an expected diff but the diff haven't found.
+const updateExpectedDiffsJSON = `Diff EXPECTED. To fix this, please run: cd pkg/sql; go test -run TestPGCatalog --rewrite-diffs`
+
 // virtualTableTemplate is used to create new virtualSchemaTable objects when
 // adding new tables.
 var virtualTableTemplate = fmt.Sprintf(`var %s = virtualSchemaTable{
@@ -1339,28 +1342,40 @@ func TestPGCatalog(t *testing.T) {
 		sum.TotalTables++
 		t.Run(fmt.Sprintf("Table=%s", pgTable), func(t *testing.T) {
 			crdbColumns, ok := crdbTables[pgTable]
+			expectedMissingTable := diffs.isExpectedMissingTable(pgTable)
 			if !ok {
-				if !diffs.isExpectedMissingTable(pgTable) {
+				if !expectedMissingTable {
 					errorf(t, "Missing table `%s`", pgTable)
 					diffs.addMissingTable(pgTable)
 					sum.MissingTables++
 				}
+				return
+			} else if expectedMissingTable {
+				errorf(t, updateExpectedDiffsJSON)
 				return
 			}
 
 			for expColumnName, expColumn := range pgColumns {
 				sum.TotalColumns++
 				gotColumn, ok := crdbColumns[expColumnName]
+				expectedMissingColumn := diffs.isExpectedMissingColumn(pgTable, expColumnName)
 				if !ok {
-					if !diffs.isExpectedMissingColumn(pgTable, expColumnName) {
+					if !expectedMissingColumn {
 						errorf(t, "Missing column `%s`", expColumnName)
 						diffs.addMissingColumn(pgTable, expColumnName)
 						sum.MissingColumns++
 					}
 					continue
+				} else if expectedMissingColumn {
+					errorf(t, updateExpectedDiffsJSON)
+					continue
 				}
 
-				if diffs.isDiffOid(pgTable, expColumnName, expColumn, gotColumn) {
+				result := diffs.compareColumns(pgTable, expColumnName, expColumn, gotColumn)
+				switch result {
+				case expectedDiffError:
+					errorf(t, updateExpectedDiffsJSON)
+				case diffError:
 					sum.DatatypeMismatches++
 					errorf(t, "Column `%s` expected data type oid `%d` (%s) but found `%d` (%s)",
 						expColumnName,

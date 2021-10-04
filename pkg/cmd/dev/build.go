@@ -56,6 +56,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
         build configuration specified in .bazelrc, minus the "cross" prefix.`)
 	buildCmd.Flags().Bool(hoistGeneratedCodeFlag, false, "hoist generated code out of the Bazel sandbox into the workspace")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
+	addCommonBuildFlags(buildCmd)
 	return buildCmd
 }
 

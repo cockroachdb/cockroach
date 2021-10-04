@@ -40,6 +40,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(filesFlag, "", "run logic tests for files matching this regex")
 	testLogicCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
 	testLogicCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
+	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
 }
 
@@ -100,7 +101,11 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		if timeout > 0 {
 			args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 		}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
 		args = append(args, additionalBazelArgs...)
+		args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err

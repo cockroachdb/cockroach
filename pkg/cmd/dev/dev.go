@@ -27,12 +27,6 @@ type dev struct {
 	exec *exec.Exec
 }
 
-var (
-	// Shared flags.
-	remoteCacheAddr string
-	numCPUs         int
-)
-
 func makeDevCmd() *dev {
 	var ret dev
 	ret.log = log.New(ioutil.Discard, "DEBUG: ", 0) // used for debug logging (see --debug)
@@ -80,13 +74,6 @@ Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With d
 	var debugVar bool
 	for _, subCmd := range ret.cli.Commands() {
 		subCmd.Flags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
-		subCmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of cpu cores used")
-		// This points to the grpc endpoint of a running `buchr/bazel-remote`
-		// instance. We're tying ourselves to the one implementation, but that
-		// seems fine for now. It seems mature, and has (very experimental)
-		// support for the  Remote Asset API, which helps speed things up when
-		// the cache sits across the network boundary.
-		subCmd.Flags().StringVar(&remoteCacheAddr, "remote-cache", "", "remote caching grpc endpoint to use")
 	}
 	for _, subCmd := range ret.cli.Commands() {
 		subCmd.PreRun = func(cmd *cobra.Command, args []string) {
