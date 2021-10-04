@@ -285,8 +285,8 @@ func StartTenant(
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
 		return multitenant.ExternalUsage{
-			CPUSecs:     float64(userTimeMillis) * 1e-3,
-			PGWireBytes: s.pgServer.BytesInAndOut(),
+			CPUSecs:           float64(userTimeMillis) * 1e-3,
+			PGWireEgressBytes: s.pgServer.BytesOut(),
 		}
 	}
 

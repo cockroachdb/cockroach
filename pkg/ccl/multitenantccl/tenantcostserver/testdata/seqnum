@@ -12,13 +12,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=10  reads=20 req/30 bytes  writes=40 req/50 bytes  pod-cpu-usage: 60 secs  pgwire=70 bytes
+Consumption: ru=10  reads=20 req/30 bytes  writes=40 req/50 bytes  pod-cpu-usage: 60 secs  pgwire-egress=70 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -35,13 +35,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire=140 bytes
+Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -58,13 +58,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire=140 bytes
+Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -81,13 +81,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire=140 bytes
+Consumption: ru=20  reads=40 req/60 bytes  writes=80 req/100 bytes  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -104,13 +104,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=30  reads=60 req/90 bytes  writes=120 req/150 bytes  pod-cpu-usage: 180 secs  pgwire=210 bytes
+Consumption: ru=30  reads=60 req/90 bytes  writes=120 req/150 bytes  pod-cpu-usage: 180 secs  pgwire-egress=210 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="bar"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -127,13 +127,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=40  reads=80 req/120 bytes  writes=160 req/200 bytes  pod-cpu-usage: 240 secs  pgwire=280 bytes
+Consumption: ru=40  reads=80 req/120 bytes  writes=160 req/200 bytes  pod-cpu-usage: 240 secs  pgwire-egress=280 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="bar"  seq=1  shares=0.0  next-instance=2  last-update=00:00:00.000

@@ -10,13 +10,13 @@ consumption:
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
-  pgwire_bytes: 70
+  pgwire_egress_bytes: 70
 ----
 
 metrics
 tenant_id="5"
 ----
-tenant_consumption_pgwire_bytes{tenant_id="5"} 70
+tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 70
 tenant_consumption_read_bytes{tenant_id="5"} 30
 tenant_consumption_read_requests{tenant_id="5"} 20
 tenant_consumption_request_units{tenant_id="5"} 10
@@ -33,7 +33,7 @@ consumption:
   write_req: 400
   write_bytes: 500
   sql_pods_cpu_usage: 600
-  pgwire_bytes: 700
+  pgwire_egress_bytes: 700
 ----
 
 token-bucket-request tenant=5
@@ -45,13 +45,13 @@ consumption:
   write_req: 4000
   write_bytes: 5000
   sql_pods_cpu_usage: 6000
-  pgwire_bytes: 7000
+  pgwire_egress_bytes: 7000
 ----
 
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=1110  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660 secs  pgwire=7770 bytes
+Consumption: ru=1110  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=2  last-update=00:00:00.000
@@ -60,7 +60,7 @@ First active instance: 1
 metrics
 tenant_id="5"
 ----
-tenant_consumption_pgwire_bytes{tenant_id="5"} 7770
+tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 7770
 tenant_consumption_read_bytes{tenant_id="5"} 3330
 tenant_consumption_read_requests{tenant_id="5"} 2220
 tenant_consumption_request_units{tenant_id="5"} 1110
