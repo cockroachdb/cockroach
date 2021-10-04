@@ -67,12 +67,35 @@ type TenantSideKVInterceptor interface {
 	// OnRequestWait accounts for portion of the cost that can be determined
 	// upfront. It can block to delay the request as needed, depending on the
 	// current allowed rate of resource usage.
+	//
+	// If the context (or a parent context) was created using
+	// WithTenantCostControlExemption, the method is a no-op.
 	OnRequestWait(ctx context.Context, info tenantcostmodel.RequestInfo) error
 
 	// OnResponse accounts for the portion of the cost that can only be determined
 	// after-the-fact. It does not block, but it can push the rate limiting into
 	// "debt", causing future requests to be blocked.
+	//
+	// If the context (or a parent context) was created using
+	// WithTenantCostControlExemption, the method is a no-op.
 	OnResponse(
 		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 	)
 }
+
+// WithTenantCostControlExemption generates a child context which will cause the
+// TenantSideKVInterceptor to ignore the respective operations. This is used for
+// important internal traffic that we don't want to stall (or be accounted for).
+func WithTenantCostControlExemption(ctx context.Context) context.Context {
+	return context.WithValue(ctx, exemptCtxValue, exemptCtxValue)
+}
+
+// HasTenantCostControlExemption returns true if this context or one of its
+// parent contexts was created using WithTenantCostControlExemption.
+func HasTenantCostControlExemption(ctx context.Context) bool {
+	return ctx.Value(exemptCtxValue) != nil
+}
+
+type exemptCtxValueType struct{}
+
+var exemptCtxValue interface{} = exemptCtxValueType{}

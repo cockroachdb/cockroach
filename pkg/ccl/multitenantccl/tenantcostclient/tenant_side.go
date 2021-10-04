@@ -583,6 +583,12 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 func (c *tenantSideCostController) OnRequestWait(
 	ctx context.Context, info tenantcostmodel.RequestInfo,
 ) error {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return nil
+	}
+	// Note that the tenantSideController might not be started yet; that is ok
+	// because we initialize the limiter with some initial RUs and a reasonable
+	// initial rate.
 	return c.limiter.Wait(ctx, c.costCfg.RequestCost(info))
 }
 
@@ -593,6 +599,9 @@ func (c *tenantSideCostController) OnRequestWait(
 func (c *tenantSideCostController) OnResponse(
 	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return
+	}
 	if resp.ReadBytes() > 0 {
 		c.limiter.AdjustTokens(c.timeSource.Now(), -c.costCfg.ResponseCost(resp))
 	}
