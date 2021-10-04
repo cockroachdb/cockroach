@@ -97,6 +97,11 @@ func NewActiveQueryProfiler(
 func (o *ActiveQueryProfiler) MaybeDumpQueries(
 	ctx context.Context, registry *sql.SessionRegistry, st *cluster.Settings,
 ) {
+	defer func() {
+		if p := recover(); p != nil {
+			log.Errorf(ctx, "panic on dumping queries: %v", p)
+		}
+	}()
 	shouldDump, memUsage := o.shouldDump(ctx, st)
 	now := o.now()
 	if shouldDump && o.takeQueryProfile(ctx, registry, now, memUsage) {
