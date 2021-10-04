@@ -294,15 +294,15 @@ func (c *tenantSideCostController) updateRunState(ctx context.Context) {
 	}
 	ru := deltaCPU * float64(c.costCfg.PodCPUSecond)
 
-	var deltaPGWireBytes uint64
-	if newExternalUsage.PGWireBytes > c.run.externalUsage.PGWireBytes {
-		deltaPGWireBytes = newExternalUsage.PGWireBytes - c.run.externalUsage.PGWireBytes
-		ru += float64(deltaPGWireBytes) * float64(c.costCfg.PGWireByte)
+	var deltaPGWireEgressBytes uint64
+	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
+		deltaPGWireEgressBytes = newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes
+		ru += float64(deltaPGWireEgressBytes) * float64(c.costCfg.PGWireEgressByte)
 	}
 
 	c.mu.Lock()
 	c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
-	c.mu.consumption.PGWireBytes += deltaPGWireBytes
+	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
 	c.mu.consumption.RU += ru
 	newConsumption := c.mu.consumption
 	c.mu.Unlock()

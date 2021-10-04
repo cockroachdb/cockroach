@@ -269,7 +269,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		WriteRequests:     4,
 		WriteBytes:        5,
 		SQLPodsCPUSeconds: 6,
-		PGWireBytes:       7,
+		PGWireEgressBytes: 7,
 	}
 	var b TenantConsumption
 	for i := 0; i < 10; i++ {
@@ -282,7 +282,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		WriteRequests:     40,
 		WriteBytes:        50,
 		SQLPodsCPUSeconds: 60,
-		PGWireBytes:       70,
+		PGWireEgressBytes: 70,
 	}); b != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, b)
 	}
@@ -296,7 +296,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		WriteRequests:     36,
 		WriteBytes:        45,
 		SQLPodsCPUSeconds: 54,
-		PGWireBytes:       63,
+		PGWireEgressBytes: 63,
 	}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
 	}

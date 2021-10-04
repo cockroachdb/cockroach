@@ -309,10 +309,9 @@ func MakeServer(
 	return server
 }
 
-// BytesInAndOut returns the total number of bytes transmitted to and from this
-// server.
-func (s *Server) BytesInAndOut() uint64 {
-	return uint64(s.metrics.BytesInCount.Count() + s.metrics.BytesOutCount.Count())
+// BytesOut returns the total number of bytes transmitted from this server.
+func (s *Server) BytesOut() uint64 {
+	return uint64(s.metrics.BytesOutCount.Count())
 }
 
 // AnnotateCtxForIncomingConn annotates the provided context with a
