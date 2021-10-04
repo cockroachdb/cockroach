@@ -351,7 +351,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
 	// Create trace service for inter-node sharing of inflight trace spans.
-	tracingService := service.New(cfg.Settings.Tracer)
+	tracingService := service.New(cfg.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
 
 	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
@@ -611,7 +611,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// cluster.
 	var traceCollector *collector.TraceCollector
 	if hasNodeLiveness {
-		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Settings.Tracer)
+		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
 	}
 
 	*execCfg = sql.ExecutorConfig{

@@ -759,8 +759,8 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	node1Tracer := tc.Server(0).Tracer().(*tracing.Tracer)
-	node2Tracer := tc.Server(1).Tracer().(*tracing.Tracer)
+	node1Tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	node2Tracer := tc.Server(1).TracerI().(*tracing.Tracer)
 
 	traceID, cleanup := setupTraces(node1Tracer, node2Tracer)
 	defer cleanup()

@@ -149,7 +149,7 @@ RETURNING id;`).Scan(&secondID))
 	// Launch a second migration which later we'll ensure does not kick off
 	// another job. We'll make sure this happens by polling the trace to see
 	// the log line indicating what we want.
-	tr := tc.Server(0).Tracer().(*tracing.Tracer)
+	tr := tc.Server(0).TracerI().(*tracing.Tracer)
 	recCtx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
 	defer cancel()
 	upgrade2Err := make(chan error, 1)

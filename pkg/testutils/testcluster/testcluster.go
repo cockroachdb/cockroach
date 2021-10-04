@@ -77,6 +77,11 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// ServerTyped is like Server, but returns the right type.
+func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
+	return tc.Servers[idx]
+}
+
 // ServerConn is part of TestClusterInterface.
 func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
@@ -131,7 +136,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// example of this.
 		//
 		// [1]: cleanupSessionTempObjects
-		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		tracer := tc.Servers[i].Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
 			var sps []*tracing.Span
 			_ = tracer.VisitSpans(func(span *tracing.Span) error {

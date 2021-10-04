@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -25,11 +26,12 @@ import (
 
 func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	si, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer si.Stopper().Stop(context.Background())
+	s := si.(*server.TestServer)
 	r := sqlutils.MakeSQLRunner(db)
 
-	tr := s.Tracer().(*tracing.Tracer)
+	tr := s.Tracer()
 
 	// Try to toggle the verbosity of a trace that doesn't exist, returns false.
 	// NB: Technically this could return true in the unlikely scenario that there
