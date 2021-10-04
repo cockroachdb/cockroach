@@ -247,6 +247,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 		columnIDs := make([]descpb.ColumnID, len(columns))
 		for i := range columns {
+			if columns[i].IsVirtual() {
+				return nil, pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"cannot create statistics on virtual column %q",
+					columns[i].ColName(),
+				)
+			}
 			columnIDs[i] = columns[i].GetID()
 		}
 		col, err := tableDesc.FindColumnWithID(columnIDs[0])
@@ -441,9 +448,16 @@ func createStatsDefaultColumns(
 				continue
 			}
 
-			colIDs := make([]descpb.ColumnID, j+1)
+			colIDs := make([]descpb.ColumnID, 0, j+1)
 			for k := 0; k <= j; k++ {
-				colIDs[k] = idx.GetKeyColumnID(k)
+				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(k))
+				if err != nil {
+					return nil, err
+				}
+				if col.IsVirtual() {
+					continue
+				}
+				colIDs = append(colIDs, col.GetID())
 			}
 
 			// Check for existing stats and remember the requested stats.
