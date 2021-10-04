@@ -445,8 +445,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err := mem.Get(pid); err != nil {
 		log.Ops.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
-	cpuTime := gosigar.ProcTime{}
-	if err := cpuTime.Get(pid); err != nil {
+	userTimeMillis, sysTimeMillis, err := GetCPUTime(ctx)
+	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
 	cgroupCPU, _ := cgroups.GetCgroupCPU()
@@ -507,8 +507,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	now := rsr.clock.PhysicalNow()
 	dur := float64(now - rsr.last.now)
 	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-	utime := int64(cpuTime.User) * 1e6
-	stime := int64(cpuTime.Sys) * 1e6
+	utime := userTimeMillis * 1e6
+	stime := sysTimeMillis * 1e6
 	urate := float64(utime-rsr.last.utime) / dur
 	srate := float64(stime-rsr.last.stime) / dur
 	combinedNormalizedPerc := (srate + urate) / cpuShare
@@ -690,14 +690,12 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.PacketsSent -= sub.PacketsSent
 }
 
-// GetUserCPUSeconds returns the cumulative User CPU time for this process, in
-// seconds.
-func GetUserCPUSeconds(ctx context.Context) float64 {
+// GetCPUTime returns the cumulative user/system time (in ms) since the process start.
+func GetCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err error) {
 	pid := os.Getpid()
 	cpuTime := gosigar.ProcTime{}
 	if err := cpuTime.Get(pid); err != nil {
-		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		return 0, 0, err
 	}
-	// cpuTime.User is in milliseconds; convert to seconds.
-	return float64(cpuTime.User) * 1e-3
+	return int64(cpuTime.User), int64(cpuTime.Sys), nil
 }

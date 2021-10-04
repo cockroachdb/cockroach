@@ -27,11 +27,7 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(CheckEndTxnTrigger, true)
 	params := base.TestServerArgs{}
-	params.Knobs = base.TestingKnobs{
-		SQLStatsKnobs: &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		},
-	}
+	params.Knobs = CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
@@ -43,11 +39,16 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 // CreateTestTenantParams creates a set of params suitable for SQL Tenant Tests.
 func CreateTestTenantParams(tenantID roachpb.TenantID) base.TestTenantArgs {
 	return base.TestTenantArgs{
-		TenantID: tenantID,
-		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
+		TenantID:     tenantID,
+		TestingKnobs: CreateTestingKnobs(),
+	}
+}
+
+// CreateTestingKnobs creates a testing knob in the unit tests.
+func CreateTestingKnobs() base.TestingKnobs {
+	return base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
 		},
 	}
 }

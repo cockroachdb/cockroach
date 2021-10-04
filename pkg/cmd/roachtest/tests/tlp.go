@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 const statementTimeout = time.Minute
@@ -169,32 +172,56 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	unpartitioned, partitioned := smither.GenerateTLP()
 
 	return runWithTimeout(func() error {
-		var unpartitionedCount int
-		row := conn.QueryRow(unpartitioned)
-		if err := row.Scan(&unpartitionedCount); err != nil {
+		rows1, err := conn.Query(unpartitioned)
+		if err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		defer rows1.Close()
+		unpartitionedRows, err := sqlutils.RowsToStrMatrix(rows1)
+		if err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		rows2, err := conn.Query(partitioned)
+		if err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		defer rows2.Close()
+		partitionedRows, err := sqlutils.RowsToStrMatrix(rows2)
+		if err != nil {
 			// Ignore errors.
 			//nolint:returnerrcheck
 			return nil
 		}
 
-		var partitionedCount int
-		row = conn.QueryRow(partitioned)
-		if err := row.Scan(&partitionedCount); err != nil {
-			// Ignore errors.
-			//nolint:returnerrcheck
-			return nil
-		}
-
-		if unpartitionedCount != partitionedCount {
+		if diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows); diff != "" {
 			logStmt(unpartitioned)
 			logStmt(partitioned)
 			return errors.Newf(
-				"expected unpartitioned count %d to equal partitioned count %d\nsql: %s\n%s",
-				unpartitionedCount, partitionedCount, unpartitioned, partitioned)
+				"expected unpartitioned results to equal partitioned results\n%s\nsql: %s\n%s",
+				diff, unpartitioned, partitioned)
 		}
-
 		return nil
 	})
+}
+
+func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
+	var rows1 []string
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], ","))
+	}
+	var rows2 []string
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], ","))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	return cmp.Diff(rows1, rows2)
 }
 
 func runWithTimeout(f func() error) error {

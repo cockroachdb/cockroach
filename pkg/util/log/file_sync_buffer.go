@@ -160,7 +160,7 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 	// continue using the previous file instead of breaking logging
 	// altogether.
 	newFile, newLastRotation, newFileName, symLinkName, err := create(
-		sb.fileSink.mu.logDir, sb.fileSink.prefix, now, sb.lastRotation, sb.fileSink.filePermissions)
+		sb.fileSink.mu.logDir, sb.fileSink.nameGenerator, now, sb.lastRotation, sb.fileSink.filePermissions)
 	if err != nil {
 		return err
 	}

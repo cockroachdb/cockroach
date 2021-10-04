@@ -353,8 +353,27 @@ var xxx_messageInfo_Entry proto.InternalMessageInfo
 // A FileDetails holds all of the particulars that can be parsed by the name of
 // a log file.
 type FileDetails struct {
-	Program  string `protobuf:"bytes,1,opt,name=program,proto3" json:"program,omitempty"`
-	Host     string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	// program contains the combination of program name and log file
+	// group name, separated by a hyphen. The program name part is
+	// guaranteed to not contain hyphens itself; if there had been any
+	// in the executable file name, they would be escaped to
+	// underscores. The first hyphen separates the program name from the
+	// file group name. The file group itself can contain hyphens.
+	//
+	// For example, if the field is set to "mybinary-my-log-group",
+	// the program name is "mybinary" and the file group is "my-log-group".
+	//
+	// The field is also guaranteed not to contain periods. If there had
+	// been periods in the executable file name, they would be replaced
+	// by underscores.
+	Program string `protobuf:"bytes,1,opt,name=program,proto3" json:"program,omitempty"`
+	// host is the hostname part of the file name.
+	// The field is guaranteed not to contain periods. If there had
+	// been periods in the hostname, they would be replaced by underscores.
+	Host string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	// user_name is the unix username part of the file name.
+	// The field is guaranteed not to contain periods. If there had
+	// been periods in the username, they would be replaced by underscores.
 	UserName string `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
 	Time     int64  `protobuf:"varint,5,opt,name=time,proto3" json:"time,omitempty"`
 	PID      int64  `protobuf:"varint,6,opt,name=pid,proto3" json:"pid,omitempty"`

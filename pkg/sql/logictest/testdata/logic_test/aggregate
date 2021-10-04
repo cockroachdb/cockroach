@@ -453,7 +453,7 @@ SELECT count(*)
 1
 
 query I
-SELECT count(k) from kv
+SELECT count(k) FROM kv
 ----
 6
 
@@ -463,7 +463,7 @@ SELECT count(1)
 1
 
 query I
-SELECT count(1) from kv
+SELECT count(1) FROM kv
 ----
 6
 
@@ -760,7 +760,7 @@ SELECT min(x), max(z), sum(x) FROM xyz
 1  8  12
 
 query II
-SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
+SELECT min(y), max(y) FROM xyz WHERE x IN (0, 4, 7)
 ----
 5  5
 
@@ -770,12 +770,27 @@ SELECT min(x), max(x) FROM xyz WHERE x = 1
 1  1
 
 query FI
-SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+SELECT min(z), max(y) FROM xyz WHERE z IN (3.0, 6.0, 8.0)
 ----
 3  5
 
+query FI
+SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
+----
+6  1
+
+query FI
+SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
+----
+NULL  NULL
+
+query FI
+SELECT max(z), min(x) FROM xyz HAVING (max(z), min(x)) = (SELECT max(z), min(x) FROM xyz)
+----
+8  1
+
 query I
-SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT min(x) FROM xyz WHERE x IN (0, 4, 7)
 ----
 4
 
@@ -894,15 +909,15 @@ VALUES (1, 1.1, 1.1),
        (18, 11.2, 11.2);
 
 query FRF
-select sqrdiff(i), round(sqrdiff(f), 12), sqrdiff(d)
-from ifd
+SELECT sqrdiff(i), round(sqrdiff(f), 12), sqrdiff(d)
+FROM ifd
 ----
 206.8333333333333333333334 86.248333333333 86.24833333333333333333333
 
 query FRF
 SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
 FROM ifd
-where i < 10
+WHERE i < 10
 ----
 8.666666666666666666666666 1.82 1.82
 
@@ -2855,7 +2870,7 @@ array_agg   array_agg
 {-3,-2,-1}  {-3,-2,-1,0,1,2}
 
 query IT
-SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
+SELECT count(1), concat_agg(col3 ORDER BY col1) FROM tab
 ----
 6  aaabbb
 
@@ -3472,10 +3487,10 @@ SELECT json_object_agg(user_name, networks) FROM
 {"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
 
 statement error pq: field name must not be null
-select json_object_agg(null, null)
+SELECT json_object_agg(null, null)
 
 statement error pq: field name must not be null
-select json_object_agg(null, 1)
+SELECT json_object_agg(null, 1)
 
 statement ok
 CREATE TABLE persons(

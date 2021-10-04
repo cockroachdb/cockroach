@@ -30,8 +30,9 @@ func TestLogFilenameParsing(t *testing.T) {
 		timeutil.Now().AddDate(0, 0, -1),
 	}
 
+	gen := makeFileNameGenerator("")
 	for i, testCase := range testCases {
-		filename, _ := logName(program, testCase)
+		filename, _ := gen.logName(testCase)
 		details, err := ParseLogFilename(filename)
 		if err != nil {
 			t.Fatal(err)
@@ -49,9 +50,10 @@ func TestSelectFiles(t *testing.T) {
 	year2000 := time.Date(2000, time.January, 1, 1, 0, 0, 0, time.UTC)
 	year2050 := time.Date(2050, time.January, 1, 1, 0, 0, 0, time.UTC)
 	year2200 := time.Date(2200, time.January, 1, 1, 0, 0, 0, time.UTC)
+	gen := makeFileNameGenerator("")
 	for i := 0; i < 100; i++ {
 		fileTime := year2000.AddDate(i, 0, 0)
-		name, _ := logName(program, fileTime)
+		name, _ := gen.logName(fileTime)
 		testfile := logpb.FileInfo{
 			Name: name,
 			Details: logpb.FileDetails{

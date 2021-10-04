@@ -1,10 +1,12 @@
+try-import %workspace%/.bazelrc.user
+
 build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info
 test --config=test
-build:test --define gotags=bazel,crdb_test,gss --test_env=TZ=
+build:with_ui --define cockroach_with_ui=y
+build:test --define gotags=bazel,crdb_test,gss
 build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
+test:test --test_env=TZ=
 query --ui_event_filters=-DEBUG
-
-try-import %workspace%/.bazelrc.user
 
 # CI should always run with `--config=ci`.
 build:ci --experimental_convenience_symlinks=ignore

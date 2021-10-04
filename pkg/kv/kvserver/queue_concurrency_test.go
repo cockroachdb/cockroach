@@ -71,7 +71,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
 			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
-			DefaultSpanConfig: TestingDefaultSpanConfig(),
+			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
 		},
 	}
 

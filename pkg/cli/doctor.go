@@ -323,22 +323,8 @@ func fromZipDir(
 	// To make parsing user functions code happy.
 	_ = builtins.AllBuiltinNames
 
-	maybePrint := func(fileName string) string {
-		path := path.Join(zipDirPath, fileName)
-		if debugCtx.verbose {
-			fmt.Println("reading " + path)
-		}
-		return path
-	}
-
-	descFile, err := os.Open(maybePrint("system.descriptor.txt"))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer descFile.Close()
 	descTable = make(doctor.DescriptorTable, 0)
-
-	if err := tableMap(descFile, func(row string) error {
+	if err := slurp(zipDirPath, "system.descriptor.txt", func(row string) error {
 		fields := strings.Fields(row)
 		last := len(fields) - 1
 		i, err := strconv.Atoi(fields[0])
@@ -360,17 +346,15 @@ func fromZipDir(
 	// Handle old debug zips where the namespace table dump is from namespace2.
 	namespaceFileName := "system.namespace2.txt"
 	if _, err := os.Stat(namespaceFileName); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			// Handle unexpected errors.
+			return nil, nil, nil, err
+		}
 		namespaceFileName = "system.namespace.txt"
 	}
 
-	namespaceFile, err := os.Open(maybePrint(namespaceFileName))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer namespaceFile.Close()
-
 	namespaceTable = make(doctor.NamespaceTable, 0)
-	if err := tableMap(namespaceFile, func(row string) error {
+	if err := slurp(zipDirPath, namespaceFileName, func(row string) error {
 		fields := strings.Fields(row)
 		parID, err := strconv.Atoi(fields[0])
 		if err != nil {
@@ -400,14 +384,8 @@ func fromZipDir(
 		return nil, nil, nil, err
 	}
 
-	jobsFile, err := os.Open(maybePrint("system.jobs.txt"))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer jobsFile.Close()
 	jobsTable = make(doctor.JobsTable, 0)
-
-	if err := tableMap(jobsFile, func(row string) error {
+	if err := slurp(zipDirPath, "system.jobs.txt", func(row string) error {
 		fields := strings.Fields(row)
 		md := jobs.JobMetadata{}
 		md.Status = jobs.Status(fields[1])
@@ -443,6 +421,31 @@ func fromZipDir(
 	}
 
 	return descTable, namespaceTable, jobsTable, nil
+}
+
+// slurp reads a file in zipDirPath and processes its contents.
+func slurp(zipDirPath string, fileName string, tableMapFn func(row string) error) error {
+	filePath := path.Join(zipDirPath, fileName)
+
+	// Check for existence of companion .err.txt file.
+	_, err := os.Stat(filePath + ".err.txt")
+	if err == nil {
+		// A .err.txt file exists.
+		fmt.Printf("WARNING: errors occurred during the production of %s, contents may be missing or incomplete.\n", fileName)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Handle unexpected errors.
+		return err
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if debugCtx.verbose {
+		fmt.Println("reading " + filePath)
+	}
+	return tableMap(f, tableMapFn)
 }
 
 // tableMap applies `fn` to all rows in `in`.

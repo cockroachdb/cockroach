@@ -141,6 +141,7 @@
 .crl-button__content {
   display: flex;
   flex: 1;
+  font-weight: normal;
 }
 
 
@@ -157,4 +158,8 @@
 .crl-button__icon--push-right {
   order: 1;
   margin-left: $spacing-base;
+}
+
+.small-margin {
+  margin-bottom: 10px;
 }

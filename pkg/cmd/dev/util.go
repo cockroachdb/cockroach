@@ -32,8 +32,14 @@ const (
 	shortFlag   = "short"
 )
 
-// To be turned on for tests. Turns off some deeper checks for reproducibility.
-var isTesting bool
+var (
+	// Shared flags.
+	remoteCacheAddr string
+	numCPUs         int
+
+	// To be turned on for tests. Turns off some deeper checks for reproducibility.
+	isTesting bool
+)
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
 	val, err := cmd.Flags().GetString(name)
@@ -104,6 +110,16 @@ func (d *dev) getWorkspace(ctx context.Context) (string, error) {
 
 func (d *dev) getBazelBin(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "bazel-bin")
+}
+
+func addCommonBuildFlags(cmd *cobra.Command) {
+	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of cpu cores used")
+	// This points to the grpc endpoint of a running `buchr/bazel-remote`
+	// instance. We're tying ourselves to the one implementation, but that
+	// seems fine for now. It seems mature, and has (very experimental)
+	// support for the  Remote Asset API, which helps speed things up when
+	// the cache sits across the network boundary.
+	cmd.Flags().StringVar(&remoteCacheAddr, "remote-cache", "", "remote caching grpc endpoint to use")
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {

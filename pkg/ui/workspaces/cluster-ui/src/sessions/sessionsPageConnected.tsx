@@ -41,6 +41,7 @@ export const SessionsPageConnected = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
+      isCloud: true,
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: () => dispatch(sessionsActions.refresh()),

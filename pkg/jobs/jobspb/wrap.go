@@ -28,6 +28,9 @@ type JobID int64
 // InvalidJobID is the zero value for JobID corresponding to no job.
 const InvalidJobID JobID = 0
 
+// SafeValue implements the redact.SafeValue interface.
+func (j JobID) SafeValue() {}
+
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 

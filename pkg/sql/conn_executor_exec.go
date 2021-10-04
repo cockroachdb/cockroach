@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -374,6 +375,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
+			if !p.ExecCfg().Codec.ForSystemTenant() {
+				return makeErrEvent(errorutil.UnsupportedWithMultiTenancy(70931))
+			}
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
 
@@ -994,7 +998,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
-			ex.rng,
 		)
 	}()
 
@@ -1851,10 +1854,6 @@ func (ex *connExecutor) handleAutoCommit(
 // statement counter for stmt's type.
 func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
-	if ex.executorType != executorTypeInternal {
-		// Update the non-internal QPS estimation.
-		ex.server.TelemetryLoggingMetrics.updateRollingQueryCounts()
-	}
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed

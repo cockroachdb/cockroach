@@ -35,17 +35,17 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	require.True(t, nilMeta.Empty())
 	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
-	require.False(t, sp.i.isNoop())
+	require.False(t, sp.IsNoop())
 	sp = tr.StartSpan("foo", WithParentAndAutoCollection(tr.noopSpan))
 	require.False(t, sp.IsVerbose()) // parent was not verbose
-	require.False(t, sp.i.isNoop())
+	require.False(t, sp.IsNoop())
 }
 
 func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.i.isNoop() {
+	if !noop1.IsNoop() {
 		t.Error("expected noop Span")
 	}
 	noop1.Record("hello")
@@ -54,14 +54,14 @@ func TestTracerRecording(t *testing.T) {
 	require.Equal(t, Recording(nil), noop1.GetRecording())
 
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
-	if !noop2.i.isNoop() {
+	if !noop2.IsNoop() {
 		t.Error("expected noop child Span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", WithForceRealSpan())
-	if s1.i.isNoop() {
+	if s1.IsNoop() {
 		t.Error("WithForceRealSpan (but not recording) Span should not be noop")
 	}
 	if s1.IsVerbose() {
@@ -84,7 +84,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Real parent --> real child.
 	real3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
-	if real3.i.isNoop() {
+	if real3.IsNoop() {
 		t.Error("expected real child Span")
 	}
 	real3.Finish()
@@ -229,7 +229,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.i.isNoop() {
+	if !noop1.IsNoop() {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := metadataCarrier{metadata.MD{}}
@@ -248,7 +248,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Errorf("expected no-op span meta: %v", wireSpanMeta)
 	}
 	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
-	if !noop2.i.isNoop() {
+	if !noop2.IsNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
 	noop1.Finish()
@@ -571,6 +571,21 @@ func TestNoopSpanFinish(t *testing.T) {
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
 	sp.Finish()
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+}
+
+// Test that a span constructed with a no-op span behaves like a root span - it
+// is present in the active spans registry.
+func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
+	tr := NewTracer()
+	noop := tr.StartSpan("noop")
+	require.True(t, noop.IsNoop())
+	root := tr.StartSpan("foo", WithParentAndAutoCollection(noop), WithForceRealSpan())
+	require.Len(t, tr.activeSpans.m, 1)
+	visitor := func(sp *Span) error {
+		require.Equal(t, root, sp)
+		return nil
+	}
+	require.NoError(t, tr.VisitSpans(visitor))
 }
 
 func TestConcurrentChildAndRecording(t *testing.T) {

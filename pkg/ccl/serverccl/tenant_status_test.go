@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -23,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -206,7 +210,7 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 		"SELECT 1, 1, 1",
 	}
 
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */)
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
 	defer testHelper.cleanup(ctx, t)
 
 	testCluster := testHelper.testCluster()
@@ -306,4 +310,162 @@ func ensureExpectedStmtFingerprintExistsInRPCResponse(
 		require.True(t, found, "expected %s to be found in "+
 			"%s tenant cluster, but it was not found", fingerprint, clusterType)
 	}
+}
+
+func TestContentionEventsForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	testHelper :=
+		newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlledCluster := testHelper.controlCluster()
+
+	sqlutils.CreateTable(
+		t,
+		testingCluster[0].tenantConn,
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	testTableID, err :=
+		strconv.Atoi(testingCluster.tenantConn(0).QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+	require.NoError(t, err)
+
+	testingCluster.tenantConn(0).Exec(t, "USE test")
+	testingCluster.tenantConn(1).Exec(t, "USE test")
+
+	testingCluster.tenantConn(0).Exec(t, `
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+	testingCluster.tenantConn(1).Exec(t, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+	testingCluster.tenantConn(0).ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		"COMMIT;",
+	)
+
+	resp, err :=
+		testingCluster.tenantStatusSrv(2).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+	require.NoError(t, err)
+
+	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
+		"expecting at least 1 contention event, but found none")
+
+	found := false
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			found = true
+			break
+		}
+	}
+
+	require.True(t, found,
+		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+
+	resp, err = controlledCluster.tenantStatusSrv(0).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+	require.NoError(t, err)
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			t.Errorf("did not expect contention event in controlled cluster, but it was found")
+		}
+	}
+}
+
+func TestIndexUsageForTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	testingCluster := testHelper.testCluster()
+	controlledCluster := testHelper.controlCluster()
+
+	testingCluster.tenantConn(0).Exec(t, `
+CREATE TABLE test (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+)
+`)
+
+	testingCluster.tenantConn(0).Exec(t, `
+INSERT INTO test
+VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+`)
+
+	// Record scan on primary index.
+	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+
+	// Record scan on secondary index.
+	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+	testTableID, err := strconv.Atoi(testTableIDStr)
+	require.NoError(t, err)
+
+	// Wait for the stats to be ingested.
+	require.NoError(t,
+		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 1,
+			}: {},
+			{
+				TableID: roachpb.TableID(testTableID),
+				IndexID: 2,
+			}: {},
+		}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+	)
+
+	query := `
+SELECT
+  table_id,
+  index_id,
+  total_reads,
+  extract_duration('second', now() - last_read) < 5
+FROM
+  crdb_internal.index_usage_statistics
+WHERE
+  table_id = $1
+`
+	actual := testingCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	expected := [][]string{
+		{testTableIDStr, "1", "1", "true"},
+		{testTableIDStr, "2", "1", "true"},
+	}
+
+	require.Equal(t, expected, actual)
+
+	// Ensure tenant data isolation.
+	actual = controlledCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	expected = [][]string{}
+
+	require.Equal(t, expected, actual)
 }

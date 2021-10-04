@@ -90,16 +90,16 @@ type crdbSpanMu struct {
 		remoteSpans []tracingpb.RecordedSpan
 	}
 
+	// The Span's associated baggage.
+	baggage map[string]string
+
 	// tags are only captured when recording. These are tags that have been
 	// added to this Span, and will be appended to the tags in logTags when
 	// someone needs to actually observe the total set of tags that is a part of
 	// this Span.
 	// TODO(radu): perhaps we want a recording to capture all the tags (even
 	// those that were set before recording started)?
-	tags map[string]attribute.Value
-
-	// The Span's associated baggage.
-	baggage map[string]string
+	tags []attribute.KeyValue
 }
 
 type childSpanRefs struct {
@@ -274,15 +274,14 @@ func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
-	if s.recordingType() != RecordingVerbose {
-		// Don't bother storing tags if we're unlikely to retrieve them.
-		return
+	k := attribute.Key(key)
+	for i := range s.mu.tags {
+		if s.mu.tags[i].Key == k {
+			s.mu.tags[i].Value = value
+			return
+		}
 	}
-
-	if s.mu.tags == nil {
-		s.mu.tags = make(map[string]attribute.Value)
-	}
-	s.mu.tags[key] = value
+	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
 func (s *crdbSpan) record(msg redact.RedactableString) {
@@ -459,11 +458,9 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 				addTag(remappedKey, tag.ValueStr())
 			})
 		}
-		if len(s.mu.tags) > 0 {
-			for k, v := range s.mu.tags {
-				// We encode the tag values as strings.
-				addTag(k, v.Emit())
-			}
+		for _, kv := range s.mu.tags {
+			// We encode the tag values as strings.
+			addTag(string(kv.Key), kv.Value.Emit())
 		}
 	}
 
