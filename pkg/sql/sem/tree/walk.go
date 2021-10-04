@@ -1084,15 +1084,6 @@ func (stmt *Import) copyNode() *Import {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Import) walkStmt(v Visitor) Statement {
 	ret := stmt
-	if stmt.CreateFile != nil {
-		e, changed := WalkExpr(v, stmt.CreateFile)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
-			}
-			ret.CreateFile = e
-		}
-	}
 	for i, expr := range stmt.Files {
 		e, changed := WalkExpr(v, expr)
 		if changed {

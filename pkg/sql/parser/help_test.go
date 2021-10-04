@@ -450,7 +450,6 @@ func TestContextualHelp(t *testing.T) {
 		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT TABLE foo CREATE USING 'foo.sql' CSV DATA ('foo') ??`, `IMPORT`},
 		{`IMPORT TABLE ??`, `IMPORT`},
 
 		{`EXPORT ??`, `EXPORT`},
