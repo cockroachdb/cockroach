@@ -41,9 +41,9 @@ type ExternalUsage struct {
 	// CPUSecs is the cumulative CPU usage in seconds for the SQL instance.
 	CPUSecs float64
 
-	// PGWireBytes is the total bytes transferred between the client and the SQL
-	// instance (both ingress and egress).
-	PGWireBytes uint64
+	// PGWireEgressBytes is the total bytes transferred from the SQL instance to
+	// the client.
+	PGWireEgressBytes uint64
 }
 
 // ExternalUsageFn is a function used to retrieve usage that is not tracked
