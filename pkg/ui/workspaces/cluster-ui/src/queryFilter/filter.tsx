@@ -69,7 +69,7 @@ const timeUnit = [
 ];
 
 export const defaultFilters: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
@@ -89,7 +89,9 @@ export const defaultFilters: Filters = {
  * @return Filters: the default filters with updated keys existing on
  * queryString
  */
-export const getFiltersFromQueryString = (queryString: string) => {
+export const getFiltersFromQueryString = (
+  queryString: string,
+): Record<string, string> => {
   const searchParams = new URLSearchParams(queryString);
 
   return Object.keys(defaultFilters).reduce(
@@ -97,7 +99,7 @@ export const getFiltersFromQueryString = (queryString: string) => {
       const defaultValue = defaultFilters[filter];
       const queryStringFilter = searchParams.get(filter);
       const filterValue =
-        queryStringFilter === null
+        queryStringFilter == null
           ? defaultValue
           : defaultValue.constructor(searchParams.get(filter));
       return { [filter]: filterValue, ...filters };
@@ -114,7 +116,7 @@ export const getFiltersFromQueryString = (queryString: string) => {
  * we want to consider 0 active Filters
  */
 export const inactiveFiltersState: Filters = {
-  app: "All",
+  app: "",
   timeNumber: "0",
   fullScan: false,
   sqlType: "",
@@ -123,7 +125,7 @@ export const inactiveFiltersState: Filters = {
   nodes: "",
 };
 
-export const calculateActiveFilters = (filters: Filters) => {
+export const calculateActiveFilters = (filters: Filters): number => {
   return Object.keys(inactiveFiltersState).reduce(
     (active, filter: keyof Filters) => {
       return inactiveFiltersState[filter] !== filters[filter]
@@ -185,7 +187,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     this.setState({ hide: true });
   };
 
-  handleChange = (event: any, field: string) => {
+  handleSelectChange = (
+    event: { label: string; value: string },
+    field: string,
+  ): void => {
+    this.setState({
+      filters: {
+        ...this.state.filters,
+        [field]: event.value,
+      },
+    });
+  };
+
+  handleChange = (event: any, field: string): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -419,7 +433,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             <div className={filterLabel.top}>App</div>
             <Select
               options={apps}
-              onChange={e => this.handleChange(e, "app")}
+              onChange={e => this.handleSelectChange(e, "app")}
               value={apps.filter(app => app.value === filters.app)}
               placeholder="All"
               styles={customStyles}
@@ -441,7 +455,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
               <Select
                 options={timeUnit}
                 value={timeUnit.filter(unit => unit.label == filters.timeUnit)}
-                onChange={e => this.handleChange(e, "timeUnit")}
+                onChange={e => this.handleSelectChange(e, "timeUnit")}
                 className={timePair.timeUnit}
                 styles={customStylesSmall}
               />
