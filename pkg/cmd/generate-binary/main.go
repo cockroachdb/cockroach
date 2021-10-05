@@ -93,10 +93,11 @@ func main() {
 			log.Fatalf("oid: %s: %v", sql, err)
 		}
 		data = append(data, entry{
-			SQL:    expr,
-			Oid:    string(id),
-			Text:   text,
-			Binary: binary,
+			SQL:          expr,
+			Oid:          string(id),
+			Text:         string(text),
+			TextAsBinary: text,
+			Binary:       binary,
 		})
 	}
 
@@ -110,10 +111,11 @@ func main() {
 }
 
 type entry struct {
-	SQL    string
-	Oid    string
-	Text   []byte
-	Binary []byte
+	SQL          string
+	Oid          string
+	Text         string
+	TextAsBinary []byte
+	Binary       []byte
 }
 
 func toString(b []byte) string {
@@ -135,8 +137,8 @@ const outputJSON = `[
 	{
 		"SQL": {{.SQL | json}},
 		"Oid": {{.Oid}},
-		"Text": {{printf "%q" .Text}},
-		"TextAsBinary": {{.Text | binary}},
+		"Text": {{.Text | json}},
+		"TextAsBinary": {{.TextAsBinary | binary}},
 		"Binary": {{.Binary | binary}}
 	}
 {{- end}}
@@ -546,5 +548,21 @@ var inputs = map[string][]string{
 		`1::text COLLATE "en_US"`,
 		`1::int8,(2::int8,3::int8)`,
 		`1::int8,('hi'::TEXT,3::int2)`,
+	},
+
+	`%s::"char"`: {
+		`(-128)`,
+		`(-32)`,
+		`(-1)`,
+		`0`,
+		`1`,
+		`32`,
+		`97`,
+		`127`,
+		`''`,
+	},
+
+	`%s::text`: {
+		`''`,
 	},
 }
