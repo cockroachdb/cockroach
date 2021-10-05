@@ -134,10 +134,8 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 				errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user,
-		// except if the certificate user is NodeUser, which is allowed to
-		// act on behalf of all other users.
-		if !Contains(certUsers, requestedUser.Normalized()) && !Contains(certUsers, NodeUser) {
+		// The client certificate user must match the requested user.
+		if !Contains(certUsers, requestedUser.Normalized()) {
 			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 

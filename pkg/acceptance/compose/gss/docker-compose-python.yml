@@ -20,13 +20,10 @@ services:
     build: ./python
     depends_on:
       - cockroach
-    command: /start.sh
     environment:
       - PGHOST=cockroach
       - PGPORT=26257
       - PGSSLMODE=require
-      - PGSSLCERT=/certs/node.crt
-      - PGSSLKEY=/certs/node.key
     volumes:
       - ./kdc/krb5.conf:/etc/krb5.conf
       - ./python/start.sh:/start.sh
