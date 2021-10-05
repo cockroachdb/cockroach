@@ -36,6 +36,7 @@ export type LocationsResponseMessage = protos.cockroach.server.serverpb.Location
 
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
 export type NodesResponseMessage = protos.cockroach.server.serverpb.NodesResponse;
+export type NodesResponseExternalMessage = protos.cockroach.server.serverpb.NodesResponseExternal;
 
 export type GetUIDataRequestMessage = protos.cockroach.server.serverpb.GetUIDataRequest;
 export type GetUIDataResponseMessage = protos.cockroach.server.serverpb.GetUIDataResponse;
@@ -273,8 +274,16 @@ export function getLocations(_req: LocationsRequestMessage, timeout?: moment.Dur
 }
 
 // getNodes gets node data
-export function getNodes(_req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
-  return timeoutFetch(serverpb.NodesResponse, `${STATUS_PREFIX}/nodes`, null, timeout);
+export function getNodesUI(
+  _req: NodesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<NodesResponseExternalMessage> {
+  return timeoutFetch(
+    serverpb.NodesResponseExternal,
+    `${STATUS_PREFIX}/nodes_ui`,
+    null,
+    timeout,
+  );
 }
 
 export function raftDebug(_req: RaftDebugRequestMessage): Promise<RaftDebugResponseMessage> {
