@@ -422,7 +422,7 @@ This turns out to be relatively straightforward to handle. If an initialized
 replica receives a snapshot that widens it, it can infer that a merge occured,
 and it simply subsumes all replicas that are overlapped by the snapshot in one
 shot. This requires the same delicate synchronization dance, mentioned at the
-end of the [merge transaction](#merge-transaction) section, to update bookeeping
+end of the [merge transaction](#merge-transaction) section, to update bookkeeping
 information. After all, applying a widening snapshot is simply the bulk version
 of applying a merge command directly. The details are too complicated to go into
 here, but you can begin your own exploration by starting with this call to
