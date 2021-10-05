@@ -408,9 +408,6 @@ type Replica struct {
 		// to the *RaftCommand contained in its associated *ProposalData. This
 		// is because the *RaftCommand can be mutated during reproposals by
 		// Replica.tryReproposeWithNewLeaseIndex.
-		//
-		// TODO(ajwerner): move the proposal map and ProposalData entirely under
-		// the raftMu.
 		proposals map[kvserverbase.CmdIDKey]*ProposalData
 		// Indicates that the replica is in the process of applying log entries.
 		// Updated to true in handleRaftReady before entries are removed from
@@ -669,9 +666,8 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
-// It requires that both Replica.mu and Replica.raftMu are exclusively held.
+// It requires that Replica.mu is exclusively held.
 func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
-	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
 	delete(r.mu.proposals, p.idKey)
 	p.releaseQuota()
