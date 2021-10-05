@@ -19,11 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
-	skip.WithIssue(t, 70902, "flaky test")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.Range(1, 3))
 
@@ -109,6 +107,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
+	c.Start(ctx, c.Node(3))
 	c.Stop(ctx, c.Range(1, 3))
 	c.Start(ctx, c.Range(1, 2))
 
