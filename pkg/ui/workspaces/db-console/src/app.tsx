@@ -13,7 +13,7 @@ import { History } from "history";
 import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider } from "react-redux";
-import { Redirect, Route, Switch } from "react-router-dom";
+import { Redirect, Route, RouteChildrenProps, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
 import { AdminUIState } from "src/redux/state";
@@ -66,6 +66,7 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionsPage from "src/views/transactions/transactionsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
+import { getMatchParamByName } from "./util/query";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -182,7 +183,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Route
                   exact
                   path={`/statements/:${appAttr}`}
-                  component={StatementsPage}
+                  render={({ match }: RouteChildrenProps) => (
+                    <Redirect
+                      to={`/statements?${appAttr}=${getMatchParamByName(
+                        match,
+                        appAttr,
+                      )}`}
+                    />
+                  )}
                 />
                 <Route
                   exact
