@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,6 +51,19 @@ const (
 	// TODO(tamird): make culling of outbound streams more evented, so that we
 	// need not rely on this timeout to shut things down.
 	raftIdleTimeout = time.Minute
+)
+
+// targetRaftOutgoingBatchSize wraps "kv.raft.command.target_batch_size".
+var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
+	"kv.raft.command.target_batch_size",
+	"size of a batch of raft commands after which it will be sent without further batching",
+	64<<20, // 64 MB
+	func(size int64) error {
+		if size < 1 {
+			return errors.New("must be positive")
+		}
+		return nil
+	},
 )
 
 // RaftMessageResponseStream is the subset of the
@@ -487,18 +501,18 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
+			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - int64(req.Size())
 			batch.Requests = append(batch.Requests, *req)
 			req.release()
-			// Pull off as many queued requests as possible.
-			//
-			// TODO(peter): Think about limiting the size of the batch we send.
-			for done := false; !done; {
+			// Pull off as many queued requests as possible, within reason.
+			for budget > 0 {
 				select {
 				case req = <-ch:
+					budget -= int64(req.Size())
 					batch.Requests = append(batch.Requests, *req)
 					req.release()
 				default:
-					done = true
+					budget = -1
 				}
 			}
 
