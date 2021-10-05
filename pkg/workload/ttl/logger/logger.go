@@ -161,12 +161,12 @@ func (l *logger) Ops(
 	l.setupMetrics(reg.Registerer())
 	ql.WorkerFns[0] = func(ctx context.Context) error {
 		var numRows int64
-		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME follower_read_timestamp()").Scan(&numRows); err != nil {
+		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s'").Scan(&numRows); err != nil {
 			return err
 		}
 		l.prometheus.numRows.Set(float64(numRows))
 		var numExpiredRows int64
-		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME follower_read_timestamp() WHERE now() > crdb_internal_ttl_expiration").Scan(&numExpiredRows); err != nil {
+		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s' WHERE now() > crdb_internal_ttl_expiration").Scan(&numExpiredRows); err != nil {
 			return err
 		}
 		l.prometheus.numExpiredRows.Set(float64(numExpiredRows))
@@ -185,7 +185,8 @@ func (l logger) Tables() []workload.Table {
 			Name: "logs",
 			Schema: fmt.Sprintf(`(
 	ts TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
-	id UUID NOT NULL DEFAULT gen_random_uuid(),
+	-- total hack to get around pretty print but whatever
+	id TEXT NOT NULL DEFAULT gen_random_uuid()::string,
 	message TEXT NOT NULL,
 	PRIMARY KEY (ts, id)
 ) TTL '%d seconds'`, int(l.ttl.Seconds())),

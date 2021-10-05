@@ -46,6 +46,7 @@ type TTLMetrics struct {
 	DeletionSelectNanos *metric.Histogram
 	DeletionDeleteNanos *metric.Histogram
 	RowDeletions        *metric.Counter
+	NumWorkers          *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -94,6 +95,13 @@ func makeTTLMetrics(histogramWindowInterval time.Duration) TTLMetrics {
 				Measurement: "num_rows",
 				Unit:        metric.Unit_COUNT,
 				MetricType:  io_prometheus_client.MetricType_COUNTER,
+			},
+		),
+		NumWorkers: metric.NewGauge(
+			metric.Metadata{
+				Name:        "jobs.ttl.num_workers",
+				Measurement: "num_workers",
+				Unit:        metric.Unit_COUNT,
 			},
 		),
 	}
