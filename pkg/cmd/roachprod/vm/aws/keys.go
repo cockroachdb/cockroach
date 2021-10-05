@@ -17,7 +17,9 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -62,11 +64,25 @@ func (p *Provider) sshKeyImport(keyName string, region string) error {
 		KeyName string
 	}
 	_ = data.KeyName // silence unused warning
+
+	user, err := p.FindActiveAccount()
+	if err != nil {
+		return err
+	}
+
+	timestamp := timeutil.Now()
+	createdAt := timestamp.Format(time.RFC3339)
+
+	IAMUserNameTag := fmt.Sprintf("{Key=IAMUserName,Value=%s}", user)
+	createdAtTag := fmt.Sprintf("{Key=CreatedAt,Value=%s}", createdAt)
+	tagSpecs := fmt.Sprintf("ResourceType=key-pair,Tags=[%s, %s]", IAMUserNameTag, createdAtTag)
+
 	args := []string{
 		"ec2", "import-key-pair",
 		"--region", region,
 		"--key-name", keyName,
 		"--public-key-material", string(keyBytes),
+		"--tag-specifications", tagSpecs,
 	}
 	err = p.runJSONCommand(args, &data)
 	// If two roachprod instances run at the same time with the same key, they may

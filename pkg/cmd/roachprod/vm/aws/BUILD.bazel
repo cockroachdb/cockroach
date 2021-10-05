@@ -17,6 +17,7 @@ go_library(
         "//pkg/cmd/roachprod/vm/flagstub",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_spf13_pflag//:pflag",
