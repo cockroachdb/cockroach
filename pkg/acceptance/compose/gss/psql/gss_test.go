@@ -35,7 +35,7 @@ func init() {
 }
 
 func TestGSS(t *testing.T) {
-	connector, err := pq.NewConnector("user=root sslmode=require")
+	connector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
 	}
