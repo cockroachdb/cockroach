@@ -13,7 +13,6 @@ package tenantrate
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,7 +65,6 @@ func NewLimiterFactory(sv *settings.Values, knobs *TestingKnobs) *LimiterFactory
 	for _, setting := range configSettings {
 		setting.SetOnChange(sv, updateFn)
 	}
-	tenantcostmodel.SetOnChange(sv, updateFn)
 	return rl
 }
 
