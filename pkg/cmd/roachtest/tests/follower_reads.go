@@ -607,32 +607,19 @@ func verifyHighFollowerReadRatios(
 		t.Fatal(err)
 	}
 
-	if len(response.Results[0].Datapoints) < 3 {
+	minDataPoints := len(response.Results[0].Datapoints)
+	for _, res := range response.Results[1:] {
+		if len(res.Datapoints) < minDataPoints {
+			minDataPoints = len(res.Datapoints)
+		}
+	}
+	if minDataPoints < 3 {
 		t.Fatalf("not enough ts data to verify follower reads")
 	}
 
 	// Go through the timeseries and process them into a better format.
-	const threshold = 0.9
-	stats := make([]intervalStats, len(response.Results[0].Datapoints))
-
-	// Sanity check timeseries response.
-	numIntervals := len(response.Results[0].Datapoints)
-	for n := 0; n < c.Spec().NodeCount; n++ {
-		followerReads := response.Results[n*2].Datapoints
-		selects := response.Results[n*2+1].Datapoints
-		if len(followerReads) != numIntervals {
-			t.Fatalf("inconsistent timeseries response. Expected %d points, but n%d (query 1) returned %d.\n"+
-				"Timeseries 1: %v\nTimeseries 2: %v.",
-				numIntervals, n, len(followerReads), response.Results[0].Datapoints, followerReads)
-		}
-		if len(selects) != numIntervals {
-			t.Fatalf("inconsistent timeseries response. Expected %d points, but n%d (query 2) returned %d.\n"+
-				"Timeseries 1: %v\nTimeseries 2: %v.",
-				numIntervals, n, len(selects), response.Results[0].Datapoints, followerReads)
-		}
-	}
-
-	for i := 0; i < numIntervals; i++ {
+	stats := make([]intervalStats, minDataPoints)
+	for i := range stats {
 		ratios := make([]float64, c.Spec().NodeCount)
 		for n := 0; n < c.Spec().NodeCount; n++ {
 			followerReadsPerTenSeconds := response.Results[n*2].Datapoints[i]
@@ -651,6 +638,7 @@ func verifyHighFollowerReadRatios(
 
 	// Now count how many intervals have more than the tolerated number of nodes
 	// with low follower read ratios.
+	const threshold = 0.9
 	var badIntervals []intervalStats
 	for _, stat := range stats {
 		var nodesWithLowRatios int
