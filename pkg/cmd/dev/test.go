@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ const (
 	stressArgsFlag  = "stress-args"
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
+	rewriteFlag     = "rewrite"
+	rewriteArgFlag  = "rewrite-arg"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -50,6 +53,8 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "Additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
+	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files (only applicable for certain tests, e.g. logic and datadriven tests)")
+	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
 	return testCmd
 }
 
@@ -67,6 +72,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	short := mustGetFlagBool(cmd, shortFlag)
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
+	rewriteArg := mustGetFlagString(cmd, rewriteArgFlag)
+	rewrite := mustGetFlagBool(cmd, rewriteFlag) || (rewriteArg != "")
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
@@ -83,6 +90,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
+	var testTargets []string
 	for _, pkg := range pkgs {
 		pkg = strings.TrimPrefix(pkg, "//")
 		pkg = strings.TrimPrefix(pkg, "./")
@@ -122,23 +130,52 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 				if err != nil {
 					return err
 				}
-				targets := strings.TrimSpace(string(out))
-				args = append(args, strings.Split(targets, "\n")...)
+				targets := strings.Split(strings.TrimSpace(string(out)), "\n")
+				testTargets = append(testTargets, targets...)
 			}
 		} else if strings.Contains(pkg, ":") {
-			args = append(args, pkg)
+			testTargets = append(testTargets, pkg)
 		} else {
 			out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", pkg))
 			if err != nil {
 				return err
 			}
 			tests := strings.Split(strings.TrimSpace(string(out)), "\n")
-			args = append(args, tests...)
+			testTargets = append(testTargets, tests...)
 		}
 	}
 
+	args = append(args, testTargets...)
+
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
+	}
+	if rewrite {
+		if stress {
+			// Both of these flags require --run_under, and their usages would conflict.
+			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
+		}
+		workspace, err := d.getWorkspace(ctx)
+		if err != nil {
+			return err
+		}
+		var cdDir string
+		for _, testTarget := range testTargets {
+			dir := getDirectoryFromTarget(testTarget)
+			if cdDir != "" && cdDir != dir {
+				// We can't pass different run_under arguments for different tests
+				// in different packages.
+				return fmt.Errorf("cannot --%s for selected targets: %s. Hint: try only specifying one test target",
+					rewriteFlag, strings.Join(testTargets, ","))
+			}
+			cdDir = dir
+		}
+		args = append(args, "--run_under", fmt.Sprintf("cd %s && ", filepath.Join(workspace, cdDir)))
+		args = append(args, "--test_env=YOU_ARE_IN_THE_WORKSPACE=1")
+		args = append(args, "--test_arg", "-rewrite")
+		if rewriteArg != "" {
+			args = append(args, "--test_arg", rewriteArg)
+		}
 	}
 	if stress && timeout > 0 {
 		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s %s", stressTarget, timeout, stressArgs))
@@ -166,4 +203,13 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+}
+
+func getDirectoryFromTarget(target string) string {
+	target = strings.TrimPrefix(target, "//")
+	colon := strings.LastIndex(target, ":")
+	if colon < 0 {
+		return target
+	}
+	return target[:colon]
 }
