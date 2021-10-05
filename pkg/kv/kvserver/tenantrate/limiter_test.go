@@ -502,11 +502,11 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	config := tenantrate.DefaultConfig()
 
 	calculateIOPS := func(rate float64) float64 {
-		readCost := config.CostModel.KVReadCost(workload.ReadSize)
-		writeCost := config.CostModel.KVWriteCost(workload.WriteSize)
-		readFraction := tenantcostmodel.RU(workload.ReadPercentage) / 100.0
+		readCost := config.ReadRequestUnits + float64(workload.ReadSize)*config.ReadUnitsPerByte
+		writeCost := config.WriteRequestUnits + float64(workload.WriteSize)*config.WriteUnitsPerByte
+		readFraction := float64(workload.ReadPercentage) / 100.0
 		avgCost := readFraction*readCost + (1-readFraction)*writeCost
-		return rate / float64(avgCost)
+		return rate / avgCost
 	}
 
 	sustained := calculateIOPS(config.Rate)
@@ -597,23 +597,17 @@ func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Conf
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
 
-	override := func(dest interface{}, val float64) {
-		if val == 0 {
-			return
-		}
-		switch dest := dest.(type) {
-		case *float64:
+	override := func(dest *float64, val float64) {
+		if val != 0 {
 			*dest = val
-		case *tenantcostmodel.RU:
-			*dest = tenantcostmodel.RU(val)
 		}
 	}
 	override(&config.Rate, vals.Rate)
 	override(&config.Burst, vals.Burst)
-	override(&config.CostModel.KVReadRequest, vals.Read.Base)
-	override(&config.CostModel.KVReadByte, vals.Read.PerByte)
-	override(&config.CostModel.KVWriteRequest, vals.Write.Base)
-	override(&config.CostModel.KVWriteByte, vals.Write.PerByte)
+	override(&config.ReadRequestUnits, vals.Read.Base)
+	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
+	override(&config.WriteRequestUnits, vals.Write.Base)
+	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {
