@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -364,14 +364,21 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
 	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
+
+	// Create some user with password authn.
+	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
+
+	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	proxyOutgoingTLSConfig.Certificates = nil
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
@@ -389,14 +396,14 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		// NB: This test will fail unless the user used between the proxy
 		// and the backend is changed to a user that actually exists.
 		delete(params, "authToken")
-		params["user"] = "root"
+		params["user"] = "testuser"
 
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	s, proxyAddr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
 
-	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28&sslmode=require", proxyAddr)
+	u := fmt.Sprintf("postgres://bogususer:foo123@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28&sslmode=require", proxyAddr)
 	te.TestConnect(ctx, t, u, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -516,14 +523,21 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := ioutil.TempFile("", "*_denylist.yml")
 	require.NoError(t, err)
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
 	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
+
+	// Create some user with password authn.
+	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
+
+	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	proxyOutgoingTLSConfig.Certificates = nil
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
@@ -554,7 +568,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
-	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Eventuallyf(
 			t,
