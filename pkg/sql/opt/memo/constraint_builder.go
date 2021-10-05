@@ -443,6 +443,81 @@ func (cb *constraintsBuilder) buildFunctionConstraints(
 	return cs, false
 }
 
+// binaryBuildConstraintsForOr builds the constraint set for a contiguous chain
+// of OrOps using divide and conquer.
+func (cb *constraintsBuilder) binaryBuildConstraintsForOr(
+	disjunctions []opt.ScalarExpr,
+) (_ *constraint.Set, tight bool) {
+	size := len(disjunctions)
+	if size == 1 {
+		return cb.buildConstraints(disjunctions[0])
+	}
+	mid := size / 2
+	left := disjunctions[:mid]
+	right := disjunctions[mid:]
+
+	cl, tightl := cb.binaryBuildConstraintsForOr(left)
+	cr, tightr := cb.binaryBuildConstraintsForOr(right)
+	res := cl.Union(cb.evalCtx, cr)
+
+	// The union may not be "tight" because the new constraint set might
+	// allow combinations of values that the expression does not allow.
+	//
+	// For example, consider the expression:
+	//
+	//   (@1 = 4 AND @2 = 6) OR (@1 = 5 AND @2 = 7)
+	//
+	// The resulting constraint set is:
+	//
+	//   /1: [/4 - /4] [/5 - /5]
+	//   /2: [/6 - /6] [/7 - /7]
+	//
+	// This constraint set is not tight, because it allows values for @1
+	// and @2 that the original expression does not, such as @1=4, @2=7.
+	//
+	// However, there are three cases in which the union constraint set is
+	// tight.
+	//
+	// First, if the left, right, and result sets have a single constraint,
+	// then the result constraint is tight if the left and right are tight.
+	// If there is a single constraint for all three sets, it implies that
+	// the sets involve the same column. Therefore it is safe to determine
+	// the tightness of the union based on the tightness of the left and
+	// right.
+	//
+	// Second, if one of the left or right set is a contradiction, then the
+	// result constraint is tight if the other input set is tight. This is
+	// because contradictions are tight and fully describe the set of
+	// values that the original expression allows - none.
+	//
+	// For example, consider the expression:
+	//
+	//   (@1 = 4 AND @1 = 6) OR (@1 = 5 AND @2 = 7)
+	//
+	// The resulting constraint set is:
+	//
+	//   /1: [/5 - /5]
+	//   /2: [/7 - /7]
+	//
+	// This constraint set is tight, because there are no values for @1 and
+	// @2 that satisfy the set but do not satisfy the expression.
+	//
+	// Third, if both the left and the right set are contradictions, then
+	// the result set is tight. This is because contradictions are tight
+	// and, as explained above, they fully describe the set of values that
+	// satisfy their expression. Note that this third case is generally
+	// covered by the second case, but it's mentioned here for the sake of
+	// explicitness.
+	if cl == contradiction {
+		return res, tightr
+	}
+	if cr == contradiction {
+		return res, tightl
+	}
+	tightu := tightl && tightr && cl.Length() == 1 && cr.Length() == 1 && res.Length() == 1
+	return res, tightu
+}
+
 func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.Set, tight bool) {
 	switch t := e.(type) {
 	case *FalseExpr, *NullExpr:
@@ -472,66 +547,8 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		return cl, (tightl || cl == contradiction)
 
 	case *OrExpr:
-		cl, tightl := cb.buildConstraints(t.Left)
-		cr, tightr := cb.buildConstraints(t.Right)
-		res := cl.Union(cb.evalCtx, cr)
-
-		// The union may not be "tight" because the new constraint set might
-		// allow combinations of values that the expression does not allow.
-		//
-		// For example, consider the expression:
-		//
-		//   (@1 = 4 AND @2 = 6) OR (@1 = 5 AND @2 = 7)
-		//
-		// The resulting constraint set is:
-		//
-		//   /1: [/4 - /4] [/5 - /5]
-		//   /2: [/6 - /6] [/7 - /7]
-		//
-		// This constraint set is not tight, because it allows values for @1
-		// and @2 that the original expression does not, such as @1=4, @2=7.
-		//
-		// However, there are three cases in which the union constraint set is
-		// tight.
-		//
-		// First, if the left, right, and result sets have a single constraint,
-		// then the result constraint is tight if the left and right are tight.
-		// If there is a single constraint for all three sets, it implies that
-		// the sets involve the same column. Therefore it is safe to determine
-		// the tightness of the union based on the tightness of the left and
-		// right.
-		//
-		// Second, if one of the left or right set is a contradiction, then the
-		// result constraint is tight if the other input set is tight. This is
-		// because contradictions are tight and fully describe the set of
-		// values that the original expression allows - none.
-		//
-		// For example, consider the expression:
-		//
-		//   (@1 = 4 AND @1 = 6) OR (@1 = 5 AND @2 = 7)
-		//
-		// The resulting constraint set is:
-		//
-		//   /1: [/5 - /5]
-		//   /2: [/7 - /7]
-		//
-		// This constraint set is tight, because there are no values for @1 and
-		// @2 that satisfy the set but do not satisfy the expression.
-		//
-		// Third, if both the left and the right set are contradictions, then
-		// the result set is tight. This is because contradictions are tight
-		// and, as explained above, they fully describe the set of values that
-		// satisfy their expression. Note that this third case is generally
-		// covered by the second case, but it's mentioned here for the sake of
-		// explicitness.
-		if cl == contradiction {
-			return res, tightr
-		}
-		if cr == contradiction {
-			return res, tightl
-		}
-		tight := tightl && tightr && cl.Length() == 1 && cr.Length() == 1 && res.Length() == 1
-		return res, tight
+		disjunctions := CollectContiguousOrExprs(e)
+		return cb.binaryBuildConstraintsForOr(disjunctions)
 
 	case *RangeExpr:
 		return cb.buildConstraints(t.And)
