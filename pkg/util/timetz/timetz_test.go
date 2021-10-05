@@ -101,7 +101,7 @@ func TestTimeTZ(t *testing.T) {
 	}{
 		{
 			t:               weirdTimeZone,
-			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation((5*60*60)+(30*60)+15, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.TimeZoneOffsetToLocation((5*60*60)+(30*60)+15)),
 			toDuration:      time.Duration((10*60*60 - ((5 * 60 * 60) + 30*60 + 15))) * time.Second,
 			largerThan:      []TimeTZ{minTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -110,7 +110,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               utcTime,
-			toTime:          time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(0, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(0)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime, hawaiiTime},
@@ -119,7 +119,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               sydneyTime,
-			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime},
 			smallerThan:     []TimeTZ{maxTime, utcTime, hawaiiTime},
@@ -128,7 +128,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               sydneyTimeWithMillisecond,
-			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 1000000, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 1000000, timeutil.TimeZoneOffsetToLocation(10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15)*time.Second + 1*time.Millisecond,
 			largerThan:      []TimeTZ{minTime, utcTime, hawaiiTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -137,7 +137,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               hawaiiTime,
-			toTime:          time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(-10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(-10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -146,7 +146,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               minTime,
-			toTime:          time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(15*60*60+59*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.TimeZoneOffsetToLocation(15*60*60+59*60)),
 			toDuration:      time.Duration(-(15*60*60 + 59*60)) * time.Second,
 			largerThan:      []TimeTZ{},
 			smallerThan:     []TimeTZ{maxTime, utcTime, sydneyTime, hawaiiTime},
@@ -155,7 +155,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               maxTime,
-			toTime:          time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(-(15*60*60+59*60), "TimeTZ")),
+			toTime:          time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.TimeZoneOffsetToLocation(-(15*60*60 + 59*60))),
 			toDuration:      time.Duration(24*60*60+15*60*60+59*60) * time.Second,
 			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime, hawaiiTime},
 			smallerThan:     []TimeTZ{},

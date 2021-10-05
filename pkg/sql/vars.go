@@ -1806,7 +1806,7 @@ var globalFalse = displayPgBool(false)
 // specified by the user.
 func sessionDataTimeZoneFormat(loc *time.Location) string {
 	locStr := loc.String()
-	_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(locStr)
+	_, origRepr, parsed := timeutil.ParseTimeZoneOffset(locStr, timeutil.TimeZoneStringToLocationISO8601Standard)
 	if parsed {
 		return origRepr
 	}
