@@ -1263,13 +1263,20 @@ var specs = []stmtSpec{
 		unlink:  []string{"job_id"},
 	},
 	{
-		name:   "show_grants_stmt",
-		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
-		replace: map[string]string{
-			"targets_roles":                "( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*",
+		name: "show_grants_stmt",
+		inline: []string{
+			"opt_on_targets_roles",
+			"for_grantee_clause",
+			"targets_roles",
+			"name_list",
+			"schema_name_list",
+			"type_name_list",
 		},
-		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
+		replace: map[string]string{
+			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"qualifiable_schema_name": "schema_name",
+		},
+		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
 		name:   "show_indexes",
