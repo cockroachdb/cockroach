@@ -163,7 +163,7 @@ func (fta *FetcherTableArgs) InitCols(
 	desc catalog.TableDescriptor,
 	scanVisibility execinfrapb.ScanVisibility,
 	withSystemColumns bool,
-	virtualColumn catalog.Column,
+	invertedColumn catalog.Column,
 ) {
 	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
 	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
@@ -171,10 +171,10 @@ func (fta *FetcherTableArgs) InitCols(
 	} else {
 		cols = append(cols, desc.PublicColumns()...)
 	}
-	if virtualColumn != nil {
+	if invertedColumn != nil {
 		for i, col := range cols {
-			if col.GetID() == virtualColumn.GetID() {
-				cols[i] = virtualColumn
+			if col.GetID() == invertedColumn.GetID() {
+				cols[i] = invertedColumn
 				break
 			}
 		}
