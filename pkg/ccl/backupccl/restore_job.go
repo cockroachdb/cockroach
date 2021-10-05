@@ -290,6 +290,40 @@ rangeLoop:
 	return requestEntries, maxEndTime, nil
 }
 
+func processTableForMultiRegion(
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
+) error {
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
+			Required:       true,
+			AvoidCached:    true,
+			IncludeOffline: true,
+		})
+	if err != nil {
+		return err
+	}
+	// If the table descriptor is being written to a multi-region database and
+	// the table does not have a locality config setup, set one up here. The
+	// table's locality config will be set to the default locality - REGIONAL
+	// BY TABLE IN PRIMARY REGION.
+	if dbDesc.IsMultiRegion() {
+		if table.GetLocalityConfig() == nil {
+			table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+		}
+	} else {
+		// If the database is not multi-region enabled, ensure that we don't
+		// write any multi-region table descriptors into it.
+		if table.GetLocalityConfig() != nil {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"cannot restore or create multi-region table %s into non-multi-region database %s",
+				table.GetName(),
+				dbDesc.GetName(),
+			)
+		}
+	}
+	return nil
+}
+
 // WriteDescriptors writes all the new descriptors: First the ID ->
 // TableDescriptor for the new table, then flip (or initialize) the name -> ID
 // entry so any new queries will use the new one. The tables are assigned the
@@ -306,7 +340,6 @@ func WriteDescriptors(
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
-	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
@@ -378,33 +411,9 @@ func WriteDescriptors(
 			}
 			privilegeDesc := table.GetPrivileges()
 			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-			// If the table descriptor is being written to a multi-region database and
-			// the table does not have a locality config setup, set one up here. The
-			// table's locality config will be set to the default locality - REGIONAL
-			// BY TABLE IN PRIMARY REGION.
-			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
-					Required:       true,
-					AvoidCached:    true,
-					IncludeOffline: true,
-				})
-			if err != nil {
+
+			if err := processTableForMultiRegion(ctx, txn, descsCol, table); err != nil {
 				return err
-			}
-			if dbDesc.IsMultiRegion() {
-				if table.GetLocalityConfig() == nil {
-					table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
-				}
-			} else {
-				// If the database is not multi-region enabled, ensure that we don't
-				// write any multi-region table descriptors into it.
-				if table.GetLocalityConfig() != nil {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot write descriptor for multi-region table %s into non-multi-region database %s",
-						table.GetName(),
-						dbDesc.GetName(),
-					)
-				}
 			}
 
 			if err := descsCol.WriteDescToBatch(
@@ -1277,7 +1286,7 @@ func createImportingDescriptors(
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(
 				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
-				details.DescriptorCoverage, r.settings, nil, /* extra */
+				details.DescriptorCoverage, nil, /* extra */
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
