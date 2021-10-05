@@ -131,6 +131,170 @@ message NodesResponse {
   ];
 }
 
+// NodesResponse describe the nodes in the cluster.
+// API: PUBLIC ALPHA
+message NodesResponseExternal {
+  // nodes carries the status payloads for all nodes in the cluster.
+  // API: PUBLIC ALPHA
+  repeated NodeResponse nodes = 1 [ (gogoproto.nullable) = false ];
+  // liveness_by_node_id maps each node ID to a liveness status.
+  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "LivenessByNodeID"
+  ];
+}
+
+// Locality is an ordered set of key value Tiers that describe a node's
+// location. The tier keys should be the same across all nodes.
+message Locality {
+  repeated Tier tiers = 1 [(gogoproto.nullable) = false];
+}
+
+// Tier represents one level of the locality hierarchy.
+message Tier {
+  // Key is the name of tier and should match all other nodes.
+  string key = 1;
+  // Value is node specific value corresponding to the key.
+  string value = 2;
+}
+
+message Version {
+  // The names "major" and "minor" are reserved in C in
+  // some platforms (e.g. FreeBSD).
+  int32 major_val = 1 [(gogoproto.customname) = "Major"];
+  int32 minor_val = 2 [(gogoproto.customname) = "Minor"];
+  // Note that patch is a placeholder and will always be zero.
+  int32 patch = 3;
+  // The internal version is used to introduce migrations during the development
+  // cycle. They are subversions that are never the end versions of a release,
+  // i.e. users of stable, public release will only use binaries with the
+  // internal version set to 0.
+  int32 internal = 4;
+}
+
+// NodeDescriptor holds details on node physical/network topology.
+message NodeDescriptor {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // address should only be visible by the Admin role.
+  util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
+  // attrs should only be visible by the Admin role.
+  cockroach.roachpb.Attributes attrs = 3 [(gogoproto.nullable) = false];
+  Locality locality = 4 [(gogoproto.nullable) = false];
+  Version ServerVersion = 5 [(gogoproto.nullable) = false];
+  string build_tag = 6;
+  int64 started_at = 7;
+  // locality_address should only be visible by the Admin role.
+  repeated cockroach.roachpb.LocalityAddress locality_address = 8 [(gogoproto.nullable) = false];
+  string cluster_name = 9;
+  // The SQL address. If empty, indicates that the base address field
+  // is also used to accept SQL connections.
+  // sql_address should only be visible by the Admin role.
+  util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SQLAddress"];
+}
+
+// Percentiles contains a handful of hard-coded percentiles meant to summarize
+// a distribution.
+message Percentiles {
+  double p10 = 1;
+  double p25 = 2;
+  double p50 = 3;
+  double p75 = 4;
+  double p90 = 5;
+  double pMax = 6;
+}
+
+// StoreDescriptor holds store information including store attributes, node
+// descriptor and store capacity.
+message StoreDescriptor {
+  int32 store_id = 1 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  roachpb.Attributes attrs = 2 [(gogoproto.nullable) = false];
+  NodeDescriptor node = 3 [(gogoproto.nullable) = false];
+  roachpb.StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
+}
+
+// StoreStatus records the most recent values of metrics for a store.
+message StoreStatus {
+  // desc is the store descriptor.
+  StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 2;
+}
+
+// NodeStatus records the most recent values of metrics for a node.
+// API: PUBLIC ALPHA
+message NodeResponse {
+  // desc is the node descriptor.
+  NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // build_info describes the `cockroach` executable file.
+  // API: PUBLIC ALPHA
+  build.Info build_info = 2 [(gogoproto.nullable) = false];
+
+  // started_at is the unix timestamp at which the node process was
+  // last started.
+  // API: PUBLIC ALPHA
+  int64 started_at = 3;
+
+  // updated_at is the unix timestamp at which the node status record
+  // was last updated.
+  // API: PUBLIC ALPHA
+  int64 updated_at = 4;
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 5;
+
+  // store_statuses provides the store status payloads for all
+  // the stores on that node.
+  repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
+
+  // args is the list of command-line arguments used to last start the node.
+  // args should only be visible by the Admin role.
+  repeated string args = 7;
+
+  // env is the list of environment variables that influenced
+  // the node's configuration.
+  // env should only be visible by the Admin role.
+  repeated string env = 8;
+
+  // latencies is a map of nodeIDs to nanoseconds which is the latency
+  // between this node and the other node.
+  //
+  // NOTE: this is deprecated and is only set if the min supported
+  //       cluster version is >= VersionRPCNetworkStats.
+  map<int32, int64> latencies = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  message NetworkActivity {
+    int64 incoming = 1; // in bytes
+    int64 outgoing = 2; // in bytes
+    int64 latency = 3;  // in nanoseconds
+  }
+  // activity is a map of nodeIDs to network statistics from this node
+  // to other nodes.
+  map<int32, NetworkActivity> activity = 10 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // total_system_memory is the total RAM available to the system
+  // (or, if detected, the memory available to the cgroup this process is in)
+  // in bytes.
+  // API: PUBLIC ALPHA
+  int64 total_system_memory = 11;
+
+  // num_cpus is the number of logical CPUs as reported by the operating system
+  // on the host where the `cockroach` process is running. Note that
+  // this does not report the number of CPUs actually used by `cockroach`;
+  // this parameter is controlled separately.
+  // API: PUBLIC ALPHA
+  int32 num_cpus = 12;
+}
+
 // RegionsRequest requests all available regions.
 message RegionsRequest {}
 
@@ -1196,6 +1360,17 @@ service Status {
     };
   }
 
+  rpc NodesUI(NodesRequest) returns (NodesResponseExternal) {
+    option (google.api.http) = {
+      get : "/_status/nodes_ui"
+    };
+  }
+
+  rpc NodeUI(NodeRequest) returns (NodeResponse) {
+    option (google.api.http) = {
+      get : "/_status/nodes_ui/{node_id}"
+    };
+  }
 
   // RaftDebug requests internal details about Raft.
   rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
