@@ -496,19 +496,19 @@ func FindPublicColumnWithID(
 	return col, nil
 }
 
-// FindVirtualColumn returns a catalog.Column matching the virtual column
+// FindInvertedColumn returns a catalog.Column matching the inverted column
 // descriptor in `spec` if not nil, nil otherwise.
-func FindVirtualColumn(
-	desc catalog.TableDescriptor, virtualColDesc *descpb.ColumnDescriptor,
+func FindInvertedColumn(
+	desc catalog.TableDescriptor, invertedColDesc *descpb.ColumnDescriptor,
 ) catalog.Column {
-	if virtualColDesc == nil {
+	if invertedColDesc == nil {
 		return nil
 	}
-	found, err := desc.FindColumnWithID(virtualColDesc.ID)
+	found, err := desc.FindColumnWithID(invertedColDesc.ID)
 	if err != nil {
 		panic(errors.HandleAsAssertionFailure(err))
 	}
-	virtualColumn := found.DeepCopy()
-	*virtualColumn.ColumnDesc() = *virtualColDesc
-	return virtualColumn
+	invertedColumn := found.DeepCopy()
+	*invertedColumn.ColumnDesc() = *invertedColDesc
+	return invertedColumn
 }

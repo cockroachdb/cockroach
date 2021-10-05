@@ -1107,8 +1107,8 @@ func initTableReaderSpec(
 		HasSystemColumns: n.containsSystemColumns,
 		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
 	}
-	if vc := getVirtualColumn(n.colCfg.virtualColumn, n.cols); vc != nil {
-		s.VirtualColumn = vc.ColumnDesc()
+	if vc := getInvertedColumn(n.colCfg.invertedColumn, n.cols); vc != nil {
+		s.InvertedColumn = vc.ColumnDesc()
 	}
 
 	indexIdx, err := getIndexIdx(n.index, n.desc)
@@ -1133,20 +1133,20 @@ func initTableReaderSpec(
 	return s, post, nil
 }
 
-// getVirtualColumn returns the column in cols with ID matching
-// virtualColumn.colID.
-func getVirtualColumn(
-	virtualColumn *struct {
+// getInvertedColumn returns the column in cols with ID matching
+// invertedColumn.colID.
+func getInvertedColumn(
+	invertedColumn *struct {
 		colID tree.ColumnID
 		typ   *types.T
 	}, cols []catalog.Column,
 ) catalog.Column {
-	if virtualColumn == nil {
+	if invertedColumn == nil {
 		return nil
 	}
 
 	for i := range cols {
-		if tree.ColumnID(cols[i].GetID()) == virtualColumn.colID {
+		if tree.ColumnID(cols[i].GetID()) == invertedColumn.colID {
 			return cols[i]
 		}
 	}
@@ -1521,13 +1521,13 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	virtualColumn := tabledesc.FindVirtualColumn(info.desc, info.spec.VirtualColumn)
+	invertedColumn := tabledesc.FindInvertedColumn(info.desc, info.spec.InvertedColumn)
 	cols := info.desc.PublicColumns()
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 	if returnMutations {
 		cols = info.desc.DeletableColumns()
 	}
-	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
+	typs := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 	if info.containsSystemColumns {
 		for _, col := range info.desc.SystemColumns() {
 			typs = append(typs, col.GetType())

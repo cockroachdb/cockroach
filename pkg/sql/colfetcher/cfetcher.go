@@ -1617,7 +1617,7 @@ func initCFetcher(
 	index catalog.Index,
 	neededCols util.FastIntSet,
 	colIdxMap catalog.TableColMap,
-	virtualCol catalog.Column,
+	invertedCol catalog.Column,
 	args cFetcherArgs,
 ) (*cFetcher, error) {
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -1631,7 +1631,7 @@ func initCFetcher(
 		ValNeededForCol:  neededCols,
 	}
 
-	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, virtualCol)
+	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, invertedCol)
 
 	if err := fetcher.Init(
 		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse, args.lockingStrength,
