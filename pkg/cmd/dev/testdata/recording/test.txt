@@ -167,3 +167,14 @@ bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_output er
 
 bazel test pkg/roachpb:string_test --test_output errors
 ----
+
+bazel query 'kind(go_test, //pkg/testutils:all)'
+----
+//pkg/testutils:testutils_test
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+bazel test //pkg/testutils:testutils_test --run_under 'cd go/src/github.com/cockroachdb/cockroach/pkg/testutils && ' --test_env=YOU_ARE_IN_THE_WORKSPACE=1 --test_arg -rewrite --test_output errors
+----
