@@ -115,3 +115,6 @@ func SetOnChange(sv *settings.Values, fn func(context.Context)) {
 		s.SetOnChange(sv, fn)
 	}
 }
+
+var _ = SetOnChange
+var _ = ConfigFromSettings
