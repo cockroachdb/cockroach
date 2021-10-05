@@ -464,14 +464,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		for i, workFn := range ops.WorkerFns {
 			go func(i int, workFn func(context.Context) error) {
 				// If a ramp period was specified, start all of the workers
-				// gradually with a new context.
+				// gradually.
 				if rampCtx != nil {
 					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
 					time.Sleep(time.Duration(i) * rampPerWorker)
-					workerRun(rampCtx, errCh, nil /* wg */, limiter, workFn)
 				}
-
-				// Start worker again, this time with the main context.
 				workerRun(workersCtx, errCh, &wg, limiter, workFn)
 			}(i, workFn)
 		}

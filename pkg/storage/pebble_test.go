@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"path/filepath"
 	"sort"
@@ -636,8 +637,17 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 
 			destination := &MemFile{}
-			_, _, _, err := engine.ExportMVCCToSst(ctx, key(10), key(20000), ts(999), ts(2000), hlc.Timestamp{},
-				true, 0, 0, false, true, destination)
+			_, _, _, err := engine.ExportMVCCToSst(ctx, ExportOptions{
+				StartKey:           MVCCKey{Key: key(10)},
+				EndKey:             key(20000),
+				StartTS:            ts(999),
+				EndTS:              ts(2000),
+				ExportAllRevisions: true,
+				TargetSize:         0,
+				MaxSize:            0,
+				StopMidKey:         false,
+				UseTBI:             true,
+			}, destination)
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {
@@ -725,8 +735,17 @@ func TestExportSplitMidKey(t *testing.T) {
 				for !resumeKey.Equal(roachpb.Key{}) {
 					dest := &MemFile{}
 					_, resumeKey, firstKeyTS, _ = engine.ExportMVCCToSst(
-						ctx, resumeKey, key(3).Next(), hlc.Timestamp{}, hlc.Timestamp{WallTime: 9999},
-						firstKeyTS, test.exportAll, 1, maxSize, test.stopMidKey, test.useTBI, dest)
+						ctx, ExportOptions{
+							StartKey:           MVCCKey{Key: resumeKey, Timestamp: firstKeyTS},
+							EndKey:             key(3).Next(),
+							StartTS:            hlc.Timestamp{},
+							EndTS:              hlc.Timestamp{WallTime: 9999},
+							ExportAllRevisions: test.exportAll,
+							TargetSize:         1,
+							MaxSize:            maxSize,
+							StopMidKey:         test.stopMidKey,
+							UseTBI:             test.useTBI,
+						}, dest)
 					if !firstKeyTS.IsEmpty() {
 						resumeWithTs++
 					}
@@ -814,4 +833,215 @@ func (fs *errorFS) Create(name string) (vfs.File, error) {
 		return nil, errors.New("background error")
 	}
 	return fs.FS.Create(name)
+}
+
+type countingResourceLimiter struct {
+	softCount int64
+	hardCount int64
+	count     int64
+}
+
+func (l *countingResourceLimiter) IsExhausted() ResourceLimitReached {
+	l.count++
+	if l.count > l.hardCount {
+		return ResourceLimitReachedHard
+	}
+	if l.count > l.softCount {
+		return ResourceLimitReachedSoft
+	}
+	return ResourceLimitNotReached
+}
+
+var _ ResourceLimiter = &countingResourceLimiter{}
+
+type queryLimits struct {
+	minKey       int64
+	maxKey       int64
+	minTimestamp hlc.Timestamp
+	maxTimestamp hlc.Timestamp
+	latest       bool
+}
+
+func testKey(id int64) roachpb.Key {
+	return []byte(fmt.Sprintf("key-%08d", id))
+}
+
+type dataLimits struct {
+	minKey          int64
+	maxKey          int64
+	minTimestamp    hlc.Timestamp
+	maxTimestamp    hlc.Timestamp
+	tombstoneChance float64
+}
+
+type resourceLimits struct {
+	softThreshold int64
+	hardThreshold int64
+}
+
+func generateData(t *testing.T, engine Engine, limits dataLimits, totalEntries int64) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := int64(0); i < totalEntries; i++ {
+		key := testKey(limits.minKey + rand.Int63n(limits.maxKey-limits.minKey))
+		timestamp := limits.minTimestamp.Add(rand.Int63n(limits.maxTimestamp.WallTime-limits.minTimestamp.WallTime), 0)
+		size := 256
+		if rng.Float64() < limits.tombstoneChance {
+			size = 0
+		}
+		require.NoError(t, engine.PutMVCC(MVCCKey{Key: key, Timestamp: timestamp}, randutil.RandBytes(rng, size)), "Write data to test storage")
+	}
+	require.NoError(t, engine.Flush(), "Flush engine data")
+}
+
+func TestExportResourceLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+
+	limits := dataLimits{
+		minKey:          0,
+		maxKey:          1000,
+		minTimestamp:    hlc.Timestamp{WallTime: 100000},
+		maxTimestamp:    hlc.Timestamp{WallTime: 200000},
+		tombstoneChance: 0.01,
+	}
+	generateData(t, engine, limits, (limits.maxKey-limits.minKey)*10)
+
+	// Outer loop runs tests on subsets of mvcc dataset.
+	for _, query := range []queryLimits{
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       false,
+		},
+		{
+			minKey:       200,
+			maxKey:       800,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       false,
+		},
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 150000},
+			maxTimestamp: hlc.Timestamp{WallTime: 175000},
+			latest:       false,
+		},
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       true,
+		},
+	} {
+		t.Run(fmt.Sprintf("minKey=%d,maxKey=%d,minTs=%v,maxTs=%v,latest=%t", query.minKey, query.maxKey, query.minTimestamp, query.maxTimestamp, query.latest),
+			func(t *testing.T) {
+				matchingData := exportAllData(t, engine, query)
+				// Inner loop exercises various thresholds to see that we always progress and respect soft
+				// and hard limits.
+				for _, resources := range []resourceLimits{
+					// soft threshold under version count, high threshold above
+					{softThreshold: 5, hardThreshold: 20},
+					// soft threshold above version count
+					{softThreshold: 15, hardThreshold: 30},
+					// low threshold to check we could always progress
+					{softThreshold: 0, hardThreshold: 0},
+					// equal thresholds to check we force breaks mid keys
+					{softThreshold: 15, hardThreshold: 15},
+					// very high hard thresholds to eliminate mid key breaking completely
+					{softThreshold: 5, hardThreshold: math.MaxInt64},
+					// very high thresholds to eliminate breaking completely
+					{softThreshold: math.MaxInt64, hardThreshold: math.MaxInt64},
+				} {
+					t.Run(fmt.Sprintf("softThreshold=%d,hardThreshold=%d", resources.softThreshold, resources.hardThreshold),
+						func(t *testing.T) {
+							assertDataEqual(t, engine, matchingData, query, resources)
+						})
+				}
+			})
+	}
+}
+
+func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
+	sstFile := &MemFile{}
+	_, _, _, err := engine.ExportMVCCToSst(context.Background(), ExportOptions{
+		StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
+		EndKey:             testKey(limits.maxKey),
+		StartTS:            limits.minTimestamp,
+		EndTS:              limits.maxTimestamp,
+		ExportAllRevisions: !limits.latest,
+		UseTBI:             true,
+	}, sstFile)
+	require.NoError(t, err, "Failed to export expected data")
+	return sstToKeys(t, sstFile.Data())
+}
+
+func sstToKeys(t *testing.T, data []byte) []MVCCKey {
+	var results []MVCCKey
+	it, err := NewMemSSTIterator(data, false)
+	require.NoError(t, err, "Failed to read exported data")
+	defer it.Close()
+	for it.SeekGE(MVCCKey{Key: []byte{}}); ; {
+		ok, err := it.Valid()
+		require.NoError(t, err, "Failed to advance iterator while preparing data")
+		if !ok {
+			break
+		}
+		results = append(results, MVCCKey{
+			Key:       append(roachpb.Key(nil), it.UnsafeKey().Key...),
+			Timestamp: it.UnsafeKey().Timestamp,
+		})
+		it.Next()
+	}
+	return results
+}
+
+func assertDataEqual(
+	t *testing.T, engine Engine, data []MVCCKey, query queryLimits, resources resourceLimits,
+) {
+	var (
+		err       error
+		key       = testKey(query.minKey)
+		ts        = query.minTimestamp
+		dataIndex = 0
+	)
+	for {
+		// Export chunk
+		limiter := countingResourceLimiter{softCount: resources.softThreshold, hardCount: resources.hardThreshold}
+		sstFile := &MemFile{}
+		_, key, ts, err = engine.ExportMVCCToSst(context.Background(), ExportOptions{
+			StartKey:           MVCCKey{Key: key, Timestamp: ts},
+			EndKey:             testKey(query.maxKey),
+			StartTS:            query.minTimestamp,
+			EndTS:              query.maxTimestamp,
+			ExportAllRevisions: !query.latest,
+			UseTBI:             true,
+			StopMidKey:         true,
+			ResourceLimiter:    &limiter,
+		}, sstFile)
+		require.NoError(t, err, "Failed to export to Sst")
+
+		chunk := sstToKeys(t, sstFile.Data())
+		require.LessOrEqual(t, len(chunk), len(data)-dataIndex, "Remaining test data")
+		for _, key := range chunk {
+			require.True(t, key.Equal(data[dataIndex]), "Returned key is not equal")
+			dataIndex++
+		}
+		require.LessOrEqual(t, limiter.count-1, resources.hardThreshold, "Fragment size")
+
+		// Last chunk check.
+		if len(key) == 0 {
+			break
+		}
+		require.GreaterOrEqual(t, limiter.count-1, resources.softThreshold, "Fragment size")
+		if resources.hardThreshold == math.MaxInt64 {
+			require.True(t, ts.IsEmpty(), "Should never break mid key on high hard thresholds")
+		}
+	}
+	require.Equal(t, dataIndex, len(data), "Not all expected data was consumed")
 }

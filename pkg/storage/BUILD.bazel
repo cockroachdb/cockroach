@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "storage",
@@ -28,6 +29,7 @@ go_library(
         "pebble_iterator.go",
         "pebble_merge.go",
         "pebble_mvcc_scanner.go",
+        "resource_limiter.go",
         "row_counter.go",
         "slice.go",
         "slice_go1.9.go",
@@ -37,6 +39,7 @@ go_library(
         "temp_dir.go",
         "temp_engine.go",
         "testing_knobs.go",
+        ":gen-resourcelimitreached-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
     visibility = ["//visibility:public"],
@@ -109,6 +112,7 @@ go_test(
         "pebble_file_registry_test.go",
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
+        "resource_limiter_test.go",
         "sst_info_test.go",
         "sst_iterator_test.go",
         "sst_writer_test.go",
@@ -159,4 +163,10 @@ go_test(
         "@org_golang_google_protobuf//proto",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-resourcelimitreached-stringer",
+    src = "resource_limiter.go",
+    typ = "ResourceLimitReached",
 )

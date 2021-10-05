@@ -594,8 +594,17 @@ func assertEqualKVs(
 			prevStart := start
 			prevTs := resumeTs
 			sstFile := &storage.MemFile{}
-			summary, start, resumeTs, err = e.ExportMVCCToSst(ctx, start, endKey, startTime, endTime, resumeTs,
-				bool(exportAllRevisions), targetSize, maxSize, bool(stopMidKey), bool(enableTimeBoundIteratorOptimization), sstFile)
+			summary, start, resumeTs, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
+				StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeTs},
+				EndKey:             endKey,
+				StartTS:            startTime,
+				EndTS:              endTime,
+				ExportAllRevisions: bool(exportAllRevisions),
+				TargetSize:         targetSize,
+				MaxSize:            maxSize,
+				StopMidKey:         bool(stopMidKey),
+				UseTBI:             bool(enableTimeBoundIteratorOptimization),
+			}, sstFile)
 			require.NoError(t, err)
 			sst = sstFile.Data()
 			loaded := loadSST(t, sst, startKey, endKey)
@@ -634,8 +643,17 @@ func assertEqualKVs(
 				if dataSizeWhenExceeded == maxSize {
 					maxSize--
 				}
-				_, _, _, err = e.ExportMVCCToSst(ctx, prevStart, endKey, startTime, endTime, prevTs,
-					bool(exportAllRevisions), targetSize, maxSize, false, bool(enableTimeBoundIteratorOptimization), &storage.MemFile{})
+				_, _, _, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
+					StartKey:           storage.MVCCKey{Key: prevStart, Timestamp: prevTs},
+					EndKey:             endKey,
+					StartTS:            startTime,
+					EndTS:              endTime,
+					ExportAllRevisions: bool(exportAllRevisions),
+					TargetSize:         targetSize,
+					MaxSize:            maxSize,
+					StopMidKey:         false,
+					UseTBI:             bool(enableTimeBoundIteratorOptimization),
+				}, &storage.MemFile{})
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
 			}
