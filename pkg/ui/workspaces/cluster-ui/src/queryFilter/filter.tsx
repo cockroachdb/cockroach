@@ -89,7 +89,9 @@ export const defaultFilters: Filters = {
  * @return Filters: the default filters with updated keys existing on
  * queryString
  */
-export const getFiltersFromQueryString = (queryString: string) => {
+export const getFiltersFromQueryString = (
+  queryString: string,
+): Record<string, string> => {
   const searchParams = new URLSearchParams(queryString);
 
   return Object.keys(defaultFilters).reduce(
