@@ -39,7 +39,7 @@ const (
 var OIDCEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		OIDCEnabledSettingName,
-		"enables or disabled OIDC login for the DB Console (this feature is experimental)",
+		"enables or disabled OIDC login for the DB Console",
 		false,
 	).WithPublic()
 	s.SetReportable(true)
@@ -50,7 +50,7 @@ var OIDCEnabled = func() *settings.BoolSetting {
 var OIDCClientID = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		OIDCClientIDSettingName,
-		"sets OIDC client id (this feature is experimental)",
+		"sets OIDC client id",
 		"",
 	).WithPublic()
 	s.SetReportable(true)
@@ -61,7 +61,7 @@ var OIDCClientID = func() *settings.StringSetting {
 var OIDCClientSecret = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		OIDCClientSecretSettingName,
-		"sets OIDC client secret (this feature is experimental)",
+		"sets OIDC client secret",
 		"",
 	).WithPublic()
 	s.SetReportable(false)
@@ -173,8 +173,7 @@ var OIDCRedirectURL = func() *settings.StringSetting {
 		OIDCRedirectURLSettingName,
 		"sets OIDC redirect URL via a URL string or a JSON string containing a required "+
 			"`redirect_urls` key with an object that maps from region keys to URL strings "+
-			"(URLs should point to your load balancer and must route to the path /oidc/v1/callback) "+
-			"(this feature is experimental)",
+			"(URLs should point to your load balancer and must route to the path /oidc/v1/callback) ",
 		"https://localhost:8080/oidc/v1/callback",
 		validateOIDCRedirectURL,
 	)
@@ -188,7 +187,7 @@ var OIDCRedirectURL = func() *settings.StringSetting {
 var OIDCProviderURL = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCProviderURLSettingName,
-		"sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve) (this feature is experimental)",
+		"sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)",
 		"",
 		func(values *settings.Values, s string) error {
 			if _, err := url.Parse(s); err != nil {
@@ -207,7 +206,7 @@ var OIDCScopes = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCScopesSettingName,
 		"sets OIDC scopes to include with authentication request "+
-			"(space delimited list of strings, required to start with `openid`) (this feature is experimental)",
+			"(space delimited list of strings, required to start with `openid`)",
 		"openid",
 		func(values *settings.Values, s string) error {
 			if s != oidc.ScopeOpenID && !strings.HasPrefix(s, oidc.ScopeOpenID+" ") {
@@ -226,7 +225,7 @@ var OIDCClaimJSONKey = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		OIDCClaimJSONKeySettingName,
 		"sets JSON key of principal to extract from payload after OIDC authentication completes "+
-			"(usually email or sid) (this feature is experimental)",
+			"(usually email or sid)",
 		"",
 	).WithPublic()
 	return s
@@ -238,7 +237,7 @@ var OIDCPrincipalRegex = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCPrincipalRegexSettingName,
 		"regular expression to apply to extracted principal (see claim_json_key setting) to "+
-			"translate to SQL user (golang regex format, must include 1 grouping to extract) (this feature is experimental)",
+			"translate to SQL user (golang regex format, must include 1 grouping to extract)",
 		"(.+)",
 		func(values *settings.Values, s string) error {
 			if _, err := regexp.Compile(s); err != nil {
@@ -258,7 +257,7 @@ var OIDCButtonText = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		OIDCButtonTextSettingName,
 		"text to show on button on DB Console login page to login with your OIDC provider "+
-			"(only shown if OIDC is enabled) (this feature is experimental)",
+			"(only shown if OIDC is enabled)",
 		"Login with your OIDC provider",
 	).WithPublic()
 	return s
@@ -270,7 +269,7 @@ var OIDCAutoLogin = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		OIDCAutoLoginSettingName,
 		"if true, logged-out visitors to the DB Console will be "+
-			"automatically redirected to the OIDC login endpoint (this feature is experimental)",
+			"automatically redirected to the OIDC login endpoint",
 		false,
 	).WithPublic()
 	return s
