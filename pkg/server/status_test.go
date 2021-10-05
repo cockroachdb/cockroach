@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2408,4 +2410,123 @@ func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 			require.Equal(t, tc.expected, buf.String())
 		})
 	}
+}
+
+func TestStatusServer_nodeStatusToResp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var nodeStatus = &statuspb.NodeStatus{
+		Desc: roachpb.NodeDescriptor{
+			Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"attr"},
+			},
+			LocalityAddress: []roachpb.LocalityAddress{{Address: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			}, LocalityTier: roachpb.Tier{Value: "v", Key: "k"}}},
+			SQLAddress: util.UnresolvedAddr{
+				NetworkField: "network",
+				AddressField: "address",
+			},
+		},
+		Args: []string{"args"},
+		Env:  []string{"env"},
+	}
+	resp := nodeStatusToResp(nodeStatus, false)
+	require.Empty(t, resp.Args)
+	require.Empty(t, resp.Env)
+	require.Empty(t, resp.Desc.Address)
+	require.Empty(t, resp.Desc.Attrs.Attrs)
+	require.Empty(t, resp.Desc.LocalityAddress)
+	require.Empty(t, resp.Desc.SQLAddress)
+
+	// Now fetch all the node statuses as admin.
+	resp = nodeStatusToResp(nodeStatus, true)
+	require.NotEmpty(t, resp.Args)
+	require.NotEmpty(t, resp.Env)
+	require.NotEmpty(t, resp.Desc.Address)
+	require.NotEmpty(t, resp.Desc.Attrs.Attrs)
+	require.NotEmpty(t, resp.Desc.LocalityAddress)
+	require.NotEmpty(t, resp.Desc.SQLAddress)
+}
+
+func TestStatusAPIContentionEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+
+	defer testCluster.Stopper().Stop(ctx)
+
+	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+
+	sqlutils.CreateTable(
+		t,
+		testCluster.ServerConn(0),
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	testTableID, err :=
+		strconv.Atoi(server1Conn.QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+	require.NoError(t, err)
+
+	server1Conn.Exec(t, "USE test")
+	server2Conn.Exec(t, "USE test")
+
+	server1Conn.Exec(t, `
+SET TRACING=on;
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+	server2Conn.Exec(t, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+COMMIT;
+SET TRACING=off;
+`)
+	server1Conn.ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		`
+COMMIT;
+SET TRACING=off;
+`,
+	)
+
+	var resp serverpb.ListContentionEventsResponse
+	require.NoError(t,
+		getStatusJSONProtoWithAdminOption(
+			testCluster.Server(2),
+			"contention_events",
+			&resp,
+			true /* isAdmin */),
+	)
+
+	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
+		"expecting at least 1 contention event, but found none")
+
+	found := false
+	for _, event := range resp.Events.IndexContentionEvents {
+		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+			found = true
+			break
+		}
+	}
+
+	require.True(t, found,
+		"expect to find contention event for table %d, but found %+v", testTableID, resp)
 }
