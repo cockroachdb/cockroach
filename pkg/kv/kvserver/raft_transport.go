@@ -503,12 +503,18 @@ func (t *RaftTransport) processQueue(
 			}
 
 			err := stream.Send(batch)
-			batch.Requests = batch.Requests[:0]
-
-			atomic.AddInt64(&stats.clientSent, 1)
 			if err != nil {
 				return err
 			}
+
+			// Reuse the Requests slice, but zero out the contents to avoid delaying
+			// GC of memory referenced from within.
+			for i := range batch.Requests {
+				batch.Requests[i] = RaftMessageRequest{}
+			}
+			batch.Requests = batch.Requests[:0]
+
+			atomic.AddInt64(&stats.clientSent, 1)
 		}
 	}
 }
