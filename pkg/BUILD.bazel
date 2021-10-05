@@ -384,6 +384,7 @@ ALL_TESTS = [
     "//pkg/util/syncutil/singleflight:singleflight_test",
     "//pkg/util/syncutil:syncutil_test",
     "//pkg/util/sysutil:sysutil_test",
+    "//pkg/util/targz:targz_test",
     "//pkg/util/timeofday:timeofday_test",
     "//pkg/util/timetz:timetz_test",
     "//pkg/util/timeutil/pgdate:pgdate_test",
