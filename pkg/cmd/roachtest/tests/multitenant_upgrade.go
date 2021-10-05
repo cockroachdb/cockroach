@@ -174,6 +174,10 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	const tenant11HTTPPort, tenant11SQLPort = 8081, 36357
 	const tenant11ID = 11
 	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, 1))
+	// We'll sometimes have to wait out the backoff of the host cluster
+	// auto-update loop (at the time of writing 30s), plus some migrations may be
+	// genuinely long-running.
+	runner.SucceedsSoonDuration = 5 * time.Minute
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant11ID)
 
 	var initialVersion string
