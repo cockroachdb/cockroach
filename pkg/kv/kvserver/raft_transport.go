@@ -487,15 +487,18 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
+			maxBytes := MaxCommandSize.Get(&t.st.SV)
 			batch.Requests = append(batch.Requests, *req)
 			req.release()
-			// Pull off as many queued requests as possible.
-			//
-			// TODO(peter): Think about limiting the size of the batch we send.
+			// Pull off as many queued requests as possible, within reason.
 			for done := false; !done; {
 				select {
 				case req = <-ch:
 					batch.Requests = append(batch.Requests, *req)
+					maxBytes -= int64(req.Size())
+					if maxBytes <= 0 {
+						done = true
+					}
 					req.release()
 				default:
 					done = true
