@@ -34,7 +34,7 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
-import { getMatchParamByName } from "src/util/query";
+import { queryByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
@@ -79,7 +79,7 @@ export const selectStatements = createSelector(
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
-    const app = getMatchParamByName(props.match, appAttr);
+    const app = queryByName(props.location, appAttr);
     const isInternal = (statement: ExecutionStatistics) =>
       statement.app.startsWith(state.data.internal_app_name_prefix);
 

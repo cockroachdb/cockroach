@@ -177,10 +177,12 @@ function AppLink(props: { app: string }) {
     return <span className={cx("app-name", "app-name__unset")}>(unset)</span>;
   }
 
+  const searchParams = new URLSearchParams({ [appAttr]: props.app });
+
   return (
     <Link
       className={cx("app-name")}
-      to={`/statements/${encodeURIComponent(props.app)}`}
+      to={`/statements/?${searchParams.toString()}`}
     >
       {props.app}
     </Link>
