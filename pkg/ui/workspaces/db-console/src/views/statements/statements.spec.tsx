@@ -588,6 +588,21 @@ function makeRoutePropsWithParams(params: { [key: string]: string }) {
   };
 }
 
+function makeRoutePropsWithSearchParams(params: { [key: string]: string }) {
+  const history = H.createHashHistory();
+  history.location.search = new URLSearchParams(params).toString();
+  return {
+    location: history.location,
+    history,
+    match: {
+      url: "",
+      path: history.location.pathname,
+      isExact: false,
+      params: {},
+    },
+  };
+}
+
 function makeEmptyRouteProps(): RouteComponentProps<any> {
   const history = H.createHashHistory();
   return {
@@ -603,7 +618,7 @@ function makeEmptyRouteProps(): RouteComponentProps<any> {
 }
 
 function makeRoutePropsWithApp(app: string) {
-  return makeRoutePropsWithParams({
+  return makeRoutePropsWithSearchParams({
     [appAttr]: app,
   });
 }
