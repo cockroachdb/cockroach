@@ -1,0 +1,3014 @@
+index-constraints vars=(id INT, book_id INT, book2_id INT, citation_id INT) index=(id)
+  id = 0
+  AND book2_id = 0
+  OR id = 1 AND book2_id = 1
+  OR id = 3 AND book2_id = 4
+  OR id = 3 AND book2_id = 9
+  OR id = 5 AND book2_id = 16
+  OR id = 5 AND book2_id = 25
+  OR id = 6 AND book2_id = 36
+  OR id = 7 AND book2_id = 49
+  OR id = 8 AND book2_id = 64
+  OR id = 9 AND book2_id = 81
+  OR id = 10 AND book2_id = 100
+  OR id = 11 AND book2_id = 121
+  OR id = 12 AND book2_id = 144
+  OR id = 13 AND book2_id = 169
+  OR id = 14 AND book2_id = 196
+  OR id = 15 AND book2_id = 225
+  OR id = 16 AND book2_id = 256
+  OR id = 17 AND book2_id = 289
+  OR id = 18 AND book2_id = 324
+  OR id = 19 AND book2_id = 361
+  OR id = 20 AND book2_id = 400
+  OR id = 21 AND book2_id = 441
+  OR id = 22 AND book2_id = 484
+  OR id = 23 AND book2_id = 529
+  OR id = 24 AND book2_id = 576
+  OR id = 25 AND book2_id = 625
+  OR id = 26 AND book2_id = 676
+  OR id = 27 AND book2_id = 729
+  OR id = 28 AND book2_id = 784
+  OR id = 29 AND book2_id = 841
+  OR id = 30 AND book2_id = 900
+  OR id = 31 AND book2_id = 961
+  OR id = 32 AND book2_id = 1024
+  OR id = 33 AND book2_id = 1089
+  OR id = 34 AND book2_id = 1156
+  OR id = 35 AND book2_id = 1225
+  OR id = 36 AND book2_id = 1296
+  OR id = 37 AND book2_id = 1369
+  OR id = 38 AND book2_id = 1444
+  OR id = 39 AND book2_id = 1521
+  OR id = 40 AND book2_id = 1600
+  OR id = 41 AND book2_id = 1681
+  OR id = 42 AND book2_id = 1764
+  OR id = 43 AND book2_id = 1849
+  OR id = 44 AND book2_id = 1936
+  OR id = 45 AND book2_id = 2025
+  OR id = 46 AND book2_id = 2116
+  OR id = 47 AND book2_id = 2209
+  OR id = 48 AND book2_id = 2304
+  OR id = 49 AND book2_id = 2401
+  OR id = 50 AND book2_id = 2500
+  OR id = 51 AND book2_id = 2601
+  OR id = 52 AND book2_id = 2704
+  OR id = 53 AND book2_id = 2809
+  OR id = 54 AND book2_id = 2916
+  OR id = 55 AND book2_id = 3025
+  OR id = 56 AND book2_id = 3136
+  OR id = 57 AND book2_id = 3249
+  OR id = 58 AND book2_id = 3364
+  OR id = 59 AND book2_id = 3481
+  OR id = 60 AND book2_id = 3600
+  OR id = 61 AND book2_id = 3721
+  OR id = 62 AND book2_id = 3844
+  OR id = 63 AND book2_id = 3969
+  OR id = 64 AND book2_id = 4096
+  OR id = 65 AND book2_id = 4225
+  OR id = 66 AND book2_id = 4356
+  OR id = 67 AND book2_id = 4489
+  OR id = 68 AND book2_id = 4624
+  OR id = 69 AND book2_id = 4761
+  OR id = 70 AND book2_id = 4900
+  OR id = 71 AND book2_id = 5041
+  OR id = 72 AND book2_id = 5184
+  OR id = 73 AND book2_id = 5329
+  OR id = 74 AND book2_id = 5476
+  OR id = 75 AND book2_id = 5625
+  OR id = 76 AND book2_id = 5776
+  OR id = 77 AND book2_id = 5929
+  OR id = 78 AND book2_id = 6084
+  OR id = 79 AND book2_id = 6241
+  OR id = 80 AND book2_id = 6400
+  OR id = 81 AND book2_id = 6561
+  OR id = 82 AND book2_id = 6724
+  OR id = 83 AND book2_id = 6889
+  OR id = 84 AND book2_id = 7056
+  OR id = 85 AND book2_id = 7225
+  OR id = 86 AND book2_id = 7396
+  OR id = 87 AND book2_id = 7569
+  OR id = 88 AND book2_id = 7744
+  OR id = 89 AND book2_id = 7921
+  OR id = 90 AND book2_id = 8100
+  OR id = 91 AND book2_id = 8281
+  OR id = 92 AND book2_id = 8464
+  OR id = 93 AND book2_id = 8649
+  OR id = 94 AND book2_id = 8836
+  OR id = 95 AND book2_id = 9025
+  OR id = 96 AND book2_id = 9216
+  OR id = 97 AND book2_id = 9409
+  OR id = 98 AND book2_id = 9604
+  OR id = 99 AND book2_id = 9801
+  OR id = 100 AND book2_id = 10000
+  OR id = 101 AND book2_id = 10201
+  OR id = 102 AND book2_id = 10404
+  OR id = 103 AND book2_id = 10609
+  OR id = 104 AND book2_id = 10816
+  OR id = 105 AND book2_id = 11025
+  OR id = 106 AND book2_id = 11236
+  OR id = 107 AND book2_id = 11449
+  OR id = 108 AND book2_id = 11664
+  OR id = 109 AND book2_id = 11881
+  OR id = 110 AND book2_id = 12100
+  OR id = 111 AND book2_id = 12321
+  OR id = 112 AND book2_id = 12544
+  OR id = 113 AND book2_id = 12769
+  OR id = 114 AND book2_id = 12996
+  OR id = 115 AND book2_id = 13225
+  OR id = 116 AND book2_id = 13456
+  OR id = 117 AND book2_id = 13689
+  OR id = 118 AND book2_id = 13924
+  OR id = 119 AND book2_id = 14161
+  OR id = 120 AND book2_id = 14400
+  OR id = 121 AND book2_id = 14641
+  OR id = 122 AND book2_id = 14884
+  OR id = 123 AND book2_id = 15129
+  OR id = 124 AND book2_id = 15376
+  OR id = 125 AND book2_id = 15625
+  OR id = 126 AND book2_id = 15876
+  OR id = 127 AND book2_id = 16129
+  OR id = 128 AND book2_id = 16384
+  OR id = 129 AND book2_id = 16641
+  OR id = 130 AND book2_id = 16900
+  OR id = 131 AND book2_id = 17161
+  OR id = 132 AND book2_id = 17424
+  OR id = 133 AND book2_id = 17689
+  OR id = 134 AND book2_id = 17956
+  OR id = 135 AND book2_id = 18225
+  OR id = 136 AND book2_id = 18496
+  OR id = 137 AND book2_id = 18769
+  OR id = 138 AND book2_id = 19044
+  OR id = 139 AND book2_id = 19321
+  OR id = 140 AND book2_id = 19600
+  OR id = 141 AND book2_id = 19881
+  OR id = 142 AND book2_id = 20164
+  OR id = 143 AND book2_id = 20449
+  OR id = 144 AND book2_id = 20736
+  OR id = 145 AND book2_id = 21025
+  OR id = 146 AND book2_id = 21316
+  OR id = 147 AND book2_id = 21609
+  OR id = 148 AND book2_id = 21904
+  OR id = 149 AND book2_id = 22201
+  OR id = 150 AND book2_id = 22500
+  OR id = 151 AND book2_id = 22801
+  OR id = 152 AND book2_id = 23104
+  OR id = 153 AND book2_id = 23409
+  OR id = 154 AND book2_id = 23716
+  OR id = 155 AND book2_id = 24025
+  OR id = 156 AND book2_id = 24336
+  OR id = 157 AND book2_id = 24649
+  OR id = 158 AND book2_id = 24964
+  OR id = 159 AND book2_id = 25281
+  OR id = 160 AND book2_id = 25600
+  OR id = 161 AND book2_id = 25921
+  OR id = 162 AND book2_id = 26244
+  OR id = 163 AND book2_id = 26569
+  OR id = 164 AND book2_id = 26896
+  OR id = 165 AND book2_id = 27225
+  OR id = 166 AND book2_id = 27556
+  OR id = 167 AND book2_id = 27889
+  OR id = 168 AND book2_id = 28224
+  OR id = 169 AND book2_id = 28561
+  OR id = 170 AND book2_id = 28900
+  OR id = 171 AND book2_id = 29241
+  OR id = 172 AND book2_id = 29584
+  OR id = 173 AND book2_id = 29929
+  OR id = 174 AND book2_id = 30276
+  OR id = 175 AND book2_id = 30625
+  OR id = 176 AND book2_id = 30976
+  OR id = 177 AND book2_id = 31329
+  OR id = 178 AND book2_id = 31684
+  OR id = 179 AND book2_id = 32041
+  OR id = 180 AND book2_id = 32400
+  OR id = 181 AND book2_id = 32761
+  OR id = 182 AND book2_id = 33124
+  OR id = 183 AND book2_id = 33489
+  OR id = 184 AND book2_id = 33856
+  OR id = 185 AND book2_id = 34225
+  OR id = 186 AND book2_id = 34596
+  OR id = 187 AND book2_id = 34969
+  OR id = 188 AND book2_id = 35344
+  OR id = 189 AND book2_id = 35721
+  OR id = 190 AND book2_id = 36100
+  OR id = 191 AND book2_id = 36481
+  OR id = 192 AND book2_id = 36864
+  OR id = 193 AND book2_id = 37249
+  OR id = 194 AND book2_id = 37636
+  OR id = 195 AND book2_id = 38025
+  OR id = 196 AND book2_id = 38416
+  OR id = 197 AND book2_id = 38809
+  OR id = 198 AND book2_id = 39204
+  OR id = 199 AND book2_id = 39601
+  OR id = 200 AND book2_id = 40000
+  OR id = 201 AND book2_id = 40401
+  OR id = 202 AND book2_id = 40804
+  OR id = 203 AND book2_id = 41209
+  OR id = 204 AND book2_id = 41616
+  OR id = 205 AND book2_id = 42025
+  OR id = 206 AND book2_id = 42436
+  OR id = 207 AND book2_id = 42849
+  OR id = 208 AND book2_id = 43264
+  OR id = 209 AND book2_id = 43681
+  OR id = 210 AND book2_id = 44100
+  OR id = 211 AND book2_id = 44521
+  OR id = 212 AND book2_id = 44944
+  OR id = 213 AND book2_id = 45369
+  OR id = 214 AND book2_id = 45796
+  OR id = 215 AND book2_id = 46225
+  OR id = 216 AND book2_id = 46656
+  OR id = 217 AND book2_id = 47089
+  OR id = 218 AND book2_id = 47524
+  OR id = 219 AND book2_id = 47961
+  OR id = 220 AND book2_id = 48400
+  OR id = 221 AND book2_id = 48841
+  OR id = 222 AND book2_id = 49284
+  OR id = 223 AND book2_id = 49729
+  OR id = 224 AND book2_id = 50176
+  OR id = 225 AND book2_id = 50625
+  OR id = 226 AND book2_id = 51076
+  OR id = 227 AND book2_id = 51529
+  OR id = 228 AND book2_id = 51984
+  OR id = 229 AND book2_id = 52441
+  OR id = 230 AND book2_id = 52900
+  OR id = 231 AND book2_id = 53361
+  OR id = 232 AND book2_id = 53824
+  OR id = 233 AND book2_id = 54289
+  OR id = 234 AND book2_id = 54756
+  OR id = 235 AND book2_id = 55225
+  OR id = 236 AND book2_id = 55696
+  OR id = 237 AND book2_id = 56169
+  OR id = 238 AND book2_id = 56644
+  OR id = 239 AND book2_id = 57121
+  OR id = 240 AND book2_id = 57600
+  OR id = 241 AND book2_id = 58081
+  OR id = 242 AND book2_id = 58564
+  OR id = 243 AND book2_id = 59049
+  OR id = 244 AND book2_id = 59536
+  OR id = 245 AND book2_id = 60025
+  OR id = 246 AND book2_id = 60516
+  OR id = 247 AND book2_id = 61009
+  OR id = 248 AND book2_id = 61504
+  OR id = 249 AND book2_id = 62001
+  OR id = 250 AND book2_id = 62500
+  OR id = 251 AND book2_id = 63001
+  OR id = 252 AND book2_id = 63504
+  OR id = 253 AND book2_id = 64009
+  OR id = 254 AND book2_id = 64516
+  OR id = 255 AND book2_id = 65025
+  OR id = 256 AND book2_id = 65536
+  OR id = 257 AND book2_id = 66049
+  OR id = 258 AND book2_id = 66564
+  OR id = 259 AND book2_id = 67081
+  OR id = 260 AND book2_id = 67600
+  OR id = 261 AND book2_id = 68121
+  OR id = 262 AND book2_id = 68644
+  OR id = 263 AND book2_id = 69169
+  OR id = 264 AND book2_id = 69696
+  OR id = 265 AND book2_id = 70225
+  OR id = 266 AND book2_id = 70756
+  OR id = 267 AND book2_id = 71289
+  OR id = 268 AND book2_id = 71824
+  OR id = 269 AND book2_id = 72361
+  OR id = 270 AND book2_id = 72900
+  OR id = 271 AND book2_id = 73441
+  OR id = 272 AND book2_id = 73984
+  OR id = 273 AND book2_id = 74529
+  OR id = 274 AND book2_id = 75076
+  OR id = 275 AND book2_id = 75625
+  OR id = 276 AND book2_id = 76176
+  OR id = 277 AND book2_id = 76729
+  OR id = 278 AND book2_id = 77284
+  OR id = 279 AND book2_id = 77841
+  OR id = 280 AND book2_id = 78400
+  OR id = 281 AND book2_id = 78961
+  OR id = 282 AND book2_id = 79524
+  OR id = 283 AND book2_id = 80089
+  OR id = 284 AND book2_id = 80656
+  OR id = 285 AND book2_id = 81225
+  OR id = 286 AND book2_id = 81796
+  OR id = 287 AND book2_id = 82369
+  OR id = 288 AND book2_id = 82944
+  OR id = 289 AND book2_id = 83521
+  OR id = 290 AND book2_id = 84100
+  OR id = 291 AND book2_id = 84681
+  OR id = 292 AND book2_id = 85264
+  OR id = 293 AND book2_id = 85849
+  OR id = 294 AND book2_id = 86436
+  OR id = 295 AND book2_id = 87025
+  OR id = 296 AND book2_id = 87616
+  OR id = 297 AND book2_id = 88209
+  OR id = 298 AND book2_id = 88804
+  OR id = 299 AND book2_id = 89401
+  OR id = 300 AND book2_id = 90000
+  OR id = 301 AND book2_id = 90601
+  OR id = 302 AND book2_id = 91204
+  OR id = 303 AND book2_id = 91809
+  OR id = 304 AND book2_id = 92416
+  OR id = 305 AND book2_id = 93025
+  OR id = 306 AND book2_id = 93636
+  OR id = 307 AND book2_id = 94249
+  OR id = 308 AND book2_id = 94864
+  OR id = 309 AND book2_id = 95481
+  OR id = 310 AND book2_id = 96100
+  OR id = 311 AND book2_id = 96721
+  OR id = 312 AND book2_id = 97344
+  OR id = 313 AND book2_id = 97969
+  OR id = 314 AND book2_id = 98596
+  OR id = 315 AND book2_id = 99225
+  OR id = 316 AND book2_id = 99856
+  OR id = 317 AND book2_id = 100489
+  OR id = 318 AND book2_id = 101124
+  OR id = 319 AND book2_id = 101761
+  OR id = 320 AND book2_id = 102400
+  OR id = 321 AND book2_id = 103041
+  OR id = 322 AND book2_id = 103684
+  OR id = 323 AND book2_id = 104329
+  OR id = 324 AND book2_id = 104976
+  OR id = 325 AND book2_id = 105625
+  OR id = 326 AND book2_id = 106276
+  OR id = 327 AND book2_id = 106929
+  OR id = 328 AND book2_id = 107584
+  OR id = 329 AND book2_id = 108241
+  OR id = 330 AND book2_id = 108900
+  OR id = 331 AND book2_id = 109561
+  OR id = 332 AND book2_id = 110224
+  OR id = 333 AND book2_id = 110889
+  OR id = 334 AND book2_id = 111556
+  OR id = 335 AND book2_id = 112225
+  OR id = 336 AND book2_id = 112896
+  OR id = 337 AND book2_id = 113569
+  OR id = 338 AND book2_id = 114244
+  OR id = 339 AND book2_id = 114921
+  OR id = 340 AND book2_id = 115600
+  OR id = 341 AND book2_id = 116281
+  OR id = 342 AND book2_id = 116964
+  OR id = 343 AND book2_id = 117649
+  OR id = 344 AND book2_id = 118336
+  OR id = 345 AND book2_id = 119025
+  OR id = 346 AND book2_id = 119716
+  OR id = 347 AND book2_id = 120409
+  OR id = 348 AND book2_id = 121104
+  OR id = 349 AND book2_id = 121801
+  OR id = 350 AND book2_id = 122500
+  OR id = 351 AND book2_id = 123201
+  OR id = 352 AND book2_id = 123904
+  OR id = 353 AND book2_id = 124609
+  OR id = 354 AND book2_id = 125316
+  OR id = 355 AND book2_id = 126025
+  OR id = 356 AND book2_id = 126736
+  OR id = 357 AND book2_id = 127449
+  OR id = 358 AND book2_id = 128164
+  OR id = 359 AND book2_id = 128881
+  OR id = 360 AND book2_id = 129600
+  OR id = 361 AND book2_id = 130321
+  OR id = 362 AND book2_id = 131044
+  OR id = 363 AND book2_id = 131769
+  OR id = 364 AND book2_id = 132496
+  OR id = 365 AND book2_id = 133225
+  OR id = 366 AND book2_id = 133956
+  OR id = 367 AND book2_id = 134689
+  OR id = 368 AND book2_id = 135424
+  OR id = 369 AND book2_id = 136161
+  OR id = 370 AND book2_id = 136900
+  OR id = 371 AND book2_id = 137641
+  OR id = 372 AND book2_id = 138384
+  OR id = 373 AND book2_id = 139129
+  OR id = 374 AND book2_id = 139876
+  OR id = 375 AND book2_id = 140625
+  OR id = 376 AND book2_id = 141376
+  OR id = 377 AND book2_id = 142129
+  OR id = 378 AND book2_id = 142884
+  OR id = 379 AND book2_id = 143641
+  OR id = 380 AND book2_id = 144400
+  OR id = 381 AND book2_id = 145161
+  OR id = 382 AND book2_id = 145924
+  OR id = 383 AND book2_id = 146689
+  OR id = 384 AND book2_id = 147456
+  OR id = 385 AND book2_id = 148225
+  OR id = 386 AND book2_id = 148996
+  OR id = 387 AND book2_id = 149769
+  OR id = 388 AND book2_id = 150544
+  OR id = 389 AND book2_id = 151321
+  OR id = 390 AND book2_id = 152100
+  OR id = 391 AND book2_id = 152881
+  OR id = 392 AND book2_id = 153664
+  OR id = 393 AND book2_id = 154449
+  OR id = 394 AND book2_id = 155236
+  OR id = 395 AND book2_id = 156025
+  OR id = 396 AND book2_id = 156816
+  OR id = 397 AND book2_id = 157609
+  OR id = 398 AND book2_id = 158404
+  OR id = 399 AND book2_id = 159201
+  OR id = 400 AND book2_id = 160000
+  OR id = 401 AND book2_id = 160801
+  OR id = 402 AND book2_id = 161604
+  OR id = 403 AND book2_id = 162409
+  OR id = 404 AND book2_id = 163216
+  OR id = 405 AND book2_id = 164025
+  OR id = 406 AND book2_id = 164836
+  OR id = 407 AND book2_id = 165649
+  OR id = 408 AND book2_id = 166464
+  OR id = 409 AND book2_id = 167281
+  OR id = 410 AND book2_id = 168100
+  OR id = 411 AND book2_id = 168921
+  OR id = 412 AND book2_id = 169744
+  OR id = 413 AND book2_id = 170569
+  OR id = 414 AND book2_id = 171396
+  OR id = 415 AND book2_id = 172225
+  OR id = 416 AND book2_id = 173056
+  OR id = 417 AND book2_id = 173889
+  OR id = 418 AND book2_id = 174724
+  OR id = 419 AND book2_id = 175561
+  OR id = 420 AND book2_id = 176400
+  OR id = 421 AND book2_id = 177241
+  OR id = 422 AND book2_id = 178084
+  OR id = 423 AND book2_id = 178929
+  OR id = 424 AND book2_id = 179776
+  OR id = 425 AND book2_id = 180625
+  OR id = 426 AND book2_id = 181476
+  OR id = 427 AND book2_id = 182329
+  OR id = 428 AND book2_id = 183184
+  OR id = 429 AND book2_id = 184041
+  OR id = 430 AND book2_id = 184900
+  OR id = 431 AND book2_id = 185761
+  OR id = 432 AND book2_id = 186624
+  OR id = 433 AND book2_id = 187489
+  OR id = 434 AND book2_id = 188356
+  OR id = 435 AND book2_id = 189225
+  OR id = 436 AND book2_id = 190096
+  OR id = 437 AND book2_id = 190969
+  OR id = 438 AND book2_id = 191844
+  OR id = 439 AND book2_id = 192721
+  OR id = 440 AND book2_id = 193600
+  OR id = 441 AND book2_id = 194481
+  OR id = 442 AND book2_id = 195364
+  OR id = 443 AND book2_id = 196249
+  OR id = 444 AND book2_id = 197136
+  OR id = 445 AND book2_id = 198025
+  OR id = 446 AND book2_id = 198916
+  OR id = 447 AND book2_id = 199809
+  OR id = 448 AND book2_id = 200704
+  OR id = 449 AND book2_id = 201601
+  OR id = 450 AND book2_id = 202500
+  OR id = 451 AND book2_id = 203401
+  OR id = 452 AND book2_id = 204304
+  OR id = 453 AND book2_id = 205209
+  OR id = 454 AND book2_id = 206116
+  OR id = 455 AND book2_id = 207025
+  OR id = 456 AND book2_id = 207936
+  OR id = 457 AND book2_id = 208849
+  OR id = 458 AND book2_id = 209764
+  OR id = 459 AND book2_id = 210681
+  OR id = 460 AND book2_id = 211600
+  OR id = 461 AND book2_id = 212521
+  OR id = 462 AND book2_id = 213444
+  OR id = 463 AND book2_id = 214369
+  OR id = 464 AND book2_id = 215296
+  OR id = 465 AND book2_id = 216225
+  OR id = 466 AND book2_id = 217156
+  OR id = 467 AND book2_id = 218089
+  OR id = 468 AND book2_id = 219024
+  OR id = 469 AND book2_id = 219961
+  OR id = 470 AND book2_id = 220900
+  OR id = 471 AND book2_id = 221841
+  OR id = 472 AND book2_id = 222784
+  OR id = 473 AND book2_id = 223729
+  OR id = 474 AND book2_id = 224676
+  OR id = 475 AND book2_id = 225625
+  OR id = 476 AND book2_id = 226576
+  OR id = 477 AND book2_id = 227529
+  OR id = 478 AND book2_id = 228484
+  OR id = 479 AND book2_id = 229441
+  OR id = 480 AND book2_id = 230400
+  OR id = 481 AND book2_id = 231361
+  OR id = 482 AND book2_id = 232324
+  OR id = 483 AND book2_id = 233289
+  OR id = 484 AND book2_id = 234256
+  OR id = 485 AND book2_id = 235225
+  OR id = 486 AND book2_id = 236196
+  OR id = 487 AND book2_id = 237169
+  OR id = 488 AND book2_id = 238144
+  OR id = 489 AND book2_id = 239121
+  OR id = 490 AND book2_id = 240100
+  OR id = 491 AND book2_id = 241081
+  OR id = 492 AND book2_id = 242064
+  OR id = 493 AND book2_id = 243049
+  OR id = 494 AND book2_id = 244036
+  OR id = 495 AND book2_id = 245025
+  OR id = 496 AND book2_id = 246016
+  OR id = 497 AND book2_id = 247009
+  OR id = 498 AND book2_id = 248004
+  OR id = 499 AND book2_id = 249001
+  OR id = 500 AND book2_id = 250000
+  OR id = 501 AND book2_id = 251001
+  OR id = 502 AND book2_id = 252004
+  OR id = 503 AND book2_id = 253009
+  OR id = 504 AND book2_id = 254016
+  OR id = 505 AND book2_id = 255025
+  OR id = 506 AND book2_id = 256036
+  OR id = 507 AND book2_id = 257049
+  OR id = 508 AND book2_id = 258064
+  OR id = 509 AND book2_id = 259081
+  OR id = 510 AND book2_id = 260100
+  OR id = 511 AND book2_id = 261121
+  OR id = 512 AND book2_id = 262144
+  OR id = 513 AND book2_id = 263169
+  OR id = 514 AND book2_id = 264196
+  OR id = 515 AND book2_id = 265225
+  OR id = 516 AND book2_id = 266256
+  OR id = 517 AND book2_id = 267289
+  OR id = 518 AND book2_id = 268324
+  OR id = 519 AND book2_id = 269361
+  OR id = 520 AND book2_id = 270400
+  OR id = 521 AND book2_id = 271441
+  OR id = 522 AND book2_id = 272484
+  OR id = 523 AND book2_id = 273529
+  OR id = 524 AND book2_id = 274576
+  OR id = 525 AND book2_id = 275625
+  OR id = 526 AND book2_id = 276676
+  OR id = 527 AND book2_id = 277729
+  OR id = 528 AND book2_id = 278784
+  OR id = 529 AND book2_id = 279841
+  OR id = 530 AND book2_id = 280900
+  OR id = 531 AND book2_id = 281961
+  OR id = 532 AND book2_id = 283024
+  OR id = 533 AND book2_id = 284089
+  OR id = 534 AND book2_id = 285156
+  OR id = 535 AND book2_id = 286225
+  OR id = 536 AND book2_id = 287296
+  OR id = 537 AND book2_id = 288369
+  OR id = 538 AND book2_id = 289444
+  OR id = 539 AND book2_id = 290521
+  OR id = 540 AND book2_id = 291600
+  OR id = 541 AND book2_id = 292681
+  OR id = 542 AND book2_id = 293764
+  OR id = 543 AND book2_id = 294849
+  OR id = 544 AND book2_id = 295936
+  OR id = 545 AND book2_id = 297025
+  OR id = 546 AND book2_id = 298116
+  OR id = 547 AND book2_id = 299209
+  OR id = 548 AND book2_id = 300304
+  OR id = 549 AND book2_id = 301401
+  OR id = 550 AND book2_id = 302500
+  OR id = 551 AND book2_id = 303601
+  OR id = 552 AND book2_id = 304704
+  OR id = 553 AND book2_id = 305809
+  OR id = 554 AND book2_id = 306916
+  OR id = 555 AND book2_id = 308025
+  OR id = 556 AND book2_id = 309136
+  OR id = 557 AND book2_id = 310249
+  OR id = 558 AND book2_id = 311364
+  OR id = 559 AND book2_id = 312481
+  OR id = 560 AND book2_id = 313600
+  OR id = 561 AND book2_id = 314721
+  OR id = 562 AND book2_id = 315844
+  OR id = 563 AND book2_id = 316969
+  OR id = 564 AND book2_id = 318096
+  OR id = 565 AND book2_id = 319225
+  OR id = 566 AND book2_id = 320356
+  OR id = 567 AND book2_id = 321489
+  OR id = 568 AND book2_id = 322624
+  OR id = 569 AND book2_id = 323761
+  OR id = 570 AND book2_id = 324900
+  OR id = 571 AND book2_id = 326041
+  OR id = 572 AND book2_id = 327184
+  OR id = 573 AND book2_id = 328329
+  OR id = 574 AND book2_id = 329476
+  OR id = 575 AND book2_id = 330625
+  OR id = 576 AND book2_id = 331776
+  OR id = 577 AND book2_id = 332929
+  OR id = 578 AND book2_id = 334084
+  OR id = 579 AND book2_id = 335241
+  OR id = 580 AND book2_id = 336400
+  OR id = 581 AND book2_id = 337561
+  OR id = 582 AND book2_id = 338724
+  OR id = 583 AND book2_id = 339889
+  OR id = 584 AND book2_id = 341056
+  OR id = 585 AND book2_id = 342225
+  OR id = 586 AND book2_id = 343396
+  OR id = 587 AND book2_id = 344569
+  OR id = 588 AND book2_id = 345744
+  OR id = 589 AND book2_id = 346921
+  OR id = 590 AND book2_id = 348100
+  OR id = 591 AND book2_id = 349281
+  OR id = 592 AND book2_id = 350464
+  OR id = 593 AND book2_id = 351649
+  OR id = 594 AND book2_id = 352836
+  OR id = 595 AND book2_id = 354025
+  OR id = 596 AND book2_id = 355216
+  OR id = 597 AND book2_id = 356409
+  OR id = 598 AND book2_id = 357604
+  OR id = 599 AND book2_id = 358801
+  OR id = 600 AND book2_id = 360000
+  OR id = 601 AND book2_id = 361201
+  OR id = 602 AND book2_id = 362404
+  OR id = 603 AND book2_id = 363609
+  OR id = 604 AND book2_id = 364816
+  OR id = 605 AND book2_id = 366025
+  OR id = 606 AND book2_id = 367236
+  OR id = 607 AND book2_id = 368449
+  OR id = 608 AND book2_id = 369664
+  OR id = 609 AND book2_id = 370881
+  OR id = 610 AND book2_id = 372100
+  OR id = 611 AND book2_id = 373321
+  OR id = 612 AND book2_id = 374544
+  OR id = 613 AND book2_id = 375769
+  OR id = 614 AND book2_id = 376996
+  OR id = 615 AND book2_id = 378225
+  OR id = 616 AND book2_id = 379456
+  OR id = 617 AND book2_id = 380689
+  OR id = 618 AND book2_id = 381924
+  OR id = 619 AND book2_id = 383161
+  OR id = 620 AND book2_id = 384400
+  OR id = 621 AND book2_id = 385641
+  OR id = 622 AND book2_id = 386884
+  OR id = 623 AND book2_id = 388129
+  OR id = 624 AND book2_id = 389376
+  OR id = 625 AND book2_id = 390625
+  OR id = 626 AND book2_id = 391876
+  OR id = 627 AND book2_id = 393129
+  OR id = 628 AND book2_id = 394384
+  OR id = 629 AND book2_id = 395641
+  OR id = 630 AND book2_id = 396900
+  OR id = 631 AND book2_id = 398161
+  OR id = 632 AND book2_id = 399424
+  OR id = 633 AND book2_id = 400689
+  OR id = 634 AND book2_id = 401956
+  OR id = 635 AND book2_id = 403225
+  OR id = 636 AND book2_id = 404496
+  OR id = 637 AND book2_id = 405769
+  OR id = 638 AND book2_id = 407044
+  OR id = 639 AND book2_id = 408321
+  OR id = 640 AND book2_id = 409600
+  OR id = 641 AND book2_id = 410881
+  OR id = 642 AND book2_id = 412164
+  OR id = 643 AND book2_id = 413449
+  OR id = 644 AND book2_id = 414736
+  OR id = 645 AND book2_id = 416025
+  OR id = 646 AND book2_id = 417316
+  OR id = 647 AND book2_id = 418609
+  OR id = 648 AND book2_id = 419904
+  OR id = 649 AND book2_id = 421201
+  OR id = 650 AND book2_id = 422500
+  OR id = 651 AND book2_id = 423801
+  OR id = 652 AND book2_id = 425104
+  OR id = 653 AND book2_id = 426409
+  OR id = 654 AND book2_id = 427716
+  OR id = 655 AND book2_id = 429025
+  OR id = 656 AND book2_id = 430336
+  OR id = 657 AND book2_id = 431649
+  OR id = 658 AND book2_id = 432964
+  OR id = 659 AND book2_id = 434281
+  OR id = 660 AND book2_id = 435600
+  OR id = 661 AND book2_id = 436921
+  OR id = 662 AND book2_id = 438244
+  OR id = 663 AND book2_id = 439569
+  OR id = 664 AND book2_id = 440896
+  OR id = 665 AND book2_id = 442225
+  OR id = 666 AND book2_id = 443556
+  OR id = 667 AND book2_id = 444889
+  OR id = 668 AND book2_id = 446224
+  OR id = 669 AND book2_id = 447561
+  OR id = 670 AND book2_id = 448900
+  OR id = 671 AND book2_id = 450241
+  OR id = 672 AND book2_id = 451584
+  OR id = 673 AND book2_id = 452929
+  OR id = 674 AND book2_id = 454276
+  OR id = 675 AND book2_id = 455625
+  OR id = 676 AND book2_id = 456976
+  OR id = 677 AND book2_id = 458329
+  OR id = 678 AND book2_id = 459684
+  OR id = 679 AND book2_id = 461041
+  OR id = 680 AND book2_id = 462400
+  OR id = 681 AND book2_id = 463761
+  OR id = 682 AND book2_id = 465124
+  OR id = 683 AND book2_id = 466489
+  OR id = 684 AND book2_id = 467856
+  OR id = 685 AND book2_id = 469225
+  OR id = 686 AND book2_id = 470596
+  OR id = 687 AND book2_id = 471969
+  OR id = 688 AND book2_id = 473344
+  OR id = 689 AND book2_id = 474721
+  OR id = 690 AND book2_id = 476100
+  OR id = 691 AND book2_id = 477481
+  OR id = 692 AND book2_id = 478864
+  OR id = 693 AND book2_id = 480249
+  OR id = 694 AND book2_id = 481636
+  OR id = 695 AND book2_id = 483025
+  OR id = 696 AND book2_id = 484416
+  OR id = 697 AND book2_id = 485809
+  OR id = 698 AND book2_id = 487204
+  OR id = 699 AND book2_id = 488601
+  OR id = 700 AND book2_id = 490000
+  OR id = 701 AND book2_id = 491401
+  OR id = 702 AND book2_id = 492804
+  OR id = 703 AND book2_id = 494209
+  OR id = 704 AND book2_id = 495616
+  OR id = 705 AND book2_id = 497025
+  OR id = 706 AND book2_id = 498436
+  OR id = 707 AND book2_id = 499849
+  OR id = 708 AND book2_id = 501264
+  OR id = 709 AND book2_id = 502681
+  OR id = 710 AND book2_id = 504100
+  OR id = 711 AND book2_id = 505521
+  OR id = 712 AND book2_id = 506944
+  OR id = 713 AND book2_id = 508369
+  OR id = 714 AND book2_id = 509796
+  OR id = 715 AND book2_id = 511225
+  OR id = 716 AND book2_id = 512656
+  OR id = 717 AND book2_id = 514089
+  OR id = 718 AND book2_id = 515524
+  OR id = 719 AND book2_id = 516961
+  OR id = 720 AND book2_id = 518400
+  OR id = 721 AND book2_id = 519841
+  OR id = 722 AND book2_id = 521284
+  OR id = 723 AND book2_id = 522729
+  OR id = 724 AND book2_id = 524176
+  OR id = 725 AND book2_id = 525625
+  OR id = 726 AND book2_id = 527076
+  OR id = 727 AND book2_id = 528529
+  OR id = 728 AND book2_id = 529984
+  OR id = 729 AND book2_id = 531441
+  OR id = 730 AND book2_id = 532900
+  OR id = 731 AND book2_id = 534361
+  OR id = 732 AND book2_id = 535824
+  OR id = 733 AND book2_id = 537289
+  OR id = 734 AND book2_id = 538756
+  OR id = 735 AND book2_id = 540225
+  OR id = 736 AND book2_id = 541696
+  OR id = 737 AND book2_id = 543169
+  OR id = 738 AND book2_id = 544644
+  OR id = 739 AND book2_id = 546121
+  OR id = 740 AND book2_id = 547600
+  OR id = 741 AND book2_id = 549081
+  OR id = 742 AND book2_id = 550564
+  OR id = 743 AND book2_id = 552049
+  OR id = 744 AND book2_id = 553536
+  OR id = 745 AND book2_id = 555025
+  OR id = 746 AND book2_id = 556516
+  OR id = 747 AND book2_id = 558009
+  OR id = 748 AND book2_id = 559504
+  OR id = 749 AND book2_id = 561001
+  OR id = 750 AND book2_id = 562500
+  OR id = 751 AND book2_id = 564001
+  OR id = 752 AND book2_id = 565504
+  OR id = 753 AND book2_id = 567009
+  OR id = 754 AND book2_id = 568516
+  OR id = 755 AND book2_id = 570025
+  OR id = 756 AND book2_id = 571536
+  OR id = 757 AND book2_id = 573049
+  OR id = 758 AND book2_id = 574564
+  OR id = 759 AND book2_id = 576081
+  OR id = 760 AND book2_id = 577600
+  OR id = 761 AND book2_id = 579121
+  OR id = 762 AND book2_id = 580644
+  OR id = 763 AND book2_id = 582169
+  OR id = 764 AND book2_id = 583696
+  OR id = 765 AND book2_id = 585225
+  OR id = 766 AND book2_id = 586756
+  OR id = 767 AND book2_id = 588289
+  OR id = 768 AND book2_id = 589824
+  OR id = 769 AND book2_id = 591361
+  OR id = 770 AND book2_id = 592900
+  OR id = 771 AND book2_id = 594441
+  OR id = 772 AND book2_id = 595984
+  OR id = 773 AND book2_id = 597529
+  OR id = 774 AND book2_id = 599076
+  OR id = 775 AND book2_id = 600625
+  OR id = 776 AND book2_id = 602176
+  OR id = 777 AND book2_id = 603729
+  OR id = 778 AND book2_id = 605284
+  OR id = 779 AND book2_id = 606841
+  OR id = 780 AND book2_id = 608400
+  OR id = 781 AND book2_id = 609961
+  OR id = 782 AND book2_id = 611524
+  OR id = 783 AND book2_id = 613089
+  OR id = 784 AND book2_id = 614656
+  OR id = 785 AND book2_id = 616225
+  OR id = 786 AND book2_id = 617796
+  OR id = 787 AND book2_id = 619369
+  OR id = 788 AND book2_id = 620944
+  OR id = 789 AND book2_id = 622521
+  OR id = 790 AND book2_id = 624100
+  OR id = 791 AND book2_id = 625681
+  OR id = 792 AND book2_id = 627264
+  OR id = 793 AND book2_id = 628849
+  OR id = 794 AND book2_id = 630436
+  OR id = 795 AND book2_id = 632025
+  OR id = 796 AND book2_id = 633616
+  OR id = 797 AND book2_id = 635209
+  OR id = 798 AND book2_id = 636804
+  OR id = 799 AND book2_id = 638401
+  OR id = 800 AND book2_id = 640000
+  OR id = 801 AND book2_id = 641601
+  OR id = 802 AND book2_id = 643204
+  OR id = 803 AND book2_id = 644809
+  OR id = 804 AND book2_id = 646416
+  OR id = 805 AND book2_id = 648025
+  OR id = 806 AND book2_id = 649636
+  OR id = 807 AND book2_id = 651249
+  OR id = 808 AND book2_id = 652864
+  OR id = 809 AND book2_id = 654481
+  OR id = 810 AND book2_id = 656100
+  OR id = 811 AND book2_id = 657721
+  OR id = 812 AND book2_id = 659344
+  OR id = 813 AND book2_id = 660969
+  OR id = 814 AND book2_id = 662596
+  OR id = 815 AND book2_id = 664225
+  OR id = 816 AND book2_id = 665856
+  OR id = 817 AND book2_id = 667489
+  OR id = 818 AND book2_id = 669124
+  OR id = 819 AND book2_id = 670761
+  OR id = 820 AND book2_id = 672400
+  OR id = 821 AND book2_id = 674041
+  OR id = 822 AND book2_id = 675684
+  OR id = 823 AND book2_id = 677329
+  OR id = 824 AND book2_id = 678976
+  OR id = 825 AND book2_id = 680625
+  OR id = 826 AND book2_id = 682276
+  OR id = 827 AND book2_id = 683929
+  OR id = 828 AND book2_id = 685584
+  OR id = 829 AND book2_id = 687241
+  OR id = 830 AND book2_id = 688900
+  OR id = 831 AND book2_id = 690561
+  OR id = 832 AND book2_id = 692224
+  OR id = 833 AND book2_id = 693889
+  OR id = 834 AND book2_id = 695556
+  OR id = 835 AND book2_id = 697225
+  OR id = 836 AND book2_id = 698896
+  OR id = 837 AND book2_id = 700569
+  OR id = 838 AND book2_id = 702244
+  OR id = 839 AND book2_id = 703921
+  OR id = 840 AND book2_id = 705600
+  OR id = 841 AND book2_id = 707281
+  OR id = 842 AND book2_id = 708964
+  OR id = 843 AND book2_id = 710649
+  OR id = 844 AND book2_id = 712336
+  OR id = 845 AND book2_id = 714025
+  OR id = 846 AND book2_id = 715716
+  OR id = 847 AND book2_id = 717409
+  OR id = 848 AND book2_id = 719104
+  OR id = 849 AND book2_id = 720801
+  OR id = 850 AND book2_id = 722500
+  OR id = 851 AND book2_id = 724201
+  OR id = 852 AND book2_id = 725904
+  OR id = 853 AND book2_id = 727609
+  OR id = 854 AND book2_id = 729316
+  OR id = 855 AND book2_id = 731025
+  OR id = 856 AND book2_id = 732736
+  OR id = 857 AND book2_id = 734449
+  OR id = 858 AND book2_id = 736164
+  OR id = 859 AND book2_id = 737881
+  OR id = 860 AND book2_id = 739600
+  OR id = 861 AND book2_id = 741321
+  OR id = 862 AND book2_id = 743044
+  OR id = 863 AND book2_id = 744769
+  OR id = 864 AND book2_id = 746496
+  OR id = 865 AND book2_id = 748225
+  OR id = 866 AND book2_id = 749956
+  OR id = 867 AND book2_id = 751689
+  OR id = 868 AND book2_id = 753424
+  OR id = 869 AND book2_id = 755161
+  OR id = 870 AND book2_id = 756900
+  OR id = 871 AND book2_id = 758641
+  OR id = 872 AND book2_id = 760384
+  OR id = 873 AND book2_id = 762129
+  OR id = 874 AND book2_id = 763876
+  OR id = 875 AND book2_id = 765625
+  OR id = 876 AND book2_id = 767376
+  OR id = 877 AND book2_id = 769129
+  OR id = 878 AND book2_id = 770884
+  OR id = 879 AND book2_id = 772641
+  OR id = 880 AND book2_id = 774400
+  OR id = 881 AND book2_id = 776161
+  OR id = 882 AND book2_id = 777924
+  OR id = 883 AND book2_id = 779689
+  OR id = 884 AND book2_id = 781456
+  OR id = 885 AND book2_id = 783225
+  OR id = 886 AND book2_id = 784996
+  OR id = 887 AND book2_id = 786769
+  OR id = 888 AND book2_id = 788544
+  OR id = 889 AND book2_id = 790321
+  OR id = 890 AND book2_id = 792100
+  OR id = 891 AND book2_id = 793881
+  OR id = 892 AND book2_id = 795664
+  OR id = 893 AND book2_id = 797449
+  OR id = 894 AND book2_id = 799236
+  OR id = 895 AND book2_id = 801025
+  OR id = 896 AND book2_id = 802816
+  OR id = 897 AND book2_id = 804609
+  OR id = 898 AND book2_id = 806404
+  OR id = 899 AND book2_id = 808201
+  OR id = 900 AND book2_id = 810000
+  OR id = 901 AND book2_id = 811801
+  OR id = 902 AND book2_id = 813604
+  OR id = 903 AND book2_id = 815409
+  OR id = 904 AND book2_id = 817216
+  OR id = 905 AND book2_id = 819025
+  OR id = 906 AND book2_id = 820836
+  OR id = 907 AND book2_id = 822649
+  OR id = 908 AND book2_id = 824464
+  OR id = 909 AND book2_id = 826281
+  OR id = 910 AND book2_id = 828100
+  OR id = 911 AND book2_id = 829921
+  OR id = 912 AND book2_id = 831744
+  OR id = 913 AND book2_id = 833569
+  OR id = 914 AND book2_id = 835396
+  OR id = 915 AND book2_id = 837225
+  OR id = 916 AND book2_id = 839056
+  OR id = 917 AND book2_id = 840889
+  OR id = 918 AND book2_id = 842724
+  OR id = 919 AND book2_id = 844561
+  OR id = 920 AND book2_id = 846400
+  OR id = 921 AND book2_id = 848241
+  OR id = 922 AND book2_id = 850084
+  OR id = 923 AND book2_id = 851929
+  OR id = 924 AND book2_id = 853776
+  OR id = 925 AND book2_id = 855625
+  OR id = 926 AND book2_id = 857476
+  OR id = 927 AND book2_id = 859329
+  OR id = 928 AND book2_id = 861184
+  OR id = 929 AND book2_id = 863041
+  OR id = 930 AND book2_id = 864900
+  OR id = 931 AND book2_id = 866761
+  OR id = 932 AND book2_id = 868624
+  OR id = 933 AND book2_id = 870489
+  OR id = 934 AND book2_id = 872356
+  OR id = 935 AND book2_id = 874225
+  OR id = 936 AND book2_id = 876096
+  OR id = 937 AND book2_id = 877969
+  OR id = 938 AND book2_id = 879844
+  OR id = 939 AND book2_id = 881721
+  OR id = 940 AND book2_id = 883600
+  OR id = 941 AND book2_id = 885481
+  OR id = 942 AND book2_id = 887364
+  OR id = 943 AND book2_id = 889249
+  OR id = 944 AND book2_id = 891136
+  OR id = 945 AND book2_id = 893025
+  OR id = 946 AND book2_id = 894916
+  OR id = 947 AND book2_id = 896809
+  OR id = 948 AND book2_id = 898704
+  OR id = 949 AND book2_id = 900601
+  OR id = 950 AND book2_id = 902500
+  OR id = 951 AND book2_id = 904401
+  OR id = 952 AND book2_id = 906304
+  OR id = 953 AND book2_id = 908209
+  OR id = 954 AND book2_id = 910116
+  OR id = 955 AND book2_id = 912025
+  OR id = 956 AND book2_id = 913936
+  OR id = 957 AND book2_id = 915849
+  OR id = 958 AND book2_id = 917764
+  OR id = 959 AND book2_id = 919681
+  OR id = 960 AND book2_id = 921600
+  OR id = 961 AND book2_id = 923521
+  OR id = 962 AND book2_id = 925444
+  OR id = 963 AND book2_id = 927369
+  OR id = 964 AND book2_id = 929296
+  OR id = 965 AND book2_id = 931225
+  OR id = 966 AND book2_id = 933156
+  OR id = 967 AND book2_id = 935089
+  OR id = 968 AND book2_id = 937024
+  OR id = 969 AND book2_id = 938961
+  OR id = 970 AND book2_id = 940900
+  OR id = 971 AND book2_id = 942841
+  OR id = 972 AND book2_id = 944784
+  OR id = 973 AND book2_id = 946729
+  OR id = 974 AND book2_id = 948676
+  OR id = 975 AND book2_id = 950625
+  OR id = 976 AND book2_id = 952576
+  OR id = 977 AND book2_id = 954529
+  OR id = 978 AND book2_id = 956484
+  OR id = 979 AND book2_id = 958441
+  OR id = 980 AND book2_id = 960400
+  OR id = 981 AND book2_id = 962361
+  OR id = 982 AND book2_id = 964324
+  OR id = 983 AND book2_id = 966289
+  OR id = 984 AND book2_id = 968256
+  OR id = 985 AND book2_id = 970225
+  OR id = 986 AND book2_id = 972196
+  OR id = 987 AND book2_id = 974169
+  OR id = 988 AND book2_id = 976144
+  OR id = 989 AND book2_id = 978121
+  OR id = 990 AND book2_id = 980100
+  OR id = 991 AND book2_id = 982081
+  OR id = 992 AND book2_id = 984064
+  OR id = 993 AND book2_id = 986049
+  OR id = 994 AND book2_id = 988036
+  OR id = 995 AND book2_id = 990025
+  OR id = 996 AND book2_id = 992016
+  OR id = 997 AND book2_id = 994009
+  OR id = 998 AND book2_id = 996004
+  OR id = 999 AND book2_id = 998001
+  OR id = 1000 AND book2_id = 1000000
+----
+[/0 - /1]
+[/3 - /3]
+[/5 - /1000]
+Remaining filter: (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id = 0) AND (book2_id = 0)) OR ((id = 1) AND (book2_id = 1))) OR ((id = 3) AND (book2_id = 4))) OR ((id = 3) AND (book2_id = 9))) OR ((id = 5) AND (book2_id = 16))) OR ((id = 5) AND (book2_id = 25))) OR ((id = 6) AND (book2_id = 36))) OR ((id = 7) AND (book2_id = 49))) OR ((id = 8) AND (book2_id = 64))) OR ((id = 9) AND (book2_id = 81))) OR ((id = 10) AND (book2_id = 100))) OR ((id = 11) AND (book2_id = 121))) OR ((id = 12) AND (book2_id = 144))) OR ((id = 13) AND (book2_id = 169))) OR ((id = 14) AND (book2_id = 196))) OR ((id = 15) AND (book2_id = 225))) OR ((id = 16) AND (book2_id = 256))) OR ((id = 17) AND (book2_id = 289))) OR ((id = 18) AND (book2_id = 324))) OR ((id = 19) AND (book2_id = 361))) OR ((id = 20) AND (book2_id = 400))) OR ((id = 21) AND (book2_id = 441))) OR ((id = 22) AND (book2_id = 484))) OR ((id = 23) AND (book2_id = 529))) OR ((id = 24) AND (book2_id = 576))) OR ((id = 25) AND (book2_id = 625))) OR ((id = 26) AND (book2_id = 676))) OR ((id = 27) AND (book2_id = 729))) OR ((id = 28) AND (book2_id = 784))) OR ((id = 29) AND (book2_id = 841))) OR ((id = 30) AND (book2_id = 900))) OR ((id = 31) AND (book2_id = 961))) OR ((id = 32) AND (book2_id = 1024))) OR ((id = 33) AND (book2_id = 1089))) OR ((id = 34) AND (book2_id = 1156))) OR ((id = 35) AND (book2_id = 1225))) OR ((id = 36) AND (book2_id = 1296))) OR ((id = 37) AND (book2_id = 1369))) OR ((id = 38) AND (book2_id = 1444))) OR ((id = 39) AND (book2_id = 1521))) OR ((id = 40) AND (book2_id = 1600))) OR ((id = 41) AND (book2_id = 1681))) OR ((id = 42) AND (book2_id = 1764))) OR ((id = 43) AND (book2_id = 1849))) OR ((id = 44) AND (book2_id = 1936))) OR ((id = 45) AND (book2_id = 2025))) OR ((id = 46) AND (book2_id = 2116))) OR ((id = 47) AND (book2_id = 2209))) OR ((id = 48) AND (book2_id = 2304))) OR ((id = 49) AND (book2_id = 2401))) OR ((id = 50) AND (book2_id = 2500))) OR ((id = 51) AND (book2_id = 2601))) OR ((id = 52) AND (book2_id = 2704))) OR ((id = 53) AND (book2_id = 2809))) OR ((id = 54) AND (book2_id = 2916))) OR ((id = 55) AND (book2_id = 3025))) OR ((id = 56) AND (book2_id = 3136))) OR ((id = 57) AND (book2_id = 3249))) OR ((id = 58) AND (book2_id = 3364))) OR ((id = 59) AND (book2_id = 3481))) OR ((id = 60) AND (book2_id = 3600))) OR ((id = 61) AND (book2_id = 3721))) OR ((id = 62) AND (book2_id = 3844))) OR ((id = 63) AND (book2_id = 3969))) OR ((id = 64) AND (book2_id = 4096))) OR ((id = 65) AND (book2_id = 4225))) OR ((id = 66) AND (book2_id = 4356))) OR ((id = 67) AND (book2_id = 4489))) OR ((id = 68) AND (book2_id = 4624))) OR ((id = 69) AND (book2_id = 4761))) OR ((id = 70) AND (book2_id = 4900))) OR ((id = 71) AND (book2_id = 5041))) OR ((id = 72) AND (book2_id = 5184))) OR ((id = 73) AND (book2_id = 5329))) OR ((id = 74) AND (book2_id = 5476))) OR ((id = 75) AND (book2_id = 5625))) OR ((id = 76) AND (book2_id = 5776))) OR ((id = 77) AND (book2_id = 5929))) OR ((id = 78) AND (book2_id = 6084))) OR ((id = 79) AND (book2_id = 6241))) OR ((id = 80) AND (book2_id = 6400))) OR ((id = 81) AND (book2_id = 6561))) OR ((id = 82) AND (book2_id = 6724))) OR ((id = 83) AND (book2_id = 6889))) OR ((id = 84) AND (book2_id = 7056))) OR ((id = 85) AND (book2_id = 7225))) OR ((id = 86) AND (book2_id = 7396))) OR ((id = 87) AND (book2_id = 7569))) OR ((id = 88) AND (book2_id = 7744))) OR ((id = 89) AND (book2_id = 7921))) OR ((id = 90) AND (book2_id = 8100))) OR ((id = 91) AND (book2_id = 8281))) OR ((id = 92) AND (book2_id = 8464))) OR ((id = 93) AND (book2_id = 8649))) OR ((id = 94) AND (book2_id = 8836))) OR ((id = 95) AND (book2_id = 9025))) OR ((id = 96) AND (book2_id = 9216))) OR ((id = 97) AND (book2_id = 9409))) OR ((id = 98) AND (book2_id = 9604))) OR ((id = 99) AND (book2_id = 9801))) OR ((id = 100) AND (book2_id = 10000))) OR ((id = 101) AND (book2_id = 10201))) OR ((id = 102) AND (book2_id = 10404))) OR ((id = 103) AND (book2_id = 10609))) OR ((id = 104) AND (book2_id = 10816))) OR ((id = 105) AND (book2_id = 11025))) OR ((id = 106) AND (book2_id = 11236))) OR ((id = 107) AND (book2_id = 11449))) OR ((id = 108) AND (book2_id = 11664))) OR ((id = 109) AND (book2_id = 11881))) OR ((id = 110) AND (book2_id = 12100))) OR ((id = 111) AND (book2_id = 12321))) OR ((id = 112) AND (book2_id = 12544))) OR ((id = 113) AND (book2_id = 12769))) OR ((id = 114) AND (book2_id = 12996))) OR ((id = 115) AND (book2_id = 13225))) OR ((id = 116) AND (book2_id = 13456))) OR ((id = 117) AND (book2_id = 13689))) OR ((id = 118) AND (book2_id = 13924))) OR ((id = 119) AND (book2_id = 14161))) OR ((id = 120) AND (book2_id = 14400))) OR ((id = 121) AND (book2_id = 14641))) OR ((id = 122) AND (book2_id = 14884))) OR ((id = 123) AND (book2_id = 15129))) OR ((id = 124) AND (book2_id = 15376))) OR ((id = 125) AND (book2_id = 15625))) OR ((id = 126) AND (book2_id = 15876))) OR ((id = 127) AND (book2_id = 16129))) OR ((id = 128) AND (book2_id = 16384))) OR ((id = 129) AND (book2_id = 16641))) OR ((id = 130) AND (book2_id = 16900))) OR ((id = 131) AND (book2_id = 17161))) OR ((id = 132) AND (book2_id = 17424))) OR ((id = 133) AND (book2_id = 17689))) OR ((id = 134) AND (book2_id = 17956))) OR ((id = 135) AND (book2_id = 18225))) OR ((id = 136) AND (book2_id = 18496))) OR ((id = 137) AND (book2_id = 18769))) OR ((id = 138) AND (book2_id = 19044))) OR ((id = 139) AND (book2_id = 19321))) OR ((id = 140) AND (book2_id = 19600))) OR ((id = 141) AND (book2_id = 19881))) OR ((id = 142) AND (book2_id = 20164))) OR ((id = 143) AND (book2_id = 20449))) OR ((id = 144) AND (book2_id = 20736))) OR ((id = 145) AND (book2_id = 21025))) OR ((id = 146) AND (book2_id = 21316))) OR ((id = 147) AND (book2_id = 21609))) OR ((id = 148) AND (book2_id = 21904))) OR ((id = 149) AND (book2_id = 22201))) OR ((id = 150) AND (book2_id = 22500))) OR ((id = 151) AND (book2_id = 22801))) OR ((id = 152) AND (book2_id = 23104))) OR ((id = 153) AND (book2_id = 23409))) OR ((id = 154) AND (book2_id = 23716))) OR ((id = 155) AND (book2_id = 24025))) OR ((id = 156) AND (book2_id = 24336))) OR ((id = 157) AND (book2_id = 24649))) OR ((id = 158) AND (book2_id = 24964))) OR ((id = 159) AND (book2_id = 25281))) OR ((id = 160) AND (book2_id = 25600))) OR ((id = 161) AND (book2_id = 25921))) OR ((id = 162) AND (book2_id = 26244))) OR ((id = 163) AND (book2_id = 26569))) OR ((id = 164) AND (book2_id = 26896))) OR ((id = 165) AND (book2_id = 27225))) OR ((id = 166) AND (book2_id = 27556))) OR ((id = 167) AND (book2_id = 27889))) OR ((id = 168) AND (book2_id = 28224))) OR ((id = 169) AND (book2_id = 28561))) OR ((id = 170) AND (book2_id = 28900))) OR ((id = 171) AND (book2_id = 29241))) OR ((id = 172) AND (book2_id = 29584))) OR ((id = 173) AND (book2_id = 29929))) OR ((id = 174) AND (book2_id = 30276))) OR ((id = 175) AND (book2_id = 30625))) OR ((id = 176) AND (book2_id = 30976))) OR ((id = 177) AND (book2_id = 31329))) OR ((id = 178) AND (book2_id = 31684))) OR ((id = 179) AND (book2_id = 32041))) OR ((id = 180) AND (book2_id = 32400))) OR ((id = 181) AND (book2_id = 32761))) OR ((id = 182) AND (book2_id = 33124))) OR ((id = 183) AND (book2_id = 33489))) OR ((id = 184) AND (book2_id = 33856))) OR ((id = 185) AND (book2_id = 34225))) OR ((id = 186) AND (book2_id = 34596))) OR ((id = 187) AND (book2_id = 34969))) OR ((id = 188) AND (book2_id = 35344))) OR ((id = 189) AND (book2_id = 35721))) OR ((id = 190) AND (book2_id = 36100))) OR ((id = 191) AND (book2_id = 36481))) OR ((id = 192) AND (book2_id = 36864))) OR ((id = 193) AND (book2_id = 37249))) OR ((id = 194) AND (book2_id = 37636))) OR ((id = 195) AND (book2_id = 38025))) OR ((id = 196) AND (book2_id = 38416))) OR ((id = 197) AND (book2_id = 38809))) OR ((id = 198) AND (book2_id = 39204))) OR ((id = 199) AND (book2_id = 39601))) OR ((id = 200) AND (book2_id = 40000))) OR ((id = 201) AND (book2_id = 40401))) OR ((id = 202) AND (book2_id = 40804))) OR ((id = 203) AND (book2_id = 41209))) OR ((id = 204) AND (book2_id = 41616))) OR ((id = 205) AND (book2_id = 42025))) OR ((id = 206) AND (book2_id = 42436))) OR ((id = 207) AND (book2_id = 42849))) OR ((id = 208) AND (book2_id = 43264))) OR ((id = 209) AND (book2_id = 43681))) OR ((id = 210) AND (book2_id = 44100))) OR ((id = 211) AND (book2_id = 44521))) OR ((id = 212) AND (book2_id = 44944))) OR ((id = 213) AND (book2_id = 45369))) OR ((id = 214) AND (book2_id = 45796))) OR ((id = 215) AND (book2_id = 46225))) OR ((id = 216) AND (book2_id = 46656))) OR ((id = 217) AND (book2_id = 47089))) OR ((id = 218) AND (book2_id = 47524))) OR ((id = 219) AND (book2_id = 47961))) OR ((id = 220) AND (book2_id = 48400))) OR ((id = 221) AND (book2_id = 48841))) OR ((id = 222) AND (book2_id = 49284))) OR ((id = 223) AND (book2_id = 49729))) OR ((id = 224) AND (book2_id = 50176))) OR ((id = 225) AND (book2_id = 50625))) OR ((id = 226) AND (book2_id = 51076))) OR ((id = 227) AND (book2_id = 51529))) OR ((id = 228) AND (book2_id = 51984))) OR ((id = 229) AND (book2_id = 52441))) OR ((id = 230) AND (book2_id = 52900))) OR ((id = 231) AND (book2_id = 53361))) OR ((id = 232) AND (book2_id = 53824))) OR ((id = 233) AND (book2_id = 54289))) OR ((id = 234) AND (book2_id = 54756))) OR ((id = 235) AND (book2_id = 55225))) OR ((id = 236) AND (book2_id = 55696))) OR ((id = 237) AND (book2_id = 56169))) OR ((id = 238) AND (book2_id = 56644))) OR ((id = 239) AND (book2_id = 57121))) OR ((id = 240) AND (book2_id = 57600))) OR ((id = 241) AND (book2_id = 58081))) OR ((id = 242) AND (book2_id = 58564))) OR ((id = 243) AND (book2_id = 59049))) OR ((id = 244) AND (book2_id = 59536))) OR ((id = 245) AND (book2_id = 60025))) OR ((id = 246) AND (book2_id = 60516))) OR ((id = 247) AND (book2_id = 61009))) OR ((id = 248) AND (book2_id = 61504))) OR ((id = 249) AND (book2_id = 62001))) OR ((id = 250) AND (book2_id = 62500))) OR ((id = 251) AND (book2_id = 63001))) OR ((id = 252) AND (book2_id = 63504))) OR ((id = 253) AND (book2_id = 64009))) OR ((id = 254) AND (book2_id = 64516))) OR ((id = 255) AND (book2_id = 65025))) OR ((id = 256) AND (book2_id = 65536))) OR ((id = 257) AND (book2_id = 66049))) OR ((id = 258) AND (book2_id = 66564))) OR ((id = 259) AND (book2_id = 67081))) OR ((id = 260) AND (book2_id = 67600))) OR ((id = 261) AND (book2_id = 68121))) OR ((id = 262) AND (book2_id = 68644))) OR ((id = 263) AND (book2_id = 69169))) OR ((id = 264) AND (book2_id = 69696))) OR ((id = 265) AND (book2_id = 70225))) OR ((id = 266) AND (book2_id = 70756))) OR ((id = 267) AND (book2_id = 71289))) OR ((id = 268) AND (book2_id = 71824))) OR ((id = 269) AND (book2_id = 72361))) OR ((id = 270) AND (book2_id = 72900))) OR ((id = 271) AND (book2_id = 73441))) OR ((id = 272) AND (book2_id = 73984))) OR ((id = 273) AND (book2_id = 74529))) OR ((id = 274) AND (book2_id = 75076))) OR ((id = 275) AND (book2_id = 75625))) OR ((id = 276) AND (book2_id = 76176))) OR ((id = 277) AND (book2_id = 76729))) OR ((id = 278) AND (book2_id = 77284))) OR ((id = 279) AND (book2_id = 77841))) OR ((id = 280) AND (book2_id = 78400))) OR ((id = 281) AND (book2_id = 78961))) OR ((id = 282) AND (book2_id = 79524))) OR ((id = 283) AND (book2_id = 80089))) OR ((id = 284) AND (book2_id = 80656))) OR ((id = 285) AND (book2_id = 81225))) OR ((id = 286) AND (book2_id = 81796))) OR ((id = 287) AND (book2_id = 82369))) OR ((id = 288) AND (book2_id = 82944))) OR ((id = 289) AND (book2_id = 83521))) OR ((id = 290) AND (book2_id = 84100))) OR ((id = 291) AND (book2_id = 84681))) OR ((id = 292) AND (book2_id = 85264))) OR ((id = 293) AND (book2_id = 85849))) OR ((id = 294) AND (book2_id = 86436))) OR ((id = 295) AND (book2_id = 87025))) OR ((id = 296) AND (book2_id = 87616))) OR ((id = 297) AND (book2_id = 88209))) OR ((id = 298) AND (book2_id = 88804))) OR ((id = 299) AND (book2_id = 89401))) OR ((id = 300) AND (book2_id = 90000))) OR ((id = 301) AND (book2_id = 90601))) OR ((id = 302) AND (book2_id = 91204))) OR ((id = 303) AND (book2_id = 91809))) OR ((id = 304) AND (book2_id = 92416))) OR ((id = 305) AND (book2_id = 93025))) OR ((id = 306) AND (book2_id = 93636))) OR ((id = 307) AND (book2_id = 94249))) OR ((id = 308) AND (book2_id = 94864))) OR ((id = 309) AND (book2_id = 95481))) OR ((id = 310) AND (book2_id = 96100))) OR ((id = 311) AND (book2_id = 96721))) OR ((id = 312) AND (book2_id = 97344))) OR ((id = 313) AND (book2_id = 97969))) OR ((id = 314) AND (book2_id = 98596))) OR ((id = 315) AND (book2_id = 99225))) OR ((id = 316) AND (book2_id = 99856))) OR ((id = 317) AND (book2_id = 100489))) OR ((id = 318) AND (book2_id = 101124))) OR ((id = 319) AND (book2_id = 101761))) OR ((id = 320) AND (book2_id = 102400))) OR ((id = 321) AND (book2_id = 103041))) OR ((id = 322) AND (book2_id = 103684))) OR ((id = 323) AND (book2_id = 104329))) OR ((id = 324) AND (book2_id = 104976))) OR ((id = 325) AND (book2_id = 105625))) OR ((id = 326) AND (book2_id = 106276))) OR ((id = 327) AND (book2_id = 106929))) OR ((id = 328) AND (book2_id = 107584))) OR ((id = 329) AND (book2_id = 108241))) OR ((id = 330) AND (book2_id = 108900))) OR ((id = 331) AND (book2_id = 109561))) OR ((id = 332) AND (book2_id = 110224))) OR ((id = 333) AND (book2_id = 110889))) OR ((id = 334) AND (book2_id = 111556))) OR ((id = 335) AND (book2_id = 112225))) OR ((id = 336) AND (book2_id = 112896))) OR ((id = 337) AND (book2_id = 113569))) OR ((id = 338) AND (book2_id = 114244))) OR ((id = 339) AND (book2_id = 114921))) OR ((id = 340) AND (book2_id = 115600))) OR ((id = 341) AND (book2_id = 116281))) OR ((id = 342) AND (book2_id = 116964))) OR ((id = 343) AND (book2_id = 117649))) OR ((id = 344) AND (book2_id = 118336))) OR ((id = 345) AND (book2_id = 119025))) OR ((id = 346) AND (book2_id = 119716))) OR ((id = 347) AND (book2_id = 120409))) OR ((id = 348) AND (book2_id = 121104))) OR ((id = 349) AND (book2_id = 121801))) OR ((id = 350) AND (book2_id = 122500))) OR ((id = 351) AND (book2_id = 123201))) OR ((id = 352) AND (book2_id = 123904))) OR ((id = 353) AND (book2_id = 124609))) OR ((id = 354) AND (book2_id = 125316))) OR ((id = 355) AND (book2_id = 126025))) OR ((id = 356) AND (book2_id = 126736))) OR ((id = 357) AND (book2_id = 127449))) OR ((id = 358) AND (book2_id = 128164))) OR ((id = 359) AND (book2_id = 128881))) OR ((id = 360) AND (book2_id = 129600))) OR ((id = 361) AND (book2_id = 130321))) OR ((id = 362) AND (book2_id = 131044))) OR ((id = 363) AND (book2_id = 131769))) OR ((id = 364) AND (book2_id = 132496))) OR ((id = 365) AND (book2_id = 133225))) OR ((id = 366) AND (book2_id = 133956))) OR ((id = 367) AND (book2_id = 134689))) OR ((id = 368) AND (book2_id = 135424))) OR ((id = 369) AND (book2_id = 136161))) OR ((id = 370) AND (book2_id = 136900))) OR ((id = 371) AND (book2_id = 137641))) OR ((id = 372) AND (book2_id = 138384))) OR ((id = 373) AND (book2_id = 139129))) OR ((id = 374) AND (book2_id = 139876))) OR ((id = 375) AND (book2_id = 140625))) OR ((id = 376) AND (book2_id = 141376))) OR ((id = 377) AND (book2_id = 142129))) OR ((id = 378) AND (book2_id = 142884))) OR ((id = 379) AND (book2_id = 143641))) OR ((id = 380) AND (book2_id = 144400))) OR ((id = 381) AND (book2_id = 145161))) OR ((id = 382) AND (book2_id = 145924))) OR ((id = 383) AND (book2_id = 146689))) OR ((id = 384) AND (book2_id = 147456))) OR ((id = 385) AND (book2_id = 148225))) OR ((id = 386) AND (book2_id = 148996))) OR ((id = 387) AND (book2_id = 149769))) OR ((id = 388) AND (book2_id = 150544))) OR ((id = 389) AND (book2_id = 151321))) OR ((id = 390) AND (book2_id = 152100))) OR ((id = 391) AND (book2_id = 152881))) OR ((id = 392) AND (book2_id = 153664))) OR ((id = 393) AND (book2_id = 154449))) OR ((id = 394) AND (book2_id = 155236))) OR ((id = 395) AND (book2_id = 156025))) OR ((id = 396) AND (book2_id = 156816))) OR ((id = 397) AND (book2_id = 157609))) OR ((id = 398) AND (book2_id = 158404))) OR ((id = 399) AND (book2_id = 159201))) OR ((id = 400) AND (book2_id = 160000))) OR ((id = 401) AND (book2_id = 160801))) OR ((id = 402) AND (book2_id = 161604))) OR ((id = 403) AND (book2_id = 162409))) OR ((id = 404) AND (book2_id = 163216))) OR ((id = 405) AND (book2_id = 164025))) OR ((id = 406) AND (book2_id = 164836))) OR ((id = 407) AND (book2_id = 165649))) OR ((id = 408) AND (book2_id = 166464))) OR ((id = 409) AND (book2_id = 167281))) OR ((id = 410) AND (book2_id = 168100))) OR ((id = 411) AND (book2_id = 168921))) OR ((id = 412) AND (book2_id = 169744))) OR ((id = 413) AND (book2_id = 170569))) OR ((id = 414) AND (book2_id = 171396))) OR ((id = 415) AND (book2_id = 172225))) OR ((id = 416) AND (book2_id = 173056))) OR ((id = 417) AND (book2_id = 173889))) OR ((id = 418) AND (book2_id = 174724))) OR ((id = 419) AND (book2_id = 175561))) OR ((id = 420) AND (book2_id = 176400))) OR ((id = 421) AND (book2_id = 177241))) OR ((id = 422) AND (book2_id = 178084))) OR ((id = 423) AND (book2_id = 178929))) OR ((id = 424) AND (book2_id = 179776))) OR ((id = 425) AND (book2_id = 180625))) OR ((id = 426) AND (book2_id = 181476))) OR ((id = 427) AND (book2_id = 182329))) OR ((id = 428) AND (book2_id = 183184))) OR ((id = 429) AND (book2_id = 184041))) OR ((id = 430) AND (book2_id = 184900))) OR ((id = 431) AND (book2_id = 185761))) OR ((id = 432) AND (book2_id = 186624))) OR ((id = 433) AND (book2_id = 187489))) OR ((id = 434) AND (book2_id = 188356))) OR ((id = 435) AND (book2_id = 189225))) OR ((id = 436) AND (book2_id = 190096))) OR ((id = 437) AND (book2_id = 190969))) OR ((id = 438) AND (book2_id = 191844))) OR ((id = 439) AND (book2_id = 192721))) OR ((id = 440) AND (book2_id = 193600))) OR ((id = 441) AND (book2_id = 194481))) OR ((id = 442) AND (book2_id = 195364))) OR ((id = 443) AND (book2_id = 196249))) OR ((id = 444) AND (book2_id = 197136))) OR ((id = 445) AND (book2_id = 198025))) OR ((id = 446) AND (book2_id = 198916))) OR ((id = 447) AND (book2_id = 199809))) OR ((id = 448) AND (book2_id = 200704))) OR ((id = 449) AND (book2_id = 201601))) OR ((id = 450) AND (book2_id = 202500))) OR ((id = 451) AND (book2_id = 203401))) OR ((id = 452) AND (book2_id = 204304))) OR ((id = 453) AND (book2_id = 205209))) OR ((id = 454) AND (book2_id = 206116))) OR ((id = 455) AND (book2_id = 207025))) OR ((id = 456) AND (book2_id = 207936))) OR ((id = 457) AND (book2_id = 208849))) OR ((id = 458) AND (book2_id = 209764))) OR ((id = 459) AND (book2_id = 210681))) OR ((id = 460) AND (book2_id = 211600))) OR ((id = 461) AND (book2_id = 212521))) OR ((id = 462) AND (book2_id = 213444))) OR ((id = 463) AND (book2_id = 214369))) OR ((id = 464) AND (book2_id = 215296))) OR ((id = 465) AND (book2_id = 216225))) OR ((id = 466) AND (book2_id = 217156))) OR ((id = 467) AND (book2_id = 218089))) OR ((id = 468) AND (book2_id = 219024))) OR ((id = 469) AND (book2_id = 219961))) OR ((id = 470) AND (book2_id = 220900))) OR ((id = 471) AND (book2_id = 221841))) OR ((id = 472) AND (book2_id = 222784))) OR ((id = 473) AND (book2_id = 223729))) OR ((id = 474) AND (book2_id = 224676))) OR ((id = 475) AND (book2_id = 225625))) OR ((id = 476) AND (book2_id = 226576))) OR ((id = 477) AND (book2_id = 227529))) OR ((id = 478) AND (book2_id = 228484))) OR ((id = 479) AND (book2_id = 229441))) OR ((id = 480) AND (book2_id = 230400))) OR ((id = 481) AND (book2_id = 231361))) OR ((id = 482) AND (book2_id = 232324))) OR ((id = 483) AND (book2_id = 233289))) OR ((id = 484) AND (book2_id = 234256))) OR ((id = 485) AND (book2_id = 235225))) OR ((id = 486) AND (book2_id = 236196))) OR ((id = 487) AND (book2_id = 237169))) OR ((id = 488) AND (book2_id = 238144))) OR ((id = 489) AND (book2_id = 239121))) OR ((id = 490) AND (book2_id = 240100))) OR ((id = 491) AND (book2_id = 241081))) OR ((id = 492) AND (book2_id = 242064))) OR ((id = 493) AND (book2_id = 243049))) OR ((id = 494) AND (book2_id = 244036))) OR ((id = 495) AND (book2_id = 245025))) OR ((id = 496) AND (book2_id = 246016))) OR ((id = 497) AND (book2_id = 247009))) OR ((id = 498) AND (book2_id = 248004))) OR ((id = 499) AND (book2_id = 249001))) OR ((id = 500) AND (book2_id = 250000))) OR ((id = 501) AND (book2_id = 251001))) OR ((id = 502) AND (book2_id = 252004))) OR ((id = 503) AND (book2_id = 253009))) OR ((id = 504) AND (book2_id = 254016))) OR ((id = 505) AND (book2_id = 255025))) OR ((id = 506) AND (book2_id = 256036))) OR ((id = 507) AND (book2_id = 257049))) OR ((id = 508) AND (book2_id = 258064))) OR ((id = 509) AND (book2_id = 259081))) OR ((id = 510) AND (book2_id = 260100))) OR ((id = 511) AND (book2_id = 261121))) OR ((id = 512) AND (book2_id = 262144))) OR ((id = 513) AND (book2_id = 263169))) OR ((id = 514) AND (book2_id = 264196))) OR ((id = 515) AND (book2_id = 265225))) OR ((id = 516) AND (book2_id = 266256))) OR ((id = 517) AND (book2_id = 267289))) OR ((id = 518) AND (book2_id = 268324))) OR ((id = 519) AND (book2_id = 269361))) OR ((id = 520) AND (book2_id = 270400))) OR ((id = 521) AND (book2_id = 271441))) OR ((id = 522) AND (book2_id = 272484))) OR ((id = 523) AND (book2_id = 273529))) OR ((id = 524) AND (book2_id = 274576))) OR ((id = 525) AND (book2_id = 275625))) OR ((id = 526) AND (book2_id = 276676))) OR ((id = 527) AND (book2_id = 277729))) OR ((id = 528) AND (book2_id = 278784))) OR ((id = 529) AND (book2_id = 279841))) OR ((id = 530) AND (book2_id = 280900))) OR ((id = 531) AND (book2_id = 281961))) OR ((id = 532) AND (book2_id = 283024))) OR ((id = 533) AND (book2_id = 284089))) OR ((id = 534) AND (book2_id = 285156))) OR ((id = 535) AND (book2_id = 286225))) OR ((id = 536) AND (book2_id = 287296))) OR ((id = 537) AND (book2_id = 288369))) OR ((id = 538) AND (book2_id = 289444))) OR ((id = 539) AND (book2_id = 290521))) OR ((id = 540) AND (book2_id = 291600))) OR ((id = 541) AND (book2_id = 292681))) OR ((id = 542) AND (book2_id = 293764))) OR ((id = 543) AND (book2_id = 294849))) OR ((id = 544) AND (book2_id = 295936))) OR ((id = 545) AND (book2_id = 297025))) OR ((id = 546) AND (book2_id = 298116))) OR ((id = 547) AND (book2_id = 299209))) OR ((id = 548) AND (book2_id = 300304))) OR ((id = 549) AND (book2_id = 301401))) OR ((id = 550) AND (book2_id = 302500))) OR ((id = 551) AND (book2_id = 303601))) OR ((id = 552) AND (book2_id = 304704))) OR ((id = 553) AND (book2_id = 305809))) OR ((id = 554) AND (book2_id = 306916))) OR ((id = 555) AND (book2_id = 308025))) OR ((id = 556) AND (book2_id = 309136))) OR ((id = 557) AND (book2_id = 310249))) OR ((id = 558) AND (book2_id = 311364))) OR ((id = 559) AND (book2_id = 312481))) OR ((id = 560) AND (book2_id = 313600))) OR ((id = 561) AND (book2_id = 314721))) OR ((id = 562) AND (book2_id = 315844))) OR ((id = 563) AND (book2_id = 316969))) OR ((id = 564) AND (book2_id = 318096))) OR ((id = 565) AND (book2_id = 319225))) OR ((id = 566) AND (book2_id = 320356))) OR ((id = 567) AND (book2_id = 321489))) OR ((id = 568) AND (book2_id = 322624))) OR ((id = 569) AND (book2_id = 323761))) OR ((id = 570) AND (book2_id = 324900))) OR ((id = 571) AND (book2_id = 326041))) OR ((id = 572) AND (book2_id = 327184))) OR ((id = 573) AND (book2_id = 328329))) OR ((id = 574) AND (book2_id = 329476))) OR ((id = 575) AND (book2_id = 330625))) OR ((id = 576) AND (book2_id = 331776))) OR ((id = 577) AND (book2_id = 332929))) OR ((id = 578) AND (book2_id = 334084))) OR ((id = 579) AND (book2_id = 335241))) OR ((id = 580) AND (book2_id = 336400))) OR ((id = 581) AND (book2_id = 337561))) OR ((id = 582) AND (book2_id = 338724))) OR ((id = 583) AND (book2_id = 339889))) OR ((id = 584) AND (book2_id = 341056))) OR ((id = 585) AND (book2_id = 342225))) OR ((id = 586) AND (book2_id = 343396))) OR ((id = 587) AND (book2_id = 344569))) OR ((id = 588) AND (book2_id = 345744))) OR ((id = 589) AND (book2_id = 346921))) OR ((id = 590) AND (book2_id = 348100))) OR ((id = 591) AND (book2_id = 349281))) OR ((id = 592) AND (book2_id = 350464))) OR ((id = 593) AND (book2_id = 351649))) OR ((id = 594) AND (book2_id = 352836))) OR ((id = 595) AND (book2_id = 354025))) OR ((id = 596) AND (book2_id = 355216))) OR ((id = 597) AND (book2_id = 356409))) OR ((id = 598) AND (book2_id = 357604))) OR ((id = 599) AND (book2_id = 358801))) OR ((id = 600) AND (book2_id = 360000))) OR ((id = 601) AND (book2_id = 361201))) OR ((id = 602) AND (book2_id = 362404))) OR ((id = 603) AND (book2_id = 363609))) OR ((id = 604) AND (book2_id = 364816))) OR ((id = 605) AND (book2_id = 366025))) OR ((id = 606) AND (book2_id = 367236))) OR ((id = 607) AND (book2_id = 368449))) OR ((id = 608) AND (book2_id = 369664))) OR ((id = 609) AND (book2_id = 370881))) OR ((id = 610) AND (book2_id = 372100))) OR ((id = 611) AND (book2_id = 373321))) OR ((id = 612) AND (book2_id = 374544))) OR ((id = 613) AND (book2_id = 375769))) OR ((id = 614) AND (book2_id = 376996))) OR ((id = 615) AND (book2_id = 378225))) OR ((id = 616) AND (book2_id = 379456))) OR ((id = 617) AND (book2_id = 380689))) OR ((id = 618) AND (book2_id = 381924))) OR ((id = 619) AND (book2_id = 383161))) OR ((id = 620) AND (book2_id = 384400))) OR ((id = 621) AND (book2_id = 385641))) OR ((id = 622) AND (book2_id = 386884))) OR ((id = 623) AND (book2_id = 388129))) OR ((id = 624) AND (book2_id = 389376))) OR ((id = 625) AND (book2_id = 390625))) OR ((id = 626) AND (book2_id = 391876))) OR ((id = 627) AND (book2_id = 393129))) OR ((id = 628) AND (book2_id = 394384))) OR ((id = 629) AND (book2_id = 395641))) OR ((id = 630) AND (book2_id = 396900))) OR ((id = 631) AND (book2_id = 398161))) OR ((id = 632) AND (book2_id = 399424))) OR ((id = 633) AND (book2_id = 400689))) OR ((id = 634) AND (book2_id = 401956))) OR ((id = 635) AND (book2_id = 403225))) OR ((id = 636) AND (book2_id = 404496))) OR ((id = 637) AND (book2_id = 405769))) OR ((id = 638) AND (book2_id = 407044))) OR ((id = 639) AND (book2_id = 408321))) OR ((id = 640) AND (book2_id = 409600))) OR ((id = 641) AND (book2_id = 410881))) OR ((id = 642) AND (book2_id = 412164))) OR ((id = 643) AND (book2_id = 413449))) OR ((id = 644) AND (book2_id = 414736))) OR ((id = 645) AND (book2_id = 416025))) OR ((id = 646) AND (book2_id = 417316))) OR ((id = 647) AND (book2_id = 418609))) OR ((id = 648) AND (book2_id = 419904))) OR ((id = 649) AND (book2_id = 421201))) OR ((id = 650) AND (book2_id = 422500))) OR ((id = 651) AND (book2_id = 423801))) OR ((id = 652) AND (book2_id = 425104))) OR ((id = 653) AND (book2_id = 426409))) OR ((id = 654) AND (book2_id = 427716))) OR ((id = 655) AND (book2_id = 429025))) OR ((id = 656) AND (book2_id = 430336))) OR ((id = 657) AND (book2_id = 431649))) OR ((id = 658) AND (book2_id = 432964))) OR ((id = 659) AND (book2_id = 434281))) OR ((id = 660) AND (book2_id = 435600))) OR ((id = 661) AND (book2_id = 436921))) OR ((id = 662) AND (book2_id = 438244))) OR ((id = 663) AND (book2_id = 439569))) OR ((id = 664) AND (book2_id = 440896))) OR ((id = 665) AND (book2_id = 442225))) OR ((id = 666) AND (book2_id = 443556))) OR ((id = 667) AND (book2_id = 444889))) OR ((id = 668) AND (book2_id = 446224))) OR ((id = 669) AND (book2_id = 447561))) OR ((id = 670) AND (book2_id = 448900))) OR ((id = 671) AND (book2_id = 450241))) OR ((id = 672) AND (book2_id = 451584))) OR ((id = 673) AND (book2_id = 452929))) OR ((id = 674) AND (book2_id = 454276))) OR ((id = 675) AND (book2_id = 455625))) OR ((id = 676) AND (book2_id = 456976))) OR ((id = 677) AND (book2_id = 458329))) OR ((id = 678) AND (book2_id = 459684))) OR ((id = 679) AND (book2_id = 461041))) OR ((id = 680) AND (book2_id = 462400))) OR ((id = 681) AND (book2_id = 463761))) OR ((id = 682) AND (book2_id = 465124))) OR ((id = 683) AND (book2_id = 466489))) OR ((id = 684) AND (book2_id = 467856))) OR ((id = 685) AND (book2_id = 469225))) OR ((id = 686) AND (book2_id = 470596))) OR ((id = 687) AND (book2_id = 471969))) OR ((id = 688) AND (book2_id = 473344))) OR ((id = 689) AND (book2_id = 474721))) OR ((id = 690) AND (book2_id = 476100))) OR ((id = 691) AND (book2_id = 477481))) OR ((id = 692) AND (book2_id = 478864))) OR ((id = 693) AND (book2_id = 480249))) OR ((id = 694) AND (book2_id = 481636))) OR ((id = 695) AND (book2_id = 483025))) OR ((id = 696) AND (book2_id = 484416))) OR ((id = 697) AND (book2_id = 485809))) OR ((id = 698) AND (book2_id = 487204))) OR ((id = 699) AND (book2_id = 488601))) OR ((id = 700) AND (book2_id = 490000))) OR ((id = 701) AND (book2_id = 491401))) OR ((id = 702) AND (book2_id = 492804))) OR ((id = 703) AND (book2_id = 494209))) OR ((id = 704) AND (book2_id = 495616))) OR ((id = 705) AND (book2_id = 497025))) OR ((id = 706) AND (book2_id = 498436))) OR ((id = 707) AND (book2_id = 499849))) OR ((id = 708) AND (book2_id = 501264))) OR ((id = 709) AND (book2_id = 502681))) OR ((id = 710) AND (book2_id = 504100))) OR ((id = 711) AND (book2_id = 505521))) OR ((id = 712) AND (book2_id = 506944))) OR ((id = 713) AND (book2_id = 508369))) OR ((id = 714) AND (book2_id = 509796))) OR ((id = 715) AND (book2_id = 511225))) OR ((id = 716) AND (book2_id = 512656))) OR ((id = 717) AND (book2_id = 514089))) OR ((id = 718) AND (book2_id = 515524))) OR ((id = 719) AND (book2_id = 516961))) OR ((id = 720) AND (book2_id = 518400))) OR ((id = 721) AND (book2_id = 519841))) OR ((id = 722) AND (book2_id = 521284))) OR ((id = 723) AND (book2_id = 522729))) OR ((id = 724) AND (book2_id = 524176))) OR ((id = 725) AND (book2_id = 525625))) OR ((id = 726) AND (book2_id = 527076))) OR ((id = 727) AND (book2_id = 528529))) OR ((id = 728) AND (book2_id = 529984))) OR ((id = 729) AND (book2_id = 531441))) OR ((id = 730) AND (book2_id = 532900))) OR ((id = 731) AND (book2_id = 534361))) OR ((id = 732) AND (book2_id = 535824))) OR ((id = 733) AND (book2_id = 537289))) OR ((id = 734) AND (book2_id = 538756))) OR ((id = 735) AND (book2_id = 540225))) OR ((id = 736) AND (book2_id = 541696))) OR ((id = 737) AND (book2_id = 543169))) OR ((id = 738) AND (book2_id = 544644))) OR ((id = 739) AND (book2_id = 546121))) OR ((id = 740) AND (book2_id = 547600))) OR ((id = 741) AND (book2_id = 549081))) OR ((id = 742) AND (book2_id = 550564))) OR ((id = 743) AND (book2_id = 552049))) OR ((id = 744) AND (book2_id = 553536))) OR ((id = 745) AND (book2_id = 555025))) OR ((id = 746) AND (book2_id = 556516))) OR ((id = 747) AND (book2_id = 558009))) OR ((id = 748) AND (book2_id = 559504))) OR ((id = 749) AND (book2_id = 561001))) OR ((id = 750) AND (book2_id = 562500))) OR ((id = 751) AND (book2_id = 564001))) OR ((id = 752) AND (book2_id = 565504))) OR ((id = 753) AND (book2_id = 567009))) OR ((id = 754) AND (book2_id = 568516))) OR ((id = 755) AND (book2_id = 570025))) OR ((id = 756) AND (book2_id = 571536))) OR ((id = 757) AND (book2_id = 573049))) OR ((id = 758) AND (book2_id = 574564))) OR ((id = 759) AND (book2_id = 576081))) OR ((id = 760) AND (book2_id = 577600))) OR ((id = 761) AND (book2_id = 579121))) OR ((id = 762) AND (book2_id = 580644))) OR ((id = 763) AND (book2_id = 582169))) OR ((id = 764) AND (book2_id = 583696))) OR ((id = 765) AND (book2_id = 585225))) OR ((id = 766) AND (book2_id = 586756))) OR ((id = 767) AND (book2_id = 588289))) OR ((id = 768) AND (book2_id = 589824))) OR ((id = 769) AND (book2_id = 591361))) OR ((id = 770) AND (book2_id = 592900))) OR ((id = 771) AND (book2_id = 594441))) OR ((id = 772) AND (book2_id = 595984))) OR ((id = 773) AND (book2_id = 597529))) OR ((id = 774) AND (book2_id = 599076))) OR ((id = 775) AND (book2_id = 600625))) OR ((id = 776) AND (book2_id = 602176))) OR ((id = 777) AND (book2_id = 603729))) OR ((id = 778) AND (book2_id = 605284))) OR ((id = 779) AND (book2_id = 606841))) OR ((id = 780) AND (book2_id = 608400))) OR ((id = 781) AND (book2_id = 609961))) OR ((id = 782) AND (book2_id = 611524))) OR ((id = 783) AND (book2_id = 613089))) OR ((id = 784) AND (book2_id = 614656))) OR ((id = 785) AND (book2_id = 616225))) OR ((id = 786) AND (book2_id = 617796))) OR ((id = 787) AND (book2_id = 619369))) OR ((id = 788) AND (book2_id = 620944))) OR ((id = 789) AND (book2_id = 622521))) OR ((id = 790) AND (book2_id = 624100))) OR ((id = 791) AND (book2_id = 625681))) OR ((id = 792) AND (book2_id = 627264))) OR ((id = 793) AND (book2_id = 628849))) OR ((id = 794) AND (book2_id = 630436))) OR ((id = 795) AND (book2_id = 632025))) OR ((id = 796) AND (book2_id = 633616))) OR ((id = 797) AND (book2_id = 635209))) OR ((id = 798) AND (book2_id = 636804))) OR ((id = 799) AND (book2_id = 638401))) OR ((id = 800) AND (book2_id = 640000))) OR ((id = 801) AND (book2_id = 641601))) OR ((id = 802) AND (book2_id = 643204))) OR ((id = 803) AND (book2_id = 644809))) OR ((id = 804) AND (book2_id = 646416))) OR ((id = 805) AND (book2_id = 648025))) OR ((id = 806) AND (book2_id = 649636))) OR ((id = 807) AND (book2_id = 651249))) OR ((id = 808) AND (book2_id = 652864))) OR ((id = 809) AND (book2_id = 654481))) OR ((id = 810) AND (book2_id = 656100))) OR ((id = 811) AND (book2_id = 657721))) OR ((id = 812) AND (book2_id = 659344))) OR ((id = 813) AND (book2_id = 660969))) OR ((id = 814) AND (book2_id = 662596))) OR ((id = 815) AND (book2_id = 664225))) OR ((id = 816) AND (book2_id = 665856))) OR ((id = 817) AND (book2_id = 667489))) OR ((id = 818) AND (book2_id = 669124))) OR ((id = 819) AND (book2_id = 670761))) OR ((id = 820) AND (book2_id = 672400))) OR ((id = 821) AND (book2_id = 674041))) OR ((id = 822) AND (book2_id = 675684))) OR ((id = 823) AND (book2_id = 677329))) OR ((id = 824) AND (book2_id = 678976))) OR ((id = 825) AND (book2_id = 680625))) OR ((id = 826) AND (book2_id = 682276))) OR ((id = 827) AND (book2_id = 683929))) OR ((id = 828) AND (book2_id = 685584))) OR ((id = 829) AND (book2_id = 687241))) OR ((id = 830) AND (book2_id = 688900))) OR ((id = 831) AND (book2_id = 690561))) OR ((id = 832) AND (book2_id = 692224))) OR ((id = 833) AND (book2_id = 693889))) OR ((id = 834) AND (book2_id = 695556))) OR ((id = 835) AND (book2_id = 697225))) OR ((id = 836) AND (book2_id = 698896))) OR ((id = 837) AND (book2_id = 700569))) OR ((id = 838) AND (book2_id = 702244))) OR ((id = 839) AND (book2_id = 703921))) OR ((id = 840) AND (book2_id = 705600))) OR ((id = 841) AND (book2_id = 707281))) OR ((id = 842) AND (book2_id = 708964))) OR ((id = 843) AND (book2_id = 710649))) OR ((id = 844) AND (book2_id = 712336))) OR ((id = 845) AND (book2_id = 714025))) OR ((id = 846) AND (book2_id = 715716))) OR ((id = 847) AND (book2_id = 717409))) OR ((id = 848) AND (book2_id = 719104))) OR ((id = 849) AND (book2_id = 720801))) OR ((id = 850) AND (book2_id = 722500))) OR ((id = 851) AND (book2_id = 724201))) OR ((id = 852) AND (book2_id = 725904))) OR ((id = 853) AND (book2_id = 727609))) OR ((id = 854) AND (book2_id = 729316))) OR ((id = 855) AND (book2_id = 731025))) OR ((id = 856) AND (book2_id = 732736))) OR ((id = 857) AND (book2_id = 734449))) OR ((id = 858) AND (book2_id = 736164))) OR ((id = 859) AND (book2_id = 737881))) OR ((id = 860) AND (book2_id = 739600))) OR ((id = 861) AND (book2_id = 741321))) OR ((id = 862) AND (book2_id = 743044))) OR ((id = 863) AND (book2_id = 744769))) OR ((id = 864) AND (book2_id = 746496))) OR ((id = 865) AND (book2_id = 748225))) OR ((id = 866) AND (book2_id = 749956))) OR ((id = 867) AND (book2_id = 751689))) OR ((id = 868) AND (book2_id = 753424))) OR ((id = 869) AND (book2_id = 755161))) OR ((id = 870) AND (book2_id = 756900))) OR ((id = 871) AND (book2_id = 758641))) OR ((id = 872) AND (book2_id = 760384))) OR ((id = 873) AND (book2_id = 762129))) OR ((id = 874) AND (book2_id = 763876))) OR ((id = 875) AND (book2_id = 765625))) OR ((id = 876) AND (book2_id = 767376))) OR ((id = 877) AND (book2_id = 769129))) OR ((id = 878) AND (book2_id = 770884))) OR ((id = 879) AND (book2_id = 772641))) OR ((id = 880) AND (book2_id = 774400))) OR ((id = 881) AND (book2_id = 776161))) OR ((id = 882) AND (book2_id = 777924))) OR ((id = 883) AND (book2_id = 779689))) OR ((id = 884) AND (book2_id = 781456))) OR ((id = 885) AND (book2_id = 783225))) OR ((id = 886) AND (book2_id = 784996))) OR ((id = 887) AND (book2_id = 786769))) OR ((id = 888) AND (book2_id = 788544))) OR ((id = 889) AND (book2_id = 790321))) OR ((id = 890) AND (book2_id = 792100))) OR ((id = 891) AND (book2_id = 793881))) OR ((id = 892) AND (book2_id = 795664))) OR ((id = 893) AND (book2_id = 797449))) OR ((id = 894) AND (book2_id = 799236))) OR ((id = 895) AND (book2_id = 801025))) OR ((id = 896) AND (book2_id = 802816))) OR ((id = 897) AND (book2_id = 804609))) OR ((id = 898) AND (book2_id = 806404))) OR ((id = 899) AND (book2_id = 808201))) OR ((id = 900) AND (book2_id = 810000))) OR ((id = 901) AND (book2_id = 811801))) OR ((id = 902) AND (book2_id = 813604))) OR ((id = 903) AND (book2_id = 815409))) OR ((id = 904) AND (book2_id = 817216))) OR ((id = 905) AND (book2_id = 819025))) OR ((id = 906) AND (book2_id = 820836))) OR ((id = 907) AND (book2_id = 822649))) OR ((id = 908) AND (book2_id = 824464))) OR ((id = 909) AND (book2_id = 826281))) OR ((id = 910) AND (book2_id = 828100))) OR ((id = 911) AND (book2_id = 829921))) OR ((id = 912) AND (book2_id = 831744))) OR ((id = 913) AND (book2_id = 833569))) OR ((id = 914) AND (book2_id = 835396))) OR ((id = 915) AND (book2_id = 837225))) OR ((id = 916) AND (book2_id = 839056))) OR ((id = 917) AND (book2_id = 840889))) OR ((id = 918) AND (book2_id = 842724))) OR ((id = 919) AND (book2_id = 844561))) OR ((id = 920) AND (book2_id = 846400))) OR ((id = 921) AND (book2_id = 848241))) OR ((id = 922) AND (book2_id = 850084))) OR ((id = 923) AND (book2_id = 851929))) OR ((id = 924) AND (book2_id = 853776))) OR ((id = 925) AND (book2_id = 855625))) OR ((id = 926) AND (book2_id = 857476))) OR ((id = 927) AND (book2_id = 859329))) OR ((id = 928) AND (book2_id = 861184))) OR ((id = 929) AND (book2_id = 863041))) OR ((id = 930) AND (book2_id = 864900))) OR ((id = 931) AND (book2_id = 866761))) OR ((id = 932) AND (book2_id = 868624))) OR ((id = 933) AND (book2_id = 870489))) OR ((id = 934) AND (book2_id = 872356))) OR ((id = 935) AND (book2_id = 874225))) OR ((id = 936) AND (book2_id = 876096))) OR ((id = 937) AND (book2_id = 877969))) OR ((id = 938) AND (book2_id = 879844))) OR ((id = 939) AND (book2_id = 881721))) OR ((id = 940) AND (book2_id = 883600))) OR ((id = 941) AND (book2_id = 885481))) OR ((id = 942) AND (book2_id = 887364))) OR ((id = 943) AND (book2_id = 889249))) OR ((id = 944) AND (book2_id = 891136))) OR ((id = 945) AND (book2_id = 893025))) OR ((id = 946) AND (book2_id = 894916))) OR ((id = 947) AND (book2_id = 896809))) OR ((id = 948) AND (book2_id = 898704))) OR ((id = 949) AND (book2_id = 900601))) OR ((id = 950) AND (book2_id = 902500))) OR ((id = 951) AND (book2_id = 904401))) OR ((id = 952) AND (book2_id = 906304))) OR ((id = 953) AND (book2_id = 908209))) OR ((id = 954) AND (book2_id = 910116))) OR ((id = 955) AND (book2_id = 912025))) OR ((id = 956) AND (book2_id = 913936))) OR ((id = 957) AND (book2_id = 915849))) OR ((id = 958) AND (book2_id = 917764))) OR ((id = 959) AND (book2_id = 919681))) OR ((id = 960) AND (book2_id = 921600))) OR ((id = 961) AND (book2_id = 923521))) OR ((id = 962) AND (book2_id = 925444))) OR ((id = 963) AND (book2_id = 927369))) OR ((id = 964) AND (book2_id = 929296))) OR ((id = 965) AND (book2_id = 931225))) OR ((id = 966) AND (book2_id = 933156))) OR ((id = 967) AND (book2_id = 935089))) OR ((id = 968) AND (book2_id = 937024))) OR ((id = 969) AND (book2_id = 938961))) OR ((id = 970) AND (book2_id = 940900))) OR ((id = 971) AND (book2_id = 942841))) OR ((id = 972) AND (book2_id = 944784))) OR ((id = 973) AND (book2_id = 946729))) OR ((id = 974) AND (book2_id = 948676))) OR ((id = 975) AND (book2_id = 950625))) OR ((id = 976) AND (book2_id = 952576))) OR ((id = 977) AND (book2_id = 954529))) OR ((id = 978) AND (book2_id = 956484))) OR ((id = 979) AND (book2_id = 958441))) OR ((id = 980) AND (book2_id = 960400))) OR ((id = 981) AND (book2_id = 962361))) OR ((id = 982) AND (book2_id = 964324))) OR ((id = 983) AND (book2_id = 966289))) OR ((id = 984) AND (book2_id = 968256))) OR ((id = 985) AND (book2_id = 970225))) OR ((id = 986) AND (book2_id = 972196))) OR ((id = 987) AND (book2_id = 974169))) OR ((id = 988) AND (book2_id = 976144))) OR ((id = 989) AND (book2_id = 978121))) OR ((id = 990) AND (book2_id = 980100))) OR ((id = 991) AND (book2_id = 982081))) OR ((id = 992) AND (book2_id = 984064))) OR ((id = 993) AND (book2_id = 986049))) OR ((id = 994) AND (book2_id = 988036))) OR ((id = 995) AND (book2_id = 990025))) OR ((id = 996) AND (book2_id = 992016))) OR ((id = 997) AND (book2_id = 994009))) OR ((id = 998) AND (book2_id = 996004))) OR ((id = 999) AND (book2_id = 998001))) OR ((id = 1000) AND (book2_id = 1000000))
+
+index-constraints vars=(id INT, book_id INT, book2_id INT, citation_id INT) index=(id,book2_id)
+  id = 0
+  AND book2_id = 0
+  OR id = 1 AND book2_id = 1
+  OR id = 3 AND book2_id = 4
+  OR id = 3 AND book2_id = 9
+  OR id = 5 AND book2_id = 16
+  OR id = 5 AND book2_id = 25
+  OR id = 6 AND book2_id = 36
+  OR id = 7 AND book2_id = 49
+  OR id = 8 AND book2_id = 64
+  OR id = 9 AND book2_id = 81
+  OR id = 10 AND book2_id = 100
+  OR id = 11 AND book2_id = 121
+  OR id = 12 AND book2_id = 144
+  OR id = 13 AND book2_id = 169
+  OR id = 14 AND book2_id = 196
+  OR id = 15 AND book2_id = 225
+  OR id = 16 AND book2_id = 256
+  OR id = 17 AND book2_id = 289
+  OR id = 18 AND book2_id = 324
+  OR id = 19 AND book2_id = 361
+  OR id = 20 AND book2_id = 400
+  OR id = 21 AND book2_id = 441
+  OR id = 22 AND book2_id = 484
+  OR id = 23 AND book2_id = 529
+  OR id = 24 AND book2_id = 576
+  OR id = 25 AND book2_id = 625
+  OR id = 26 AND book2_id = 676
+  OR id = 27 AND book2_id = 729
+  OR id = 28 AND book2_id = 784
+  OR id = 29 AND book2_id = 841
+  OR id = 30 AND book2_id = 900
+  OR id = 31 AND book2_id = 961
+  OR id = 32 AND book2_id = 1024
+  OR id = 33 AND book2_id = 1089
+  OR id = 34 AND book2_id = 1156
+  OR id = 35 AND book2_id = 1225
+  OR id = 36 AND book2_id = 1296
+  OR id = 37 AND book2_id = 1369
+  OR id = 38 AND book2_id = 1444
+  OR id = 39 AND book2_id = 1521
+  OR id = 40 AND book2_id = 1600
+  OR id = 41 AND book2_id = 1681
+  OR id = 42 AND book2_id = 1764
+  OR id = 43 AND book2_id = 1849
+  OR id = 44 AND book2_id = 1936
+  OR id = 45 AND book2_id = 2025
+  OR id = 46 AND book2_id = 2116
+  OR id = 47 AND book2_id = 2209
+  OR id = 48 AND book2_id = 2304
+  OR id = 49 AND book2_id = 2401
+  OR id = 50 AND book2_id = 2500
+  OR id = 51 AND book2_id = 2601
+  OR id = 52 AND book2_id = 2704
+  OR id = 53 AND book2_id = 2809
+  OR id = 54 AND book2_id = 2916
+  OR id = 55 AND book2_id = 3025
+  OR id = 56 AND book2_id = 3136
+  OR id = 57 AND book2_id = 3249
+  OR id = 58 AND book2_id = 3364
+  OR id = 59 AND book2_id = 3481
+  OR id = 60 AND book2_id = 3600
+  OR id = 61 AND book2_id = 3721
+  OR id = 62 AND book2_id = 3844
+  OR id = 63 AND book2_id = 3969
+  OR id = 64 AND book2_id = 4096
+  OR id = 65 AND book2_id = 4225
+  OR id = 66 AND book2_id = 4356
+  OR id = 67 AND book2_id = 4489
+  OR id = 68 AND book2_id = 4624
+  OR id = 69 AND book2_id = 4761
+  OR id = 70 AND book2_id = 4900
+  OR id = 71 AND book2_id = 5041
+  OR id = 72 AND book2_id = 5184
+  OR id = 73 AND book2_id = 5329
+  OR id = 74 AND book2_id = 5476
+  OR id = 75 AND book2_id = 5625
+  OR id = 76 AND book2_id = 5776
+  OR id = 77 AND book2_id = 5929
+  OR id = 78 AND book2_id = 6084
+  OR id = 79 AND book2_id = 6241
+  OR id = 80 AND book2_id = 6400
+  OR id = 81 AND book2_id = 6561
+  OR id = 82 AND book2_id = 6724
+  OR id = 83 AND book2_id = 6889
+  OR id = 84 AND book2_id = 7056
+  OR id = 85 AND book2_id = 7225
+  OR id = 86 AND book2_id = 7396
+  OR id = 87 AND book2_id = 7569
+  OR id = 88 AND book2_id = 7744
+  OR id = 89 AND book2_id = 7921
+  OR id = 90 AND book2_id = 8100
+  OR id = 91 AND book2_id = 8281
+  OR id = 92 AND book2_id = 8464
+  OR id = 93 AND book2_id = 8649
+  OR id = 94 AND book2_id = 8836
+  OR id = 95 AND book2_id = 9025
+  OR id = 96 AND book2_id = 9216
+  OR id = 97 AND book2_id = 9409
+  OR id = 98 AND book2_id = 9604
+  OR id = 99 AND book2_id = 9801
+  OR id = 100 AND book2_id = 10000
+  OR id = 101 AND book2_id = 10201
+  OR id = 102 AND book2_id = 10404
+  OR id = 103 AND book2_id = 10609
+  OR id = 104 AND book2_id = 10816
+  OR id = 105 AND book2_id = 11025
+  OR id = 106 AND book2_id = 11236
+  OR id = 107 AND book2_id = 11449
+  OR id = 108 AND book2_id = 11664
+  OR id = 109 AND book2_id = 11881
+  OR id = 110 AND book2_id = 12100
+  OR id = 111 AND book2_id = 12321
+  OR id = 112 AND book2_id = 12544
+  OR id = 113 AND book2_id = 12769
+  OR id = 114 AND book2_id = 12996
+  OR id = 115 AND book2_id = 13225
+  OR id = 116 AND book2_id = 13456
+  OR id = 117 AND book2_id = 13689
+  OR id = 118 AND book2_id = 13924
+  OR id = 119 AND book2_id = 14161
+  OR id = 120 AND book2_id = 14400
+  OR id = 121 AND book2_id = 14641
+  OR id = 122 AND book2_id = 14884
+  OR id = 123 AND book2_id = 15129
+  OR id = 124 AND book2_id = 15376
+  OR id = 125 AND book2_id = 15625
+  OR id = 126 AND book2_id = 15876
+  OR id = 127 AND book2_id = 16129
+  OR id = 128 AND book2_id = 16384
+  OR id = 129 AND book2_id = 16641
+  OR id = 130 AND book2_id = 16900
+  OR id = 131 AND book2_id = 17161
+  OR id = 132 AND book2_id = 17424
+  OR id = 133 AND book2_id = 17689
+  OR id = 134 AND book2_id = 17956
+  OR id = 135 AND book2_id = 18225
+  OR id = 136 AND book2_id = 18496
+  OR id = 137 AND book2_id = 18769
+  OR id = 138 AND book2_id = 19044
+  OR id = 139 AND book2_id = 19321
+  OR id = 140 AND book2_id = 19600
+  OR id = 141 AND book2_id = 19881
+  OR id = 142 AND book2_id = 20164
+  OR id = 143 AND book2_id = 20449
+  OR id = 144 AND book2_id = 20736
+  OR id = 145 AND book2_id = 21025
+  OR id = 146 AND book2_id = 21316
+  OR id = 147 AND book2_id = 21609
+  OR id = 148 AND book2_id = 21904
+  OR id = 149 AND book2_id = 22201
+  OR id = 150 AND book2_id = 22500
+  OR id = 151 AND book2_id = 22801
+  OR id = 152 AND book2_id = 23104
+  OR id = 153 AND book2_id = 23409
+  OR id = 154 AND book2_id = 23716
+  OR id = 155 AND book2_id = 24025
+  OR id = 156 AND book2_id = 24336
+  OR id = 157 AND book2_id = 24649
+  OR id = 158 AND book2_id = 24964
+  OR id = 159 AND book2_id = 25281
+  OR id = 160 AND book2_id = 25600
+  OR id = 161 AND book2_id = 25921
+  OR id = 162 AND book2_id = 26244
+  OR id = 163 AND book2_id = 26569
+  OR id = 164 AND book2_id = 26896
+  OR id = 165 AND book2_id = 27225
+  OR id = 166 AND book2_id = 27556
+  OR id = 167 AND book2_id = 27889
+  OR id = 168 AND book2_id = 28224
+  OR id = 169 AND book2_id = 28561
+  OR id = 170 AND book2_id = 28900
+  OR id = 171 AND book2_id = 29241
+  OR id = 172 AND book2_id = 29584
+  OR id = 173 AND book2_id = 29929
+  OR id = 174 AND book2_id = 30276
+  OR id = 175 AND book2_id = 30625
+  OR id = 176 AND book2_id = 30976
+  OR id = 177 AND book2_id = 31329
+  OR id = 178 AND book2_id = 31684
+  OR id = 179 AND book2_id = 32041
+  OR id = 180 AND book2_id = 32400
+  OR id = 181 AND book2_id = 32761
+  OR id = 182 AND book2_id = 33124
+  OR id = 183 AND book2_id = 33489
+  OR id = 184 AND book2_id = 33856
+  OR id = 185 AND book2_id = 34225
+  OR id = 186 AND book2_id = 34596
+  OR id = 187 AND book2_id = 34969
+  OR id = 188 AND book2_id = 35344
+  OR id = 189 AND book2_id = 35721
+  OR id = 190 AND book2_id = 36100
+  OR id = 191 AND book2_id = 36481
+  OR id = 192 AND book2_id = 36864
+  OR id = 193 AND book2_id = 37249
+  OR id = 194 AND book2_id = 37636
+  OR id = 195 AND book2_id = 38025
+  OR id = 196 AND book2_id = 38416
+  OR id = 197 AND book2_id = 38809
+  OR id = 198 AND book2_id = 39204
+  OR id = 199 AND book2_id = 39601
+  OR id = 200 AND book2_id = 40000
+  OR id = 201 AND book2_id = 40401
+  OR id = 202 AND book2_id = 40804
+  OR id = 203 AND book2_id = 41209
+  OR id = 204 AND book2_id = 41616
+  OR id = 205 AND book2_id = 42025
+  OR id = 206 AND book2_id = 42436
+  OR id = 207 AND book2_id = 42849
+  OR id = 208 AND book2_id = 43264
+  OR id = 209 AND book2_id = 43681
+  OR id = 210 AND book2_id = 44100
+  OR id = 211 AND book2_id = 44521
+  OR id = 212 AND book2_id = 44944
+  OR id = 213 AND book2_id = 45369
+  OR id = 214 AND book2_id = 45796
+  OR id = 215 AND book2_id = 46225
+  OR id = 216 AND book2_id = 46656
+  OR id = 217 AND book2_id = 47089
+  OR id = 218 AND book2_id = 47524
+  OR id = 219 AND book2_id = 47961
+  OR id = 220 AND book2_id = 48400
+  OR id = 221 AND book2_id = 48841
+  OR id = 222 AND book2_id = 49284
+  OR id = 223 AND book2_id = 49729
+  OR id = 224 AND book2_id = 50176
+  OR id = 225 AND book2_id = 50625
+  OR id = 226 AND book2_id = 51076
+  OR id = 227 AND book2_id = 51529
+  OR id = 228 AND book2_id = 51984
+  OR id = 229 AND book2_id = 52441
+  OR id = 230 AND book2_id = 52900
+  OR id = 231 AND book2_id = 53361
+  OR id = 232 AND book2_id = 53824
+  OR id = 233 AND book2_id = 54289
+  OR id = 234 AND book2_id = 54756
+  OR id = 235 AND book2_id = 55225
+  OR id = 236 AND book2_id = 55696
+  OR id = 237 AND book2_id = 56169
+  OR id = 238 AND book2_id = 56644
+  OR id = 239 AND book2_id = 57121
+  OR id = 240 AND book2_id = 57600
+  OR id = 241 AND book2_id = 58081
+  OR id = 242 AND book2_id = 58564
+  OR id = 243 AND book2_id = 59049
+  OR id = 244 AND book2_id = 59536
+  OR id = 245 AND book2_id = 60025
+  OR id = 246 AND book2_id = 60516
+  OR id = 247 AND book2_id = 61009
+  OR id = 248 AND book2_id = 61504
+  OR id = 249 AND book2_id = 62001
+  OR id = 250 AND book2_id = 62500
+  OR id = 251 AND book2_id = 63001
+  OR id = 252 AND book2_id = 63504
+  OR id = 253 AND book2_id = 64009
+  OR id = 254 AND book2_id = 64516
+  OR id = 255 AND book2_id = 65025
+  OR id = 256 AND book2_id = 65536
+  OR id = 257 AND book2_id = 66049
+  OR id = 258 AND book2_id = 66564
+  OR id = 259 AND book2_id = 67081
+  OR id = 260 AND book2_id = 67600
+  OR id = 261 AND book2_id = 68121
+  OR id = 262 AND book2_id = 68644
+  OR id = 263 AND book2_id = 69169
+  OR id = 264 AND book2_id = 69696
+  OR id = 265 AND book2_id = 70225
+  OR id = 266 AND book2_id = 70756
+  OR id = 267 AND book2_id = 71289
+  OR id = 268 AND book2_id = 71824
+  OR id = 269 AND book2_id = 72361
+  OR id = 270 AND book2_id = 72900
+  OR id = 271 AND book2_id = 73441
+  OR id = 272 AND book2_id = 73984
+  OR id = 273 AND book2_id = 74529
+  OR id = 274 AND book2_id = 75076
+  OR id = 275 AND book2_id = 75625
+  OR id = 276 AND book2_id = 76176
+  OR id = 277 AND book2_id = 76729
+  OR id = 278 AND book2_id = 77284
+  OR id = 279 AND book2_id = 77841
+  OR id = 280 AND book2_id = 78400
+  OR id = 281 AND book2_id = 78961
+  OR id = 282 AND book2_id = 79524
+  OR id = 283 AND book2_id = 80089
+  OR id = 284 AND book2_id = 80656
+  OR id = 285 AND book2_id = 81225
+  OR id = 286 AND book2_id = 81796
+  OR id = 287 AND book2_id = 82369
+  OR id = 288 AND book2_id = 82944
+  OR id = 289 AND book2_id = 83521
+  OR id = 290 AND book2_id = 84100
+  OR id = 291 AND book2_id = 84681
+  OR id = 292 AND book2_id = 85264
+  OR id = 293 AND book2_id = 85849
+  OR id = 294 AND book2_id = 86436
+  OR id = 295 AND book2_id = 87025
+  OR id = 296 AND book2_id = 87616
+  OR id = 297 AND book2_id = 88209
+  OR id = 298 AND book2_id = 88804
+  OR id = 299 AND book2_id = 89401
+  OR id = 300 AND book2_id = 90000
+  OR id = 301 AND book2_id = 90601
+  OR id = 302 AND book2_id = 91204
+  OR id = 303 AND book2_id = 91809
+  OR id = 304 AND book2_id = 92416
+  OR id = 305 AND book2_id = 93025
+  OR id = 306 AND book2_id = 93636
+  OR id = 307 AND book2_id = 94249
+  OR id = 308 AND book2_id = 94864
+  OR id = 309 AND book2_id = 95481
+  OR id = 310 AND book2_id = 96100
+  OR id = 311 AND book2_id = 96721
+  OR id = 312 AND book2_id = 97344
+  OR id = 313 AND book2_id = 97969
+  OR id = 314 AND book2_id = 98596
+  OR id = 315 AND book2_id = 99225
+  OR id = 316 AND book2_id = 99856
+  OR id = 317 AND book2_id = 100489
+  OR id = 318 AND book2_id = 101124
+  OR id = 319 AND book2_id = 101761
+  OR id = 320 AND book2_id = 102400
+  OR id = 321 AND book2_id = 103041
+  OR id = 322 AND book2_id = 103684
+  OR id = 323 AND book2_id = 104329
+  OR id = 324 AND book2_id = 104976
+  OR id = 325 AND book2_id = 105625
+  OR id = 326 AND book2_id = 106276
+  OR id = 327 AND book2_id = 106929
+  OR id = 328 AND book2_id = 107584
+  OR id = 329 AND book2_id = 108241
+  OR id = 330 AND book2_id = 108900
+  OR id = 331 AND book2_id = 109561
+  OR id = 332 AND book2_id = 110224
+  OR id = 333 AND book2_id = 110889
+  OR id = 334 AND book2_id = 111556
+  OR id = 335 AND book2_id = 112225
+  OR id = 336 AND book2_id = 112896
+  OR id = 337 AND book2_id = 113569
+  OR id = 338 AND book2_id = 114244
+  OR id = 339 AND book2_id = 114921
+  OR id = 340 AND book2_id = 115600
+  OR id = 341 AND book2_id = 116281
+  OR id = 342 AND book2_id = 116964
+  OR id = 343 AND book2_id = 117649
+  OR id = 344 AND book2_id = 118336
+  OR id = 345 AND book2_id = 119025
+  OR id = 346 AND book2_id = 119716
+  OR id = 347 AND book2_id = 120409
+  OR id = 348 AND book2_id = 121104
+  OR id = 349 AND book2_id = 121801
+  OR id = 350 AND book2_id = 122500
+  OR id = 351 AND book2_id = 123201
+  OR id = 352 AND book2_id = 123904
+  OR id = 353 AND book2_id = 124609
+  OR id = 354 AND book2_id = 125316
+  OR id = 355 AND book2_id = 126025
+  OR id = 356 AND book2_id = 126736
+  OR id = 357 AND book2_id = 127449
+  OR id = 358 AND book2_id = 128164
+  OR id = 359 AND book2_id = 128881
+  OR id = 360 AND book2_id = 129600
+  OR id = 361 AND book2_id = 130321
+  OR id = 362 AND book2_id = 131044
+  OR id = 363 AND book2_id = 131769
+  OR id = 364 AND book2_id = 132496
+  OR id = 365 AND book2_id = 133225
+  OR id = 366 AND book2_id = 133956
+  OR id = 367 AND book2_id = 134689
+  OR id = 368 AND book2_id = 135424
+  OR id = 369 AND book2_id = 136161
+  OR id = 370 AND book2_id = 136900
+  OR id = 371 AND book2_id = 137641
+  OR id = 372 AND book2_id = 138384
+  OR id = 373 AND book2_id = 139129
+  OR id = 374 AND book2_id = 139876
+  OR id = 375 AND book2_id = 140625
+  OR id = 376 AND book2_id = 141376
+  OR id = 377 AND book2_id = 142129
+  OR id = 378 AND book2_id = 142884
+  OR id = 379 AND book2_id = 143641
+  OR id = 380 AND book2_id = 144400
+  OR id = 381 AND book2_id = 145161
+  OR id = 382 AND book2_id = 145924
+  OR id = 383 AND book2_id = 146689
+  OR id = 384 AND book2_id = 147456
+  OR id = 385 AND book2_id = 148225
+  OR id = 386 AND book2_id = 148996
+  OR id = 387 AND book2_id = 149769
+  OR id = 388 AND book2_id = 150544
+  OR id = 389 AND book2_id = 151321
+  OR id = 390 AND book2_id = 152100
+  OR id = 391 AND book2_id = 152881
+  OR id = 392 AND book2_id = 153664
+  OR id = 393 AND book2_id = 154449
+  OR id = 394 AND book2_id = 155236
+  OR id = 395 AND book2_id = 156025
+  OR id = 396 AND book2_id = 156816
+  OR id = 397 AND book2_id = 157609
+  OR id = 398 AND book2_id = 158404
+  OR id = 399 AND book2_id = 159201
+  OR id = 400 AND book2_id = 160000
+  OR id = 401 AND book2_id = 160801
+  OR id = 402 AND book2_id = 161604
+  OR id = 403 AND book2_id = 162409
+  OR id = 404 AND book2_id = 163216
+  OR id = 405 AND book2_id = 164025
+  OR id = 406 AND book2_id = 164836
+  OR id = 407 AND book2_id = 165649
+  OR id = 408 AND book2_id = 166464
+  OR id = 409 AND book2_id = 167281
+  OR id = 410 AND book2_id = 168100
+  OR id = 411 AND book2_id = 168921
+  OR id = 412 AND book2_id = 169744
+  OR id = 413 AND book2_id = 170569
+  OR id = 414 AND book2_id = 171396
+  OR id = 415 AND book2_id = 172225
+  OR id = 416 AND book2_id = 173056
+  OR id = 417 AND book2_id = 173889
+  OR id = 418 AND book2_id = 174724
+  OR id = 419 AND book2_id = 175561
+  OR id = 420 AND book2_id = 176400
+  OR id = 421 AND book2_id = 177241
+  OR id = 422 AND book2_id = 178084
+  OR id = 423 AND book2_id = 178929
+  OR id = 424 AND book2_id = 179776
+  OR id = 425 AND book2_id = 180625
+  OR id = 426 AND book2_id = 181476
+  OR id = 427 AND book2_id = 182329
+  OR id = 428 AND book2_id = 183184
+  OR id = 429 AND book2_id = 184041
+  OR id = 430 AND book2_id = 184900
+  OR id = 431 AND book2_id = 185761
+  OR id = 432 AND book2_id = 186624
+  OR id = 433 AND book2_id = 187489
+  OR id = 434 AND book2_id = 188356
+  OR id = 435 AND book2_id = 189225
+  OR id = 436 AND book2_id = 190096
+  OR id = 437 AND book2_id = 190969
+  OR id = 438 AND book2_id = 191844
+  OR id = 439 AND book2_id = 192721
+  OR id = 440 AND book2_id = 193600
+  OR id = 441 AND book2_id = 194481
+  OR id = 442 AND book2_id = 195364
+  OR id = 443 AND book2_id = 196249
+  OR id = 444 AND book2_id = 197136
+  OR id = 445 AND book2_id = 198025
+  OR id = 446 AND book2_id = 198916
+  OR id = 447 AND book2_id = 199809
+  OR id = 448 AND book2_id = 200704
+  OR id = 449 AND book2_id = 201601
+  OR id = 450 AND book2_id = 202500
+  OR id = 451 AND book2_id = 203401
+  OR id = 452 AND book2_id = 204304
+  OR id = 453 AND book2_id = 205209
+  OR id = 454 AND book2_id = 206116
+  OR id = 455 AND book2_id = 207025
+  OR id = 456 AND book2_id = 207936
+  OR id = 457 AND book2_id = 208849
+  OR id = 458 AND book2_id = 209764
+  OR id = 459 AND book2_id = 210681
+  OR id = 460 AND book2_id = 211600
+  OR id = 461 AND book2_id = 212521
+  OR id = 462 AND book2_id = 213444
+  OR id = 463 AND book2_id = 214369
+  OR id = 464 AND book2_id = 215296
+  OR id = 465 AND book2_id = 216225
+  OR id = 466 AND book2_id = 217156
+  OR id = 467 AND book2_id = 218089
+  OR id = 468 AND book2_id = 219024
+  OR id = 469 AND book2_id = 219961
+  OR id = 470 AND book2_id = 220900
+  OR id = 471 AND book2_id = 221841
+  OR id = 472 AND book2_id = 222784
+  OR id = 473 AND book2_id = 223729
+  OR id = 474 AND book2_id = 224676
+  OR id = 475 AND book2_id = 225625
+  OR id = 476 AND book2_id = 226576
+  OR id = 477 AND book2_id = 227529
+  OR id = 478 AND book2_id = 228484
+  OR id = 479 AND book2_id = 229441
+  OR id = 480 AND book2_id = 230400
+  OR id = 481 AND book2_id = 231361
+  OR id = 482 AND book2_id = 232324
+  OR id = 483 AND book2_id = 233289
+  OR id = 484 AND book2_id = 234256
+  OR id = 485 AND book2_id = 235225
+  OR id = 486 AND book2_id = 236196
+  OR id = 487 AND book2_id = 237169
+  OR id = 488 AND book2_id = 238144
+  OR id = 489 AND book2_id = 239121
+  OR id = 490 AND book2_id = 240100
+  OR id = 491 AND book2_id = 241081
+  OR id = 492 AND book2_id = 242064
+  OR id = 493 AND book2_id = 243049
+  OR id = 494 AND book2_id = 244036
+  OR id = 495 AND book2_id = 245025
+  OR id = 496 AND book2_id = 246016
+  OR id = 497 AND book2_id = 247009
+  OR id = 498 AND book2_id = 248004
+  OR id = 499 AND book2_id = 249001
+  OR id = 500 AND book2_id = 250000
+  OR id = 501 AND book2_id = 251001
+  OR id = 502 AND book2_id = 252004
+  OR id = 503 AND book2_id = 253009
+  OR id = 504 AND book2_id = 254016
+  OR id = 505 AND book2_id = 255025
+  OR id = 506 AND book2_id = 256036
+  OR id = 507 AND book2_id = 257049
+  OR id = 508 AND book2_id = 258064
+  OR id = 509 AND book2_id = 259081
+  OR id = 510 AND book2_id = 260100
+  OR id = 511 AND book2_id = 261121
+  OR id = 512 AND book2_id = 262144
+  OR id = 513 AND book2_id = 263169
+  OR id = 514 AND book2_id = 264196
+  OR id = 515 AND book2_id = 265225
+  OR id = 516 AND book2_id = 266256
+  OR id = 517 AND book2_id = 267289
+  OR id = 518 AND book2_id = 268324
+  OR id = 519 AND book2_id = 269361
+  OR id = 520 AND book2_id = 270400
+  OR id = 521 AND book2_id = 271441
+  OR id = 522 AND book2_id = 272484
+  OR id = 523 AND book2_id = 273529
+  OR id = 524 AND book2_id = 274576
+  OR id = 525 AND book2_id = 275625
+  OR id = 526 AND book2_id = 276676
+  OR id = 527 AND book2_id = 277729
+  OR id = 528 AND book2_id = 278784
+  OR id = 529 AND book2_id = 279841
+  OR id = 530 AND book2_id = 280900
+  OR id = 531 AND book2_id = 281961
+  OR id = 532 AND book2_id = 283024
+  OR id = 533 AND book2_id = 284089
+  OR id = 534 AND book2_id = 285156
+  OR id = 535 AND book2_id = 286225
+  OR id = 536 AND book2_id = 287296
+  OR id = 537 AND book2_id = 288369
+  OR id = 538 AND book2_id = 289444
+  OR id = 539 AND book2_id = 290521
+  OR id = 540 AND book2_id = 291600
+  OR id = 541 AND book2_id = 292681
+  OR id = 542 AND book2_id = 293764
+  OR id = 543 AND book2_id = 294849
+  OR id = 544 AND book2_id = 295936
+  OR id = 545 AND book2_id = 297025
+  OR id = 546 AND book2_id = 298116
+  OR id = 547 AND book2_id = 299209
+  OR id = 548 AND book2_id = 300304
+  OR id = 549 AND book2_id = 301401
+  OR id = 550 AND book2_id = 302500
+  OR id = 551 AND book2_id = 303601
+  OR id = 552 AND book2_id = 304704
+  OR id = 553 AND book2_id = 305809
+  OR id = 554 AND book2_id = 306916
+  OR id = 555 AND book2_id = 308025
+  OR id = 556 AND book2_id = 309136
+  OR id = 557 AND book2_id = 310249
+  OR id = 558 AND book2_id = 311364
+  OR id = 559 AND book2_id = 312481
+  OR id = 560 AND book2_id = 313600
+  OR id = 561 AND book2_id = 314721
+  OR id = 562 AND book2_id = 315844
+  OR id = 563 AND book2_id = 316969
+  OR id = 564 AND book2_id = 318096
+  OR id = 565 AND book2_id = 319225
+  OR id = 566 AND book2_id = 320356
+  OR id = 567 AND book2_id = 321489
+  OR id = 568 AND book2_id = 322624
+  OR id = 569 AND book2_id = 323761
+  OR id = 570 AND book2_id = 324900
+  OR id = 571 AND book2_id = 326041
+  OR id = 572 AND book2_id = 327184
+  OR id = 573 AND book2_id = 328329
+  OR id = 574 AND book2_id = 329476
+  OR id = 575 AND book2_id = 330625
+  OR id = 576 AND book2_id = 331776
+  OR id = 577 AND book2_id = 332929
+  OR id = 578 AND book2_id = 334084
+  OR id = 579 AND book2_id = 335241
+  OR id = 580 AND book2_id = 336400
+  OR id = 581 AND book2_id = 337561
+  OR id = 582 AND book2_id = 338724
+  OR id = 583 AND book2_id = 339889
+  OR id = 584 AND book2_id = 341056
+  OR id = 585 AND book2_id = 342225
+  OR id = 586 AND book2_id = 343396
+  OR id = 587 AND book2_id = 344569
+  OR id = 588 AND book2_id = 345744
+  OR id = 589 AND book2_id = 346921
+  OR id = 590 AND book2_id = 348100
+  OR id = 591 AND book2_id = 349281
+  OR id = 592 AND book2_id = 350464
+  OR id = 593 AND book2_id = 351649
+  OR id = 594 AND book2_id = 352836
+  OR id = 595 AND book2_id = 354025
+  OR id = 596 AND book2_id = 355216
+  OR id = 597 AND book2_id = 356409
+  OR id = 598 AND book2_id = 357604
+  OR id = 599 AND book2_id = 358801
+  OR id = 600 AND book2_id = 360000
+  OR id = 601 AND book2_id = 361201
+  OR id = 602 AND book2_id = 362404
+  OR id = 603 AND book2_id = 363609
+  OR id = 604 AND book2_id = 364816
+  OR id = 605 AND book2_id = 366025
+  OR id = 606 AND book2_id = 367236
+  OR id = 607 AND book2_id = 368449
+  OR id = 608 AND book2_id = 369664
+  OR id = 609 AND book2_id = 370881
+  OR id = 610 AND book2_id = 372100
+  OR id = 611 AND book2_id = 373321
+  OR id = 612 AND book2_id = 374544
+  OR id = 613 AND book2_id = 375769
+  OR id = 614 AND book2_id = 376996
+  OR id = 615 AND book2_id = 378225
+  OR id = 616 AND book2_id = 379456
+  OR id = 617 AND book2_id = 380689
+  OR id = 618 AND book2_id = 381924
+  OR id = 619 AND book2_id = 383161
+  OR id = 620 AND book2_id = 384400
+  OR id = 621 AND book2_id = 385641
+  OR id = 622 AND book2_id = 386884
+  OR id = 623 AND book2_id = 388129
+  OR id = 624 AND book2_id = 389376
+  OR id = 625 AND book2_id = 390625
+  OR id = 626 AND book2_id = 391876
+  OR id = 627 AND book2_id = 393129
+  OR id = 628 AND book2_id = 394384
+  OR id = 629 AND book2_id = 395641
+  OR id = 630 AND book2_id = 396900
+  OR id = 631 AND book2_id = 398161
+  OR id = 632 AND book2_id = 399424
+  OR id = 633 AND book2_id = 400689
+  OR id = 634 AND book2_id = 401956
+  OR id = 635 AND book2_id = 403225
+  OR id = 636 AND book2_id = 404496
+  OR id = 637 AND book2_id = 405769
+  OR id = 638 AND book2_id = 407044
+  OR id = 639 AND book2_id = 408321
+  OR id = 640 AND book2_id = 409600
+  OR id = 641 AND book2_id = 410881
+  OR id = 642 AND book2_id = 412164
+  OR id = 643 AND book2_id = 413449
+  OR id = 644 AND book2_id = 414736
+  OR id = 645 AND book2_id = 416025
+  OR id = 646 AND book2_id = 417316
+  OR id = 647 AND book2_id = 418609
+  OR id = 648 AND book2_id = 419904
+  OR id = 649 AND book2_id = 421201
+  OR id = 650 AND book2_id = 422500
+  OR id = 651 AND book2_id = 423801
+  OR id = 652 AND book2_id = 425104
+  OR id = 653 AND book2_id = 426409
+  OR id = 654 AND book2_id = 427716
+  OR id = 655 AND book2_id = 429025
+  OR id = 656 AND book2_id = 430336
+  OR id = 657 AND book2_id = 431649
+  OR id = 658 AND book2_id = 432964
+  OR id = 659 AND book2_id = 434281
+  OR id = 660 AND book2_id = 435600
+  OR id = 661 AND book2_id = 436921
+  OR id = 662 AND book2_id = 438244
+  OR id = 663 AND book2_id = 439569
+  OR id = 664 AND book2_id = 440896
+  OR id = 665 AND book2_id = 442225
+  OR id = 666 AND book2_id = 443556
+  OR id = 667 AND book2_id = 444889
+  OR id = 668 AND book2_id = 446224
+  OR id = 669 AND book2_id = 447561
+  OR id = 670 AND book2_id = 448900
+  OR id = 671 AND book2_id = 450241
+  OR id = 672 AND book2_id = 451584
+  OR id = 673 AND book2_id = 452929
+  OR id = 674 AND book2_id = 454276
+  OR id = 675 AND book2_id = 455625
+  OR id = 676 AND book2_id = 456976
+  OR id = 677 AND book2_id = 458329
+  OR id = 678 AND book2_id = 459684
+  OR id = 679 AND book2_id = 461041
+  OR id = 680 AND book2_id = 462400
+  OR id = 681 AND book2_id = 463761
+  OR id = 682 AND book2_id = 465124
+  OR id = 683 AND book2_id = 466489
+  OR id = 684 AND book2_id = 467856
+  OR id = 685 AND book2_id = 469225
+  OR id = 686 AND book2_id = 470596
+  OR id = 687 AND book2_id = 471969
+  OR id = 688 AND book2_id = 473344
+  OR id = 689 AND book2_id = 474721
+  OR id = 690 AND book2_id = 476100
+  OR id = 691 AND book2_id = 477481
+  OR id = 692 AND book2_id = 478864
+  OR id = 693 AND book2_id = 480249
+  OR id = 694 AND book2_id = 481636
+  OR id = 695 AND book2_id = 483025
+  OR id = 696 AND book2_id = 484416
+  OR id = 697 AND book2_id = 485809
+  OR id = 698 AND book2_id = 487204
+  OR id = 699 AND book2_id = 488601
+  OR id = 700 AND book2_id = 490000
+  OR id = 701 AND book2_id = 491401
+  OR id = 702 AND book2_id = 492804
+  OR id = 703 AND book2_id = 494209
+  OR id = 704 AND book2_id = 495616
+  OR id = 705 AND book2_id = 497025
+  OR id = 706 AND book2_id = 498436
+  OR id = 707 AND book2_id = 499849
+  OR id = 708 AND book2_id = 501264
+  OR id = 709 AND book2_id = 502681
+  OR id = 710 AND book2_id = 504100
+  OR id = 711 AND book2_id = 505521
+  OR id = 712 AND book2_id = 506944
+  OR id = 713 AND book2_id = 508369
+  OR id = 714 AND book2_id = 509796
+  OR id = 715 AND book2_id = 511225
+  OR id = 716 AND book2_id = 512656
+  OR id = 717 AND book2_id = 514089
+  OR id = 718 AND book2_id = 515524
+  OR id = 719 AND book2_id = 516961
+  OR id = 720 AND book2_id = 518400
+  OR id = 721 AND book2_id = 519841
+  OR id = 722 AND book2_id = 521284
+  OR id = 723 AND book2_id = 522729
+  OR id = 724 AND book2_id = 524176
+  OR id = 725 AND book2_id = 525625
+  OR id = 726 AND book2_id = 527076
+  OR id = 727 AND book2_id = 528529
+  OR id = 728 AND book2_id = 529984
+  OR id = 729 AND book2_id = 531441
+  OR id = 730 AND book2_id = 532900
+  OR id = 731 AND book2_id = 534361
+  OR id = 732 AND book2_id = 535824
+  OR id = 733 AND book2_id = 537289
+  OR id = 734 AND book2_id = 538756
+  OR id = 735 AND book2_id = 540225
+  OR id = 736 AND book2_id = 541696
+  OR id = 737 AND book2_id = 543169
+  OR id = 738 AND book2_id = 544644
+  OR id = 739 AND book2_id = 546121
+  OR id = 740 AND book2_id = 547600
+  OR id = 741 AND book2_id = 549081
+  OR id = 742 AND book2_id = 550564
+  OR id = 743 AND book2_id = 552049
+  OR id = 744 AND book2_id = 553536
+  OR id = 745 AND book2_id = 555025
+  OR id = 746 AND book2_id = 556516
+  OR id = 747 AND book2_id = 558009
+  OR id = 748 AND book2_id = 559504
+  OR id = 749 AND book2_id = 561001
+  OR id = 750 AND book2_id = 562500
+  OR id = 751 AND book2_id = 564001
+  OR id = 752 AND book2_id = 565504
+  OR id = 753 AND book2_id = 567009
+  OR id = 754 AND book2_id = 568516
+  OR id = 755 AND book2_id = 570025
+  OR id = 756 AND book2_id = 571536
+  OR id = 757 AND book2_id = 573049
+  OR id = 758 AND book2_id = 574564
+  OR id = 759 AND book2_id = 576081
+  OR id = 760 AND book2_id = 577600
+  OR id = 761 AND book2_id = 579121
+  OR id = 762 AND book2_id = 580644
+  OR id = 763 AND book2_id = 582169
+  OR id = 764 AND book2_id = 583696
+  OR id = 765 AND book2_id = 585225
+  OR id = 766 AND book2_id = 586756
+  OR id = 767 AND book2_id = 588289
+  OR id = 768 AND book2_id = 589824
+  OR id = 769 AND book2_id = 591361
+  OR id = 770 AND book2_id = 592900
+  OR id = 771 AND book2_id = 594441
+  OR id = 772 AND book2_id = 595984
+  OR id = 773 AND book2_id = 597529
+  OR id = 774 AND book2_id = 599076
+  OR id = 775 AND book2_id = 600625
+  OR id = 776 AND book2_id = 602176
+  OR id = 777 AND book2_id = 603729
+  OR id = 778 AND book2_id = 605284
+  OR id = 779 AND book2_id = 606841
+  OR id = 780 AND book2_id = 608400
+  OR id = 781 AND book2_id = 609961
+  OR id = 782 AND book2_id = 611524
+  OR id = 783 AND book2_id = 613089
+  OR id = 784 AND book2_id = 614656
+  OR id = 785 AND book2_id = 616225
+  OR id = 786 AND book2_id = 617796
+  OR id = 787 AND book2_id = 619369
+  OR id = 788 AND book2_id = 620944
+  OR id = 789 AND book2_id = 622521
+  OR id = 790 AND book2_id = 624100
+  OR id = 791 AND book2_id = 625681
+  OR id = 792 AND book2_id = 627264
+  OR id = 793 AND book2_id = 628849
+  OR id = 794 AND book2_id = 630436
+  OR id = 795 AND book2_id = 632025
+  OR id = 796 AND book2_id = 633616
+  OR id = 797 AND book2_id = 635209
+  OR id = 798 AND book2_id = 636804
+  OR id = 799 AND book2_id = 638401
+  OR id = 800 AND book2_id = 640000
+  OR id = 801 AND book2_id = 641601
+  OR id = 802 AND book2_id = 643204
+  OR id = 803 AND book2_id = 644809
+  OR id = 804 AND book2_id = 646416
+  OR id = 805 AND book2_id = 648025
+  OR id = 806 AND book2_id = 649636
+  OR id = 807 AND book2_id = 651249
+  OR id = 808 AND book2_id = 652864
+  OR id = 809 AND book2_id = 654481
+  OR id = 810 AND book2_id = 656100
+  OR id = 811 AND book2_id = 657721
+  OR id = 812 AND book2_id = 659344
+  OR id = 813 AND book2_id = 660969
+  OR id = 814 AND book2_id = 662596
+  OR id = 815 AND book2_id = 664225
+  OR id = 816 AND book2_id = 665856
+  OR id = 817 AND book2_id = 667489
+  OR id = 818 AND book2_id = 669124
+  OR id = 819 AND book2_id = 670761
+  OR id = 820 AND book2_id = 672400
+  OR id = 821 AND book2_id = 674041
+  OR id = 822 AND book2_id = 675684
+  OR id = 823 AND book2_id = 677329
+  OR id = 824 AND book2_id = 678976
+  OR id = 825 AND book2_id = 680625
+  OR id = 826 AND book2_id = 682276
+  OR id = 827 AND book2_id = 683929
+  OR id = 828 AND book2_id = 685584
+  OR id = 829 AND book2_id = 687241
+  OR id = 830 AND book2_id = 688900
+  OR id = 831 AND book2_id = 690561
+  OR id = 832 AND book2_id = 692224
+  OR id = 833 AND book2_id = 693889
+  OR id = 834 AND book2_id = 695556
+  OR id = 835 AND book2_id = 697225
+  OR id = 836 AND book2_id = 698896
+  OR id = 837 AND book2_id = 700569
+  OR id = 838 AND book2_id = 702244
+  OR id = 839 AND book2_id = 703921
+  OR id = 840 AND book2_id = 705600
+  OR id = 841 AND book2_id = 707281
+  OR id = 842 AND book2_id = 708964
+  OR id = 843 AND book2_id = 710649
+  OR id = 844 AND book2_id = 712336
+  OR id = 845 AND book2_id = 714025
+  OR id = 846 AND book2_id = 715716
+  OR id = 847 AND book2_id = 717409
+  OR id = 848 AND book2_id = 719104
+  OR id = 849 AND book2_id = 720801
+  OR id = 850 AND book2_id = 722500
+  OR id = 851 AND book2_id = 724201
+  OR id = 852 AND book2_id = 725904
+  OR id = 853 AND book2_id = 727609
+  OR id = 854 AND book2_id = 729316
+  OR id = 855 AND book2_id = 731025
+  OR id = 856 AND book2_id = 732736
+  OR id = 857 AND book2_id = 734449
+  OR id = 858 AND book2_id = 736164
+  OR id = 859 AND book2_id = 737881
+  OR id = 860 AND book2_id = 739600
+  OR id = 861 AND book2_id = 741321
+  OR id = 862 AND book2_id = 743044
+  OR id = 863 AND book2_id = 744769
+  OR id = 864 AND book2_id = 746496
+  OR id = 865 AND book2_id = 748225
+  OR id = 866 AND book2_id = 749956
+  OR id = 867 AND book2_id = 751689
+  OR id = 868 AND book2_id = 753424
+  OR id = 869 AND book2_id = 755161
+  OR id = 870 AND book2_id = 756900
+  OR id = 871 AND book2_id = 758641
+  OR id = 872 AND book2_id = 760384
+  OR id = 873 AND book2_id = 762129
+  OR id = 874 AND book2_id = 763876
+  OR id = 875 AND book2_id = 765625
+  OR id = 876 AND book2_id = 767376
+  OR id = 877 AND book2_id = 769129
+  OR id = 878 AND book2_id = 770884
+  OR id = 879 AND book2_id = 772641
+  OR id = 880 AND book2_id = 774400
+  OR id = 881 AND book2_id = 776161
+  OR id = 882 AND book2_id = 777924
+  OR id = 883 AND book2_id = 779689
+  OR id = 884 AND book2_id = 781456
+  OR id = 885 AND book2_id = 783225
+  OR id = 886 AND book2_id = 784996
+  OR id = 887 AND book2_id = 786769
+  OR id = 888 AND book2_id = 788544
+  OR id = 889 AND book2_id = 790321
+  OR id = 890 AND book2_id = 792100
+  OR id = 891 AND book2_id = 793881
+  OR id = 892 AND book2_id = 795664
+  OR id = 893 AND book2_id = 797449
+  OR id = 894 AND book2_id = 799236
+  OR id = 895 AND book2_id = 801025
+  OR id = 896 AND book2_id = 802816
+  OR id = 897 AND book2_id = 804609
+  OR id = 898 AND book2_id = 806404
+  OR id = 899 AND book2_id = 808201
+  OR id = 900 AND book2_id = 810000
+  OR id = 901 AND book2_id = 811801
+  OR id = 902 AND book2_id = 813604
+  OR id = 903 AND book2_id = 815409
+  OR id = 904 AND book2_id = 817216
+  OR id = 905 AND book2_id = 819025
+  OR id = 906 AND book2_id = 820836
+  OR id = 907 AND book2_id = 822649
+  OR id = 908 AND book2_id = 824464
+  OR id = 909 AND book2_id = 826281
+  OR id = 910 AND book2_id = 828100
+  OR id = 911 AND book2_id = 829921
+  OR id = 912 AND book2_id = 831744
+  OR id = 913 AND book2_id = 833569
+  OR id = 914 AND book2_id = 835396
+  OR id = 915 AND book2_id = 837225
+  OR id = 916 AND book2_id = 839056
+  OR id = 917 AND book2_id = 840889
+  OR id = 918 AND book2_id = 842724
+  OR id = 919 AND book2_id = 844561
+  OR id = 920 AND book2_id = 846400
+  OR id = 921 AND book2_id = 848241
+  OR id = 922 AND book2_id = 850084
+  OR id = 923 AND book2_id = 851929
+  OR id = 924 AND book2_id = 853776
+  OR id = 925 AND book2_id = 855625
+  OR id = 926 AND book2_id = 857476
+  OR id = 927 AND book2_id = 859329
+  OR id = 928 AND book2_id = 861184
+  OR id = 929 AND book2_id = 863041
+  OR id = 930 AND book2_id = 864900
+  OR id = 931 AND book2_id = 866761
+  OR id = 932 AND book2_id = 868624
+  OR id = 933 AND book2_id = 870489
+  OR id = 934 AND book2_id = 872356
+  OR id = 935 AND book2_id = 874225
+  OR id = 936 AND book2_id = 876096
+  OR id = 937 AND book2_id = 877969
+  OR id = 938 AND book2_id = 879844
+  OR id = 939 AND book2_id = 881721
+  OR id = 940 AND book2_id = 883600
+  OR id = 941 AND book2_id = 885481
+  OR id = 942 AND book2_id = 887364
+  OR id = 943 AND book2_id = 889249
+  OR id = 944 AND book2_id = 891136
+  OR id = 945 AND book2_id = 893025
+  OR id = 946 AND book2_id = 894916
+  OR id = 947 AND book2_id = 896809
+  OR id = 948 AND book2_id = 898704
+  OR id = 949 AND book2_id = 900601
+  OR id = 950 AND book2_id = 902500
+  OR id = 951 AND book2_id = 904401
+  OR id = 952 AND book2_id = 906304
+  OR id = 953 AND book2_id = 908209
+  OR id = 954 AND book2_id = 910116
+  OR id = 955 AND book2_id = 912025
+  OR id = 956 AND book2_id = 913936
+  OR id = 957 AND book2_id = 915849
+  OR id = 958 AND book2_id = 917764
+  OR id = 959 AND book2_id = 919681
+  OR id = 960 AND book2_id = 921600
+  OR id = 961 AND book2_id = 923521
+  OR id = 962 AND book2_id = 925444
+  OR id = 963 AND book2_id = 927369
+  OR id = 964 AND book2_id = 929296
+  OR id = 965 AND book2_id = 931225
+  OR id = 966 AND book2_id = 933156
+  OR id = 967 AND book2_id = 935089
+  OR id = 968 AND book2_id = 937024
+  OR id = 969 AND book2_id = 938961
+  OR id = 970 AND book2_id = 940900
+  OR id = 971 AND book2_id = 942841
+  OR id = 972 AND book2_id = 944784
+  OR id = 973 AND book2_id = 946729
+  OR id = 974 AND book2_id = 948676
+  OR id = 975 AND book2_id = 950625
+  OR id = 976 AND book2_id = 952576
+  OR id = 977 AND book2_id = 954529
+  OR id = 978 AND book2_id = 956484
+  OR id = 979 AND book2_id = 958441
+  OR id = 980 AND book2_id = 960400
+  OR id = 981 AND book2_id = 962361
+  OR id = 982 AND book2_id = 964324
+  OR id = 983 AND book2_id = 966289
+  OR id = 984 AND book2_id = 968256
+  OR id = 985 AND book2_id = 970225
+  OR id = 986 AND book2_id = 972196
+  OR id = 987 AND book2_id = 974169
+  OR id = 988 AND book2_id = 976144
+  OR id = 989 AND book2_id = 978121
+  OR id = 990 AND book2_id = 980100
+  OR id = 991 AND book2_id = 982081
+  OR id = 992 AND book2_id = 984064
+  OR id = 993 AND book2_id = 986049
+  OR id = 994 AND book2_id = 988036
+  OR id = 995 AND book2_id = 990025
+  OR id = 996 AND book2_id = 992016
+  OR id = 997 AND book2_id = 994009
+  OR id = 998 AND book2_id = 996004
+  OR id = 999 AND book2_id = 998001
+  OR id = 1000 AND book2_id = 1000000
+----
+[/0/0 - /0/0]
+[/1/1 - /1/1]
+[/3/4 - /3/4]
+[/3/9 - /3/9]
+[/5/16 - /5/16]
+[/5/25 - /5/25]
+[/6/36 - /6/36]
+[/7/49 - /7/49]
+[/8/64 - /8/64]
+[/9/81 - /9/81]
+[/10/100 - /10/100]
+[/11/121 - /11/121]
+[/12/144 - /12/144]
+[/13/169 - /13/169]
+[/14/196 - /14/196]
+[/15/225 - /15/225]
+[/16/256 - /16/256]
+[/17/289 - /17/289]
+[/18/324 - /18/324]
+[/19/361 - /19/361]
+[/20/400 - /20/400]
+[/21/441 - /21/441]
+[/22/484 - /22/484]
+[/23/529 - /23/529]
+[/24/576 - /24/576]
+[/25/625 - /25/625]
+[/26/676 - /26/676]
+[/27/729 - /27/729]
+[/28/784 - /28/784]
+[/29/841 - /29/841]
+[/30/900 - /30/900]
+[/31/961 - /31/961]
+[/32/1024 - /32/1024]
+[/33/1089 - /33/1089]
+[/34/1156 - /34/1156]
+[/35/1225 - /35/1225]
+[/36/1296 - /36/1296]
+[/37/1369 - /37/1369]
+[/38/1444 - /38/1444]
+[/39/1521 - /39/1521]
+[/40/1600 - /40/1600]
+[/41/1681 - /41/1681]
+[/42/1764 - /42/1764]
+[/43/1849 - /43/1849]
+[/44/1936 - /44/1936]
+[/45/2025 - /45/2025]
+[/46/2116 - /46/2116]
+[/47/2209 - /47/2209]
+[/48/2304 - /48/2304]
+[/49/2401 - /49/2401]
+[/50/2500 - /50/2500]
+[/51/2601 - /51/2601]
+[/52/2704 - /52/2704]
+[/53/2809 - /53/2809]
+[/54/2916 - /54/2916]
+[/55/3025 - /55/3025]
+[/56/3136 - /56/3136]
+[/57/3249 - /57/3249]
+[/58/3364 - /58/3364]
+[/59/3481 - /59/3481]
+[/60/3600 - /60/3600]
+[/61/3721 - /61/3721]
+[/62/3844 - /62/3844]
+[/63/3969 - /63/3969]
+[/64/4096 - /64/4096]
+[/65/4225 - /65/4225]
+[/66/4356 - /66/4356]
+[/67/4489 - /67/4489]
+[/68/4624 - /68/4624]
+[/69/4761 - /69/4761]
+[/70/4900 - /70/4900]
+[/71/5041 - /71/5041]
+[/72/5184 - /72/5184]
+[/73/5329 - /73/5329]
+[/74/5476 - /74/5476]
+[/75/5625 - /75/5625]
+[/76/5776 - /76/5776]
+[/77/5929 - /77/5929]
+[/78/6084 - /78/6084]
+[/79/6241 - /79/6241]
+[/80/6400 - /80/6400]
+[/81/6561 - /81/6561]
+[/82/6724 - /82/6724]
+[/83/6889 - /83/6889]
+[/84/7056 - /84/7056]
+[/85/7225 - /85/7225]
+[/86/7396 - /86/7396]
+[/87/7569 - /87/7569]
+[/88/7744 - /88/7744]
+[/89/7921 - /89/7921]
+[/90/8100 - /90/8100]
+[/91/8281 - /91/8281]
+[/92/8464 - /92/8464]
+[/93/8649 - /93/8649]
+[/94/8836 - /94/8836]
+[/95/9025 - /95/9025]
+[/96/9216 - /96/9216]
+[/97/9409 - /97/9409]
+[/98/9604 - /98/9604]
+[/99/9801 - /99/9801]
+[/100/10000 - /100/10000]
+[/101/10201 - /101/10201]
+[/102/10404 - /102/10404]
+[/103/10609 - /103/10609]
+[/104/10816 - /104/10816]
+[/105/11025 - /105/11025]
+[/106/11236 - /106/11236]
+[/107/11449 - /107/11449]
+[/108/11664 - /108/11664]
+[/109/11881 - /109/11881]
+[/110/12100 - /110/12100]
+[/111/12321 - /111/12321]
+[/112/12544 - /112/12544]
+[/113/12769 - /113/12769]
+[/114/12996 - /114/12996]
+[/115/13225 - /115/13225]
+[/116/13456 - /116/13456]
+[/117/13689 - /117/13689]
+[/118/13924 - /118/13924]
+[/119/14161 - /119/14161]
+[/120/14400 - /120/14400]
+[/121/14641 - /121/14641]
+[/122/14884 - /122/14884]
+[/123/15129 - /123/15129]
+[/124/15376 - /124/15376]
+[/125/15625 - /125/15625]
+[/126/15876 - /126/15876]
+[/127/16129 - /127/16129]
+[/128/16384 - /128/16384]
+[/129/16641 - /129/16641]
+[/130/16900 - /130/16900]
+[/131/17161 - /131/17161]
+[/132/17424 - /132/17424]
+[/133/17689 - /133/17689]
+[/134/17956 - /134/17956]
+[/135/18225 - /135/18225]
+[/136/18496 - /136/18496]
+[/137/18769 - /137/18769]
+[/138/19044 - /138/19044]
+[/139/19321 - /139/19321]
+[/140/19600 - /140/19600]
+[/141/19881 - /141/19881]
+[/142/20164 - /142/20164]
+[/143/20449 - /143/20449]
+[/144/20736 - /144/20736]
+[/145/21025 - /145/21025]
+[/146/21316 - /146/21316]
+[/147/21609 - /147/21609]
+[/148/21904 - /148/21904]
+[/149/22201 - /149/22201]
+[/150/22500 - /150/22500]
+[/151/22801 - /151/22801]
+[/152/23104 - /152/23104]
+[/153/23409 - /153/23409]
+[/154/23716 - /154/23716]
+[/155/24025 - /155/24025]
+[/156/24336 - /156/24336]
+[/157/24649 - /157/24649]
+[/158/24964 - /158/24964]
+[/159/25281 - /159/25281]
+[/160/25600 - /160/25600]
+[/161/25921 - /161/25921]
+[/162/26244 - /162/26244]
+[/163/26569 - /163/26569]
+[/164/26896 - /164/26896]
+[/165/27225 - /165/27225]
+[/166/27556 - /166/27556]
+[/167/27889 - /167/27889]
+[/168/28224 - /168/28224]
+[/169/28561 - /169/28561]
+[/170/28900 - /170/28900]
+[/171/29241 - /171/29241]
+[/172/29584 - /172/29584]
+[/173/29929 - /173/29929]
+[/174/30276 - /174/30276]
+[/175/30625 - /175/30625]
+[/176/30976 - /176/30976]
+[/177/31329 - /177/31329]
+[/178/31684 - /178/31684]
+[/179/32041 - /179/32041]
+[/180/32400 - /180/32400]
+[/181/32761 - /181/32761]
+[/182/33124 - /182/33124]
+[/183/33489 - /183/33489]
+[/184/33856 - /184/33856]
+[/185/34225 - /185/34225]
+[/186/34596 - /186/34596]
+[/187/34969 - /187/34969]
+[/188/35344 - /188/35344]
+[/189/35721 - /189/35721]
+[/190/36100 - /190/36100]
+[/191/36481 - /191/36481]
+[/192/36864 - /192/36864]
+[/193/37249 - /193/37249]
+[/194/37636 - /194/37636]
+[/195/38025 - /195/38025]
+[/196/38416 - /196/38416]
+[/197/38809 - /197/38809]
+[/198/39204 - /198/39204]
+[/199/39601 - /199/39601]
+[/200/40000 - /200/40000]
+[/201/40401 - /201/40401]
+[/202/40804 - /202/40804]
+[/203/41209 - /203/41209]
+[/204/41616 - /204/41616]
+[/205/42025 - /205/42025]
+[/206/42436 - /206/42436]
+[/207/42849 - /207/42849]
+[/208/43264 - /208/43264]
+[/209/43681 - /209/43681]
+[/210/44100 - /210/44100]
+[/211/44521 - /211/44521]
+[/212/44944 - /212/44944]
+[/213/45369 - /213/45369]
+[/214/45796 - /214/45796]
+[/215/46225 - /215/46225]
+[/216/46656 - /216/46656]
+[/217/47089 - /217/47089]
+[/218/47524 - /218/47524]
+[/219/47961 - /219/47961]
+[/220/48400 - /220/48400]
+[/221/48841 - /221/48841]
+[/222/49284 - /222/49284]
+[/223/49729 - /223/49729]
+[/224/50176 - /224/50176]
+[/225/50625 - /225/50625]
+[/226/51076 - /226/51076]
+[/227/51529 - /227/51529]
+[/228/51984 - /228/51984]
+[/229/52441 - /229/52441]
+[/230/52900 - /230/52900]
+[/231/53361 - /231/53361]
+[/232/53824 - /232/53824]
+[/233/54289 - /233/54289]
+[/234/54756 - /234/54756]
+[/235/55225 - /235/55225]
+[/236/55696 - /236/55696]
+[/237/56169 - /237/56169]
+[/238/56644 - /238/56644]
+[/239/57121 - /239/57121]
+[/240/57600 - /240/57600]
+[/241/58081 - /241/58081]
+[/242/58564 - /242/58564]
+[/243/59049 - /243/59049]
+[/244/59536 - /244/59536]
+[/245/60025 - /245/60025]
+[/246/60516 - /246/60516]
+[/247/61009 - /247/61009]
+[/248/61504 - /248/61504]
+[/249/62001 - /249/62001]
+[/250/62500 - /250/62500]
+[/251/63001 - /251/63001]
+[/252/63504 - /252/63504]
+[/253/64009 - /253/64009]
+[/254/64516 - /254/64516]
+[/255/65025 - /255/65025]
+[/256/65536 - /256/65536]
+[/257/66049 - /257/66049]
+[/258/66564 - /258/66564]
+[/259/67081 - /259/67081]
+[/260/67600 - /260/67600]
+[/261/68121 - /261/68121]
+[/262/68644 - /262/68644]
+[/263/69169 - /263/69169]
+[/264/69696 - /264/69696]
+[/265/70225 - /265/70225]
+[/266/70756 - /266/70756]
+[/267/71289 - /267/71289]
+[/268/71824 - /268/71824]
+[/269/72361 - /269/72361]
+[/270/72900 - /270/72900]
+[/271/73441 - /271/73441]
+[/272/73984 - /272/73984]
+[/273/74529 - /273/74529]
+[/274/75076 - /274/75076]
+[/275/75625 - /275/75625]
+[/276/76176 - /276/76176]
+[/277/76729 - /277/76729]
+[/278/77284 - /278/77284]
+[/279/77841 - /279/77841]
+[/280/78400 - /280/78400]
+[/281/78961 - /281/78961]
+[/282/79524 - /282/79524]
+[/283/80089 - /283/80089]
+[/284/80656 - /284/80656]
+[/285/81225 - /285/81225]
+[/286/81796 - /286/81796]
+[/287/82369 - /287/82369]
+[/288/82944 - /288/82944]
+[/289/83521 - /289/83521]
+[/290/84100 - /290/84100]
+[/291/84681 - /291/84681]
+[/292/85264 - /292/85264]
+[/293/85849 - /293/85849]
+[/294/86436 - /294/86436]
+[/295/87025 - /295/87025]
+[/296/87616 - /296/87616]
+[/297/88209 - /297/88209]
+[/298/88804 - /298/88804]
+[/299/89401 - /299/89401]
+[/300/90000 - /300/90000]
+[/301/90601 - /301/90601]
+[/302/91204 - /302/91204]
+[/303/91809 - /303/91809]
+[/304/92416 - /304/92416]
+[/305/93025 - /305/93025]
+[/306/93636 - /306/93636]
+[/307/94249 - /307/94249]
+[/308/94864 - /308/94864]
+[/309/95481 - /309/95481]
+[/310/96100 - /310/96100]
+[/311/96721 - /311/96721]
+[/312/97344 - /312/97344]
+[/313/97969 - /313/97969]
+[/314/98596 - /314/98596]
+[/315/99225 - /315/99225]
+[/316/99856 - /316/99856]
+[/317/100489 - /317/100489]
+[/318/101124 - /318/101124]
+[/319/101761 - /319/101761]
+[/320/102400 - /320/102400]
+[/321/103041 - /321/103041]
+[/322/103684 - /322/103684]
+[/323/104329 - /323/104329]
+[/324/104976 - /324/104976]
+[/325/105625 - /325/105625]
+[/326/106276 - /326/106276]
+[/327/106929 - /327/106929]
+[/328/107584 - /328/107584]
+[/329/108241 - /329/108241]
+[/330/108900 - /330/108900]
+[/331/109561 - /331/109561]
+[/332/110224 - /332/110224]
+[/333/110889 - /333/110889]
+[/334/111556 - /334/111556]
+[/335/112225 - /335/112225]
+[/336/112896 - /336/112896]
+[/337/113569 - /337/113569]
+[/338/114244 - /338/114244]
+[/339/114921 - /339/114921]
+[/340/115600 - /340/115600]
+[/341/116281 - /341/116281]
+[/342/116964 - /342/116964]
+[/343/117649 - /343/117649]
+[/344/118336 - /344/118336]
+[/345/119025 - /345/119025]
+[/346/119716 - /346/119716]
+[/347/120409 - /347/120409]
+[/348/121104 - /348/121104]
+[/349/121801 - /349/121801]
+[/350/122500 - /350/122500]
+[/351/123201 - /351/123201]
+[/352/123904 - /352/123904]
+[/353/124609 - /353/124609]
+[/354/125316 - /354/125316]
+[/355/126025 - /355/126025]
+[/356/126736 - /356/126736]
+[/357/127449 - /357/127449]
+[/358/128164 - /358/128164]
+[/359/128881 - /359/128881]
+[/360/129600 - /360/129600]
+[/361/130321 - /361/130321]
+[/362/131044 - /362/131044]
+[/363/131769 - /363/131769]
+[/364/132496 - /364/132496]
+[/365/133225 - /365/133225]
+[/366/133956 - /366/133956]
+[/367/134689 - /367/134689]
+[/368/135424 - /368/135424]
+[/369/136161 - /369/136161]
+[/370/136900 - /370/136900]
+[/371/137641 - /371/137641]
+[/372/138384 - /372/138384]
+[/373/139129 - /373/139129]
+[/374/139876 - /374/139876]
+[/375/140625 - /375/140625]
+[/376/141376 - /376/141376]
+[/377/142129 - /377/142129]
+[/378/142884 - /378/142884]
+[/379/143641 - /379/143641]
+[/380/144400 - /380/144400]
+[/381/145161 - /381/145161]
+[/382/145924 - /382/145924]
+[/383/146689 - /383/146689]
+[/384/147456 - /384/147456]
+[/385/148225 - /385/148225]
+[/386/148996 - /386/148996]
+[/387/149769 - /387/149769]
+[/388/150544 - /388/150544]
+[/389/151321 - /389/151321]
+[/390/152100 - /390/152100]
+[/391/152881 - /391/152881]
+[/392/153664 - /392/153664]
+[/393/154449 - /393/154449]
+[/394/155236 - /394/155236]
+[/395/156025 - /395/156025]
+[/396/156816 - /396/156816]
+[/397/157609 - /397/157609]
+[/398/158404 - /398/158404]
+[/399/159201 - /399/159201]
+[/400/160000 - /400/160000]
+[/401/160801 - /401/160801]
+[/402/161604 - /402/161604]
+[/403/162409 - /403/162409]
+[/404/163216 - /404/163216]
+[/405/164025 - /405/164025]
+[/406/164836 - /406/164836]
+[/407/165649 - /407/165649]
+[/408/166464 - /408/166464]
+[/409/167281 - /409/167281]
+[/410/168100 - /410/168100]
+[/411/168921 - /411/168921]
+[/412/169744 - /412/169744]
+[/413/170569 - /413/170569]
+[/414/171396 - /414/171396]
+[/415/172225 - /415/172225]
+[/416/173056 - /416/173056]
+[/417/173889 - /417/173889]
+[/418/174724 - /418/174724]
+[/419/175561 - /419/175561]
+[/420/176400 - /420/176400]
+[/421/177241 - /421/177241]
+[/422/178084 - /422/178084]
+[/423/178929 - /423/178929]
+[/424/179776 - /424/179776]
+[/425/180625 - /425/180625]
+[/426/181476 - /426/181476]
+[/427/182329 - /427/182329]
+[/428/183184 - /428/183184]
+[/429/184041 - /429/184041]
+[/430/184900 - /430/184900]
+[/431/185761 - /431/185761]
+[/432/186624 - /432/186624]
+[/433/187489 - /433/187489]
+[/434/188356 - /434/188356]
+[/435/189225 - /435/189225]
+[/436/190096 - /436/190096]
+[/437/190969 - /437/190969]
+[/438/191844 - /438/191844]
+[/439/192721 - /439/192721]
+[/440/193600 - /440/193600]
+[/441/194481 - /441/194481]
+[/442/195364 - /442/195364]
+[/443/196249 - /443/196249]
+[/444/197136 - /444/197136]
+[/445/198025 - /445/198025]
+[/446/198916 - /446/198916]
+[/447/199809 - /447/199809]
+[/448/200704 - /448/200704]
+[/449/201601 - /449/201601]
+[/450/202500 - /450/202500]
+[/451/203401 - /451/203401]
+[/452/204304 - /452/204304]
+[/453/205209 - /453/205209]
+[/454/206116 - /454/206116]
+[/455/207025 - /455/207025]
+[/456/207936 - /456/207936]
+[/457/208849 - /457/208849]
+[/458/209764 - /458/209764]
+[/459/210681 - /459/210681]
+[/460/211600 - /460/211600]
+[/461/212521 - /461/212521]
+[/462/213444 - /462/213444]
+[/463/214369 - /463/214369]
+[/464/215296 - /464/215296]
+[/465/216225 - /465/216225]
+[/466/217156 - /466/217156]
+[/467/218089 - /467/218089]
+[/468/219024 - /468/219024]
+[/469/219961 - /469/219961]
+[/470/220900 - /470/220900]
+[/471/221841 - /471/221841]
+[/472/222784 - /472/222784]
+[/473/223729 - /473/223729]
+[/474/224676 - /474/224676]
+[/475/225625 - /475/225625]
+[/476/226576 - /476/226576]
+[/477/227529 - /477/227529]
+[/478/228484 - /478/228484]
+[/479/229441 - /479/229441]
+[/480/230400 - /480/230400]
+[/481/231361 - /481/231361]
+[/482/232324 - /482/232324]
+[/483/233289 - /483/233289]
+[/484/234256 - /484/234256]
+[/485/235225 - /485/235225]
+[/486/236196 - /486/236196]
+[/487/237169 - /487/237169]
+[/488/238144 - /488/238144]
+[/489/239121 - /489/239121]
+[/490/240100 - /490/240100]
+[/491/241081 - /491/241081]
+[/492/242064 - /492/242064]
+[/493/243049 - /493/243049]
+[/494/244036 - /494/244036]
+[/495/245025 - /495/245025]
+[/496/246016 - /496/246016]
+[/497/247009 - /497/247009]
+[/498/248004 - /498/248004]
+[/499/249001 - /499/249001]
+[/500/250000 - /500/250000]
+[/501/251001 - /501/251001]
+[/502/252004 - /502/252004]
+[/503/253009 - /503/253009]
+[/504/254016 - /504/254016]
+[/505/255025 - /505/255025]
+[/506/256036 - /506/256036]
+[/507/257049 - /507/257049]
+[/508/258064 - /508/258064]
+[/509/259081 - /509/259081]
+[/510/260100 - /510/260100]
+[/511/261121 - /511/261121]
+[/512/262144 - /512/262144]
+[/513/263169 - /513/263169]
+[/514/264196 - /514/264196]
+[/515/265225 - /515/265225]
+[/516/266256 - /516/266256]
+[/517/267289 - /517/267289]
+[/518/268324 - /518/268324]
+[/519/269361 - /519/269361]
+[/520/270400 - /520/270400]
+[/521/271441 - /521/271441]
+[/522/272484 - /522/272484]
+[/523/273529 - /523/273529]
+[/524/274576 - /524/274576]
+[/525/275625 - /525/275625]
+[/526/276676 - /526/276676]
+[/527/277729 - /527/277729]
+[/528/278784 - /528/278784]
+[/529/279841 - /529/279841]
+[/530/280900 - /530/280900]
+[/531/281961 - /531/281961]
+[/532/283024 - /532/283024]
+[/533/284089 - /533/284089]
+[/534/285156 - /534/285156]
+[/535/286225 - /535/286225]
+[/536/287296 - /536/287296]
+[/537/288369 - /537/288369]
+[/538/289444 - /538/289444]
+[/539/290521 - /539/290521]
+[/540/291600 - /540/291600]
+[/541/292681 - /541/292681]
+[/542/293764 - /542/293764]
+[/543/294849 - /543/294849]
+[/544/295936 - /544/295936]
+[/545/297025 - /545/297025]
+[/546/298116 - /546/298116]
+[/547/299209 - /547/299209]
+[/548/300304 - /548/300304]
+[/549/301401 - /549/301401]
+[/550/302500 - /550/302500]
+[/551/303601 - /551/303601]
+[/552/304704 - /552/304704]
+[/553/305809 - /553/305809]
+[/554/306916 - /554/306916]
+[/555/308025 - /555/308025]
+[/556/309136 - /556/309136]
+[/557/310249 - /557/310249]
+[/558/311364 - /558/311364]
+[/559/312481 - /559/312481]
+[/560/313600 - /560/313600]
+[/561/314721 - /561/314721]
+[/562/315844 - /562/315844]
+[/563/316969 - /563/316969]
+[/564/318096 - /564/318096]
+[/565/319225 - /565/319225]
+[/566/320356 - /566/320356]
+[/567/321489 - /567/321489]
+[/568/322624 - /568/322624]
+[/569/323761 - /569/323761]
+[/570/324900 - /570/324900]
+[/571/326041 - /571/326041]
+[/572/327184 - /572/327184]
+[/573/328329 - /573/328329]
+[/574/329476 - /574/329476]
+[/575/330625 - /575/330625]
+[/576/331776 - /576/331776]
+[/577/332929 - /577/332929]
+[/578/334084 - /578/334084]
+[/579/335241 - /579/335241]
+[/580/336400 - /580/336400]
+[/581/337561 - /581/337561]
+[/582/338724 - /582/338724]
+[/583/339889 - /583/339889]
+[/584/341056 - /584/341056]
+[/585/342225 - /585/342225]
+[/586/343396 - /586/343396]
+[/587/344569 - /587/344569]
+[/588/345744 - /588/345744]
+[/589/346921 - /589/346921]
+[/590/348100 - /590/348100]
+[/591/349281 - /591/349281]
+[/592/350464 - /592/350464]
+[/593/351649 - /593/351649]
+[/594/352836 - /594/352836]
+[/595/354025 - /595/354025]
+[/596/355216 - /596/355216]
+[/597/356409 - /597/356409]
+[/598/357604 - /598/357604]
+[/599/358801 - /599/358801]
+[/600/360000 - /600/360000]
+[/601/361201 - /601/361201]
+[/602/362404 - /602/362404]
+[/603/363609 - /603/363609]
+[/604/364816 - /604/364816]
+[/605/366025 - /605/366025]
+[/606/367236 - /606/367236]
+[/607/368449 - /607/368449]
+[/608/369664 - /608/369664]
+[/609/370881 - /609/370881]
+[/610/372100 - /610/372100]
+[/611/373321 - /611/373321]
+[/612/374544 - /612/374544]
+[/613/375769 - /613/375769]
+[/614/376996 - /614/376996]
+[/615/378225 - /615/378225]
+[/616/379456 - /616/379456]
+[/617/380689 - /617/380689]
+[/618/381924 - /618/381924]
+[/619/383161 - /619/383161]
+[/620/384400 - /620/384400]
+[/621/385641 - /621/385641]
+[/622/386884 - /622/386884]
+[/623/388129 - /623/388129]
+[/624/389376 - /624/389376]
+[/625/390625 - /625/390625]
+[/626/391876 - /626/391876]
+[/627/393129 - /627/393129]
+[/628/394384 - /628/394384]
+[/629/395641 - /629/395641]
+[/630/396900 - /630/396900]
+[/631/398161 - /631/398161]
+[/632/399424 - /632/399424]
+[/633/400689 - /633/400689]
+[/634/401956 - /634/401956]
+[/635/403225 - /635/403225]
+[/636/404496 - /636/404496]
+[/637/405769 - /637/405769]
+[/638/407044 - /638/407044]
+[/639/408321 - /639/408321]
+[/640/409600 - /640/409600]
+[/641/410881 - /641/410881]
+[/642/412164 - /642/412164]
+[/643/413449 - /643/413449]
+[/644/414736 - /644/414736]
+[/645/416025 - /645/416025]
+[/646/417316 - /646/417316]
+[/647/418609 - /647/418609]
+[/648/419904 - /648/419904]
+[/649/421201 - /649/421201]
+[/650/422500 - /650/422500]
+[/651/423801 - /651/423801]
+[/652/425104 - /652/425104]
+[/653/426409 - /653/426409]
+[/654/427716 - /654/427716]
+[/655/429025 - /655/429025]
+[/656/430336 - /656/430336]
+[/657/431649 - /657/431649]
+[/658/432964 - /658/432964]
+[/659/434281 - /659/434281]
+[/660/435600 - /660/435600]
+[/661/436921 - /661/436921]
+[/662/438244 - /662/438244]
+[/663/439569 - /663/439569]
+[/664/440896 - /664/440896]
+[/665/442225 - /665/442225]
+[/666/443556 - /666/443556]
+[/667/444889 - /667/444889]
+[/668/446224 - /668/446224]
+[/669/447561 - /669/447561]
+[/670/448900 - /670/448900]
+[/671/450241 - /671/450241]
+[/672/451584 - /672/451584]
+[/673/452929 - /673/452929]
+[/674/454276 - /674/454276]
+[/675/455625 - /675/455625]
+[/676/456976 - /676/456976]
+[/677/458329 - /677/458329]
+[/678/459684 - /678/459684]
+[/679/461041 - /679/461041]
+[/680/462400 - /680/462400]
+[/681/463761 - /681/463761]
+[/682/465124 - /682/465124]
+[/683/466489 - /683/466489]
+[/684/467856 - /684/467856]
+[/685/469225 - /685/469225]
+[/686/470596 - /686/470596]
+[/687/471969 - /687/471969]
+[/688/473344 - /688/473344]
+[/689/474721 - /689/474721]
+[/690/476100 - /690/476100]
+[/691/477481 - /691/477481]
+[/692/478864 - /692/478864]
+[/693/480249 - /693/480249]
+[/694/481636 - /694/481636]
+[/695/483025 - /695/483025]
+[/696/484416 - /696/484416]
+[/697/485809 - /697/485809]
+[/698/487204 - /698/487204]
+[/699/488601 - /699/488601]
+[/700/490000 - /700/490000]
+[/701/491401 - /701/491401]
+[/702/492804 - /702/492804]
+[/703/494209 - /703/494209]
+[/704/495616 - /704/495616]
+[/705/497025 - /705/497025]
+[/706/498436 - /706/498436]
+[/707/499849 - /707/499849]
+[/708/501264 - /708/501264]
+[/709/502681 - /709/502681]
+[/710/504100 - /710/504100]
+[/711/505521 - /711/505521]
+[/712/506944 - /712/506944]
+[/713/508369 - /713/508369]
+[/714/509796 - /714/509796]
+[/715/511225 - /715/511225]
+[/716/512656 - /716/512656]
+[/717/514089 - /717/514089]
+[/718/515524 - /718/515524]
+[/719/516961 - /719/516961]
+[/720/518400 - /720/518400]
+[/721/519841 - /721/519841]
+[/722/521284 - /722/521284]
+[/723/522729 - /723/522729]
+[/724/524176 - /724/524176]
+[/725/525625 - /725/525625]
+[/726/527076 - /726/527076]
+[/727/528529 - /727/528529]
+[/728/529984 - /728/529984]
+[/729/531441 - /729/531441]
+[/730/532900 - /730/532900]
+[/731/534361 - /731/534361]
+[/732/535824 - /732/535824]
+[/733/537289 - /733/537289]
+[/734/538756 - /734/538756]
+[/735/540225 - /735/540225]
+[/736/541696 - /736/541696]
+[/737/543169 - /737/543169]
+[/738/544644 - /738/544644]
+[/739/546121 - /739/546121]
+[/740/547600 - /740/547600]
+[/741/549081 - /741/549081]
+[/742/550564 - /742/550564]
+[/743/552049 - /743/552049]
+[/744/553536 - /744/553536]
+[/745/555025 - /745/555025]
+[/746/556516 - /746/556516]
+[/747/558009 - /747/558009]
+[/748/559504 - /748/559504]
+[/749/561001 - /749/561001]
+[/750/562500 - /750/562500]
+[/751/564001 - /751/564001]
+[/752/565504 - /752/565504]
+[/753/567009 - /753/567009]
+[/754/568516 - /754/568516]
+[/755/570025 - /755/570025]
+[/756/571536 - /756/571536]
+[/757/573049 - /757/573049]
+[/758/574564 - /758/574564]
+[/759/576081 - /759/576081]
+[/760/577600 - /760/577600]
+[/761/579121 - /761/579121]
+[/762/580644 - /762/580644]
+[/763/582169 - /763/582169]
+[/764/583696 - /764/583696]
+[/765/585225 - /765/585225]
+[/766/586756 - /766/586756]
+[/767/588289 - /767/588289]
+[/768/589824 - /768/589824]
+[/769/591361 - /769/591361]
+[/770/592900 - /770/592900]
+[/771/594441 - /771/594441]
+[/772/595984 - /772/595984]
+[/773/597529 - /773/597529]
+[/774/599076 - /774/599076]
+[/775/600625 - /775/600625]
+[/776/602176 - /776/602176]
+[/777/603729 - /777/603729]
+[/778/605284 - /778/605284]
+[/779/606841 - /779/606841]
+[/780/608400 - /780/608400]
+[/781/609961 - /781/609961]
+[/782/611524 - /782/611524]
+[/783/613089 - /783/613089]
+[/784/614656 - /784/614656]
+[/785/616225 - /785/616225]
+[/786/617796 - /786/617796]
+[/787/619369 - /787/619369]
+[/788/620944 - /788/620944]
+[/789/622521 - /789/622521]
+[/790/624100 - /790/624100]
+[/791/625681 - /791/625681]
+[/792/627264 - /792/627264]
+[/793/628849 - /793/628849]
+[/794/630436 - /794/630436]
+[/795/632025 - /795/632025]
+[/796/633616 - /796/633616]
+[/797/635209 - /797/635209]
+[/798/636804 - /798/636804]
+[/799/638401 - /799/638401]
+[/800/640000 - /800/640000]
+[/801/641601 - /801/641601]
+[/802/643204 - /802/643204]
+[/803/644809 - /803/644809]
+[/804/646416 - /804/646416]
+[/805/648025 - /805/648025]
+[/806/649636 - /806/649636]
+[/807/651249 - /807/651249]
+[/808/652864 - /808/652864]
+[/809/654481 - /809/654481]
+[/810/656100 - /810/656100]
+[/811/657721 - /811/657721]
+[/812/659344 - /812/659344]
+[/813/660969 - /813/660969]
+[/814/662596 - /814/662596]
+[/815/664225 - /815/664225]
+[/816/665856 - /816/665856]
+[/817/667489 - /817/667489]
+[/818/669124 - /818/669124]
+[/819/670761 - /819/670761]
+[/820/672400 - /820/672400]
+[/821/674041 - /821/674041]
+[/822/675684 - /822/675684]
+[/823/677329 - /823/677329]
+[/824/678976 - /824/678976]
+[/825/680625 - /825/680625]
+[/826/682276 - /826/682276]
+[/827/683929 - /827/683929]
+[/828/685584 - /828/685584]
+[/829/687241 - /829/687241]
+[/830/688900 - /830/688900]
+[/831/690561 - /831/690561]
+[/832/692224 - /832/692224]
+[/833/693889 - /833/693889]
+[/834/695556 - /834/695556]
+[/835/697225 - /835/697225]
+[/836/698896 - /836/698896]
+[/837/700569 - /837/700569]
+[/838/702244 - /838/702244]
+[/839/703921 - /839/703921]
+[/840/705600 - /840/705600]
+[/841/707281 - /841/707281]
+[/842/708964 - /842/708964]
+[/843/710649 - /843/710649]
+[/844/712336 - /844/712336]
+[/845/714025 - /845/714025]
+[/846/715716 - /846/715716]
+[/847/717409 - /847/717409]
+[/848/719104 - /848/719104]
+[/849/720801 - /849/720801]
+[/850/722500 - /850/722500]
+[/851/724201 - /851/724201]
+[/852/725904 - /852/725904]
+[/853/727609 - /853/727609]
+[/854/729316 - /854/729316]
+[/855/731025 - /855/731025]
+[/856/732736 - /856/732736]
+[/857/734449 - /857/734449]
+[/858/736164 - /858/736164]
+[/859/737881 - /859/737881]
+[/860/739600 - /860/739600]
+[/861/741321 - /861/741321]
+[/862/743044 - /862/743044]
+[/863/744769 - /863/744769]
+[/864/746496 - /864/746496]
+[/865/748225 - /865/748225]
+[/866/749956 - /866/749956]
+[/867/751689 - /867/751689]
+[/868/753424 - /868/753424]
+[/869/755161 - /869/755161]
+[/870/756900 - /870/756900]
+[/871/758641 - /871/758641]
+[/872/760384 - /872/760384]
+[/873/762129 - /873/762129]
+[/874/763876 - /874/763876]
+[/875/765625 - /875/765625]
+[/876/767376 - /876/767376]
+[/877/769129 - /877/769129]
+[/878/770884 - /878/770884]
+[/879/772641 - /879/772641]
+[/880/774400 - /880/774400]
+[/881/776161 - /881/776161]
+[/882/777924 - /882/777924]
+[/883/779689 - /883/779689]
+[/884/781456 - /884/781456]
+[/885/783225 - /885/783225]
+[/886/784996 - /886/784996]
+[/887/786769 - /887/786769]
+[/888/788544 - /888/788544]
+[/889/790321 - /889/790321]
+[/890/792100 - /890/792100]
+[/891/793881 - /891/793881]
+[/892/795664 - /892/795664]
+[/893/797449 - /893/797449]
+[/894/799236 - /894/799236]
+[/895/801025 - /895/801025]
+[/896/802816 - /896/802816]
+[/897/804609 - /897/804609]
+[/898/806404 - /898/806404]
+[/899/808201 - /899/808201]
+[/900/810000 - /900/810000]
+[/901/811801 - /901/811801]
+[/902/813604 - /902/813604]
+[/903/815409 - /903/815409]
+[/904/817216 - /904/817216]
+[/905/819025 - /905/819025]
+[/906/820836 - /906/820836]
+[/907/822649 - /907/822649]
+[/908/824464 - /908/824464]
+[/909/826281 - /909/826281]
+[/910/828100 - /910/828100]
+[/911/829921 - /911/829921]
+[/912/831744 - /912/831744]
+[/913/833569 - /913/833569]
+[/914/835396 - /914/835396]
+[/915/837225 - /915/837225]
+[/916/839056 - /916/839056]
+[/917/840889 - /917/840889]
+[/918/842724 - /918/842724]
+[/919/844561 - /919/844561]
+[/920/846400 - /920/846400]
+[/921/848241 - /921/848241]
+[/922/850084 - /922/850084]
+[/923/851929 - /923/851929]
+[/924/853776 - /924/853776]
+[/925/855625 - /925/855625]
+[/926/857476 - /926/857476]
+[/927/859329 - /927/859329]
+[/928/861184 - /928/861184]
+[/929/863041 - /929/863041]
+[/930/864900 - /930/864900]
+[/931/866761 - /931/866761]
+[/932/868624 - /932/868624]
+[/933/870489 - /933/870489]
+[/934/872356 - /934/872356]
+[/935/874225 - /935/874225]
+[/936/876096 - /936/876096]
+[/937/877969 - /937/877969]
+[/938/879844 - /938/879844]
+[/939/881721 - /939/881721]
+[/940/883600 - /940/883600]
+[/941/885481 - /941/885481]
+[/942/887364 - /942/887364]
+[/943/889249 - /943/889249]
+[/944/891136 - /944/891136]
+[/945/893025 - /945/893025]
+[/946/894916 - /946/894916]
+[/947/896809 - /947/896809]
+[/948/898704 - /948/898704]
+[/949/900601 - /949/900601]
+[/950/902500 - /950/902500]
+[/951/904401 - /951/904401]
+[/952/906304 - /952/906304]
+[/953/908209 - /953/908209]
+[/954/910116 - /954/910116]
+[/955/912025 - /955/912025]
+[/956/913936 - /956/913936]
+[/957/915849 - /957/915849]
+[/958/917764 - /958/917764]
+[/959/919681 - /959/919681]
+[/960/921600 - /960/921600]
+[/961/923521 - /961/923521]
+[/962/925444 - /962/925444]
+[/963/927369 - /963/927369]
+[/964/929296 - /964/929296]
+[/965/931225 - /965/931225]
+[/966/933156 - /966/933156]
+[/967/935089 - /967/935089]
+[/968/937024 - /968/937024]
+[/969/938961 - /969/938961]
+[/970/940900 - /970/940900]
+[/971/942841 - /971/942841]
+[/972/944784 - /972/944784]
+[/973/946729 - /973/946729]
+[/974/948676 - /974/948676]
+[/975/950625 - /975/950625]
+[/976/952576 - /976/952576]
+[/977/954529 - /977/954529]
+[/978/956484 - /978/956484]
+[/979/958441 - /979/958441]
+[/980/960400 - /980/960400]
+[/981/962361 - /981/962361]
+[/982/964324 - /982/964324]
+[/983/966289 - /983/966289]
+[/984/968256 - /984/968256]
+[/985/970225 - /985/970225]
+[/986/972196 - /986/972196]
+[/987/974169 - /987/974169]
+[/988/976144 - /988/976144]
+[/989/978121 - /989/978121]
+[/990/980100 - /990/980100]
+[/991/982081 - /991/982081]
+[/992/984064 - /992/984064]
+[/993/986049 - /993/986049]
+[/994/988036 - /994/988036]
+[/995/990025 - /995/990025]
+[/996/992016 - /996/992016]
+[/997/994009 - /997/994009]
+[/998/996004 - /998/996004]
+[/999/998001 - /999/998001]
+[/1000/1000000 - /1000/1000000]
