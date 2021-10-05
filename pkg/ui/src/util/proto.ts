@@ -11,6 +11,8 @@
 import _ from "lodash";
 
 import * as protos from "src/js/protos";
+import { cockroach } from "src/js/protos";
+import INodeResponse = cockroach.server.serverpb.INodeResponse;
 
 export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
 const nodeStatus: INodeStatus = null;
@@ -42,11 +44,8 @@ export function AccumulateMetrics(
  * metrics collection of the supplied NodeStatus object. This is convenient
  * for all current usages of NodeStatus in the UI.
  */
-export function RollupStoreMetrics(ns: INodeStatus): void {
-  AccumulateMetrics(
-    ns.metrics,
-    ..._.map(ns.store_statuses, (ss) => ss.metrics),
-  );
+export function RollupStoreMetrics(ns: INodeResponse): void {
+  AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, ss => ss.metrics));
 }
 
 /**
