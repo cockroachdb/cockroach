@@ -551,10 +551,14 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 		for _, fkCol := range fk.OriginColumnIDs {
 			if onUpdateCols.Contains(fkCol) {
+				col, err := desc.FindColumnWithID(fkCol)
+				if err != nil {
+					return err
+				}
 				errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
 					"cannot specify both ON UPDATE expression and a foreign key"+
-						" ON UPDATE action for column with ID %d",
-					fkCol,
+						" ON UPDATE action for column %q",
+					col.ColName(),
 				))
 			}
 		}
