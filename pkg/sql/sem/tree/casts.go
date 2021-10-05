@@ -537,9 +537,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		} else if v, ok := inVal.(*DCollatedString); ok {
 			sv = v.Contents
 		}
-
 		sv = adjustStringValueToType(typ, sv)
-
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
 				"value too long for type %s",
@@ -984,13 +982,27 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 
 	case types.StringFamily, types.CollatedStringFamily:
 		var s string
+		typ := t
 		switch t := d.(type) {
 		case *DBitArray:
 			s = t.BitArray.String()
 		case *DFloat:
 			s = strconv.FormatFloat(float64(*t), 'g',
 				ctx.SessionData().DataConversionConfig.GetFloatPrec(), 64)
-		case *DBool, *DInt, *DDecimal:
+		case *DInt:
+			if typ.Oid() == oid.T_char {
+				// int to "char" casts just return the correspondong ASCII byte.
+				if *t > math.MaxInt8 || *t < math.MinInt8 {
+					return nil, errCharOutOfRange
+				} else if *t == 0 {
+					s = ""
+				} else {
+					s = string([]byte{byte(*t)})
+				}
+			} else {
+				s = d.String()
+			}
+		case *DBool, *DDecimal:
 			s = d.String()
 		case *DTimestamp, *DDate, *DTime, *DTimeTZ, *DGeography, *DGeometry, *DBox2D:
 			s = AsStringWithFlags(d, FmtBareStrings)
