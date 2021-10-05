@@ -37,24 +37,23 @@ func init() {
 	// the functions depend on scalarBuildFuncMap which in turn depends on the
 	// functions).
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
-		opt.VariableOp:        (*Builder).buildVariable,
-		opt.ConstOp:           (*Builder).buildTypedExpr,
-		opt.NullOp:            (*Builder).buildNull,
-		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
-		opt.TupleOp:           (*Builder).buildTuple,
-		opt.FunctionOp:        (*Builder).buildFunction,
-		opt.CaseOp:            (*Builder).buildCase,
-		opt.CastOp:            (*Builder).buildCast,
-		opt.CoalesceOp:        (*Builder).buildCoalesce,
-		opt.ColumnAccessOp:    (*Builder).buildColumnAccess,
-		opt.ArrayOp:           (*Builder).buildArray,
-		opt.AnyOp:             (*Builder).buildAny,
-		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
-		opt.IndirectionOp:     (*Builder).buildIndirection,
-		opt.CollateOp:         (*Builder).buildCollate,
-		opt.ArrayFlattenOp:    (*Builder).buildArrayFlatten,
-		opt.IfErrOp:           (*Builder).buildIfErr,
-		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
+		opt.VariableOp:     (*Builder).buildVariable,
+		opt.ConstOp:        (*Builder).buildTypedExpr,
+		opt.NullOp:         (*Builder).buildNull,
+		opt.PlaceholderOp:  (*Builder).buildTypedExpr,
+		opt.TupleOp:        (*Builder).buildTuple,
+		opt.FunctionOp:     (*Builder).buildFunction,
+		opt.CaseOp:         (*Builder).buildCase,
+		opt.CastOp:         (*Builder).buildCast,
+		opt.CoalesceOp:     (*Builder).buildCoalesce,
+		opt.ColumnAccessOp: (*Builder).buildColumnAccess,
+		opt.ArrayOp:        (*Builder).buildArray,
+		opt.AnyOp:          (*Builder).buildAny,
+		opt.AnyScalarOp:    (*Builder).buildAnyScalar,
+		opt.IndirectionOp:  (*Builder).buildIndirection,
+		opt.CollateOp:      (*Builder).buildCollate,
+		opt.ArrayFlattenOp: (*Builder).buildArrayFlatten,
+		opt.IfErrOp:        (*Builder).buildIfErr,
 
 		// Item operators.
 		opt.ProjectionsItemOp:  (*Builder).buildItem,
@@ -489,12 +488,6 @@ func (b *Builder) buildIfErr(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.T
 	}
 
 	return tree.NewTypedIfErrExpr(cond, orElse, errCode), nil
-}
-
-func (b *Builder) buildUnsupportedExpr(
-	ctx *buildScalarCtx, scalar opt.ScalarExpr,
-) (tree.TypedExpr, error) {
-	return scalar.(*memo.UnsupportedExprExpr).Value, nil
 }
 
 func (b *Builder) buildItem(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
