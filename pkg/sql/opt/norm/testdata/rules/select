@@ -549,6 +549,28 @@ select
       ├── (u:1 = 10) OR (v:2 = 20) [outer=(1,2)]
       └── (v:2 = 20) OR (u:1 = 10) [outer=(1,2)]
 
+# Regression test for #71002. DeduplicateSelectFilters should not remove filters
+# that are not duplicated.
+exec-ddl
+create table t71002 (
+  a BOOL,
+  b BOOL,
+  c BOOL
+)
+----
+
+assign-placeholders-norm query-args=(false)
+SELECT * FROM t71002 WHERE a AND (b OR ($1 OR c))
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── fd: ()-->(1)
+ ├── scan t71002
+ │    └── columns: a:1 b:2 c:3
+ └── filters
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── b:2 OR c:3 [outer=(2,3)]
+
 # --------------------------------------------------
 # MergeSelects
 # --------------------------------------------------
