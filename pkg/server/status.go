@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1398,6 +1399,110 @@ func (s *statusServer) Nodes(
 	return resp, err
 }
 
+func (s *statusServer) NodesUI(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponseExternal, error) {
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+
+	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	resp := &serverpb.NodesResponseExternal{
+		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
+		LivenessByNodeID: internalResp.LivenessByNodeID,
+	}
+	for i, nodeStatus := range internalResp.Nodes {
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, isAdmin)
+	}
+
+	return resp, err
+}
+
+func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeResponse {
+	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
+	for j, t := range n.Desc.Locality.Tiers {
+		tiers[j] = serverpb.Tier{
+			Key:   t.Key,
+			Value: t.Value,
+		}
+	}
+
+	activity := make(map[roachpb.NodeID]serverpb.NodeResponse_NetworkActivity, len(n.Activity))
+	for k, v := range n.Activity {
+		activity[k] = serverpb.NodeResponse_NetworkActivity{
+			Incoming: v.Incoming,
+			Outgoing: v.Outgoing,
+			Latency:  v.Latency,
+		}
+	}
+
+	nodeDescriptor := serverpb.NodeDescriptor{
+		NodeID:  n.Desc.NodeID,
+		Address: util.UnresolvedAddr{},
+		Attrs:   roachpb.Attributes{},
+		Locality: serverpb.Locality{
+			Tiers: tiers,
+		},
+		ServerVersion: serverpb.Version{
+			Major:    n.Desc.ServerVersion.Major,
+			Minor:    n.Desc.ServerVersion.Minor,
+			Patch:    n.Desc.ServerVersion.Patch,
+			Internal: n.Desc.ServerVersion.Internal,
+		},
+		BuildTag:        n.Desc.BuildTag,
+		StartedAt:       n.Desc.StartedAt,
+		LocalityAddress: nil,
+		ClusterName:     n.Desc.ClusterName,
+		SQLAddress:      util.UnresolvedAddr{},
+	}
+
+	statuses := make([]serverpb.StoreStatus, len(n.StoreStatuses))
+	for i, ss := range n.StoreStatuses {
+		statuses[i] = serverpb.StoreStatus{
+			Desc: serverpb.StoreDescriptor{
+				StoreID:  ss.Desc.StoreID,
+				Attrs:    ss.Desc.Attrs,
+				Node:     nodeDescriptor,
+				Capacity: ss.Desc.Capacity,
+			},
+			Metrics: ss.Metrics,
+		}
+	}
+
+	resp := serverpb.NodeResponse{
+		Desc:              nodeDescriptor,
+		BuildInfo:         n.BuildInfo,
+		StartedAt:         n.StartedAt,
+		UpdatedAt:         n.UpdatedAt,
+		Metrics:           n.Metrics,
+		StoreStatuses:     statuses,
+		Args:              nil,
+		Env:               nil,
+		Latencies:         n.Latencies,
+		Activity:          activity,
+		TotalSystemMemory: n.TotalSystemMemory,
+		NumCpus:           n.NumCpus,
+	}
+
+	if isAdmin {
+		resp.Args = n.Args
+		resp.Env = n.Env
+		resp.Desc.Attrs = n.Desc.Attrs
+		resp.Desc.Address = n.Desc.Address
+		resp.Desc.LocalityAddress = n.Desc.LocalityAddress
+		resp.Desc.SQLAddress = n.Desc.SQLAddress
+		for _, n := range resp.StoreStatuses {
+			n.Desc.Node = resp.Desc
+		}
+	}
+
+	return resp
+}
+
 // ListNodesInternal is a helper function for the benefit of SQL exclusively.
 // It skips the privilege check, assuming that SQL is doing privilege checking already.
 func (s *statusServer) ListNodesInternal(
@@ -1492,6 +1597,12 @@ func (s *statusServer) Node(
 		return nil, err
 	}
 
+	return s.nodeStatus(ctx, req)
+}
+
+func (s *statusServer) nodeStatus(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*statuspb.NodeStatus, error) {
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1512,6 +1623,27 @@ func (s *statusServer) Node(
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
+}
+
+func (s *statusServer) NodeUI(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*serverpb.NodeResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeStatus, err := s.nodeStatus(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	resp := nodeStatusToResp(nodeStatus, isAdmin)
+	return &resp, nil
 }
 
 // Metrics return metrics information for the server specified.

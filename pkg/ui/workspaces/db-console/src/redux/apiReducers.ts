@@ -50,7 +50,9 @@ export const healthReducerObj = new CachedDataReducer(
 );
 export const refreshHealth = healthReducerObj.refresh;
 
-function rollupStoreMetrics(res: api.NodesResponseMessage): INodeStatus[] {
+function rollupStoreMetrics(
+  res: api.NodesResponseExternalMessage,
+): INodeStatus[] {
   return _.map(res.nodes, node => {
     RollupStoreMetrics(node);
     return node;
@@ -59,7 +61,7 @@ function rollupStoreMetrics(res: api.NodesResponseMessage): INodeStatus[] {
 
 export const nodesReducerObj = new CachedDataReducer(
   (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
-    api.getNodes(req, timeout).then(rollupStoreMetrics),
+    api.getNodesUI(req, timeout).then(rollupStoreMetrics),
   "nodes",
   moment.duration(10, "s"),
 );
