@@ -8210,7 +8210,7 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 		// and force it to use the same location as the incoming time.
 		// If using the fixed offset in the given location gives us a timestamp that is the
 		// same as the original time offset, use that timestamp instead.
-		fixedOffsetLoc := timeutil.FixedOffsetTimeZoneToLocation(origZoneOffset, "date_trunc")
+		fixedOffsetLoc := timeutil.FixedTimeZoneOffsetToLocation(origZoneOffset, "date_trunc")
 		fixedOffsetTime := time.Date(year, month, day, hour, min, sec, nsec, fixedOffsetLoc)
 		locCorrectedOffsetTime := fixedOffsetTime.In(loc)
 

@@ -21,7 +21,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -43,16 +42,31 @@ import (
 )
 
 func registerFollowerReads(r registry.Registry) {
-	register := func(survival survivalGoal, locality localitySetting, rc readConsistency) {
+	register := func(
+		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool,
+	) {
+		name := fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc)
+		if insufficientQuorum {
+			name = name + "/insufficient-quorum"
+		}
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
+			Name:  name,
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(
+				6, /* nodeCount */
+				spec.CPU(2),
+				spec.Geo(),
+				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Wipe(ctx)
 				c.Start(ctx)
-				topology := topologySpec{multiRegion: true, locality: locality, survival: survival}
+				topology := topologySpec{
+					multiRegion:       true,
+					locality:          locality,
+					survival:          survival,
+					deadPrimaryRegion: insufficientQuorum,
+				}
 				data := initFollowerReadsDB(ctx, t, c, topology)
 				runFollowerReadsTest(ctx, t, c, topology, rc, data)
 			},
@@ -65,9 +79,13 @@ func registerFollowerReads(r registry.Registry) {
 					// Only GLOBAL tables can perform strongly consistent reads off followers.
 					continue
 				}
-				register(survival, locality, rc)
+				register(survival, locality, rc, false /* insufficientQuorum */)
 			}
 		}
+
+		// Register an additional variant that cuts off the primary region and
+		// verifies that bounded staleness reads are still available elsewhere.
+		register(survival, regional, boundedStaleness, true /* insufficientQuorum */)
 	}
 
 	r.Add(registry.TestSpec{
@@ -111,6 +129,10 @@ type topologySpec struct {
 	// locality and survival are only relevant when multiRegion is set.
 	locality localitySetting
 	survival survivalGoal
+	// deadPrimaryRegion, if set, indicates that the nodes in the database's
+	// primary region should be stopped while running the read load. Only relevant
+	// when multiRegion is set.
+	deadPrimaryRegion bool
 }
 
 // runFollowerReadsTest is a basic litmus test that follower reads work.
@@ -165,7 +187,7 @@ func runFollowerReadsTest(
 	case exactStaleness:
 		aost = "AS OF SYSTEM TIME follower_read_timestamp()"
 	case boundedStaleness:
-		aost = "AS OF SYSTEM TIME with_max_staleness('10s')"
+		aost = "AS OF SYSTEM TIME with_max_staleness('10m')"
 	default:
 		t.Fatalf("unexpected readConsistency %s", rc)
 	}
@@ -191,8 +213,6 @@ func runFollowerReadsTest(
 			return nil
 		}
 	}
-	var numSelects int64
-	selectsPerNode := make([]int64, c.Spec().NodeCount)
 	doSelects := func(ctx context.Context, node int) func() error {
 		return func() error {
 			for ctx.Err() == nil {
@@ -201,8 +221,6 @@ func runFollowerReadsTest(
 				if err != nil && ctx.Err() == nil {
 					return err
 				}
-				atomic.AddInt64(&numSelects, 1)
-				selectsPerNode[node-1]++
 			}
 			return nil
 		}
@@ -246,6 +264,7 @@ func runFollowerReadsTest(
 
 	// Perform reads on each node and ensure we get the expected value. Do so a
 	// few times on each follower to give caches time to warm up.
+	t.L().Printf("warming up reads")
 	g, gCtx := errgroup.WithContext(ctx)
 	k, v := chooseKV()
 	for i := 1; i <= c.Spec().NodeCount; i++ {
@@ -280,6 +299,18 @@ func runFollowerReadsTest(
 			expNodesToSeeFollowerReads, followerReadsBefore, followerReadsAfter)
 	}
 
+	// Kill nodes, if necessary.
+	liveNodes, deadNodes := make(map[int]struct{}), make(map[int]struct{})
+	for i := 1; i <= c.Spec().NodeCount; i++ {
+		if topology.deadPrimaryRegion && i <= 3 {
+			c.Stop(ctx, c.Node(i), option.StopArgs("--sig=9"))
+			deadNodes[i] = struct{}{}
+		} else {
+			liveNodes[i] = struct{}{}
+		}
+	}
+
+	t.L().Printf("starting read load")
 	const loadDuration = 4 * time.Minute
 	timeoutCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -289,9 +320,13 @@ func runFollowerReadsTest(
 	})
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	const concurrency = 32
-	t.L().Printf("starting read load")
-	for i := 0; i < concurrency; i++ {
-		g.Go(doSelects(gCtx, rand.Intn(c.Spec().NodeCount)+1))
+	var cur int
+	for i := 0; cur < concurrency; i++ {
+		node := i%c.Spec().NodeCount + 1
+		if _, ok := liveNodes[node]; ok {
+			g.Go(doSelects(gCtx, node))
+			cur++
+		}
 	}
 	start := timeutil.Now()
 
@@ -315,8 +350,18 @@ func runFollowerReadsTest(
 		// node in the cluster that doesn't have a replica - so that node also won't
 		// serve follower reads.
 		expectedLowRatioNodes = 2
+		// However, if the primary region is dead, then we'll be consulting fewer
+		// nodes in verifyHighFollowerReadRatios (only liveNodes), so the expected
+		// number of nodes with a low follower read ratio drops. With zone survival,
+		// 2 of the remaining 3 nodes remaining will hold a non-voting replicas, so
+		// we expect only 1 node to not serve follower reads. With region survival,
+		// all 3 remaining nodes will hold a voting replica, but one will take over
+		// as the leaseholder, so we also expect 1 node to not serve follower reads.
+		if topology.deadPrimaryRegion {
+			expectedLowRatioNodes = 1
+		}
 	}
-	verifyHighFollowerReadRatios(ctx, c, t, c.Node(1), start, end, expectedLowRatioNodes)
+	verifyHighFollowerReadRatios(ctx, t, c, liveNodes, start, end, expectedLowRatioNodes)
 
 	if topology.multiRegion {
 		// Perform a ts query to verify that the SQL latencies were well below the
@@ -324,7 +369,12 @@ func runFollowerReadsTest(
 		//
 		// We don't do this for singleRegion since, in a single region, there's no
 		// low latency and high-latency regimes.
-		verifySQLLatency(ctx, c, t, c.Node(1), start, end, 20*time.Millisecond)
+		verifySQLLatency(ctx, t, c, liveNodes, start, end, 25*time.Millisecond)
+	}
+
+	// Restart dead nodes, if necessary.
+	for i := range deadNodes {
+		c.Start(ctx, c.Node(i))
 	}
 }
 
@@ -391,10 +441,10 @@ func initFollowerReadsDB(
 
 	// Wait until the table has completed up-replication.
 	t.L().Printf("waiting for up-replication...")
-	require.NoError(t, retry.ForDuration(5*time.Minute, func() error {
+	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Check that the table has the expected number of voting and non-voting
 		// replicas.
-
 		var votersCol, nonVotersCol string
 		if topology.multiRegion {
 			votersCol = "coalesce(array_length(voting_replicas, 1), 0)"
@@ -413,11 +463,14 @@ func initFollowerReadsDB(
 				crdb_internal.ranges_no_leases
 			WHERE
 				table_name = 'test'`, votersCol, nonVotersCol)
+
 		var voters, nonVoters int
-		if err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters); err != nil {
-			t.L().Printf("retrying: %v\n", err)
-			return err
+		err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters)
+		if errors.Is(err, gosql.ErrNoRows) {
+			t.L().Printf("up-replication not complete, missing range")
+			continue
 		}
+		require.NoError(t, err)
 
 		var ok bool
 		if !topology.multiRegion {
@@ -429,11 +482,15 @@ func initFollowerReadsDB(
 			// Expect 5 voting replicas and 0 non-voting replicas.
 			ok = voters == 5 && nonVoters == 0
 		}
-		if !ok {
-			return errors.Newf("up-replication not complete, found %d voters and %d non_voters", voters, nonVoters)
+		if ok {
+			break
 		}
 
-		if topology.multiRegion {
+		t.L().Printf("up-replication not complete, found %d voters and %d non_voters", voters, nonVoters)
+	}
+
+	if topology.multiRegion {
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Check that one of these replicas exists in each region. Do so by
 			// parsing the replica_localities array using the same pattern as the
 			// one used by SHOW REGIONS.
@@ -444,17 +501,54 @@ func initFollowerReadsDB(
 				crdb_internal.ranges_no_leases
 			WHERE
 				table_name = 'test'`
+
 			var distinctRegions int
-			if err := db.QueryRowContext(ctx, q2).Scan(&distinctRegions); err != nil {
-				t.L().Printf("retrying: %v\n", err)
-				return err
+			require.NoError(t, db.QueryRowContext(ctx, q2).Scan(&distinctRegions))
+			if distinctRegions == 3 {
+				break
 			}
-			if distinctRegions != 3 {
-				return errors.Newf("rebalancing not complete, table in %d regions", distinctRegions)
+
+			t.L().Printf("rebalancing not complete, table in %d regions", distinctRegions)
+		}
+
+		if topology.deadPrimaryRegion {
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				// If we're going to be killing nodes in a multi-region cluster, make
+				// sure system ranges have all upreplicated as expected as well. Do so
+				// using replication reports.
+				WaitForUpdatedReplicationReport(ctx, t, db)
+
+				var expAtRisk int
+				if topology.survival == zone {
+					// Only the 'test' table's range should be at risk of a region
+					// failure.
+					expAtRisk = 1
+				} else {
+					// No range should be at risk of a region failure.
+					expAtRisk = 0
+				}
+
+				const q3 = `
+				SELECT
+					coalesce(sum(at_risk_ranges), 0)
+				FROM
+					system.replication_critical_localities
+				WHERE
+					locality LIKE '%region%'
+				AND
+					locality NOT LIKE '%zone%'`
+
+				var atRisk int
+				require.NoError(t, db.QueryRowContext(ctx, q3).Scan(&atRisk))
+				if atRisk == expAtRisk {
+					break
+				}
+
+				t.L().Printf("rebalancing not complete, expected %d at risk ranges, "+
+					"found %d", expAtRisk, atRisk)
 			}
 		}
-		return nil
-	}))
+	}
 
 	const rows = 100
 	const concurrency = 32
@@ -502,28 +596,36 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 // ignoring the first 20s.
 func verifySQLLatency(
 	ctx context.Context,
-	c cluster.Cluster,
 	t test.Test,
-	adminNode option.NodeListOption,
+	c cluster.Cluster,
+	liveNodes map[int]struct{},
 	start, end time.Time,
 	targetLatency time.Duration,
 ) {
 	// Query needed information over the timespan of the query.
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	var adminNode int
+	for i := range liveNodes {
+		adminNode = i
+		break
+	}
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
 	if err != nil {
 		t.Fatal(err)
 	}
 	url := "http://" + adminURLs[0] + "/ts/query"
+	var sources []string
+	for i := range liveNodes {
+		sources = append(sources, strconv.Itoa(i))
+	}
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
 		EndNanos:   end.UnixNano(),
 		// Ask for 10s intervals.
 		SampleNanos: (10 * time.Second).Nanoseconds(),
-		Queries: []tspb.Query{
-			{
-				Name: "cr.node.sql.service.latency-p90",
-			},
-		},
+		Queries: []tspb.Query{{
+			Name:    "cr.node.sql.service.latency-p90",
+			Sources: sources,
+		}},
 	}
 	var response tspb.TimeSeriesQueryResponse
 	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
@@ -555,9 +657,9 @@ func verifySQLLatency(
 // to zero (the new leaseholder), and another one's rises (the old leaseholder).
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
-	c cluster.Cluster,
 	t test.Test,
-	node option.NodeListOption,
+	c cluster.Cluster,
+	liveNodes map[int]struct{},
 	start, end time.Time,
 	toleratedNodes int,
 ) {
@@ -568,7 +670,12 @@ func verifyHighFollowerReadRatios(
 	start = start.Add(10 * time.Second)
 
 	// Query needed information over the timespan of the query.
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, node)
+	var adminNode int
+	for i := range liveNodes {
+		adminNode = i
+		break
+	}
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
 	require.NoError(t, err)
 	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
@@ -577,8 +684,8 @@ func verifyHighFollowerReadRatios(
 		// Ask for 10s intervals.
 		SampleNanos: (10 * time.Second).Nanoseconds(),
 	}
-	for i := 0; i < c.Spec().NodeCount; i++ {
-		nodeID := strconv.Itoa(i + 1)
+	for i := range liveNodes {
+		nodeID := strconv.Itoa(i)
 		request.Queries = append(request.Queries, tspb.Query{
 			Name:       "cr.store.follower_reads.success_count",
 			Sources:    []string{nodeID},
@@ -596,37 +703,24 @@ func verifyHighFollowerReadRatios(
 		t.Fatal(err)
 	}
 
-	if len(response.Results[0].Datapoints) < 3 {
+	minDataPoints := len(response.Results[0].Datapoints)
+	for _, res := range response.Results[1:] {
+		if len(res.Datapoints) < minDataPoints {
+			minDataPoints = len(res.Datapoints)
+		}
+	}
+	if minDataPoints < 3 {
 		t.Fatalf("not enough ts data to verify follower reads")
 	}
 
 	// Go through the timeseries and process them into a better format.
-	const threshold = 0.9
-	stats := make([]intervalStats, len(response.Results[0].Datapoints))
-
-	// Sanity check timeseries response.
-	numIntervals := len(response.Results[0].Datapoints)
-	for n := 0; n < c.Spec().NodeCount; n++ {
-		followerReads := response.Results[n*2].Datapoints
-		selects := response.Results[n*2+1].Datapoints
-		if len(followerReads) != numIntervals {
-			t.Fatalf("inconsistent timeseries response. Expected %d points, but n%d (query 1) returned %d.\n"+
-				"Timeseries 1: %v\nTimeseries 2: %v.",
-				numIntervals, n, len(followerReads), response.Results[0].Datapoints, followerReads)
-		}
-		if len(selects) != numIntervals {
-			t.Fatalf("inconsistent timeseries response. Expected %d points, but n%d (query 2) returned %d.\n"+
-				"Timeseries 1: %v\nTimeseries 2: %v.",
-				numIntervals, n, len(selects), response.Results[0].Datapoints, followerReads)
-		}
-	}
-
-	for i := 0; i < numIntervals; i++ {
-		ratios := make([]float64, c.Spec().NodeCount)
-		for n := 0; n < c.Spec().NodeCount; n++ {
-			followerReadsPerTenSeconds := response.Results[n*2].Datapoints[i]
-			selectsPerTenSeconds := response.Results[n*2+1].Datapoints[i]
-			ratios[n] = followerReadsPerTenSeconds.Value / selectsPerTenSeconds.Value
+	stats := make([]intervalStats, minDataPoints)
+	for i := range stats {
+		var ratios []float64
+		for n := 0; n < len(response.Results); n += 2 {
+			followerReadsPerTenSeconds := response.Results[n].Datapoints[i]
+			selectsPerTenSeconds := response.Results[n+1].Datapoints[i]
+			ratios = append(ratios, followerReadsPerTenSeconds.Value/selectsPerTenSeconds.Value)
 		}
 		intervalEnd := timeutil.Unix(0, response.Results[0].Datapoints[i].TimestampNanos)
 		stats[i] = intervalStats{
@@ -640,6 +734,7 @@ func verifyHighFollowerReadRatios(
 
 	// Now count how many intervals have more than the tolerated number of nodes
 	// with low follower read ratios.
+	const threshold = 0.9
 	var badIntervals []intervalStats
 	for _, stat := range stats {
 		var nodesWithLowRatios int
