@@ -1,6 +1,0 @@
-preparable_set_stmt ::=
-	'SET' 'SESSION' set_rest
-	| 'SET' set_rest
-	| set_local_stmt
-	| set_csetting_stmt
-	| use_stmt
