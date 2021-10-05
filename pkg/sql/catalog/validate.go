@@ -40,6 +40,9 @@ func Validate(
 		ValidationTelemetry: telemetry,
 		targetLevel:         targetLevel,
 	}
+	if true {
+		return &vea
+	}
 	// Internal descriptor consistency checks.
 	if !vea.validateDescriptorsAtLevel(
 		ValidationLevelSelfOnly,
