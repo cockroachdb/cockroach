@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -1472,31 +1471,26 @@ func TestAsyncAbortPoisons(t *testing.T) {
 					if r.Poison {
 						close(commitCh)
 					} else {
-						commitCh <- fmt.Errorf("EndTxn didn't have expected Poison flag")
+						commitCh <- errors.New("EndTxn didn't have expected Poison flag")
 					}
 				}
 			}
 		}
 		return nil
 	}
-	s, _, _ := serverutils.StartServer(t,
+	s, _, db := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
-
-	// Setup two userspace ranges: /Min-b, b-/Max.
-	db := s.DB()
 
 	// Write values to key "a".
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	b := txn.NewBatch()
 	b.Put(keyA, []byte("value"))
-	if err := txn.Run(ctx, b); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn.Run(ctx, b))
 
 	// Run a high-priority txn that will abort the previous one.
-	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
@@ -1507,17 +1501,13 @@ func TestAsyncAbortPoisons(t *testing.T) {
 			return err
 		}
 		return txn.Put(ctx, keyA, []byte("value2"))
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
-	expErr := regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORT_SPAN)")
-	if _, err := txn.Get(ctx, keyA); !testutils.IsError(err, expErr) {
-		t.Fatalf("expected %s, got: %v", expErr, err)
-	}
-	if err := <-commitCh; err != nil {
-		t.Fatal(err)
-	}
+	_, err := txn.Get(ctx, keyA)
+	require.Error(t, err)
+	require.IsType(t, err, &roachpb.TransactionRetryWithProtoRefreshError{})
+	require.Contains(t, err.Error(), "TransactionAbortedError")
+	require.NoError(t, <-commitCh)
 }
 
 // TestTxnCoordSenderRetries verifies that the txn coord sender
