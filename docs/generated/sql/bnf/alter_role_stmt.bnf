@@ -1,15 +1,61 @@
 alter_role_stmt ::=
-	'ALTER' 'ROLE' name opt_with role_options
-	| 'ALTER' 'ROLE' name 
-	| 'ALTER' 'USER' name opt_with role_options
-	| 'ALTER' 'USER' name 
-	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name opt_with role_options
-	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name 
-	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_with role_options
-	| 'ALTER' 'USER' 'IF' 'EXISTS' name 
-	| 'ALTER' 'ROLE' name opt_in_database set_or_reset_clause
-	| 'ALTER' 'USER' name opt_in_database set_or_reset_clause
-	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name opt_in_database set_or_reset_clause
-	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_in_database set_or_reset_clause
-	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
-	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
+	'ALTER' 'ROLE' 'role_name' 'WITH' role_option ( ( role_option ) )*
+	| 'ALTER' 'ROLE' 'role_name'  role_option ( ( role_option ) )*
+	| 'ALTER' 'ROLE' 'role_name' 
+	| 'ALTER' 'USER' 'role_name' 'WITH' role_option ( ( role_option ) )*
+	| 'ALTER' 'USER' 'role_name'  role_option ( ( role_option ) )*
+	| 'ALTER' 'USER' 'role_name' 
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 'WITH' role_option ( ( role_option ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name'  role_option ( ( role_option ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 'WITH' role_option ( ( role_option ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name'  role_option ( ( role_option ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 
+	| 'ALTER' 'ROLE' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'role_name' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'role_name' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'ROLE' 'role_name'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'role_name'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'role_name'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'role_name'  'RESET' session_var
+	| 'ALTER' 'USER' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'role_name' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'role_name' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'USER' 'role_name'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'role_name'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'role_name'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'role_name'  'RESET' session_var
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' 'role_name'  'RESET' session_var
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'IF' 'EXISTS' 'role_name'  'RESET' session_var
+	| 'ALTER' 'ROLE' 'ALL' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'ALL' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'ALL' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'ALL' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'ROLE' 'ALL'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'ALL'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'ROLE' 'ALL'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'ROLE' 'ALL'  'RESET' session_var
+	| 'ALTER' 'USER' 'ALL' 'IN' 'DATABASE' database_name 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'ALL' 'IN' 'DATABASE' database_name 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'ALL' 'IN' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'ALL' 'IN' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'USER' 'ALL'  'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'ALL'  'SET' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'ALTER' 'USER' 'ALL'  'RESET_ALL' 'ALL'
+	| 'ALTER' 'USER' 'ALL'  'RESET' session_var
