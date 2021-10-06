@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/cgroups",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
