@@ -45,9 +45,6 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	server := testCluster.Server(0)
 
-	httpClient, err := server.RPCContext().GetHTTPClient()
-	require.NoError(t, err)
-
 	tenantID := serverutils.TestTenantID()
 	tenant, connTenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID: tenantID,
@@ -58,6 +55,8 @@ func TestTenantGRPCServices(t *testing.T) {
 		},
 	})
 	defer connTenant.Close()
+
+	t.Logf("subtests starting")
 
 	t.Run("gRPC is running", func(t *testing.T) {
 		grpcAddr := tenant.SQLAddr()
@@ -73,6 +72,9 @@ func TestTenantGRPCServices(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Statements)
 	})
+
+	httpClient, err := tenant.RPCContext().GetHTTPClient()
+	require.NoError(t, err)
 
 	t.Run("gRPC Gateway is running", func(t *testing.T) {
 		resp, err := httpClient.Get("https://" + tenant.HTTPAddr() + "/_status/statements")
