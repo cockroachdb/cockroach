@@ -270,7 +270,8 @@ func validateForeignKey(
 			query,
 		)
 
-		values, err := ie.QueryRow(ctx, "validate foreign key constraint", txn, query)
+		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint",
+			txn, sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
 			return err
 		}
@@ -295,7 +296,8 @@ func validateForeignKey(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate fk constraint", txn, query)
+	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return err
 	}
@@ -390,7 +392,8 @@ func validateUniqueConstraint(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate unique constraint", txn, query)
+	values, err := ie.QueryRowEx(ctx, "validate unique constraint", txn,
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return err
 	}

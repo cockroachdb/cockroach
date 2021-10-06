@@ -434,7 +434,6 @@ func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvColl
 // environmentQuery is a helper to run a query that returns a single string
 // value.
 func (c *stmtEnvCollector) query(query string) (string, error) {
-	var row tree.Datums
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
 		"stmtEnvCollector",

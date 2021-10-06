@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -330,6 +331,30 @@ func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*typ
 func (ep *DummyEvalPlanner) ResolveType(
 	_ context.Context, _ *tree.UnresolvedObjectName,
 ) (*types.T, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// QueryRowEx is part of the tree.EvalPlanner interface.
+func (ep *DummyEvalPlanner) QueryRowEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// QueryIteratorEx is part of the tree.EvalPlanner interface.
+func (ep *DummyEvalPlanner) QueryIteratorEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.InternalRows, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
