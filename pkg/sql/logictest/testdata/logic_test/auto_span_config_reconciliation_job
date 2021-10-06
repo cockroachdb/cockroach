@@ -5,7 +5,7 @@ SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;
 
 # Ensure there's a single auto span config reconciliation job in the system,
 # and that it's running.
-query ITT colnames
+query ITT colnames,retry
 SELECT count(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' GROUP BY (job_type, status)
 ----
 count  job_type                         status
