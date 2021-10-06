@@ -208,7 +208,7 @@ SELECT c, count(*) FROM foo, bar WHERE a = 1 GROUP BY c
 hash: 6889256940365688364
 plan-gist: AgFsAgAAAAAAAWoCAAUCAAAJAAAAAAEFAgsABgQ=
 explain(shape):
-• group
+• group (streaming)
 │
 └── • cross join
     │
@@ -222,7 +222,7 @@ explain(shape):
           table: foo@foo_pkey
           spans: 1 span
 explain(gist):
-• group
+• group (hash)
 │
 └── • cross join
     │

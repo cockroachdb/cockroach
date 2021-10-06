@@ -303,7 +303,7 @@ SELECT min(y) FROM xyz GROUP BY y
 ----
 project
  ├── columns: min:6
- └── group-by
+ └── group-by (streaming)
       ├── columns: y:2 min:6
       ├── grouping columns: y:2
       ├── internal-ordering: +2
@@ -323,7 +323,7 @@ SELECT max(y) FROM xyz GROUP BY y
 ----
 project
  ├── columns: max:6
- └── group-by
+ └── group-by (streaming)
       ├── columns: y:2 max:6
       ├── grouping columns: y:2
       ├── internal-ordering: +2
@@ -343,7 +343,7 @@ SELECT min(y) FROM xyz GROUP BY x
 ----
 project
  ├── columns: min:6
- └── group-by
+ └── group-by (streaming)
       ├── columns: x:1!null min:6
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
@@ -363,7 +363,7 @@ project
 opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT x,min(y) FROM xyz GROUP BY x,y
 ----
-group-by
+group-by (streaming)
  ├── columns: x:1!null min:6
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1
@@ -383,7 +383,7 @@ group-by
 opt expect-not=ReplaceScalarMinMaxWithLimit
 SELECT x,max(y) FROM xyz GROUP BY x,y
 ----
-group-by
+group-by (streaming)
  ├── columns: x:1!null max:6
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1
@@ -405,7 +405,7 @@ SELECT min(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
  ├── columns: min:6!null count:7!null
- └── group-by
+ └── group-by (streaming)
       ├── columns: x:1!null min:6!null count:7!null
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
@@ -429,7 +429,7 @@ SELECT max(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
  ├── columns: max:6!null count:7!null
- └── group-by
+ └── group-by (streaming)
       ├── columns: x:1!null max:6!null count:7!null
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
@@ -889,7 +889,7 @@ SELECT min(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
  ├── columns: min:7!null
- └── group-by
+ └── group-by (streaming)
       ├── columns: w:4 min:7!null
       ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
@@ -911,7 +911,7 @@ SELECT max(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
  ├── columns: max:7!null
- └── group-by
+ └── group-by (streaming)
       ├── columns: w:4 max:7!null
       ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
@@ -935,7 +935,7 @@ SELECT min(w) FROM kuvw WHERE v > 5 AND w IS NOT NULL GROUP BY v
 ----
 project
  ├── columns: min:7!null
- └── group-by
+ └── group-by (streaming)
       ├── columns: v:3!null min:7!null
       ├── grouping columns: v:3!null
       ├── internal-ordering: +3
@@ -962,7 +962,7 @@ SELECT max(w) FROM kuvw WHERE v > 5 GROUP BY v
 ----
 project
  ├── columns: max:7
- └── group-by
+ └── group-by (streaming)
       ├── columns: v:3!null max:7
       ├── grouping columns: v:3!null
       ├── internal-ordering: +3
@@ -981,7 +981,7 @@ project
 opt expect-not=ReplaceMinWithLimit
 SELECT min(w), min(k) FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
-group-by
+group-by (streaming)
  ├── columns: min:7!null min:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1002,7 +1002,7 @@ group-by
 opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), max(k) FROM kuvw WHERE v = 5 GROUP BY v
 ----
-group-by
+group-by (streaming)
  ├── columns: max:7 max:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1022,7 +1022,7 @@ group-by
 opt expect-not=ReplaceMinWithLimit
 SELECT min(k), max(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
-group-by
+group-by (streaming)
  ├── columns: min:7!null max:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1042,7 +1042,7 @@ group-by
 opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), count(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
-group-by
+group-by (streaming)
  ├── columns: max:7 count:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1063,7 +1063,7 @@ group-by
 opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
-group-by
+group-by (streaming)
  ├── columns: min:7
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -2453,7 +2453,7 @@ project
       │    ├── key: (2,3)
       │    ├── fd: (2,3)-->(10)
       │    ├── limit hint: 1.00
-      │    ├── group-by
+      │    ├── group-by (streaming)
       │    │    ├── columns: a:2!null b:3!null count_rows:10!null
       │    │    ├── grouping columns: a:2!null b:3!null
       │    │    ├── internal-ordering: +2,+3
@@ -2509,7 +2509,7 @@ project
       │    ├── key: (5,6)
       │    ├── fd: (5,6)-->(10)
       │    ├── limit hint: 1.00
-      │    ├── group-by
+      │    ├── group-by (streaming)
       │    │    ├── columns: d:5!null e:6!null count_rows:10!null
       │    │    ├── grouping columns: d:5!null e:6!null
       │    │    ├── internal-ordering: +5,+6
@@ -2575,7 +2575,7 @@ project
       │    ├── key: (2)
       │    ├── fd: (2)-->(10)
       │    ├── limit hint: 1.00
-      │    ├── group-by
+      │    ├── group-by (streaming)
       │    │    ├── columns: a:2!null count_rows:10!null
       │    │    ├── grouping columns: a:2!null
       │    │    ├── internal-ordering: +2
@@ -2633,7 +2633,7 @@ project
       │    ├── key: (5)
       │    ├── fd: (5)-->(10)
       │    ├── limit hint: 1.00
-      │    ├── group-by
+      │    ├── group-by (streaming)
       │    │    ├── columns: d:5!null count_rows:10!null
       │    │    ├── grouping columns: d:5!null
       │    │    ├── internal-ordering: +5
@@ -2877,7 +2877,7 @@ SELECT a, array_agg(b)
 FROM (SELECT * FROM regional ORDER BY b)
 GROUP BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: a:2!null array_agg:10!null
  ├── grouping columns: a:2!null
  ├── internal-ordering: +2,+3
@@ -2908,7 +2908,7 @@ SELECT a, array_agg(c)
 FROM (SELECT * FROM regional ORDER BY c)
 GROUP BY a
 ----
-group-by
+group-by (hash)
  ├── columns: a:2!null array_agg:10
  ├── grouping columns: a:2!null
  ├── internal-ordering: +4 opt(2)
@@ -2944,7 +2944,7 @@ SELECT a, array_agg(r)
 FROM (SELECT * FROM regional ORDER BY r)
 GROUP BY a
 ----
-group-by
+group-by (hash)
  ├── columns: a:2!null array_agg:10!null
  ├── grouping columns: a:2!null
  ├── internal-ordering: +1 opt(2)
@@ -2976,7 +2976,7 @@ CREATE TABLE abcd (
 opt expect=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT max(b), a FROM abcd WHERE c > 0 GROUP BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: max:8 a:1
  ├── grouping columns: a:1
  ├── internal-ordering: +1
@@ -2995,7 +2995,7 @@ group-by
 opt expect=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT count(*), c FROM abcd WHERE d = 1 GROUP BY c
 ----
-group-by
+group-by (streaming)
  ├── columns: count:8!null c:3
  ├── grouping columns: c:3
  ├── internal-ordering: +3
@@ -3150,7 +3150,7 @@ upsert xyz
 opt expect-not=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT max(b), c FROM abcd WHERE c > 0 GROUP BY c
 ----
-group-by
+group-by (hash)
  ├── columns: max:8 c:3!null
  ├── grouping columns: c:3!null
  ├── key: (3)
@@ -3174,7 +3174,7 @@ group-by
 opt expect-not=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT count(*), d FROM abcd WHERE d = 1 GROUP BY d
 ----
-group-by
+group-by (streaming)
  ├── columns: count:8!null d:4!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -3194,7 +3194,7 @@ group-by
 opt expect-not=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT max(c), a FROM abcd WHERE c > 0 GROUP BY a
 ----
-group-by
+group-by (hash)
  ├── columns: max:8!null a:1
  ├── grouping columns: a:1
  ├── key: (1)
@@ -3218,7 +3218,7 @@ group-by
 opt expect-not=EliminateIndexJoinOrProjectInsideGroupBy
 SELECT max(d), c FROM abcd WHERE d = 1 GROUP BY c
 ----
-group-by
+group-by (streaming)
  ├── columns: max:8!null c:3
  ├── grouping columns: c:3
  ├── internal-ordering: +3 opt(4)
@@ -3243,7 +3243,7 @@ SELECT a, array_agg(b)
 FROM (SELECT a, b FROM abcd WHERE c > 0 ORDER BY c)
 GROUP BY a
 ----
-group-by
+group-by (hash)
  ├── columns: a:1 array_agg:8
  ├── grouping columns: a:1
  ├── internal-ordering: +3 opt(1)
@@ -3266,3 +3266,230 @@ group-by
  └── aggregations
       └── array-agg [as=array_agg:8, outer=(2)]
            └── b:2
+
+# --------------------------------------------------
+# GenerateLimitedGroupByScans
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE defg (
+d INT,
+e INT,
+f INT,
+g INT,
+INDEX dd (d),
+INDEX dfg (d, f, g),
+INDEX df (d, f),
+INDEX gd (g, d),
+INDEX gg (g)
+)
+----
+
+memo
+SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
+----
+memo (optimized, ~16KB, required=[presentation: d:1,e:2,count:8])
+ ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
+ │    └── [presentation: d:1,e:2,count:8]
+ │         ├── best: (limit G4="[limit hint: 10.00]" G3)
+ │         └── cost: 641.98
+ ├── G2: (group-by G7 G8 cols=(1,2)) (group-by G7 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G7 G8 cols=(1,2))
+ │         └── cost: 1144.90
+ ├── G3: (const 10)
+ ├── G4: (group-by G9 G8 cols=(1,2)) (group-by G9 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G9="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 641.87
+ ├── G5: (group-by G10 G8 cols=(1,2)) (group-by G10 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G10="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 642.07
+ ├── G6: (group-by G11 G8 cols=(1,2)) (group-by G11 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G11="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 641.97
+ ├── G7: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G8: (aggregations G12)
+ ├── G9: (index-join G13 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G13="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.44
+ │    └── []
+ │         ├── best: (index-join G13 defg,cols=(1,2))
+ │         └── cost: 7134.44
+ ├── G10: (index-join G14 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G14="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.64
+ │    └── []
+ │         ├── best: (index-join G14 defg,cols=(1,2))
+ │         └── cost: 7154.64
+ ├── G11: (index-join G15 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G15="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.54
+ │    └── []
+ │         ├── best: (index-join G15 defg,cols=(1,2))
+ │         └── cost: 7144.54
+ ├── G12: (count-rows)
+ ├── G13: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 24.42
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G14: (scan defg@dfg,cols=(1,5))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 24.62
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,5))
+ │         └── cost: 1084.62
+ └── G15: (scan defg@df,cols=(1,5))
+      ├── [ordering: +1] [limit hint: 10.00]
+      │    ├── best: (scan defg@df,cols=(1,5))
+      │    └── cost: 24.52
+      └── []
+           ├── best: (scan defg@df,cols=(1,5))
+           └── cost: 1074.52
+
+# Rule will trigger, but because no order is specified and an index matches,
+# this will result in a streaming group by.
+opt expect=GenerateLimitedGroupByScans
+SELECT d, g, count(*) FROM defg GROUP BY d, g LIMIT 10
+----
+limit
+ ├── columns: d:1 g:4 count:8!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(8)
+ ├── group-by (streaming)
+ │    ├── columns: d:1 g:4 count_rows:8!null
+ │    ├── grouping columns: d:1 g:4
+ │    ├── internal-ordering: +4,+1
+ │    ├── key: (1,4)
+ │    ├── fd: (1,4)-->(8)
+ │    ├── limit hint: 10.00
+ │    ├── scan defg@gd
+ │    │    ├── columns: d:1 g:4
+ │    │    ├── ordering: +4,+1
+ │    │    └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+opt expect=GenerateLimitedGroupByScans
+SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY d LIMIT 10
+----
+limit
+ ├── columns: d:1 e:2 count:8!null
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(8)
+ ├── ordering: +1
+ ├── group-by (partial streaming)
+ │    ├── columns: d:1 e:2 count_rows:8!null
+ │    ├── grouping columns: d:1 e:2
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(8)
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    ├── index-join defg
+ │    │    ├── columns: d:1 e:2
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 10.00
+ │    │    └── scan defg@dd
+ │    │         ├── columns: d:1 rowid:5!null
+ │    │         ├── key: (5)
+ │    │         ├── fd: (5)-->(1)
+ │    │         ├── ordering: +1
+ │    │         └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+# GenerateLimitedGroupByScans will not result in an index scan since the order
+# by is a column not in an index.
+opt expect-not=GenerateLimitedGroupByScans
+SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY e LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 count:8!null
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(8)
+ ├── ordering: +2
+ └── group-by (hash)
+      ├── columns: d:1 e:2 count_rows:8!null
+      ├── grouping columns: d:1 e:2
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(8)
+      ├── scan defg
+      │    └── columns: d:1 e:2
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# GenerateLimitedGroupByScans will be triggered, but not add an index
+# scan to the memo since the order by and group by don't share columns.
+memo
+SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY count(*) LIMIT 10
+----
+memo (optimized, ~5KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
+ ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8})
+ │    ├── [presentation: d:1,e:2,count:8] [ordering: +8]
+ │    │    ├── best: (top-k G2 &{10 +8})
+ │    │    └── cost: 1231.64
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +8})
+ │         └── cost: 1231.64
+ ├── G2: (group-by G4 G5 cols=(1,2)) (group-by G4 G5 cols=(1,2),ordering=+1)
+ │    ├── [ordering: +8] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1394.38
+ │    └── []
+ │         ├── best: (group-by G4 G5 cols=(1,2))
+ │         └── cost: 1144.90
+ ├── G3: (const 10)
+ ├── G4: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G5: (aggregations G6)
+ └── G6: (count-rows)
+
+# Rule does not apply because the grouping columns are not the first columns of
+# an index.
+opt expect-not=GenerateLimitedGroupByScans
+SELECT f, e, count(*) FROM defg GROUP BY f, e LIMIT 10
+----
+limit
+ ├── columns: f:3 e:2 count:8!null
+ ├── cardinality: [0 - 10]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(8)
+ ├── group-by (hash)
+ │    ├── columns: e:2 f:3 count_rows:8!null
+ │    ├── grouping columns: e:2 f:3
+ │    ├── key: (2,3)
+ │    ├── fd: (2,3)-->(8)
+ │    ├── limit hint: 10.00
+ │    ├── scan defg
+ │    │    └── columns: e:2 f:3
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10

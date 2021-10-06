@@ -160,7 +160,7 @@ vectorized: true
         │ order: -any_not_null
         │ k: 10
         │
-        └── • group
+        └── • group (streaming)
             │ columns: (k, sum, any_not_null)
             │ estimated row count: 1,000 (missing stats)
             │ aggregate 0: sum(w)

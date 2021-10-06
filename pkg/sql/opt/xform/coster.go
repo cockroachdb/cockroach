@@ -1205,9 +1205,10 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 
 	// If this is a streaming GroupBy with a limit hint, l, we only need to
 	// process enough input rows to output l rows.
-	isStreaming := isStreamingAggregation(private, required)
-	if isStreaming && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
+	streamingType := private.GroupingOrderType(&required.Ordering)
+	if (streamingType != memo.NoStreaming) && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
 		inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
+		outputRowCount = math.Min(outputRowCount, required.LimitHint)
 	}
 
 	// Cost per row depends on the number of grouping columns and the number of
@@ -1219,7 +1220,7 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	//
 	// The cost is chosen so that it's always less than the cost to sort the
 	// input.
-	if groupingColCount > 0 && !isStreaming {
+	if groupingColCount > 0 && streamingType != memo.Streaming {
 		// Add the cost to build the hash table.
 		cost += memo.Cost(inputRowCount) * cpuCostFactor
 
@@ -1540,17 +1541,6 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 
 	// Weight the constraintScore twice as much as the lease score.
 	return (constraintScore*2 + leaseScore) / 3
-}
-
-// isStreamingAggregation returns true if the GroupingPrivate indicates that
-// streaming aggregation will be performed during execution with the required
-// physical properties. Currently, streaming aggregation is performed when all
-// the grouping columns are ordered. The execution engine does not support
-// streaming aggregation with partially ordered grouping columns.
-func isStreamingAggregation(g *memo.GroupingPrivate, required *physical.Required) bool {
-	groupingColCount := g.GroupingCols.Len()
-	return groupingColCount > 0 &&
-		groupingColCount == len(ordering.StreamingGroupingColOrdering(g, &required.Ordering))
 }
 
 // streamingGroupByLimitHint calculates an appropriate limit hint for the input
