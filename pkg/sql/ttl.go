@@ -136,7 +136,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 						// TODO(XXX): order by directions.
 						// TODO(XXX): prevent full table scans?
-						_, err := ie.Exec(ctx, "ttl-begin", txn, "SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()")
+						_, err := ie.Exec(ctx, "ttl-begin", txn, "SET TRANSACTION AS OF SYSTEM TIME '-30s'")
 						if err != nil {
 							return err
 						}
