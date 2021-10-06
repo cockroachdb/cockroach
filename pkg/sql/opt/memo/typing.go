@@ -169,7 +169,6 @@ var typingFuncMap map[opt.Operator]typingFunc
 func init() {
 	typingFuncMap = make(map[opt.Operator]typingFunc)
 	typingFuncMap[opt.PlaceholderOp] = typeAsTypedExpr
-	typingFuncMap[opt.UnsupportedExprOp] = typeAsTypedExpr
 	typingFuncMap[opt.CoalesceOp] = typeCoalesce
 	typingFuncMap[opt.CaseOp] = typeCase
 	typingFuncMap[opt.WhenOp] = typeWhen
