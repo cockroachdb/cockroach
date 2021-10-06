@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1155,6 +1156,11 @@ type ExecutorConfig struct {
 	// SpanConfigReconciliationJobDeps are used to drive the span config
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+
+	// InternalExecutorFactory is used to create an InternalExecutor binded with
+	// SessionData and other ExtraTxnState.
+	// This is currently only for builtin functions where we need to execute sql.
+	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

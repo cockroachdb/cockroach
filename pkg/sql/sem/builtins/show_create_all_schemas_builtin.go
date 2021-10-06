@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -26,7 +25,7 @@ import (
 // crdb_internal.show_create_all_schemas for a specified database.
 func getSchemaIDs(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
 	acc *mon.BoundAccount,
@@ -36,7 +35,7 @@ func getSchemaIDs(
 		FROM %s.crdb_internal.create_schema_statements
 		WHERE database_name = $1
 		`, dbName)
-	it, err := ie.QueryIteratorEx(
+	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
 		txn,
@@ -69,7 +68,7 @@ func getSchemaIDs(
 // getSchemaCreateStatement gets the create statement to recreate a schema (ignoring fks)
 // for a given schema id in a database.
 func getSchemaCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -77,7 +76,7 @@ func getSchemaCreateStatement(
 		FROM %s.crdb_internal.create_schema_statements
 		WHERE descriptor_id = $1
 	`, dbName)
-	row, err := ie.QueryRowEx(
+	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
 		txn,

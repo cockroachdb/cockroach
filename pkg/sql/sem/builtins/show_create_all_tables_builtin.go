@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -50,12 +49,12 @@ const foreignKeyValidationWarning = "-- Validate foreign key constraints. These 
 // The tables are sorted by table id first to guarantee stable ordering.
 func getTopologicallySortedTableIDs(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
-	ids, err := getTableIDs(ctx, ie, txn, dbName, acc)
+	ids, err := getTableIDs(ctx, evalPlanner, txn, dbName, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +74,7 @@ func getTopologicallySortedTableIDs(
 		FROM %s.crdb_internal.backward_dependencies
 		WHERE descriptor_id = $1
 		`, dbName)
-		it, err := ie.QueryIteratorEx(
+		it, err := evalPlanner.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
 			txn,
@@ -154,7 +153,7 @@ func getTopologicallySortedTableIDs(
 // crdb_internal.show_create_all_tables for a specified database.
 func getTableIDs(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
 	acc *mon.BoundAccount,
@@ -166,7 +165,7 @@ func getTableIDs(
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
 		`, dbName)
-	it, err := ie.QueryIteratorEx(
+	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,
@@ -242,7 +241,7 @@ func topologicalSort(
 // getCreateStatement gets the create statement to recreate a table (ignoring fks)
 // for a given table id in a database.
 func getCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -250,7 +249,7 @@ func getCreateStatement(
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, dbName)
-	row, err := ie.QueryRowEx(
+	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,
@@ -269,7 +268,7 @@ func getCreateStatement(
 // foreign keys for a given table id in a database.
 func getAlterStatements(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	id int64,
 	dbName string,
@@ -281,7 +280,7 @@ func getAlterStatements(
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, statementType, dbName)
-	row, err := ie.QueryRowEx(
+	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		txn,

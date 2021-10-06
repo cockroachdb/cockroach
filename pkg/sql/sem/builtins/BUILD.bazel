@@ -64,7 +64,6 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
-        "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/streaming",
         "//pkg/util",
