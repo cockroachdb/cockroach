@@ -569,6 +569,18 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sarama.V0_8_2_0, saramaCfg.Version)
 	})
+	t.Run("apply parses valid version with capitalized key", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Version": "0.8.2.0"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.V0_8_2_0, saramaCfg.Version)
+	})
 	t.Run("apply allows for unset version", func(t *testing.T) {
 		opts := make(map[string]string)
 		opts[changefeedbase.OptKafkaSinkConfig] = `{}`
