@@ -549,6 +549,7 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	groupColOrdering colinfo.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
+	groupingOrder exec.GroupingOrder,
 ) (exec.Node, error) {
 	return e.constructAggregators(
 		input,

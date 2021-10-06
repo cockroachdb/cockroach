@@ -46,7 +46,7 @@ sort
  ├── key: (9,10)
  ├── fd: (9,10)-->(19,20,22,24-28)
  ├── ordering: +9,+10
- └── group-by
+ └── group-by (hash)
       ├── columns: l_returnflag:9!null l_linestatus:10!null sum:19!null sum:20!null sum:22!null sum:24!null avg:25!null avg:26!null avg:27!null count_rows:28!null
       ├── grouping columns: l_returnflag:9!null l_linestatus:10!null
       ├── immutable
@@ -159,7 +159,7 @@ project
            ├── columns: p_partkey:1!null p_mfgr:3!null s_name:13!null s_address:14!null s_phone:16!null s_acctbal:17!null s_comment:18!null ps_partkey:21!null ps_suppkey:22!null ps_supplycost:24!null n_name:29!null min:66!null
            ├── key: (21,22)
            ├── fd: (1)-->(3), (21,22)-->(1,3,13,14,16-18,24,29,66), (1)==(21), (21)==(1), (22)-->(13,14,16-18,29), (24)==(66), (66)==(24)
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: p_partkey:1!null p_mfgr:3!null s_name:13!null s_address:14!null s_phone:16!null s_acctbal:17!null s_comment:18!null ps_partkey:21!null ps_suppkey:22!null ps_supplycost:24!null n_name:29!null min:66!null
            │    ├── grouping columns: ps_partkey:21!null ps_suppkey:22!null
            │    ├── key: (21,22)
@@ -324,7 +324,7 @@ top-k
  ├── key: (22)
  ├── fd: (22)-->(15,18,41)
  ├── ordering: -41,+15
- └── group-by
+ └── group-by (hash)
       ├── columns: o_orderdate:15!null o_shippriority:18!null l_orderkey:22!null sum:41!null
       ├── grouping columns: l_orderkey:22!null
       ├── immutable
@@ -416,7 +416,7 @@ sort
  ├── key: (6)
  ├── fd: (6)-->(30)
  ├── ordering: +6
- └── group-by
+ └── group-by (hash)
       ├── columns: o_orderpriority:6!null count_rows:30!null
       ├── grouping columns: o_orderpriority:6!null
       ├── key: (6)
@@ -486,7 +486,7 @@ sort
  ├── key: (50)
  ├── fd: (50)-->(61)
  ├── ordering: -61
- └── group-by
+ └── group-by (hash)
       ├── columns: n_name:50!null sum:61!null
       ├── grouping columns: n_name:50!null
       ├── immutable
@@ -671,7 +671,7 @@ sort
  ├── key: (50,56,61)
  ├── fd: (50,56,61)-->(63)
  ├── ordering: +50,+56,+61
- └── group-by
+ └── group-by (hash)
       ├── columns: n1.n_name:50!null n2.n_name:56!null l_year:61 sum:63!null
       ├── grouping columns: n1.n_name:50!null n2.n_name:56!null l_year:61
       ├── immutable
@@ -799,7 +799,7 @@ sort
       ├── immutable
       ├── key: (77)
       ├── fd: (77)-->(82)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: o_year:77 sum:80!null sum:81!null
       │    ├── grouping columns: o_year:77
       │    ├── immutable
@@ -956,7 +956,7 @@ sort
  ├── key: (58,63)
  ├── fd: (58,63)-->(65)
  ├── ordering: +58,-63
- └── group-by
+ └── group-by (hash)
       ├── columns: n_name:58!null o_year:63 sum:65!null
       ├── grouping columns: n_name:58!null o_year:63
       ├── immutable
@@ -1091,7 +1091,7 @@ top-k
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,6,8,41,47)
  ├── ordering: -47
- └── group-by
+ └── group-by (hash)
       ├── columns: c_custkey:1!null c_name:2!null c_address:3!null c_phone:5!null c_acctbal:6!null c_comment:8!null n_name:41!null sum:47!null
       ├── grouping columns: c_custkey:1!null
       ├── immutable
@@ -1204,7 +1204,7 @@ sort
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(24)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: ps_partkey:1!null sum:24!null
       │    ├── grouping columns: ps_partkey:1!null
       │    ├── immutable
@@ -1351,7 +1351,7 @@ sort
  ├── key: (26)
  ├── fd: (26)-->(31,33)
  ├── ordering: +26
- └── group-by
+ └── group-by (hash)
       ├── columns: l_shipmode:26!null sum:31!null sum:33!null
       ├── grouping columns: l_shipmode:26!null
       ├── key: (26)
@@ -1423,12 +1423,12 @@ sort
  ├── key: (22)
  ├── fd: (22)-->(23)
  ├── ordering: -23,-22
- └── group-by
+ └── group-by (hash)
       ├── columns: count:22!null count_rows:23!null
       ├── grouping columns: count:22!null
       ├── key: (22)
       ├── fd: (22)-->(23)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: c_custkey:1!null count:22!null
       │    ├── grouping columns: c_custkey:1!null
       │    ├── key: (1)
@@ -1603,7 +1603,7 @@ project
       │         ├── immutable
       │         ├── key: (12)
       │         ├── fd: (12)-->(29)
-      │         ├── group-by
+      │         ├── group-by (hash)
       │         │    ├── columns: l_suppkey:12!null sum:29!null
       │         │    ├── grouping columns: l_suppkey:12!null
       │         │    ├── immutable
@@ -1634,7 +1634,7 @@ project
       │                             ├── immutable
       │                             ├── key: ()
       │                             ├── fd: ()-->(50)
-      │                             ├── group-by
+      │                             ├── group-by (hash)
       │                             │    ├── columns: l_suppkey:32!null sum:49!null
       │                             │    ├── grouping columns: l_suppkey:32!null
       │                             │    ├── immutable
@@ -1711,7 +1711,7 @@ sort
  ├── key: (11-13)
  ├── fd: (11-13)-->(28)
  ├── ordering: -28,+11,+12,+13
- └── group-by
+ └── group-by (hash)
       ├── columns: p_brand:11!null p_type:12!null p_size:13!null count:28!null
       ├── grouping columns: p_brand:11!null p_type:12!null p_size:13!null
       ├── key: (11-13)
@@ -1818,7 +1818,7 @@ project
  │    │    │    │    ├── immutable
  │    │    │    │    ├── key: (19)
  │    │    │    │    ├── fd: (19)-->(49)
- │    │    │    │    ├── group-by
+ │    │    │    │    ├── group-by (streaming)
  │    │    │    │    │    ├── columns: p_partkey:19!null avg:48!null
  │    │    │    │    │    ├── grouping columns: p_partkey:19!null
  │    │    │    │    │    ├── internal-ordering: +(19|31) opt(22,25)
@@ -1919,7 +1919,7 @@ top-k
  ├── key: (11)
  ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
  ├── ordering: -14,+15
- └── group-by
+ └── group-by (hash)
       ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_totalprice:14!null o_orderdate:15!null sum:59!null
       ├── grouping columns: o_orderkey:11!null
       ├── key: (11)
@@ -1953,7 +1953,7 @@ top-k
       │    │    │    │    ├── key: (40)
       │    │    │    │    ├── fd: (40)-->(58)
       │    │    │    │    ├── ordering: +40
-      │    │    │    │    ├── group-by
+      │    │    │    │    ├── group-by (streaming)
       │    │    │    │    │    ├── columns: l_orderkey:40!null sum:58!null
       │    │    │    │    │    ├── grouping columns: l_orderkey:40!null
       │    │    │    │    │    ├── key: (40)
@@ -2172,7 +2172,7 @@ sort
            │         │         │    ├── immutable
            │         │         │    ├── key: (16,17)
            │         │         │    ├── fd: (16,17)-->(18,52)
-           │         │         │    ├── group-by
+           │         │         │    ├── group-by (hash)
            │         │         │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null sum:52!null
            │         │         │    │    ├── grouping columns: ps_partkey:16!null ps_suppkey:17!null
            │         │         │    │    ├── key: (16,17)
@@ -2268,7 +2268,7 @@ top-k
  ├── key: (2)
  ├── fd: (2)-->(81)
  ├── ordering: -81,+2
- └── group-by
+ └── group-by (hash)
       ├── columns: s_name:2!null count_rows:81!null
       ├── grouping columns: s_name:2!null
       ├── key: (2)
@@ -2387,7 +2387,7 @@ sort
  ├── key: (33)
  ├── fd: (33)-->(34,35)
  ├── ordering: +33
- └── group-by
+ └── group-by (hash)
       ├── columns: cntrycode:33 count_rows:34!null sum:35!null
       ├── grouping columns: cntrycode:33
       ├── immutable

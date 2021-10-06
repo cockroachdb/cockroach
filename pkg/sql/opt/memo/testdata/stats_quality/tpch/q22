@@ -62,7 +62,7 @@ sort
  ├── key: (33)
  ├── fd: (33)-->(34,35)
  ├── ordering: +33
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q22_group_by_2
       ├── columns: cntrycode:33(string) count_rows:34(int!null) sum:35(float!null)
       ├── grouping columns: cntrycode:33(string)

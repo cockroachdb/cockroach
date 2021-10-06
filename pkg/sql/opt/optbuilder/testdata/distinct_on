@@ -278,7 +278,7 @@ SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 distinct-on
  ├── columns: min:8  [hidden: y:2]
  ├── grouping columns: y:2
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: y:2 min:8
  │    ├── grouping columns: y:2
  │    ├── project
@@ -302,7 +302,7 @@ distinct-on
       ├── columns: min:8!null
       └── select
            ├── columns: y:2 min:8!null
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: y:2 min:8
            │    ├── grouping columns: y:2
            │    ├── project

@@ -41,7 +41,7 @@ project
  ├── columns: count:7(int!null)
  ├── immutable
  ├── stats: [rows=28.5478625]
- └── group-by
+ └── group-by (hash)
       ├── columns: y:2(int) count_rows:7(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
