@@ -134,7 +134,7 @@ func BuildChildPhysicalProps(
 
 		// For streaming GroupBy expressions we can estimate the number of input
 		// rows needed to produce LimitHint output rows.
-		if isStreamingAggregation(private, parentProps) {
+		if isStreamingAggregation(private, parentProps) || isPartialOrderAggregation(private, parentProps) {
 			if input, ok := parent.Child(nth).(memo.RelExpr); ok {
 				inputRows := input.Relational().Stats.RowCount
 				childProps.LimitHint = streamingGroupByInputLimitHint(inputRows, outputRows, parentProps.LimitHint)
