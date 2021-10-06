@@ -34,8 +34,9 @@ import (
 //       up", when the Scan operator is wrapped by an operator that constrains
 //       or limits scan output in some way (e.g. Select, Limit, InnerJoin).
 //       Index joins are only lower cost when their input does not include all
-//       rows from the table. See ConstrainScans and LimitScans for cases where
-//       index joins are introduced into the memo.
+//       rows from the table. See ConstrainScans, LimitScans, and
+//       LimitedGroupByScans for cases where index joins are introduced into the
+//       memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet

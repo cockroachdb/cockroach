@@ -12,6 +12,7 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -393,4 +394,59 @@ func (c *CustomFuncs) MakeGroupingPrivate(
 		NullsAreDistinct: nullsAreDistinct,
 		ErrorOnDup:       errorText,
 	}
+}
+
+// GenerateLimitedGroupByScans enumerates all non-inverted secondary indexes on
+// the given Scan operator's table and generates an alternate Scan operator for
+// each index that includes a partial set of needed columns specified in the
+// ScanOpDef. An IndexJoin is constructed to add missing columns. A GroupBy and
+// Limit are also constructed to make an equivalent expression for the memo.
+//
+// For cases where the Scan's secondary index covers all needed columns, see
+// GenerateIndexScans, which does not construct an IndexJoin.
+func (c *CustomFuncs) GenerateLimitedGroupByScans(
+	grp memo.RelExpr,
+	sp *memo.ScanPrivate,
+	aggs memo.AggregationsExpr,
+	gp *memo.GroupingPrivate,
+	limit opt.ScalarExpr,
+	required props.OrderingChoice,
+) {
+	// Iterate over all non-inverted and non-partial secondary indexes.
+	var iter scanIndexIter
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator only produces pseudo-partial indexes (the predicate is
+		// true) because no filters are passed to iter.Init to imply a partial
+		// index predicate. constProj is a projection of constant values based
+		// on a partial index predicate. It should always be empty because a
+		// pseudo-partial index cannot hold a column constant. If it is not, we
+		// panic to avoid performing a logically incorrect transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
+		// If the secondary index includes the set of needed columns, then this
+		// case does not need an index join and will be covered in
+		// GenerateIndexScans.
+		if isCovering {
+			return
+		}
+
+		// Scan whatever columns we need which are available from the index.
+		newScanPrivate := *sp
+		newScanPrivate.Index = index.Ordinal()
+		newScanPrivate.Cols = indexCols.Intersection(sp.Cols)
+		input := c.e.f.ConstructScan(&newScanPrivate)
+		// Construct an IndexJoin operator that provides the columns missing from
+		// the index.
+		input = c.e.f.ConstructIndexJoin(input, &memo.IndexJoinPrivate{
+			Table: sp.Table,
+			Cols:  sp.Cols,
+		})
+		// Reconstruct the GroupBy and Limit so the new expression in the memo is
+		// equivalent.
+		input = c.e.f.ConstructGroupBy(input, aggs, gp)
+		grp.Memo().AddLimitToGroup(&memo.LimitExpr{Limit: limit, Ordering: required, Input: input}, grp)
+	})
 }

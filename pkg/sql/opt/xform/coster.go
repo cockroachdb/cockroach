@@ -1193,8 +1193,10 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	// If this is a streaming GroupBy with a limit hint, l, we only need to
 	// process enough input rows to output l rows.
 	isStreaming := isStreamingAggregation(private, required)
-	if isStreaming && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
+	isPartialOrder := isPartialOrderAggregation(private, required)
+	if (isStreaming || isPartialOrder) && grouping.Op() == opt.GroupByOp && required.LimitHint > 0 {
 		inputRowCount = streamingGroupByInputLimitHint(inputRowCount, outputRowCount, required.LimitHint)
+		outputRowCount = math.Min(outputRowCount, required.LimitHint)
 	}
 
 	// Cost per row depends on the number of grouping columns and the number of
@@ -1538,6 +1540,15 @@ func isStreamingAggregation(g *memo.GroupingPrivate, required *physical.Required
 	groupingColCount := g.GroupingCols.Len()
 	return groupingColCount > 0 &&
 		groupingColCount == len(ordering.StreamingGroupingColOrdering(g, &required.Ordering))
+}
+
+// isPartialOrderAggregation returns true if the GroupingPrivate indicates that
+// aggregation with partially ordered grouping columns will be performed with
+// the required physical properties.
+func isPartialOrderAggregation(g *memo.GroupingPrivate, required *physical.Required) bool {
+	groupingColCount := g.GroupingCols.Len()
+	return groupingColCount > 0 &&
+		len(ordering.StreamingGroupingColOrdering(g, &required.Ordering)) > 0
 }
 
 // streamingGroupByLimitHint calculates an appropriate limit hint for the input
