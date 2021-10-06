@@ -58,7 +58,7 @@ sort
  ├── key: (11-13)
  ├── fd: (11-13)-->(28)
  ├── ordering: -28,+11,+12,+13
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q16_group_by_2
       ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) count:28(int!null)
       ├── grouping columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)

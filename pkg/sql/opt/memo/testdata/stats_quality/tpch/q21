@@ -67,7 +67,7 @@ top-k
  ├── key: (2)
  ├── fd: (2)-->(81)
  ├── ordering: -81,+2
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q21_group_by_2
       ├── columns: s_name:2(char!null) count_rows:81(int!null)
       ├── grouping columns: s_name:2(char!null)

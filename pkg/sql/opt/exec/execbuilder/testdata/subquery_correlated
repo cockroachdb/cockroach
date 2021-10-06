@@ -27,7 +27,7 @@ vectorized: true
 │
 └── • render
     │
-    └── • group
+    └── • group (hash)
         │ group by: c_id
         │
         └── • sort

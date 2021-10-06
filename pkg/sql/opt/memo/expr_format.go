@@ -216,6 +216,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
+	case *GroupByExpr:
+		fmt.Fprintf(f.Buffer, "%v ", e.Op())
+		groupingColOrderType := e.Private().(*GroupingPrivate).GroupingOrderType(&required.Ordering)
+		if groupingColOrderType == Streaming {
+			fmt.Fprintf(f.Buffer, "(streaming)")
+		} else if groupingColOrderType == PartialStreaming {
+			fmt.Fprintf(f.Buffer, "(partial streaming)")
+		} else {
+			fmt.Fprintf(f.Buffer, "(hash)")
+		}
+
 	case *SortExpr:
 		if t.InputOrdering.Any() {
 			fmt.Fprintf(f.Buffer, "%v", e.Op())

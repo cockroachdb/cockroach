@@ -64,7 +64,7 @@ top-k
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,6,8,41,47)
  ├── ordering: -47
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q10_group_by_2
       ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:41(char!null) sum:47(float!null)
       ├── grouping columns: c_custkey:1(int!null)

@@ -1355,8 +1355,9 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			&groupBy.GroupingPrivate, &groupBy.RequiredPhysical().Ordering,
 		))
 		reqOrdering := ep.reqOrdering(groupBy)
+		orderType := exec.GroupingOrderType(groupBy.GroupingOrderType(&groupBy.RequiredPhysical().Ordering))
 		ep.root, err = b.factory.ConstructGroupBy(
-			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering,
+			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering, orderType,
 		)
 	}
 	if err != nil {

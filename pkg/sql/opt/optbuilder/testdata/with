@@ -946,7 +946,7 @@ with &2 (included_parts)
  │              │    └── filters (true)
  │              └── filters
  │                   └── p.part:13 = sub_part:10
- └── group-by
+ └── group-by (hash)
       ├── columns: sub_part:19 sum:22
       ├── grouping columns: sub_part:19
       ├── project

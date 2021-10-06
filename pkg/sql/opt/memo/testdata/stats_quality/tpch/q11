@@ -59,7 +59,7 @@ sort
       ├── stats: [rows=9927.82897, distinct(1)=9927.82897, null(1)=0, distinct(24)=9927.82897, null(24)=0]
       ├── key: (1)
       ├── fd: (1)-->(24)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── save-table-name: q11_group_by_3
       │    ├── columns: ps_partkey:1(int!null) sum:24(float!null)
       │    ├── grouping columns: ps_partkey:1(int!null)

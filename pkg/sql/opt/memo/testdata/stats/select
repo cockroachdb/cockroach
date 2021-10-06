@@ -150,7 +150,7 @@ SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 project
  ├── columns: sum:6(decimal!null)
  ├── stats: [rows=100]
- └── group-by
+ └── group-by (hash)
       ├── columns: z:2(int!null) sum:6(decimal!null)
       ├── grouping columns: z:2(int!null)
       ├── stats: [rows=100, distinct(2)=100, null(2)=0]
@@ -236,7 +236,7 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 project
  ├── columns: count:10(int!null)
  ├── stats: [rows=0.999973439]
- └── group-by
+ └── group-by (hash)
       ├── columns: col0:2(int) count_rows:10(int!null)
       ├── grouping columns: col0:2(int)
       ├── stats: [rows=0.999973439, distinct(2)=0.999973439, null(2)=0.999973439]
@@ -1364,7 +1364,7 @@ project
  │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
  │    ├── key: (2,3)
  │    ├── fd: ()-->(4)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
  │    │    ├── cardinality: [1 - 2]

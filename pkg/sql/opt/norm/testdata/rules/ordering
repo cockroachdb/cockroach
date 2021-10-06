@@ -112,7 +112,7 @@ offset
 norm
 SELECT array_agg(b), a, c FROM abcde GROUP BY b, a, c ORDER BY a, b, c
 ----
-group-by
+group-by (streaming)
  ├── columns: array_agg:8 a:1!null c:3
  ├── grouping columns: a:1!null
  ├── key: (1)

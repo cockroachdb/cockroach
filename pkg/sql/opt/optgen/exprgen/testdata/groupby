@@ -23,7 +23,7 @@ expr
   (NoOrdering)
 )
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1(int)
  ├── grouping columns: t.public.abc.a:1(int)
  ├── internal-ordering: +1
@@ -61,7 +61,7 @@ expr
   (NoOrdering)
 )
 ----
-group-by
+group-by (hash)
  ├── columns: a:1(int)
  ├── grouping columns: t.public.abc.a:1(int)
  ├── cardinality: [0 - 10]

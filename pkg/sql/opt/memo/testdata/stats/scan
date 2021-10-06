@@ -132,7 +132,7 @@ scan a
 opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
-group-by
+group-by (streaming)
  ├── columns: count:8(int!null) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── internal-ordering: +1

@@ -290,7 +290,7 @@ vectorized: true
                 │ estimated row count: 1,000 (missing stats)
                 │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
                 │
-                └── • group
+                └── • group (hash)
                     │ columns: (v int, d decimal, max int)
                     │ estimated row count: 1,000 (missing stats)
                     │ aggregate 0: max(k)
@@ -323,7 +323,7 @@ vectorized: true
         │ estimated row count: 1,000 (missing stats)
         │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
         │
-        └── • group
+        └── • group (hash)
             │ columns: (v int, d decimal, max int)
             │ estimated row count: 1,000 (missing stats)
             │ aggregate 0: max(k)

@@ -52,7 +52,7 @@ top-k
  ├── key: (22)
  ├── fd: (22)-->(15,18,41)
  ├── ordering: -41,+15
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q3_group_by_2
       ├── columns: o_orderdate:15(date!null) o_shippriority:18(int!null) l_orderkey:22(int!null) sum:41(float!null)
       ├── grouping columns: l_orderkey:22(int!null)

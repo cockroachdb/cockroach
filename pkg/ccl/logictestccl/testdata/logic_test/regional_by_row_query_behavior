@@ -1217,7 +1217,7 @@ LIMIT 1] OFFSET 2
         │ estimated row count: 333,300
         │ filter: count_rows > 1
         │
-        └── • group
+        └── • group (streaming)
             │ columns: (a, b, count_rows)
             │ estimated row count: 999,900
             │ aggregate 0: count_rows()
@@ -1299,7 +1299,7 @@ LIMIT 1] OFFSET 2
         │ estimated row count: 111,111
         │ filter: count_rows > 1
         │
-        └── • group
+        └── • group (streaming)
             │ columns: (b, count_rows)
             │ estimated row count: 333,333
             │ aggregate 0: count_rows()
@@ -1367,7 +1367,7 @@ LIMIT 1] OFFSET 2
         │ estimated row count: 111,111
         │ filter: count_rows > 1
         │
-        └── • group
+        └── • group (streaming)
             │ columns: (c, count_rows)
             │ estimated row count: 333,333
             │ aggregate 0: count_rows()
