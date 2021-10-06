@@ -41,8 +41,8 @@ var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
 
 // Embedded certificates specific to multi-tenancy testing.
 const (
-	EmbeddedTenantClientCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantClientCAKey  = "ca-client-tenant.key" // CA for client connections
+	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
+	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
 )
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
