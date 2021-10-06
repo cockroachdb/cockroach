@@ -29,7 +29,7 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
-	testing *TracerTestingKnobs
+	tracer *Tracer
 
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
@@ -125,6 +125,10 @@ func (b *sizeLimitedBuffer) Reset() {
 // sync.Pool) after finish(), although we're not currently taking advantage of
 // this.
 func (s *crdbSpan) finish() bool {
+	if s.parent == nil {
+		s.tracer.activeSpansRegistry.removeSpan(s.spanID)
+	}
+
 	{
 		s.mu.Lock()
 		if s.mu.duration >= 0 {
@@ -208,6 +212,24 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
+// TraceID is part of the RegistrySpan interface.
+func (s *crdbSpan) TraceID() uint64 {
+	return s.traceID
+}
+
+// GetRecording is part of the RegistrySpan interface.
+func (s *crdbSpan) GetRecording() Recording {
+	// If the span is not verbose, optimize by avoiding the tags.
+	// This span is likely only used to carry payloads around.
+	//
+	// TODO(andrei): The optimization for avoiding the tags was done back when
+	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
+	// That has become cheap since, so this optimization might not be worth it any
+	// more.
+	wantTags := s.recordingType() == RecordingVerbose
+	return s.getRecording(wantTags)
+}
+
 // getRecording returns the Span's recording, including its children.
 //
 // When wantTags is false, no tags will be added. This is a performance
@@ -282,10 +304,10 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	}
 
 	var now time.Time
-	if clock := s.testing.Clock; clock != nil {
+	if clock := s.tracer.testing.Clock; clock != nil {
 		now = clock.Now()
 	} else {
-		now = time.Now()
+		now = timeutil.Now()
 	}
 	logRecord := &tracingpb.LogRecord{
 		Time:    now,
@@ -308,7 +330,7 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	}
 
 	var now time.Time
-	if clock := s.testing.Clock; clock != nil {
+	if clock := s.tracer.testing.Clock; clock != nil {
 		now = clock.Now()
 	} else {
 		now = time.Now()
@@ -474,8 +496,7 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 //
 // child is the child span that just finished.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
-	wantTags := s.recordingType() == RecordingVerbose
-	rec := child.getRecording(wantTags)
+	rec := child.GetRecording()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -494,9 +515,8 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	}
 }
 
-// setVerboseRecursively sets the verbosity of the crdbSpan appropriately and
-// recurses on its list of children.
-func (s *crdbSpan) setVerboseRecursively(to bool) {
+// SetVerboseRecursively is part of the RegistrySpan interface.
+func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	if to {
 		s.enableRecording(RecordingVerbose)
 	} else {
@@ -509,7 +529,7 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 	s.mu.Unlock()
 
 	for _, child := range children {
-		child.setVerboseRecursively(to)
+		child.SetVerboseRecursively(to)
 	}
 }
 

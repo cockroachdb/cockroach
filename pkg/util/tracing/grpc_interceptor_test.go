@@ -240,7 +240,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		})
 	}
 	testutils.SucceedsSoon(t, func() error {
-		return tr.VisitSpans(func(sp *tracing.Span) error {
+		return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
 			return errors.Newf("leaked span: %s", sp.GetRecording()[0].Operation)
 		})
 	})

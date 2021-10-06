@@ -165,30 +165,88 @@ type Tracer struct {
 	otelTracer unsafe.Pointer
 
 	// activeSpans is a map that references all non-Finish'ed local root spans,
-	// i.e. those for which no WithLocalParent(<non-nil>) option was supplied.
-	// The map is keyed on the span ID, which is deterministically unique.
-	//
-	// In normal operation, a local root Span is inserted on creation and
-	// removed on .Finish().
-	//
-	// The map can be introspected by `Tracer.VisitSpans`. A Span can also be
-	// retrieved from its ID by `Tracer.GetActiveSpanFromID`.
-	activeSpans struct {
-		// NB: it might be tempting to use a sync.Map here, but
-		// this incurs an allocation per Span (sync.Map does
-		// not use a sync.Pool for its internal *entry type).
-		//
-		// The bare map approach is essentially allocation-free once the map
-		// has grown to accommodate the usual number of active local root spans,
-		// and the critical sections of the mutex are very small.
-		syncutil.Mutex
-		m map[uint64]*Span
-	}
+	// i.e. those for which no WithParent(<non-nil>) option was supplied.
+	activeSpansRegistry *spanRegistry
 
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
 	testing TracerTestingKnobs
+}
+
+// spanRegistry is a map that references all non-Finish'ed local root spans,
+// i.e. those for which no WithLocalParent(<non-nil>) option was supplied. The
+// map is keyed on the span ID, which is deterministically unique.
+//
+// In normal operation, a local root crdbSpan is inserted on creation and
+// removed on .Finish().
+//
+// The map can be introspected by `Tracer.VisitSpans`. A Span can also be
+// retrieved from its ID by `Tracer.GetActiveSpanByID`.
+type spanRegistry struct {
+	mu struct {
+		syncutil.Mutex
+		m map[uint64]*crdbSpan
+	}
+}
+
+func makeSpanRegistry() *spanRegistry {
+	r := &spanRegistry{}
+	r.mu.m = make(map[uint64]*crdbSpan)
+	return r
+}
+
+// removeSpan removes a span from the registry.
+func (r *spanRegistry) removeSpan(spanID uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.m, spanID)
+}
+
+func (r *spanRegistry) addSpan(s *crdbSpan) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Ensure that the registry does not grow unboundedly in case there
+	// is a leak. When the registry reaches max size, each new span added
+	// kicks out some old span. We rely on map iteration order here to
+	// make this cheap.
+	if toDelete := len(r.mu.m) - maxSpanRegistrySize + 1; toDelete > 0 {
+		for k := range r.mu.m {
+			delete(r.mu.m, k)
+			toDelete--
+			if toDelete <= 0 {
+				break
+			}
+		}
+	}
+	r.mu.m[s.spanID] = s
+}
+
+// getSpanByID looks up a span in the registry. Returns nil if not found.
+func (r *spanRegistry) getSpanByID(spanID uint64) RegistrySpan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.m[spanID]
+}
+
+func (r *spanRegistry) visitSpans(visitor func(span RegistrySpan) error) error {
+	r.mu.Lock()
+	sl := make([]*crdbSpan, 0, len(r.mu.m))
+	for _, sp := range r.mu.m {
+		sl = append(sl, sp)
+	}
+	r.mu.Unlock()
+
+	for _, sp := range sl {
+		if err := visitor(sp); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // TracerTestingKnobs contains knobs for a Tracer.
@@ -204,8 +262,9 @@ type TracerTestingKnobs struct {
 // and collects essentially nothing; use Configure() to enable various tracing
 // backends.
 func NewTracer() *Tracer {
-	t := &Tracer{}
-	t.activeSpans.m = make(map[uint64]*Span)
+	t := &Tracer{
+		activeSpansRegistry: makeSpanRegistry(),
+	}
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
@@ -592,6 +651,7 @@ func (t *Tracer) startSpanGeneric(
 	}{}
 
 	helper.crdbSpan = crdbSpan{
+		tracer:       t,
 		traceID:      traceID,
 		spanID:       spanID,
 		goroutineID:  goroutineID,
@@ -602,7 +662,6 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 			tags:     helper.tagsAlloc[:0],
 		},
-		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
@@ -651,23 +710,7 @@ func (t *Tracer) startSpanGeneric(
 	} else {
 		// Local root span - put it into the registry of active local root
 		// spans. `Span.Finish` takes care of deleting it again.
-		t.activeSpans.Lock()
-
-		// Ensure that the registry does not grow unboundedly in case there
-		// is a leak. When the registry reaches max size, each new span added
-		// kicks out some old span. We rely on map iteration order here to
-		// make this cheap.
-		if toDelete := len(t.activeSpans.m) - maxSpanRegistrySize + 1; toDelete > 0 {
-			for k := range t.activeSpans.m {
-				delete(t.activeSpans.m, k)
-				toDelete--
-				if toDelete <= 0 {
-					break
-				}
-			}
-		}
-		t.activeSpans.m[spanID] = s
-		t.activeSpans.Unlock()
+		t.activeSpansRegistry.addSpan(s.i.crdb)
 
 		if !opts.RemoteParent.Empty() {
 			for k, v := range opts.RemoteParent.Baggage {
@@ -829,33 +872,30 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	}, nil
 }
 
-// GetActiveSpanFromID retrieves any active root span given its ID.
-func (t *Tracer) GetActiveSpanFromID(spanID uint64) (*Span, bool) {
-	t.activeSpans.Lock()
-	span, found := t.activeSpans.m[spanID]
-	t.activeSpans.Unlock()
-	return span, found
+// RegistrySpan is the interface used by clients of the active span registry.
+type RegistrySpan interface {
+	// TraceID returns an identifier for the trace that this span is part of.
+	TraceID() uint64
+
+	// GetRecording returns the recording of the trace rooted at this span.
+	GetRecording() Recording
+
+	// SetVerboseRecursively sets the verbosity of the span appropriately and
+	// recurses on its children.
+	SetVerboseRecursively(to bool)
+}
+
+var _ RegistrySpan = &crdbSpan{}
+
+// GetActiveSpanByID retrieves any active root span given its ID.
+func (t *Tracer) GetActiveSpanByID(spanID uint64) RegistrySpan {
+	return t.activeSpansRegistry.getSpanByID(spanID)
 }
 
 // VisitSpans invokes the visitor with all active Spans. The function will
 // gracefully exit if the visitor returns iterutil.StopIteration().
-func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
-	t.activeSpans.Lock()
-	sl := make([]*Span, 0, len(t.activeSpans.m))
-	for _, sp := range t.activeSpans.m {
-		sl = append(sl, sp)
-	}
-	t.activeSpans.Unlock()
-
-	for _, sp := range sl {
-		if err := visitor(sp); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
-		}
-	}
-	return nil
+func (t *Tracer) VisitSpans(visitor func(span RegistrySpan) error) error {
+	return t.activeSpansRegistry.visitSpans(visitor)
 }
 
 // TestingRecordAsyncSpans is a test-only helper that configures
