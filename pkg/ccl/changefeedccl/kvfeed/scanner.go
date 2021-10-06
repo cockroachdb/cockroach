@@ -65,8 +65,8 @@ func (p *scanRequestScanner) Scan(
 		return err
 	}
 
-	maxConcurrentExports := maxConcurrentExportRequests(p.gossip, &p.settings.SV)
-	exportLim := limit.MakeConcurrentRequestLimiter("changefeedExportRequestLimiter", maxConcurrentExports)
+	maxConcurrentScans := maxConcurrentScanRequests(p.gossip, &p.settings.SV)
+	exportLim := limit.MakeConcurrentRequestLimiter("changefeedScanRequestLimiter", maxConcurrentScans)
 
 	lastScanLimitUserSetting := changefeedbase.ScanRequestLimit.Get(&p.settings.SV)
 
@@ -79,7 +79,7 @@ func (p *scanRequestScanner) Scan(
 		// If the user defined scan request limit has changed, recalculate it
 		if currentUserScanLimit := changefeedbase.ScanRequestLimit.Get(&p.settings.SV); currentUserScanLimit != lastScanLimitUserSetting {
 			lastScanLimitUserSetting = currentUserScanLimit
-			exportLim.SetLimit(maxConcurrentExportRequests(p.gossip, &p.settings.SV))
+			exportLim.SetLimit(maxConcurrentScanRequests(p.gossip, &p.settings.SV))
 		}
 
 		limAlloc, err := exportLim.Begin(ctx)
@@ -288,8 +288,8 @@ func clusterNodeCount(gw gossip.OptionalGossip) int {
 	return nodes
 }
 
-// maxConcurrentExportRequests returns the number of concurrent scan requests.
-func maxConcurrentExportRequests(gw gossip.OptionalGossip, sv *settings.Values) int {
+// maxConcurrentScanRequests returns the number of concurrent scan requests.
+func maxConcurrentScanRequests(gw gossip.OptionalGossip, sv *settings.Values) int {
 	// If the user specified ScanRequestLimit -- use that value.
 	if max := changefeedbase.ScanRequestLimit.Get(sv); max > 0 {
 		return int(max)
