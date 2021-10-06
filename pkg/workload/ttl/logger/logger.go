@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -160,17 +161,19 @@ func (l *logger) Ops(
 
 	l.setupMetrics(reg.Registerer())
 	ql.WorkerFns[0] = func(ctx context.Context) error {
-		var numRows int64
-		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s'").Scan(&numRows); err != nil {
-			return err
-		}
-		l.prometheus.numRows.Set(float64(numRows))
-		var numExpiredRows int64
-		if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s' WHERE now() > crdb_internal_ttl_expiration").Scan(&numExpiredRows); err != nil {
-			return err
-		}
-		l.prometheus.numExpiredRows.Set(float64(numExpiredRows))
-		return nil
+		return retry.ForDuration(time.Minute, func() error {
+			var numRows int64
+			if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s'").Scan(&numRows); err != nil {
+				return err
+			}
+			l.prometheus.numRows.Set(float64(numRows))
+			var numExpiredRows int64
+			if err := db.QueryRow("SELECT count(1) FROM logs AS OF SYSTEM TIME '-30s' WHERE now() > crdb_internal_ttl_expiration").Scan(&numExpiredRows); err != nil {
+				return err
+			}
+			l.prometheus.numExpiredRows.Set(float64(numExpiredRows))
+			return nil
+		})
 	}
 	return ql, nil
 }
