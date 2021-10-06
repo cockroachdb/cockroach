@@ -276,6 +276,11 @@ func init() {
 		buildChildReqOrdering: exportBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.WithOp] = funcs{
+		canProvideOrdering:    withCanProvideOrdering,
+		buildChildReqOrdering: withBuildChildReqOrdering,
+		buildProvidedOrdering: withBuildProvided,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
