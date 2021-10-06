@@ -298,7 +298,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Calculating the Frechet distance is slow and testing it here
 					// is not worth it.
 					continue
-				case "crdb_internal.reset_sql_stats":
+				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
 					// Skipped due to long execution time.
 					continue
 				}
