@@ -2267,6 +2267,63 @@ sort
            └── filters
                 └── b:16 = c:17 [outer=(16,17), fd=(16)==(17), (17)==(16)]
 
+# --------------------------------------------------
+# With operator.
+# --------------------------------------------------
+
+# Verify that we can pass through the ordering requirement through the With
+# operator.
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc ORDER BY a,b,c
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null
+ ├── materialized
+ ├── key: (6-8)
+ ├── ordering: +6,+7,+8
+ ├── scan xyz
+ │    └── columns: x:1!null
+ └── scan abc
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── key: (6-8)
+      └── ordering: +6,+7,+8
+
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc INNER MERGE JOIN cte ON a = x ORDER BY a
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null x:11!null
+ ├── materialized
+ ├── fd: (6)==(11), (11)==(6)
+ ├── ordering: +(6|11) [actual: +6]
+ ├── scan xyz
+ │    └── columns: xyz.x:1!null
+ └── inner-join (merge)
+      ├── columns: a:6!null b:7!null c:8!null x:11!null
+      ├── flags: force merge join
+      ├── left ordering: +6
+      ├── right ordering: +11
+      ├── fd: (6)==(11), (11)==(6)
+      ├── ordering: +(6|11) [actual: +6]
+      ├── scan abc
+      │    ├── columns: a:6!null b:7!null c:8!null
+      │    ├── key: (6-8)
+      │    └── ordering: +6
+      ├── sort
+      │    ├── columns: x:11!null
+      │    ├── ordering: +11
+      │    └── with-scan &1 (cte)
+      │         ├── columns: x:11!null
+      │         └── mapping:
+      │              └──  xyz.x:1 => x:11
+      └── filters (true)
+
+
+# --------------------------------------------------
+# Misc tests.
+# --------------------------------------------------
 
 # Regression test for #36219: lookup join with ON condition that imposes an
 # equality on two input columns (which isn't pushed down).
