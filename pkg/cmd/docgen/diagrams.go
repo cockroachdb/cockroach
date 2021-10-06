@@ -1269,6 +1269,10 @@ var specs = []stmtSpec{
 		stmt: "show_enums_stmt",
 	},
 	{
+		name: "show_full_scans",
+		stmt: "show_full_scans_stmt",
+	},
+	{
 		name:   "show_backup",
 		stmt:   "show_backup_stmt",
 		inline: []string{"opt_with_options"},
