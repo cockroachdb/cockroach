@@ -44,91 +44,91 @@ func getCases(format string) []testCase {
 		{
 			name:   "1.all",
 			format: format,
-			args:   []string{testdataPath + "/1/*/*"},
+			args:   []string{testdataPath + "/d1/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			name:   "1.filter-program",
 			format: format,
-			args:   []string{testdataPath + "/1/*/*"},
+			args:   []string{testdataPath + "/d1/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--program-filter", "not-cockroach"},
 		},
 		{
 			name:   "1.seek-past-end-of-file",
 			format: format,
-			args:   []string{testdataPath + "/1/*/*"},
+			args:   []string{testdataPath + "/d1/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525317"},
 		},
 		{
 			name:   "1.filter-message",
 			format: format,
-			args:   []string{testdataPath + "/1/*/*"},
+			args:   []string{testdataPath + "/d1/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--filter", "gossip"},
 		},
 		{
 			name:   "2.multiple-files-from-node",
 			format: format,
-			args:   []string{testdataPath + "/2/*/*"},
+			args:   []string{testdataPath + "/d2/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			// NB: the output here matches 2.multiple-files-from-node.
 			name:   "2.walk-directory",
 			format: format,
-			args:   []string{testdataPath + "/2"},
+			args:   []string{testdataPath + "/d2"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			name:   "2.skip-file",
 			format: format,
-			args:   []string{testdataPath + "/2/*/*"},
+			args:   []string{testdataPath + "/d2/*/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
 		},
 		{
 			name:   "2.remove-duplicates",
 			format: format,
 			args: []string{
-				testdataPath + "/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_06_47Z.004130.log",
-				testdataPath + "/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_14_47Z.004130.log",
-				testdataPath + "/2/2.logs/cockroach.stderr",
-				testdataPath + "/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
-				testdataPath + "/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
-				testdataPath + "/2/2.logs/roachprod.log",
+				testdataPath + "/d2/1/cockroach.test-0001.ubuntu.2018-11-30T22_06_47Z.004130.log",
+				testdataPath + "/d2/1/cockroach.test-0001.ubuntu.2018-11-30T22_14_47Z.004130.log",
+				testdataPath + "/d2/2/cockroach.stderr",
+				testdataPath + "/d2/2/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
+				testdataPath + "/d2/2/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
+				testdataPath + "/d2/2/roachprod.log",
 			},
 			flags: []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
 		},
 		{
 			name:   "3.non-standard",
 			format: format,
-			args:   []string{testdataPath + "/3/*/*"},
-			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--prefix", ""},
+			args:   []string{testdataPath + "/d3/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*"},
 		},
 		{
 			// Prints only lines that match the filter (if no submatches).
 			name:   "4.filter",
 			format: format,
-			args:   []string{testdataPath + "/4/*"},
+			args:   []string{testdataPath + "/d4/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "3:0"},
 		},
 		{
 			// Prints only the submatch.
 			name:   "4.filter-submatch",
 			format: format,
-			args:   []string{testdataPath + "/4/*"},
+			args:   []string{testdataPath + "/d4/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3:)0"},
 		},
 		{
 			// Prints only the submatches.
 			name:   "4.filter-submatch-double",
 			format: format,
-			args:   []string{testdataPath + "/4/*"},
+			args:   []string{testdataPath + "/d4/*"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3):(0)"},
 		},
 		{
 			// Simple grep for a panic line only.
 			name:   "4.filter-npe",
 			format: format,
-			args:   []string{testdataPath + "/4/npe.log"},
+			args:   []string{testdataPath + "/d4/npe.log"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(panic: .*)`},
 		},
 		{
@@ -137,7 +137,7 @@ func getCases(format string) []testCase {
 			// source of the panic is harder to find.
 			name:   "4.filter-npe-with-context",
 			format: format,
-			args:   []string{testdataPath + "/4/npe.log"},
+			args:   []string{testdataPath + "/d4/npe.log"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)(panic:.(?:.*\n){0,5})`},
 		},
 		{
@@ -155,31 +155,31 @@ func getCases(format string) []testCase {
 			// usually alternate with panic().
 			name:   "4.filter-npe-origin-stack-only",
 			format: format,
-			args:   []string{testdataPath + "/4/npe-repanic.log"}, // (?:panic\(.*)*
+			args:   []string{testdataPath + "/d4/npe-repanic.log"}, // (?:panic\(.*)*
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`},
 		},
 		{
 			name:   "5.redact-off-redactable-off",
 			format: format,
-			args:   []string{testdataPath + "/5/redactable.log"},
+			args:   []string{testdataPath + "/d5/redactable.log"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*"},
 		},
 		{
 			name:   "5.redact-off-redactable-on",
 			format: format,
-			args:   []string{testdataPath + "/5/redactable.log"},
+			args:   []string{testdataPath + "/d5/redactable.log"},
 			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=true", "--file-pattern", ".*"},
 		},
 		{
 			name:   "5.redact-on-redactable-off",
 			format: format,
-			args:   []string{testdataPath + "/5/redactable.log"},
+			args:   []string{testdataPath + "/d5/redactable.log"},
 			flags:  []string{"--format=" + format, "--redact=true", "--redactable-output=false", "--file-pattern", ".*"},
 		},
 		{
 			name:   "5.redact-on-redactable-on",
 			format: format,
-			args:   []string{testdataPath + "/5/redactable.log"},
+			args:   []string{testdataPath + "/d5/redactable.log"},
 			flags:  []string{"--format=" + format, "--redact=true", "--redactable-output=true", "--file-pattern", ".*"},
 		},
 	}
