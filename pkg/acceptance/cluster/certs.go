@@ -39,7 +39,7 @@ func GenerateCerts(ctx context.Context) func() {
 	// Root user.
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		1024, 48*time.Hour, false, security.RootUserName(), true /* generate pk8 key */))
+		2048, 48*time.Hour, false, security.RootUserName(), true /* generate pk8 key */))
 
 	// Test user.
 	maybePanic(security.CreateClientPair(
