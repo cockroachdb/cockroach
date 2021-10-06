@@ -30,8 +30,9 @@ type streamIngestionResumer struct {
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	startTime hlc.Timestamp,
 	streamAddress streamingccl.StreamAddress,
+	tenantID roachpb.TenantID,
+	startTime hlc.Timestamp,
 	progress jobspb.Progress,
 	jobID jobspb.JobID,
 ) error {
@@ -40,7 +41,14 @@ func ingest(
 	if err != nil {
 		return err
 	}
-	topology, err := client.GetTopology(streamAddress)
+
+	// TODO(dt): if there is an existing stream ID, reconnect to it.
+	id, err := client.Create(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+
+	topology, err := client.Plan(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -80,9 +88,11 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
+	tenantID := roachpb.MakeTenantID(details.TenantID)
+
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	err := ingest(resumeCtx, p, details.StartTime, streamAddress, s.job.Progress(), s.job.ID())
+	err := ingest(resumeCtx, p, streamAddress, tenantID, details.StartTime, s.job.Progress(), s.job.ID())
 	if err != nil {
 		return err
 	}

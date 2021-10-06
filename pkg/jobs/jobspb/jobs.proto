@@ -71,6 +71,9 @@ message StreamIngestionDetails {
   // StreamAddress locates the stream. It enables the client to find the
   // addresses of the stream's partitions.
   string stream_address = 1;
+  
+  uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
+  
   // Span is the keyspan into which this job will ingest KVs.
   //
   // The stream should emit all changes for a given span, and no changes outside
@@ -79,6 +82,8 @@ message StreamIngestionDetails {
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
   // The job will ingest events from StartTime onwards.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+  
+  uint64 tenant_id = 5 [(gogoproto.customname) = "TenantID"];
 }
 
 message StreamIngestionProgress {

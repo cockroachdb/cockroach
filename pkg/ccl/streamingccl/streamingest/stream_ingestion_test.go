@@ -54,14 +54,13 @@ func getHighWaterMark(jobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	return payload.GetHighWater(), nil
 }
 
-func getTestRandomClientURI(tenantID int) string {
+func getTestRandomClientURI() string {
 	valueRange := 100
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
 	dupProbability := 0.2
-	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, tenantID, kvFrequency,
-		dupProbability)
+	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency, dupProbability)
 }
 
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
@@ -134,7 +133,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
 	const tenantID = 10
-	streamAddr := getTestRandomClientURI(tenantID)
+	streamAddr := getTestRandomClientURI()
 	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`, streamAddr)
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
@@ -203,6 +202,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	}
 
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(tenantID)))
+	t.Logf("counting kvs in span %v", tenantPrefix)
 	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
 	// Sanity check that the max ts in the store is less than the revert range
 	// target timestamp.

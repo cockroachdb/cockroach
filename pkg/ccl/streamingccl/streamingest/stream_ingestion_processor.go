@@ -84,11 +84,11 @@ type streamIngestionProcessor struct {
 
 	// client is a streaming client which provides a stream of events from a given
 	// address.
-	client streamclient.Client
+	forceClientForTests streamclient.Client
 
 	// Checkpoint events may need to be buffered if they arrive within the same
 	// minimumFlushInterval.
-	bufferedCheckpoints map[streamingccl.PartitionAddress]hlc.Timestamp
+	bufferedCheckpoints map[string]hlc.Timestamp
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
@@ -133,7 +133,7 @@ type streamIngestionProcessor struct {
 // partitionEvent augments a normal event with the partition it came from.
 type partitionEvent struct {
 	streamingccl.Event
-	partition streamingccl.PartitionAddress
+	partition string
 }
 
 var _ execinfra.Processor = &streamIngestionProcessor{}
@@ -148,18 +148,13 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(spec.StreamAddress))
-	if err != nil {
-		return nil, err
-	}
 
 	sip := &streamIngestionProcessor{
 		flowCtx:             flowCtx,
 		spec:                spec,
 		output:              output,
 		curBatch:            make([]storage.MVCCKeyValue, 0),
-		client:              streamClient,
-		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
+		bufferedCheckpoints: make(map[string]hlc.Timestamp),
 		maxFlushRateTimer:   timeutil.NewTimer(),
 		cutoverCh:           make(chan struct{}),
 		closePoller:         make(chan struct{}),
@@ -182,6 +177,7 @@ func newStreamIngestionDataProcessor(
 
 // Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
+	log.Infof(ctx, "starting ingest proc")
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
 	sip.metrics = sip.flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
@@ -209,18 +205,34 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 	}()
 
+	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionIds))
+
 	// Initialize the event streams.
-	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
-	errChs := make(map[streamingccl.PartitionAddress]chan error)
-	for _, pa := range sip.spec.PartitionAddresses {
-		partitionAddress := streamingccl.PartitionAddress(pa)
-		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, sip.spec.StartTime)
+	eventChs := make(map[string]chan streamingccl.Event)
+	errChs := make(map[string]chan error)
+	for i := range sip.spec.PartitionIds {
+		id := sip.spec.PartitionIds[i]
+		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
+		addr := sip.spec.PartitionAddresses[i]
+		var streamClient streamclient.Client
+		if sip.forceClientForTests != nil {
+			streamClient = sip.forceClientForTests
+			log.Infof(ctx, "using testing client")
+		} else {
+			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
+			if err != nil {
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for parition spec %q from %q", spec, addr))
+				return
+			}
+		}
+
+		eventCh, errCh, err := streamClient.Subscribe(ctx, streamclient.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
 		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
+			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
 		}
-		eventChs[partitionAddress] = eventCh
-		errChs[partitionAddress] = errCh
+		eventChs[id] = eventCh
+		errChs[id] = errCh
 	}
 	sip.eventCh, err = sip.merge(ctx, eventChs, errChs)
 	if err != nil {
@@ -351,8 +363,8 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 // channel.
 func (sip *streamIngestionProcessor) merge(
 	ctx context.Context,
-	partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
-	errorStreams map[streamingccl.PartitionAddress]chan error,
+	partitionStreams map[string]chan streamingccl.Event,
+	errorStreams map[string]chan error,
 ) (chan partitionEvent, error) {
 	merged := make(chan partitionEvent)
 
@@ -559,7 +571,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	// Reset the current batch.
 	sip.curBatch = nil
 	sip.lastFlushTime = timeutil.Now()
-	sip.bufferedCheckpoints = make(map[streamingccl.PartitionAddress]hlc.Timestamp)
+	sip.bufferedCheckpoints = make(map[string]hlc.Timestamp)
 
 	return &flushedCheckpoints, sip.batcher.Reset(sip.Ctx)
 }

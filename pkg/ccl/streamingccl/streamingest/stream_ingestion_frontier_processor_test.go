@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type partitionToEvent map[streamingccl.PartitionAddress][]streamingccl.Event
+type partitionToEvent map[string][]streamingccl.Event
 
 func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -66,8 +66,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	// The stream address needs to be set with a scheme we support, but this test
 	// will mock out the actual client.
 	spec.StreamAddress = "randomgen://test/"
-	pa1 := streamingccl.PartitionAddress("randomgen://test1/")
-	pa2 := streamingccl.PartitionAddress("randomgen://test2/")
+	pa1 := "randomgen://test1/"
+	pa2 := "randomgen://test2/"
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
@@ -154,7 +154,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			spec.PartitionAddresses = []string{string(pa1), string(pa2)}
+			spec.PartitionAddresses = []string{pa1, pa2}
+			spec.PartitionIds = []string{pa1, pa2}
+			spec.PartitionSpecs = []string{pa1, pa2}
 			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
@@ -163,7 +165,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 
 			// Inject a mock client with the events being tested against.
-			sip.client = &mockStreamClient{
+			sip.forceClientForTests = &mockStreamClient{
 				partitionEvents: tc.events,
 			}
 
@@ -220,6 +222,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 					}
 					t.Fatalf("unexpected meta record returned by frontier processor: %+v\n", *meta)
 				}
+				t.Logf("WOAH, row: %v", row)
 				if row == nil {
 					break
 				}
