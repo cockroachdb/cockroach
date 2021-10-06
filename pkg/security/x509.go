@@ -203,6 +203,7 @@ func GenerateTenantClientCert(
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	tenantID uint64,
+	hosts []string,
 ) ([]byte, error) {
 
 	if tenantID == 0 {
@@ -221,8 +222,10 @@ func GenerateTenantClientCert(
 	}
 
 	// Set client-specific fields.
-	// Client authentication only.
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	// Client authentication to authenticate to KV nodes.
+	// Server authentication to authenticate to other SQL servers.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	addHostsToTemplate(template, hosts)
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {

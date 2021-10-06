@@ -48,7 +48,7 @@ If the CA certificate exists and --overwrite is true, the new CA certificate is 
 // A createClientCert command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
 var mtCreateTenantClientCertCmd = &cobra.Command{
-	Use:   "create-tenant-client --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <tenant-id>",
+	Use:   "create-tenant-client --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <tenant-id> <host 1> <host 2> ... <host N>",
 	Short: "create tenant client certificate and key",
 	Long: `
 Generate a tenant client certificate "<certs-dir>/client-tenant.<tenant-id>.crt" and key
@@ -60,12 +60,14 @@ Requires a CA cert in "<certs-dir>/ca-client-tenant.crt" and matching key in "--
 If "ca-client-tenant.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MinimumNArgs(2),
 	RunE: clierrorplus.MaybeDecorateError(
 		func(cmd *cobra.Command, args []string) error {
-			tenantID, err := strconv.ParseUint(args[0], 10, 64)
+			tenantIDs := args[0]
+			hostAddrs := args[1:]
+			tenantID, err := strconv.ParseUint(tenantIDs, 10, 64)
 			if err != nil {
-				return errors.Wrapf(err, "%s is invalid uint64", args[0])
+				return errors.Wrapf(err, "%s is invalid uint64", tenantIDs)
 			}
 			cp, err := security.CreateTenantClientPair(
 				certCtx.certsDir,
@@ -73,6 +75,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 				certCtx.keySize,
 				certCtx.certificateLifetime,
 				tenantID,
+				hostAddrs,
 			)
 			if err != nil {
 				return errors.Wrap(
