@@ -1363,6 +1363,9 @@ var specs = []stmtSpec{
 		inline: []string{"schedule_state", "opt_schedule_executor_type"},
 	},
 	{
+		name: "show_create_schedules_stmt",
+	},
+	{
 		name: "show_schemas",
 		stmt: "show_schemas_stmt",
 	},
