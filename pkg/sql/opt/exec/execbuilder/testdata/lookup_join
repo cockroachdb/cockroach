@@ -31,7 +31,7 @@ ALTER TABLE def INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -68,7 +68,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -86,7 +86,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -105,7 +105,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -124,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -267,7 +267,7 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -311,7 +311,7 @@ ALTER TABLE authors INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -356,7 +356,7 @@ NULL       NULL     {5}       5
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -383,7 +383,7 @@ vectorized: true
               table: authors@primary
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck9Fv2j4Qx99_f4V_95RIbsFJAClSJaPCVCYWOkDapImHhFwha7Az25E2If73KQldCWpC6ZvPd5-vv3e296B_peDD-PvjdDgJiDWaLJaLr1ObLMbT8f2SFPEkuF-SMDdbqfStCHdIPs1nX0gk5bMmwwWJGK0Cp4wc-lJMvj2M52NiWRG7NYlJkdyRyKmWNhkGI2K9yBZ8kT0W2sd0xG71FtMn8n9JlmsbKAgZYxDuUIP_AxhQ6MGKQqbkGrWWqtjel0WT-Df4XQqJyHJTbK8orKVC8PdQngQ-BPJGZp0-UIjRhElalh0oyNy8QtqEGwR_cKAnwqxdeBlGKc4xjFF1ujV5KOfFM5XsQvUHKCyyUGif3ACFWW58whnlLjS5YB91weoujtO_4MNp9OE0-ng9PhdSxagwPp_v5ZI3mnkI9fazTASqjlPvJcUnY3Fm36lkszUWd-xaD5S7lHuNnbjXTLQwcByo-8a1OifznEr5nGfkp0wEkcIn3CtcBYQ7xZPmg38emy_bu8baKNEmEWvT8erGOGvU731Iv_du_X5N_8JfnKPOpND4rs_YLV4IxhusXpyWuVrjo5Lr8pgqnJVcuRGjNlV2UAUTUaUKg6cwa4XdGszOYecK2DmH3VbYa7fttcK9drjXCvfb4X4r3D2DV4f__gYAAP__TEsXpA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3KW73lEheIU7opEiVggpTmRh0gLRJEw8JuULWYGe2I21CfPcpDl0bBOnoW86-3__-d77sUP_KMcTh9_txfzQBZzCaL-Zfxy7Mh-Ph7QKqeDS5XUBcmo1U-krEW4JPs-kXSKR81NCfQ-KxOuA24uwpGb7dDWdDcJzEuzKZyQluIOH1pwv9yQCcJ9mKr24Pie7hOvGu9IbyB3hvSfvtIkMhU5rEW9IY_kAPlwwLJVektVTV0c4mjNLfGHYZZqIoTXW8ZLiSijDcoa2CIS7iJKcZxSmpThcZpmTiLLeytqWoUNk2Vn-Q4byIhQ7hAzKcliaEyGORj8s9Q1ma5wraxGvC0Nuzt7nwmi4OA3rFBz_rg5_18Vy-FFKlpChtlF5W5GspJ5q5i_Xms8wEqQ5v9pLTg3Eiz71R2XpjnIi7jR5Y5LMoONuJf8lEKwOHgfonnpW_mOdYyseygJ8yEyBFCFFQuZpAxKutiz7-83j-sYNLrA0ybTKxMp2gaSzyzur33qTf-2_960v0Z6QLKTQdL8tJ5W61IZSuqd44LUu1onslV7ZMHU4tZw9S0qa-5XUwEvbK_k0vYe8CmB_DvBX2G3D3GPZb4aAdDlrhXjvca4Wvj-Dl_t3fAAAA___-ZuVx
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -923,7 +923,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -944,7 +944,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join (inner)
@@ -972,7 +972,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -1002,7 +1002,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1020,7 +1020,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1038,7 +1038,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1057,7 +1057,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1076,7 +1076,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1095,7 +1095,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1833,7 +1833,7 @@ CREATE TABLE t59615 (
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1850,7 +1850,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615 t WHERE u.y = t.y
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1878,7 +1878,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
 ON u.w = t.w AND u.x = t.x
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1895,7 +1895,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
   SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)

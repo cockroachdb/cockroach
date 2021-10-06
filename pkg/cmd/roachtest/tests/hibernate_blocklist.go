@@ -219,4 +219,6 @@ var hibernateIgnoreList22_1 = hibernateIgnoreList21_2
 
 var hibernateIgnoreList21_2 = hibernateIgnoreList21_1
 
-var hibernateIgnoreList21_1 = blocklist{}
+var hibernateIgnoreList21_1 = blocklist{
+	"org.hibernate.userguide.pc.WhereTest.testLifecycle": "unknown",
+}

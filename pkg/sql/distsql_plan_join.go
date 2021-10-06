@@ -41,6 +41,7 @@ type joinPlanningInfo struct {
 	// then a hash join is planned.
 	leftMergeOrd, rightMergeOrd                 execinfrapb.Ordering
 	leftPlanDistribution, rightPlanDistribution physicalplan.PlanDistribution
+	allowPartialDistribution                    bool
 }
 
 // makeCoreSpec creates a processor core for hash and merge joins based on the

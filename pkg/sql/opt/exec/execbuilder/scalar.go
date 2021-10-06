@@ -459,7 +459,10 @@ func (b *Builder) buildArrayFlatten(
 	}
 
 	typ := b.mem.Metadata().ColumnMeta(af.RequestedCol).Type
-	e := b.addSubquery(exec.SubqueryAllRows, typ, root.root, af.OriginalExpr)
+	e := b.addSubquery(
+		exec.SubqueryAllRows, typ, root.root, af.OriginalExpr,
+		int64(af.Input.Relational().Stats.RowCountIfAvailable()),
+	)
 
 	return tree.NewTypedArrayFlattenExpr(e), nil
 }
@@ -513,7 +516,10 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		contents[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
 	typs := types.MakeTuple(contents)
-	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr)
+	subqueryExpr := b.addSubquery(
+		exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr,
+		int64(any.Input.Relational().Stats.RowCountIfAvailable()),
+	)
 
 	// Build the scalar value that is compared against each row.
 	scalarExpr, err := b.buildScalar(ctx, any.Scalar)
@@ -546,7 +552,10 @@ func (b *Builder) buildExistsSubquery(
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryExists, types.Bool, plan.root, exists.OriginalExpr), nil
+	return b.addSubquery(
+		exec.SubqueryExists, types.Bool, plan.root, exists.OriginalExpr,
+		int64(exists.Input.Relational().Stats.RowCountIfAvailable()),
+	), nil
 }
 
 func (b *Builder) buildSubquery(
@@ -573,13 +582,16 @@ func (b *Builder) buildSubquery(
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryOneRow, subquery.Typ, plan.root, subquery.OriginalExpr), nil
+	return b.addSubquery(
+		exec.SubqueryOneRow, subquery.Typ, plan.root, subquery.OriginalExpr,
+		int64(input.Relational().Stats.RowCountIfAvailable()),
+	), nil
 }
 
 // addSubquery adds an entry to b.subqueries and creates a tree.Subquery
 // expression node associated with it.
 func (b *Builder) addSubquery(
-	mode exec.SubqueryMode, typ *types.T, root exec.Node, originalExpr *tree.Subquery,
+	mode exec.SubqueryMode, typ *types.T, root exec.Node, originalExpr *tree.Subquery, rowCount int64,
 ) *tree.Subquery {
 	var originalSelect tree.SelectStatement
 	if originalExpr != nil {
@@ -594,6 +606,7 @@ func (b *Builder) addSubquery(
 		ExprNode: exprNode,
 		Mode:     mode,
 		Root:     root,
+		RowCount: rowCount,
 	})
 	// Associate the tree.Subquery expression node with this subquery
 	// by index (1-based).

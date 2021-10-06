@@ -1496,9 +1496,19 @@ func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, e
 		Scheme: "https",
 		Host:   "raduberinde.github.io",
 		Path:   "optsteps.html",
-		// We could use Fragment (which avoids the data being sent to the server),
-		// but then the link will become invalid when a real fragment link is used.
-		RawQuery: compressed.String(),
+	}
+	const githubPagesMaxURLLength = 8100
+	if compressed.Len() > githubPagesMaxURLLength {
+		// If the compressed data is longer than the maximum allowed URL length
+		// for the GitHub Pages server, we include it as a fragment. This
+		// prevents the browser from sending this data to the server, avoiding a
+		// 414 error from GitHub Pages.
+		url.Fragment = compressed.String()
+	} else {
+		// Otherwise, the compressed data is included as a query parameter. This
+		// is preferred because the URL remains valid when anchor links are
+		// clicked and fragments are added to the URL by the browser.
+		url.RawQuery = compressed.String()
 	}
 	return url, nil
 }
