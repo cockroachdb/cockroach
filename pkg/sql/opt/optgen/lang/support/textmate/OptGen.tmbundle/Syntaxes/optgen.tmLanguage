@@ -183,7 +183,6 @@
                         FunctionPrivate |
                         Coalesce |
                         ColumnAccess |
-                        UnsupportedExpr |
                         Avg |
                         BoolAnd |
                         BoolOr |
