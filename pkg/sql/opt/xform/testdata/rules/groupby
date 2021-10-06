@@ -3266,3 +3266,194 @@ group-by
  └── aggregations
       └── array-agg [as=array_agg:8, outer=(2)]
            └── b:2
+
+# --------------------------------------------------
+# GenerateLimitedGroupByScans
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE defg (
+d INT,
+e INT,
+f INT,
+g INT,
+INDEX dd (d),
+INDEX df (d, f),
+INDEX dfg (d, f, g),
+INDEX gg (g)
+)
+----
+
+memo
+SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
+----
+memo (optimized, ~16KB, required=[presentation: d:1,e:2,count:8])
+ ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
+ │    └── [presentation: d:1,e:2,count:8]
+ │         ├── best: (limit G4="[limit hint: 10.00]" G3)
+ │         └── cost: 641.88
+ ├── G2: (group-by G7 G8 cols=(1,2)) (group-by G7 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G7 G8 cols=(1,2))
+ │         └── cost: 1144.90
+ ├── G3: (const 10)
+ ├── G4: (group-by G9 G8 cols=(1,2)) (group-by G9 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G9="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 641.77
+ ├── G5: (group-by G10 G8 cols=(1,2)) (group-by G10 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G10="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 641.87
+ ├── G6: (group-by G11 G8 cols=(1,2)) (group-by G11 G8 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G11="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         └── cost: 641.97
+ ├── G7: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G8: (aggregations G12)
+ ├── G9: (index-join G13 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G13="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.34
+ │    └── []
+ │         ├── best: (index-join G13 defg,cols=(1,2))
+ │         └── cost: 7124.34
+ ├── G10: (index-join G14 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G14="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.44
+ │    └── []
+ │         ├── best: (index-join G14 defg,cols=(1,2))
+ │         └── cost: 7134.44
+ ├── G11: (index-join G15 defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (index-join G15="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.54
+ │    └── []
+ │         ├── best: (index-join G15 defg,cols=(1,2))
+ │         └── cost: 7144.54
+ ├── G12: (count-rows)
+ ├── G13: (scan defg@dd,cols=(1))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (scan defg@dd,cols=(1))
+ │    │    └── cost: 24.32
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1))
+ │         └── cost: 1054.32
+ ├── G14: (scan defg@df,cols=(1))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (scan defg@df,cols=(1))
+ │    │    └── cost: 24.42
+ │    └── []
+ │         ├── best: (scan defg@df,cols=(1))
+ │         └── cost: 1064.42
+ └── G15: (scan defg@dfg,cols=(1))
+      ├── [ordering: +1] [limit hint: 10.00]
+      │    ├── best: (scan defg@dfg,cols=(1))
+      │    └── cost: 24.52
+      └── []
+           ├── best: (scan defg@dfg,cols=(1))
+           └── cost: 1074.52
+
+opt
+SELECT d, g, count(*) FROM defg GROUP BY d, g LIMIT 10
+----
+limit
+ ├── columns: d:1 g:4 count:8!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(8)
+ ├── group-by
+ │    ├── columns: d:1 g:4 count_rows:8!null
+ │    ├── grouping columns: d:1 g:4
+ │    ├── internal-ordering: +1
+ │    ├── key: (1,4)
+ │    ├── fd: (1,4)-->(8)
+ │    ├── limit hint: 10.00
+ │    ├── scan defg@dfg
+ │    │    ├── columns: d:1 g:4
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+opt
+SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY d LIMIT 10
+----
+limit
+ ├── columns: d:1 e:2 count:8!null
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(8)
+ ├── ordering: +1
+ ├── group-by
+ │    ├── columns: d:1 e:2 count_rows:8!null
+ │    ├── grouping columns: d:1 e:2
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(8)
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    ├── index-join defg
+ │    │    ├── columns: d:1 e:2
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 10.00
+ │    │    └── scan defg@dd
+ │    │         ├── columns: d:1
+ │    │         ├── ordering: +1
+ │    │         └── limit hint: 10.00
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
+
+# GenerateLimitedGroupByScans will be triggered, but not result in an index
+# scan since the order by is a column not in an index.
+opt
+SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY e LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 count:8!null
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(8)
+ ├── ordering: +2
+ └── group-by
+      ├── columns: d:1 e:2 count_rows:8!null
+      ├── grouping columns: d:1 e:2
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(8)
+      ├── scan defg
+      │    └── columns: d:1 e:2
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# Rule does not apply because the grouping columns are not the first columns of
+# an index.
+opt expect-not=GenerateLimitedGroupByScans
+SELECT f, e, count(*) FROM defg GROUP BY f, e LIMIT 10
+----
+limit
+ ├── columns: f:3 e:2 count:8!null
+ ├── cardinality: [0 - 10]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(8)
+ ├── group-by
+ │    ├── columns: e:2 f:3 count_rows:8!null
+ │    ├── grouping columns: e:2 f:3
+ │    ├── key: (2,3)
+ │    ├── fd: (2,3)-->(8)
+ │    ├── limit hint: 10.00
+ │    ├── scan defg
+ │    │    └── columns: e:2 f:3
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
+ └── 10
