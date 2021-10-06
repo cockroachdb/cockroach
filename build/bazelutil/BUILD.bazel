@@ -1,14 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load(":lint.bzl", "lint_binary")
 
-# Built by `dev doctor`. This target will fail to build iff the dev config
-# isn't being used.
-filegroup(
-    name = "dev_toolchain_being_used",
-    srcs = select({
-        "//build/toolchains:dev": [],
-        "//conditions:default": ["NONEXISTENT_FILE"],
-    }),
+genrule(
+    name = "test_stamping",
+    outs = ["test_stamping.txt"],
+    cmd = """cat bazel-out/stable-status.txt | grep STABLE_BUILD > $@""",
+    stamp = True,
 )
 
 lint_binary(
