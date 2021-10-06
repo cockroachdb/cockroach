@@ -2,7 +2,6 @@
 # gazelle:proto_strip_import_prefix /pkg
 
 ALL_TESTS = [
-    "//pkg/acceptance:acceptance_test",
     "//pkg/base:base_test",
     "//pkg/bench/rttanalysis:rttanalysis_test",
     "//pkg/bench:bench_test",

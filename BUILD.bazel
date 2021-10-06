@@ -131,6 +131,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/util/log/log_channels_generated.go
 # gazelle:exclude pkg/util/log/severity/severity_generated.go
 # gazelle:exclude pkg/util/timeutil/lowercase_timezones_generated.go
+# gazelle:exclude pkg/acceptance/compose/gss/psql/*
+# gazelle:exclude pkg/acceptance/test_main.go
 #
 # TODO(irfansharif): Hand excluding these _generated.go/_stringer.go files is
 # silly, we should glob exclude everything once we have full coverage.

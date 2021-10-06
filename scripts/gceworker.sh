@@ -132,7 +132,10 @@ case "${cmd}" in
     gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
     unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
       -sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
+      -ignore 'Path .localcluster.certs*' \
       -ignore 'Path .git' \
+      -ignore 'Path _bazel*' \
+      -ignore 'Path bazel-out*' \
       -ignore 'Path bin*' \
       -ignore 'Path build/builder_home' \
       -ignore 'Path pkg/sql/parser/gen' \
