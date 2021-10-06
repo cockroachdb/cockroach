@@ -1949,17 +1949,18 @@ func createSchemaChangeEvalCtx(
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData(execCfg.SV())
+	ie := ieFactory(ctx, sd)
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
 		// other fields are used.
-		Tracing: &SessionTracing{},
-		ExecCfg: execCfg,
-		Descs:   descriptors,
+		Tracing:                      &SessionTracing{},
+		ExecCfg:                      execCfg,
+		Descs:                        descriptors,
+		SchemaChangeInternalExecutor: ie.(*InternalExecutor),
 		EvalContext: tree.EvalContext{
 			SessionDataStack: sessiondata.NewStack(sd),
-			InternalExecutor: ieFactory(ctx, sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.
 			Context:            ctx,

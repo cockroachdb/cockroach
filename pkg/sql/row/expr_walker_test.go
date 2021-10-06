@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,10 +81,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	evalCtx := &tree.EvalContext{
-		Context:          ctx,
-		DB:               db,
-		Codec:            keys.TODOSQLCodec,
-		InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
+		Context: ctx,
+		DB:      db,
+		Codec:   keys.TODOSQLCodec,
 	}
 
 	registry := s.JobRegistry().(*jobs.Registry)

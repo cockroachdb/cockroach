@@ -125,11 +125,6 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
-// SetSessionDataStack binds the session variable stack to the internal executor.
-func (ie *InternalExecutor) SetSessionDataStack(sessionDataStack *sessiondata.Stack) {
-	ie.sessionDataStack = sessionDataStack
-}
-
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // takes in a StmtBuf into which commands can be pushed and a WaitGroup that
 // will be signaled when connEx.run() returns.
@@ -263,6 +258,7 @@ type rowsIterator struct {
 }
 
 var _ sqlutil.InternalRows = &rowsIterator{}
+var _ tree.InternalRows = &rowsIterator{}
 
 func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 	// Due to recursive calls to Next() below, this deferred function might get
