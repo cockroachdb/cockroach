@@ -129,6 +129,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/util/buildutil/crdb_test_dyn.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_off.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_on.go
+# gazelle:exclude pkg/acceptance/compose/gss/psql/*
+# gazelle:exclude pkg/acceptance/test_main.go
 #
 # Generally useful references:
 #
