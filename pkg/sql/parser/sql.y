@@ -5667,13 +5667,11 @@ show_create_stmt:
 show_create_schedules_stmt:
   SHOW CREATE ALL SCHEDULES
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowCreateSchedules{}
   }
 | SHOW CREATE ALL SCHEDULES error // SHOW HELP: SHOW CREATE SCHEDULES
 | SHOW CREATE SCHEDULE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
   }
 | SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES

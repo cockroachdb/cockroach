@@ -215,6 +215,7 @@ show_stmt ::=
 	| show_columns_stmt
 	| show_constraints_stmt
 	| show_create_stmt
+	| show_create_schedules_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_enums_stmt
@@ -646,6 +647,10 @@ show_constraints_stmt ::=
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
+
+show_create_schedules_stmt ::=
+	'SHOW' 'CREATE' 'ALL' 'SCHEDULES'
+	| 'SHOW' 'CREATE' 'SCHEDULE' a_expr
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
