@@ -362,3 +362,13 @@ SELECT * FROM t
 ----
 1  1  false
 2  2  true
+
+# Test CREATE TABLE AS referring to a sequence.
+statement ok
+CREATE SEQUENCE seq;
+CREATE TABLE tab_from_seq AS (SELECT nextval('seq'))
+
+query I
+SELECT * FROM tab_from_seq
+----
+2
