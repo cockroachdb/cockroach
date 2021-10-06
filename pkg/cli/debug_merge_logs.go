@@ -40,24 +40,10 @@ type logStream interface {
 // writeLogStream pops messages off of s and writes them to out prepending
 // prefix per message and filtering messages which match filter.
 func writeLogStream(
-	s logStream,
-	out io.Writer,
-	filter *regexp.Regexp,
-	prefix string,
-	keepRedactable bool,
-	cp ttycolor.Profile,
+	s logStream, out io.Writer, filter *regexp.Regexp, keepRedactable bool, cp ttycolor.Profile,
 ) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB
-
-	prefixCache := map[*fileInfo][]byte{}
-	getPrefix := func(fi *fileInfo) ([]byte, error) {
-		if prefixBuf, ok := prefixCache[fi]; ok {
-			return prefixBuf, nil
-		}
-		prefixCache[fi] = fi.pattern.ExpandString(nil, prefix, fi.path, fi.matches)
-		return prefixCache[fi], nil
-	}
 
 	type entryInfo struct {
 		logpb.Entry
@@ -68,11 +54,7 @@ func writeLogStream(
 		// Currently, `render` applies the `crdb-v1-tty` format regardless of the
 		// output logging format defined for the stderr sink. It should instead
 		// apply the selected output format.
-		var prefixBytes []byte
-		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
-			return err
-		}
-		err = log.FormatLegacyEntryPrefix(prefixBytes, w, cp)
+		err = log.FormatLegacyEntryPrefix(ei.prefix, w, cp)
 		if err != nil {
 			return err
 		}
@@ -183,6 +165,7 @@ func newMergedStreamFromPatterns(
 	from, to time.Time,
 	editMode log.EditSensitiveData,
 	format string,
+	prefixer filePrefixer,
 ) (logStream, error) {
 	paths, err := expandPatterns(patterns)
 	if err != nil {
@@ -193,6 +176,8 @@ func newMergedStreamFromPatterns(
 	if err != nil {
 		return nil, err
 	}
+
+	prefixer.PopulatePrefixes(files)
 	return newMergedStream(ctx, files, from, to, editMode, format)
 }
 
@@ -341,6 +326,7 @@ func getLogFileInfo(path string, filePattern *regexp.Regexp) (fileInfo, bool) {
 
 type fileInfo struct {
 	path    string
+	prefix  []byte
 	pattern *regexp.Regexp
 	matches []int
 }
@@ -379,6 +365,7 @@ func findLogFiles(
 		}); err != nil {
 			return nil, err
 		}
+
 	}
 	return files, nil
 }
