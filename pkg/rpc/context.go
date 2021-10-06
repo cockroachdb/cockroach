@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/syncmap"
@@ -448,7 +449,7 @@ func NewContext(opts ContextOptions) *Context {
 
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
 
-	ctx := &Context{
+	rpcCtx := &Context{
 		ContextOptions:  opts,
 		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
 		breakerClock: breakerClock{
@@ -462,14 +463,14 @@ func NewContext(opts ContextOptions) *Context {
 		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
 	}
 	if id := opts.Knobs.ClusterID; id != nil {
-		ctx.ClusterID.Set(masterCtx, *id)
+		rpcCtx.ClusterID.Set(masterCtx, *id)
 	}
 
 	waitQuiesce := func(context.Context) {
-		<-ctx.Stopper.ShouldQuiesce()
+		<-rpcCtx.Stopper.ShouldQuiesce()
 
 		cancel()
-		ctx.conns.Range(func(k, v interface{}) bool {
+		rpcCtx.conns.Range(func(k, v interface{}) bool {
 			conn := v.(*Connection)
 			conn.initOnce.Do(func() {
 				// Make sure initialization is not in progress when we're removing the
@@ -479,14 +480,14 @@ func NewContext(opts ContextOptions) *Context {
 					conn.dialErr = errDialRejected
 				}
 			})
-			ctx.removeConn(conn, k.(connKey))
+			rpcCtx.removeConn(conn, k.(connKey))
 			return true
 		})
 	}
-	if err := ctx.Stopper.RunAsyncTask(ctx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(ctx.masterCtx)
+	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(rpcCtx.masterCtx)
 	}
-	return ctx
+	return rpcCtx
 }
 
 // ClusterName retrieves the configured cluster name.
@@ -1050,6 +1051,19 @@ type delayingHeader struct {
 	DelayMS  int32
 }
 
+func makeDialCtx(
+	dialCtx context.Context, remoteNodeID roachpb.NodeID, target string, class ConnectionClass,
+) context.Context {
+	if remoteNodeID == 0 {
+		dialCtx = logtags.AddTag(dialCtx, "rnode?", nil)
+	} else {
+		dialCtx = logtags.AddTag(dialCtx, "rnode", remoteNodeID)
+	}
+	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
+	dialCtx = logtags.AddTag(dialCtx, "class", class)
+	return dialCtx
+}
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDialNode, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
@@ -1057,11 +1071,12 @@ type delayingHeader struct {
 // This method implies a DefaultClass ConnectionClass for the returned
 // ClientConn.
 func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
-	return rpcCtx.grpcDialRaw(target, 0, DefaultClass)
+	dialCtx := makeDialCtx(rpcCtx.masterCtx, 0, target, DefaultClass)
+	return rpcCtx.grpcDialRaw(dialCtx, target, 0, DefaultClass)
 }
 
 func (rpcCtx *Context) grpcDialRaw(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	dialCtx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := rpcCtx.grpcDialOptions(target, class)
 	if err != nil {
@@ -1089,7 +1104,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	dialerFunc := dialer.dial
 	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
 		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
-		log.VEventf(rpcCtx.masterCtx, 1, "connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+		log.VEventf(dialCtx, 1, "connecting with simulated latency %dms",
 			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
@@ -1104,9 +1119,9 @@ func (rpcCtx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, rpcCtx.testingDialOpts...)
 
-	log.Health.Infof(rpcCtx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
-	conn, err := grpc.DialContext(rpcCtx.masterCtx, target, dialOpts...)
-	if err != nil && rpcCtx.masterCtx.Err() != nil {
+	log.Health.Infof(dialCtx, "dialing")
+	conn, err := grpc.DialContext(dialCtx, target, dialOpts...)
+	if err != nil && dialCtx.Err() != nil {
 		// If the node is draining, discard the error (which is likely gRPC's version
 		// of context.Canceled) and return errDialRejected which instructs callers not
 		// to retry.
@@ -1120,7 +1135,8 @@ func (rpcCtx *Context) grpcDialRaw(
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
 func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return rpcCtx.grpcDialNodeInternal(target, 0, SystemClass)
+	dialCtx := makeDialCtx(rpcCtx.masterCtx, 0, target, DefaultClass)
+	return rpcCtx.grpcDialNodeInternal(dialCtx, target, 0, SystemClass)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -1134,9 +1150,10 @@ func (rpcCtx *Context) GRPCDialNode(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
-		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
+		log.Fatalf(rpcCtx.masterCtx, "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
-	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, class)
+	dialCtx := makeDialCtx(rpcCtx.masterCtx, remoteNodeID, target, class)
+	return rpcCtx.grpcDialNodeInternal(dialCtx, target, remoteNodeID, class)
 }
 
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
@@ -1153,7 +1170,7 @@ func (rpcCtx *Context) GRPCDialPod(
 }
 
 func (rpcCtx *Context) grpcDialNodeInternal(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	dialCtx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	thisConnKeys := []connKey{{target, remoteNodeID, class}}
 	value, ok := rpcCtx.conns.Load(thisConnKeys[0])
@@ -1188,14 +1205,15 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(target, remoteNodeID, class)
+		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(dialCtx, target, remoteNodeID, class)
+		hbCtx := logtags.AddTag(dialCtx, "heartbeat", nil)
 		if conn.dialErr == nil {
 			if err := rpcCtx.Stopper.RunAsyncTask(
-				rpcCtx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
-					err := rpcCtx.runHeartbeat(conn, target, redialChan)
+				hbCtx, "rpc.Context: grpc heartbeat", func(hbCtx context.Context) {
+					err := rpcCtx.runHeartbeat(hbCtx, conn, target, redialChan)
 					if err != nil && !grpcutil.IsClosedConnection(err) &&
 						!grpcutil.IsConnectionRejected(err) {
-						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %v", target, err)
+						log.Health.Errorf(hbCtx, "removing connection to %s due to error: %v", target, err)
 					}
 					rpcCtx.removeConn(conn, thisConnKeys...)
 				}); err != nil {
@@ -1232,7 +1250,7 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 var ErrNoConnection = errors.New("no connection found")
 
 func (rpcCtx *Context) runHeartbeat(
-	conn *Connection, target string, redialChan <-chan struct{},
+	dialCtx context.Context, conn *Connection, target string, redialChan <-chan struct{},
 ) (retErr error) {
 	rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
 	// setInitialHeartbeatDone is idempotent and is critical to notify Connect
@@ -1280,7 +1298,7 @@ func (rpcCtx *Context) runHeartbeat(
 			heartbeatTimer.Read = true
 		}
 
-		if err := rpcCtx.Stopper.RunTaskWithErr(rpcCtx.masterCtx, "rpc heartbeat", func(goCtx context.Context) error {
+		if err := rpcCtx.Stopper.RunTaskWithErr(dialCtx, "rpc heartbeat", func(dialCtx context.Context) error {
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := rpcCtx.ClusterID.Get()
 			request := &PingRequest{
@@ -1299,7 +1317,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 			var response *PingResponse
 			sendTime := rpcCtx.Clock.PhysicalTime()
-			ping := func(goCtx context.Context) error {
+			ping := func(dialCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
 				if err := interceptor(request); err != nil {
@@ -1307,14 +1325,14 @@ func (rpcCtx *Context) runHeartbeat(
 					return err
 				}
 				var err error
-				response, err = heartbeatClient.Ping(goCtx, request)
+				response, err = heartbeatClient.Ping(dialCtx, request)
 				return err
 			}
 			var err error
 			if rpcCtx.heartbeatTimeout > 0 {
-				err = contextutil.RunWithTimeout(goCtx, "rpc heartbeat", rpcCtx.heartbeatTimeout, ping)
+				err = contextutil.RunWithTimeout(dialCtx, "rpc heartbeat", rpcCtx.heartbeatTimeout, ping)
 			} else {
-				err = ping(goCtx)
+				err = ping(dialCtx)
 			}
 
 			if grpcutil.IsConnectionRejected(err) {
@@ -1340,7 +1358,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 			if err == nil {
 				err = errors.Wrap(
-					checkVersion(goCtx, rpcCtx.Settings, response.ServerVersion),
+					checkVersion(dialCtx, rpcCtx.Settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
 				if err != nil {
 					returnErr = true
@@ -1368,7 +1386,7 @@ func (rpcCtx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(rpcCtx.masterCtx, target, request.Offset, pingDuration)
+				rpcCtx.RemoteClocks.UpdateOffset(dialCtx, target, request.Offset, pingDuration)
 
 				if cb := rpcCtx.HeartbeatCB; cb != nil {
 					cb()
