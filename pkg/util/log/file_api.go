@@ -42,7 +42,7 @@ const FileNamePattern = `(?P<program>[^/.]+)\.(?P<host>[^/\.]+)\.` +
 	`(?P<user>[^/\.]+)\.(?P<ts>[^/\.]+)\.(?P<pid>\d+)\.log`
 
 // FilePattern matches log file paths.
-const FilePattern = "^(?:.*/)?" + FileNamePattern + "$"
+const FilePattern = "^(?:(?P<fpath>.*)/)?" + FileNamePattern + "$"
 
 var fileRE = regexp.MustCompile(FilePattern)
 
