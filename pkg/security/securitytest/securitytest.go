@@ -44,6 +44,21 @@ func RestrictedCopy(path, tempdir, name string) (string, error) {
 	return tempPath, nil
 }
 
+// AppendFile appends an on-disk copy of the embedded security asset
+// with the provided path, to the file designated by the second path.
+func AppendFile(assetPath, dstPath string) error {
+	contents, err := Asset(assetPath)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_APPEND, 0 /* unused */)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(contents)
+	return errors.CombineErrors(err, f.Close())
+}
+
 // AssetReadDir mimics ioutil.ReadDir, returning a list of []os.FileInfo for
 // the specified directory. Contrary to ioutil.ReadDir however, it skips sub-
 // directories.

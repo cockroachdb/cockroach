@@ -131,7 +131,8 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantCombinedStats)
 	require.NoError(t, err)
 
-	checkStatements := func(tc []testCase, actual *serverpb.StatementsResponse) {
+	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
+		t.Helper()
 		var expectedStatements []string
 		for _, stmt := range tc {
 			var expectedStmt = stmt.stmt
@@ -162,38 +163,44 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		require.Equal(t, expectedStatements, actualStatements)
 	}
 
-	// First we verify that we have expected stats from tenants
-	checkStatements(testCaseTenant, tenantStats)
-	checkStatements(testCaseTenant, tenantCombinedStats)
+	// First we verify that we have expected stats from tenants.
+	t.Run("tenant-stats", func(t *testing.T) {
+		checkStatements(t, testCaseTenant, tenantStats)
+		checkStatements(t, testCaseTenant, tenantCombinedStats)
+	})
 
 	// Now we verify the non tenant stats are what we expected.
-	checkStatements(testCaseNonTenant, &nonTenantStats)
-	checkStatements(testCaseNonTenant, &nonTenantCombinedStats)
+	t.Run("non-tenant-stats", func(t *testing.T) {
+		checkStatements(t, testCaseNonTenant, &nonTenantStats)
+		checkStatements(t, testCaseNonTenant, &nonTenantCombinedStats)
+	})
 
 	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
-	for _, tenantStmt := range tenantStats.Statements {
-		for _, nonTenantStmt := range nonTenantStats.Statements {
-			require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+	t.Run("overlap", func(t *testing.T) {
+		for _, tenantStmt := range tenantStats.Statements {
+			for _, nonTenantStmt := range nonTenantStats.Statements {
+				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+			}
 		}
-	}
 
-	for _, tenantTxn := range tenantStats.Transactions {
-		for _, nonTenantTxn := range nonTenantStats.Transactions {
-			require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+		for _, tenantTxn := range tenantStats.Transactions {
+			for _, nonTenantTxn := range nonTenantStats.Transactions {
+				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+			}
 		}
-	}
 
-	for _, tenantStmt := range tenantCombinedStats.Statements {
-		for _, nonTenantStmt := range nonTenantCombinedStats.Statements {
-			require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+		for _, tenantStmt := range tenantCombinedStats.Statements {
+			for _, nonTenantStmt := range nonTenantCombinedStats.Statements {
+				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+			}
 		}
-	}
 
-	for _, tenantTxn := range tenantCombinedStats.Transactions {
-		for _, nonTenantTxn := range nonTenantCombinedStats.Transactions {
-			require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+		for _, tenantTxn := range tenantCombinedStats.Transactions {
+			for _, nonTenantTxn := range nonTenantCombinedStats.Transactions {
+				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+			}
 		}
-	}
+	})
 }
 
 func TestResetSQLStatsRPCForTenant(t *testing.T) {
