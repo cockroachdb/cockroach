@@ -46,7 +46,7 @@ func (s *spanInner) TraceID() uint64 {
 	if s.isNoop() {
 		return 0
 	}
-	return s.crdb.traceID
+	return s.crdb.TraceID()
 }
 
 func (s *spanInner) isNoop() bool {
@@ -76,8 +76,10 @@ func (s *spanInner) SetVerbose(to bool) {
 }
 
 func (s *spanInner) SetVerboseRecursively(to bool) {
-	s.SetVerbose(to)
-	s.crdb.setVerboseRecursively(to)
+	if s.isNoop() {
+		panic(errors.AssertionFailedf("SetVerboseRecursively called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
+	}
+	s.crdb.SetVerboseRecursively(to)
 }
 
 func (s *spanInner) ResetRecording() {
@@ -88,15 +90,7 @@ func (s *spanInner) GetRecording() Recording {
 	if s.isNoop() {
 		return nil
 	}
-	// If the span is not verbose, optimize by avoiding the tags.
-	// This span is likely only used to carry payloads around.
-	//
-	// TODO(andrei): The optimization for avoiding the tags was done back when
-	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
-	// That has become cheap since, so this optimization might not be worth it any
-	// more.
-	wantTags := s.crdb.recordingType() == RecordingVerbose
-	return s.crdb.getRecording(wantTags)
+	return s.crdb.GetRecording()
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
@@ -123,11 +117,6 @@ func (s *spanInner) Finish() {
 	}
 	if s.netTr != nil {
 		s.netTr.Finish()
-	}
-	if s.crdb.parent == nil {
-		s.tracer.activeSpans.Lock()
-		delete(s.tracer.activeSpans.m, s.crdb.spanID)
-		s.tracer.activeSpans.Unlock()
 	}
 }
 

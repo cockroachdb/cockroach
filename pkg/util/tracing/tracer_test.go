@@ -433,7 +433,7 @@ func TestTracer_RegistryMaxSize(t *testing.T) {
 		if exp > maxSpanRegistrySize {
 			exp = maxSpanRegistrySize
 		}
-		require.Len(t, tr.activeSpans.m, exp)
+		require.Len(t, tr.activeSpansRegistry.mu.m, exp)
 	}
 }
 
@@ -453,7 +453,7 @@ func TestActiveSpanVisitorErrors(t *testing.T) {
 
 	var numVisited int
 
-	visitor := func(*Span) error {
+	visitor := func(RegistrySpan) error {
 		numVisited++
 		return iterutil.StopIteration()
 	}
@@ -470,7 +470,7 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 
 	spanOpsWithFinished := make(map[string]bool)
 
-	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
+	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
 		for _, rec := range sp.GetRecording() {
 			spanOpsWithFinished[rec.Operation] = rec.Finished
 		}
@@ -487,7 +487,7 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 
 	var spanOps []string
 
-	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
+	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
 		for _, rec := range sp.GetRecording() {
 			spanOps = append(spanOps, rec.Operation)
 		}
@@ -507,16 +507,16 @@ func TestTracer_VisitSpans(t *testing.T) {
 	root := tr1.StartSpan("root", WithForceRealSpan())
 	root.SetVerbose(true)
 	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
-	require.Len(t, tr1.activeSpans.m, 1)
+	require.Len(t, tr1.activeSpansRegistry.mu.m, 1)
 
 	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
-	require.Len(t, tr2.activeSpans.m, 2)
+	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
 
 	child.ImportRemoteSpans(childChildFinished.GetRecording())
 
 	childChildFinished.Finish()
-	require.Len(t, tr2.activeSpans.m, 1)
+	require.Len(t, tr2.activeSpansRegistry.mu.m, 1)
 
 	// Even though only `root` is tracked by tr1, we also reach
 	// root.child and (via ImportRemoteSpans) the remote child.
@@ -531,8 +531,8 @@ func TestTracer_VisitSpans(t *testing.T) {
 	// Nothing is tracked any more.
 	require.Len(t, getSortedSpanOps(t, tr1), 0)
 	require.Len(t, getSortedSpanOps(t, tr2), 0)
-	require.Len(t, tr1.activeSpans.m, 0)
-	require.Len(t, tr2.activeSpans.m, 0)
+	require.Len(t, tr1.activeSpansRegistry.mu.m, 0)
+	require.Len(t, tr2.activeSpansRegistry.mu.m, 0)
 }
 
 // TestSpanRecordingFinished verifies that Finished()ed Spans surfaced in an
@@ -614,9 +614,9 @@ func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 	noop := tr.StartSpan("noop")
 	require.True(t, noop.IsNoop())
 	root := tr.StartSpan("foo", WithParentAndAutoCollection(noop), WithForceRealSpan())
-	require.Len(t, tr.activeSpans.m, 1)
-	visitor := func(sp *Span) error {
-		require.Equal(t, root, sp)
+	require.Len(t, tr.activeSpansRegistry.mu.m, 1)
+	visitor := func(sp RegistrySpan) error {
+		require.Equal(t, root.i.crdb, sp)
 		return nil
 	}
 	require.NoError(t, tr.VisitSpans(visitor))
