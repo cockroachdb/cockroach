@@ -49,6 +49,7 @@ func TestCertNomenclature(t *testing.T) {
 		{"ca-client.crt", "", security.ClientCAPem, ""},
 		{"ca-ui.crt", "", security.UICAPem, ""},
 		{"node.crt", "", security.NodePem, ""},
+		{"sql-node.crt", "", security.TenantNodePem, ""},
 		{"ui.crt", "", security.UIPem, ""},
 		{"client.root.crt", "", security.ClientPem, "root"},
 		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
@@ -191,6 +192,9 @@ func TestNamingScheme(t *testing.T) {
 	parsedGoodNodeCert, goodNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 	_, badUserNodeCert := makeTestCert(t, "notnode", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 
+	parsedGoodSQLNodeCert, goodSQLNodeCert := makeTestCert(t, "sql-node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
+	_, badUserSQLNodeCert := makeTestCert(t, "notsqlnode", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
+
 	parsedGoodRootCert, goodRootCert := makeTestCert(t, "root", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 	_, notRootCert := makeTestCert(t, "notroot", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
@@ -250,6 +254,7 @@ func TestNamingScheme(t *testing.T) {
 				{"cr..crt", 0777, []byte{}},
 				{"node.foo.crt", 0777, []byte{}},
 				{"node..crt", 0777, []byte{}},
+				{"sql-node..crt", 0777, []byte{}},
 				{"client.crt", 0777, []byte{}},
 				{"client..crt", 0777, []byte{}},
 			},
@@ -260,6 +265,7 @@ func TestNamingScheme(t *testing.T) {
 			files: []testFile{
 				{"ca.crt", 0777, caCert},
 				{"node.crt", 0777, goodNodeCert},
+				{"sql-node.crt", 0777, goodSQLNodeCert},
 				{"client.root.crt", 0777, goodRootCert},
 			},
 			certs: []security.CertInfo{
@@ -267,6 +273,8 @@ func TestNamingScheme(t *testing.T) {
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
 					Error: errors.New(".* no such file or directory")},
 				{FileUsage: security.NodePem, Filename: "node.crt",
+					Error: errors.New(".* no such file or directory")},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt",
 					Error: errors.New(".* no such file or directory")},
 			},
 		},
@@ -278,6 +286,8 @@ func TestNamingScheme(t *testing.T) {
 				{"ca.key", 0777, []byte{}},
 				{"node.crt", 0777, goodNodeCert},
 				{"node.key", 0704, []byte{}},
+				{"sql-node.crt", 0777, goodSQLNodeCert},
+				{"sql-node.key", 0704, []byte{}},
 				{"client.root.crt", 0777, goodRootCert},
 				{"client.root.key", 0704, []byte{}},
 			},
@@ -287,6 +297,8 @@ func TestNamingScheme(t *testing.T) {
 					Error: permissionRequirementErr},
 				{FileUsage: security.NodePem, Filename: "node.crt",
 					Error: permissionRequirementErr},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt",
+					Error: permissionRequirementErr},
 			},
 			skipWindows: true,
 		},
@@ -295,6 +307,8 @@ func TestNamingScheme(t *testing.T) {
 			files: []testFile{
 				{"node.crt", 0777, badUserNodeCert},
 				{"node.key", 0700, []byte("node.key")},
+				{"sql-node.crt", 0777, badUserSQLNodeCert},
+				{"sql-node.key", 0700, []byte("sql-node.key")},
 				{"client.root.crt", 0777, notRootCert},
 				{"client.root.key", 0700, []byte{}},
 			},
@@ -303,6 +317,8 @@ func TestNamingScheme(t *testing.T) {
 					Error: errors.New(`client certificate has principals \["notroot"\], expected "root"`)},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: badUserNodeCert, KeyFileContents: []byte("node.key")},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt", KeyFilename: "sql-node.key",
+					FileContents: badUserSQLNodeCert, KeyFileContents: []byte("sql-node.key")},
 			},
 		},
 		{
@@ -312,6 +328,8 @@ func TestNamingScheme(t *testing.T) {
 				{"ca.key", 0700, []byte("ca.key")},
 				{"node.crt", 0777, goodNodeCert},
 				{"node.key", 0700, []byte("node.key")},
+				{"sql-node.crt", 0777, goodSQLNodeCert},
+				{"sql-node.key", 0700, []byte("sql-node.key")},
 				{"client.root.crt", 0777, goodRootCert},
 				{"client.root.key", 0700, []byte("client.root.key")},
 			},
@@ -321,6 +339,8 @@ func TestNamingScheme(t *testing.T) {
 					Name: "root", FileContents: goodRootCert, KeyFileContents: []byte("client.root.key")},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: goodNodeCert, KeyFileContents: []byte("node.key")},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt", KeyFilename: "sql-node.key",
+					FileContents: goodSQLNodeCert, KeyFileContents: []byte("sql-node.key")},
 			},
 		},
 		{
@@ -330,6 +350,8 @@ func TestNamingScheme(t *testing.T) {
 				{"ca.key", 0700, []byte("ca.key")},
 				{"node.crt", 0777, append(goodNodeCert, caCert...)},
 				{"node.key", 0700, []byte("node.key")},
+				{"sql-node.crt", 0777, append(goodSQLNodeCert, caCert...)},
+				{"sql-node.key", 0700, []byte("sql-node.key")},
 				{"client.root.crt", 0777, append(goodRootCert, caCert...)},
 				{"client.root.key", 0700, []byte("client.root.key")},
 			},
@@ -341,6 +363,9 @@ func TestNamingScheme(t *testing.T) {
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: append(goodNodeCert, caCert...), KeyFileContents: []byte("node.key"),
 					ParsedCertificates: []*x509.Certificate{parsedGoodNodeCert, parsedCACert}},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt", KeyFilename: "sql-node.key",
+					FileContents: append(goodSQLNodeCert, caCert...), KeyFileContents: []byte("sql-node.key"),
+					ParsedCertificates: []*x509.Certificate{parsedGoodSQLNodeCert, parsedCACert}},
 			},
 		},
 		{
@@ -350,6 +375,8 @@ func TestNamingScheme(t *testing.T) {
 				{"ca.key", 0777, []byte("ca.key")},
 				{"node.crt", 0777, goodNodeCert},
 				{"node.key", 0777, []byte("node.key")},
+				{"sql-node.crt", 0777, goodSQLNodeCert},
+				{"sql-node.key", 0777, []byte("sql-node.key")},
 				{"client.root.crt", 0777, goodRootCert},
 				{"client.root.key", 0777, []byte("client.root.key")},
 			},
@@ -359,6 +386,8 @@ func TestNamingScheme(t *testing.T) {
 					Name: "root", FileContents: goodRootCert, KeyFileContents: []byte("client.root.key")},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: goodNodeCert, KeyFileContents: []byte("node.key")},
+				{FileUsage: security.TenantNodePem, Filename: "sql-node.crt", KeyFilename: "sql-node.key",
+					FileContents: goodSQLNodeCert, KeyFileContents: []byte("sql-node.key")},
 			},
 			skipChecks: true,
 		},

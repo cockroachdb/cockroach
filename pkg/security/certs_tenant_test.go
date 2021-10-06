@@ -49,6 +49,9 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	// happen (it may be enough to just have them in-mem, we will see).
 	require.NoError(t, security.WriteTenantClientPair(certsDir, tenantCerts, false /* overwrite */))
 
+	require.NoError(t, security.CreateSQLNodePair(
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, false, []string{"127.0.0.1"}))
+
 	// The server also needs to show certs trusted by the client. These are the
 	// node certs.
 	serverCAKeyPath := filepath.Join(certsDir, "name-does-not-matter-too.key")

@@ -252,6 +252,13 @@ func generateBaseCerts(certsDir string) error {
 			return err
 		}
 
+		if err := security.CreateSQLNodePair(
+			certsDir, caKey,
+			testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
+		); err != nil {
+			return err
+		}
+
 		tcp, err := security.CreateTenantClientPair(certsDir, caKey,
 			testKeySize, time.Hour*48, 10)
 		if err != nil {
