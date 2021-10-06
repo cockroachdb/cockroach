@@ -142,6 +142,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		testKeySize,
 		time.Hour,
 		999,
+		[]string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	require.NoError(t, security.WriteTenantClientPair(certsDir, cp, false))
@@ -253,7 +254,7 @@ func generateBaseCerts(certsDir string) error {
 		}
 
 		tcp, err := security.CreateTenantClientPair(certsDir, caKey,
-			testKeySize, time.Hour*48, 10)
+			testKeySize, time.Hour*48, 10, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}

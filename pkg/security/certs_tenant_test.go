@@ -42,7 +42,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 
 	// That dedicated service can make client certs for a tenant as follows:
 	tenantCerts, err := security.CreateTenantClientPair(
-		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant,
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily

@@ -774,9 +774,17 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
-	nodeCert, err := cm.getNodeCertLocked()
-	if err != nil {
-		return nil, err
+	var nodeCert *CertInfo
+	if cm.tenantClientCert == nil {
+		nodeCert, err = cm.getNodeCertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		nodeCert, err = cm.getTenantClientCertLocked()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	clientCA, err := cm.getClientCACertLocked()
@@ -862,7 +870,10 @@ func (cm *CertificateManager) getCACertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 	if cm.clientCACert == nil {
 		// No client CA: use general CA.
-		return cm.getCACertLocked()
+		if cm.tenantClientCert == nil {
+			return cm.getCACertLocked()
+		}
+		return cm.getTenantClientCACertLocked()
 	}
 
 	if err := checkCertIsValid(cm.clientCACert); err != nil {
@@ -877,7 +888,10 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 	if cm.uiCACert == nil {
 		// No UI CA: use general CA.
-		return cm.getCACertLocked()
+		if cm.tenantClientCert == nil {
+			return cm.getCACertLocked()
+		}
+		return cm.getTenantClientCACertLocked()
 	}
 
 	if err := checkCertIsValid(cm.uiCACert); err != nil {
@@ -901,7 +915,10 @@ func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 	if cm.uiCert == nil {
 		// No UI certificate: use node certificate.
-		return cm.getNodeCertLocked()
+		if cm.tenantClientCert == nil {
+			return cm.getNodeCertLocked()
+		}
+		return cm.getTenantClientCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
 		return nil, makeError(err, "problem with UI certificate")
@@ -928,7 +945,10 @@ func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, 
 func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	if cm.nodeClientCert == nil {
 		// No specific client cert for 'node': use multi-purpose node cert.
-		return cm.getNodeCertLocked()
+		if cm.tenantClientCert == nil {
+			return cm.getNodeCertLocked()
+		}
+		return cm.getTenantClientCertLocked()
 	}
 
 	if err := checkCertIsValid(cm.nodeClientCert); err != nil {
@@ -1002,9 +1022,18 @@ func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config,
 	defer cm.mu.Unlock()
 
 	// We always need the CA cert.
-	ca, err := cm.getCACertLocked()
-	if err != nil {
-		return nil, err
+	var ca *CertInfo
+	var err error
+	if cm.tenantClientCert == nil {
+		ca, err = cm.getCACertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		ca, err = cm.getTenantClientCACertLocked()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !user.IsNodeUser() {
