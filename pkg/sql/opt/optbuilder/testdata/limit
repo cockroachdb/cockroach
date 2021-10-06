@@ -136,22 +136,26 @@ limit
  ├── columns: sum:6  [hidden: v:2]
  ├── internal-ordering: -2
  ├── ordering: -2
- ├── sort
+ ├── project
  │    ├── columns: v:2 sum:6
  │    ├── ordering: -2
  │    ├── limit hint: 10.00
- │    └── project
- │         ├── columns: v:2 sum:6
- │         └── group-by
- │              ├── columns: k:1!null v:2 sum:6
- │              ├── grouping columns: k:1!null v:2
- │              ├── project
- │              │    ├── columns: k:1!null v:2 w:3
- │              │    └── scan t
- │              │         └── columns: k:1!null v:2 w:3 crdb_internal_mvcc_timestamp:4 tableoid:5
- │              └── aggregations
- │                   └── sum [as=sum:6]
- │                        └── w:3
+ │    └── group-by (partial streaming)
+ │         ├── columns: k:1!null v:2 sum:6
+ │         ├── grouping columns: k:1!null v:2
+ │         ├── ordering: -2
+ │         ├── limit hint: 10.00
+ │         ├── sort
+ │         │    ├── columns: k:1!null v:2 w:3
+ │         │    ├── ordering: -2
+ │         │    ├── limit hint: 10.00
+ │         │    └── project
+ │         │         ├── columns: k:1!null v:2 w:3
+ │         │         └── scan t
+ │         │              └── columns: k:1!null v:2 w:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── aggregations
+ │              └── sum [as=sum:6]
+ │                   └── w:3
  └── 10
 
 build

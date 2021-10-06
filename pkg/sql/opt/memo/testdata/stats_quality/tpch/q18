@@ -61,7 +61,7 @@ top-k
  ├── key: (11)
  ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
  ├── ordering: -14,+15
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q18_group_by_2
       ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:11(int!null) o_totalprice:14(float!null) o_orderdate:15(date!null) sum:59(float!null)
       ├── grouping columns: o_orderkey:11(int!null)
@@ -121,7 +121,7 @@ top-k
       │    │    │    │    ├── key: (40)
       │    │    │    │    ├── fd: (40)-->(58)
       │    │    │    │    ├── ordering: +40
-      │    │    │    │    ├── group-by
+      │    │    │    │    ├── group-by (streaming)
       │    │    │    │    │    ├── save-table-name: q18_group_by_9
       │    │    │    │    │    ├── columns: l_orderkey:40(int!null) sum:58(float!null)
       │    │    │    │    │    ├── grouping columns: l_orderkey:40(int!null)

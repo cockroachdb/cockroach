@@ -53,7 +53,7 @@ sort
  ├── key: (50)
  ├── fd: (50)-->(61)
  ├── ordering: -61
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q5_group_by_2
       ├── columns: n_name:50(char!null) sum:61(float!null)
       ├── grouping columns: n_name:50(char!null)

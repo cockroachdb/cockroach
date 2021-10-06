@@ -201,6 +201,17 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 			return "values", nil
 		}
 
+	case groupByOp:
+		a := n.args.(*groupByArgs)
+		switch a.groupingOrderType {
+		case exec.Streaming:
+			return "group (streaming)", nil
+		case exec.PartialStreaming:
+			return "group (partial streaming)", nil
+		default:
+			return "group (hash)", nil
+		}
+
 	case hashJoinOp:
 		a := n.args.(*hashJoinArgs)
 		if len(n.args.(*hashJoinArgs).LeftEqCols) == 0 {
@@ -280,7 +291,7 @@ var nodeNames = [...]string{
 	explainOptOp:           "explain",
 	exportOp:               "export",
 	filterOp:               "filter",
-	groupByOp:              "group",
+	groupByOp:              "", // This node does not have a fixed name.
 	hashJoinOp:             "", // This node does not have a fixed name.
 	indexJoinOp:            "index join",
 	insertFastPathOp:       "insert fast path",

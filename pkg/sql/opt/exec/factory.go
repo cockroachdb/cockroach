@@ -342,3 +342,15 @@ type ExecutionStats struct {
 // BuildPlanForExplainFn builds an execution plan against the given
 // base factory.
 type BuildPlanForExplainFn func(f Factory) (Plan, error)
+
+// GroupingOrderType is the grouping column order type for group by and distinct
+// operations.
+type GroupingOrderType int
+
+const (
+	// PartialStreaming means that the grouping columns are partially ordered, so
+	// some optimizations can be done during aggregation.
+	PartialStreaming GroupingOrderType = iota
+	// Streaming means that the grouping columns are fully ordered.
+	Streaming
+)

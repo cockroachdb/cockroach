@@ -56,7 +56,7 @@ sort
  ├── key: (26)
  ├── fd: (26)-->(31,33)
  ├── ordering: +26
- └── group-by
+ └── group-by (hash)
       ├── save-table-name: q12_group_by_2
       ├── columns: l_shipmode:26(char!null) sum:31(decimal!null) sum:33(decimal!null)
       ├── grouping columns: l_shipmode:26(char!null)

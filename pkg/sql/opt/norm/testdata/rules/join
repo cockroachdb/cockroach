@@ -1442,7 +1442,7 @@ project
  │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
  │    │    ├── key: (12-15)
  │    │    ├── fd: (12-15)-->(21,48)
- │    │    ├── group-by
+ │    │    ├── group-by (hash)
  │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
  │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
  │    │    │    ├── key: (12-15)
@@ -2181,7 +2181,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2-5)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 sum:9
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -2633,7 +2633,7 @@ values
 norm expect=EliminateJoinNoColsRight
 SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10))
 ----
-group-by
+group-by (hash)
  ├── columns: x:1!null y:2
  ├── grouping columns: x:1!null
  ├── immutable

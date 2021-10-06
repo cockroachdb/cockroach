@@ -470,7 +470,7 @@ project
  │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: ()-->(7), (1)-->(3)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: k:1!null f:3 sum:7!null
  │    │    ├── grouping columns: k:1!null
  │    │    ├── key: (1)
@@ -1357,7 +1357,7 @@ distinct-on
 norm expect=PruneAggCols
 SELECT s, sumi FROM (SELECT sum(i) sumi, s, min(s||'foo') FROM a GROUP BY s) a
 ----
-group-by
+group-by (hash)
  ├── columns: s:4 sumi:7
  ├── grouping columns: s:4
  ├── key: (4)
@@ -1480,7 +1480,7 @@ scalar-group-by
 norm expect=PruneGroupByCols
 SELECT s, sum(i) FROM a GROUP BY s, s||'foo'
 ----
-group-by
+group-by (hash)
  ├── columns: s:4 sum:7
  ├── grouping columns: s:4
  ├── key: (4)
@@ -1495,7 +1495,7 @@ group-by
 norm expect=PruneGroupByCols
 SELECT avg(s::int+i), s, i FROM a GROUP BY s, i, i+1
 ----
-group-by
+group-by (hash)
  ├── columns: avg:8 s:4 i:2
  ├── grouping columns: i:2 s:4
  ├── immutable
@@ -1533,12 +1533,12 @@ project
 norm expect=PruneGroupByCols
 SELECT min(sm), i FROM (SELECT s, i, sum(k) sm, avg(k) av FROM a GROUP BY i, s) a GROUP BY i, i+1
 ----
-group-by
+group-by (hash)
  ├── columns: min:9!null i:2
  ├── grouping columns: i:2
  ├── key: (2)
  ├── fd: (2)-->(9)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: i:2 s:4 sum:7!null
  │    ├── grouping columns: i:2 s:4
  │    ├── key: (2,4)
@@ -1684,7 +1684,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(8)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null sum:8
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
