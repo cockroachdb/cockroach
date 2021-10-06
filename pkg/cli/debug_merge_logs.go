@@ -43,21 +43,11 @@ func writeLogStream(
 	s logStream,
 	out io.Writer,
 	filter *regexp.Regexp,
-	prefix string,
 	keepRedactable bool,
 	cp ttycolor.Profile,
 ) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB
-
-	prefixCache := map[*fileInfo][]byte{}
-	getPrefix := func(fi *fileInfo) ([]byte, error) {
-		if prefixBuf, ok := prefixCache[fi]; ok {
-			return prefixBuf, nil
-		}
-		prefixCache[fi] = fi.pattern.ExpandString(nil, prefix, fi.path, fi.matches)
-		return prefixCache[fi], nil
-	}
 
 	type entryInfo struct {
 		logpb.Entry
@@ -68,11 +58,7 @@ func writeLogStream(
 		// Currently, `render` applies the `crdb-v1-tty` format regardless of the
 		// output logging format defined for the stderr sink. It should instead
 		// apply the selected output format.
-		var prefixBytes []byte
-		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
-			return err
-		}
-		err = log.FormatLegacyEntryPrefix(prefixBytes, w, cp)
+		err = log.FormatLegacyEntryPrefix([]byte(ei.prefix), w, cp)
 		if err != nil {
 			return err
 		}
@@ -183,6 +169,7 @@ func newMergedStreamFromPatterns(
 	from, to time.Time,
 	editMode log.EditSensitiveData,
 	format string,
+	prefixer prefixer,
 ) (logStream, error) {
 	paths, err := expandPatterns(patterns)
 	if err != nil {
@@ -193,6 +180,8 @@ func newMergedStreamFromPatterns(
 	if err != nil {
 		return nil, err
 	}
+
+	prefixer.Prefix(files)
 	return newMergedStream(ctx, files, from, to, editMode, format)
 }
 
@@ -341,6 +330,7 @@ func getLogFileInfo(path string, filePattern *regexp.Regexp) (fileInfo, bool) {
 
 type fileInfo struct {
 	path    string
+	prefix  string
 	pattern *regexp.Regexp
 	matches []int
 }
@@ -379,6 +369,7 @@ func findLogFiles(
 		}); err != nil {
 			return nil, err
 		}
+
 	}
 	return files, nil
 }
