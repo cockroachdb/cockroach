@@ -1674,7 +1674,7 @@ var payloadsForSpanGeneratorType = types.MakeLabeledTuple(
 // over all recordings for a given Span.
 type payloadsForSpanGenerator struct {
 	// The span to iterate over.
-	span *tracing.Span
+	span tracing.RegistrySpan
 
 	// recordingIndex maintains the current position of the index of the iterator
 	// in the list of recordings surfaced by a given span. The payloads of the
@@ -1705,8 +1705,8 @@ func makePayloadsForSpanGenerator(
 		)
 	}
 	spanID := uint64(*(args[0].(*tree.DInt)))
-	span, found := ctx.Tracer.GetActiveSpanFromID(spanID)
-	if !found {
+	span := ctx.Tracer.GetActiveSpanByID(spanID)
+	if span == nil {
 		return nil, nil
 	}
 

@@ -138,8 +138,8 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// [1]: cleanupSessionTempObjects
 		tracer := tc.Servers[i].Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
-			var sps []*tracing.Span
-			_ = tracer.VisitSpans(func(span *tracing.Span) error {
+			var sps []tracing.RegistrySpan
+			_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 				sps = append(sps, span)
 				return nil
 			})

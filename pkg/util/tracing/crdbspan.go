@@ -29,8 +29,8 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	tracer   *Tracer
 	rootSpan *crdbSpan // root span of the containing trace; could be itself
-	testing  *TracerTestingKnobs
 
 	// traceEmpty indicates whether or not the trace rooted at this span
 	// (provided it is a root span) contains any recordings or baggage. All
@@ -126,6 +126,10 @@ func (b *sizeLimitedBuffer) Reset() {
 // sync.Pool) after finish(), although we're not currently taking advantage of
 // this.
 func (s *crdbSpan) finish() bool {
+	if s.parent == nil {
+		s.tracer.activeSpansRegistry.removeSpan(s.spanID)
+	}
+
 	{
 		s.mu.Lock()
 		if s.mu.duration >= 0 {
@@ -209,6 +213,24 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
+// TraceID is part of the RegistrySpan interface.
+func (s *crdbSpan) TraceID() uint64 {
+	return s.traceID
+}
+
+// GetRecording is part of the RegistrySpan interface.
+func (s *crdbSpan) GetRecording() Recording {
+	// If the span is not verbose, optimize by avoiding the tags.
+	// This span is likely only used to carry payloads around.
+	//
+	// TODO(andrei): The optimization for avoiding the tags was done back when
+	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
+	// That has become cheap since, so this optimization might not be worth it any
+	// more.
+	wantTags := s.recordingType() == RecordingVerbose
+	return s.getRecording(wantTags)
+}
+
 // getRecording returns the Span's recording, including its children.
 //
 // When wantTags is false, no tags will be added. This is a performance
@@ -222,7 +244,7 @@ func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	// no recordings or baggage. If the trace is verbose, we'll still recurse in
 	// order to pick up all the operations that were part of the trace, despite
 	// nothing having any actual data in them.
-	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() && !s.testing.RecordEmptyTraces {
+	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() && !s.tracer.testing.RecordEmptyTraces {
 		return nil
 	}
 
@@ -291,8 +313,8 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	}
 
 	var now time.Time
-	if clock := s.testing.Clock; clock != nil {
-		now = s.testing.Clock.Now()
+	if clock := s.tracer.testing.Clock; clock != nil {
+		now = s.tracer.testing.Clock.Now()
 	} else {
 		now = time.Now()
 	}
@@ -484,8 +506,7 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 //
 // child is the child span that just finished.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
-	wantTags := s.recordingType() == RecordingVerbose
-	rec := child.getRecording(wantTags)
+	rec := child.GetRecording()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -504,9 +525,8 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	}
 }
 
-// setVerboseRecursively sets the verbosity of the crdbSpan appropriately and
-// recurses on its list of children.
-func (s *crdbSpan) setVerboseRecursively(to bool) {
+// SetVerboseRecursively is part of the RegistrySpan interface.
+func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	if to {
 		s.enableRecording(RecordingVerbose)
 	} else {
@@ -518,7 +538,7 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 	s.mu.Unlock()
 
 	for _, child := range children {
-		child.setVerboseRecursively(to)
+		child.SetVerboseRecursively(to)
 	}
 }
 

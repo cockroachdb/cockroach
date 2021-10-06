@@ -147,12 +147,6 @@ func (sp *Span) SetVerbose(to bool) {
 	sp.i.SetVerbose(to)
 }
 
-// SetVerboseRecursively is like SetVerbose, except it does so for all
-// descendant spans as well.
-func (sp *Span) SetVerboseRecursively(to bool) {
-	sp.i.SetVerboseRecursively(to)
-}
-
 // ResetRecording clears any previously recorded information. This doesn't
 // affect any auxiliary trace sinks such as net/trace or zipkin.
 //
