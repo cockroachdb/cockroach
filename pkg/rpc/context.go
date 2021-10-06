@@ -715,7 +715,7 @@ func (ctx *Context) grpcDialOptions(
 		if ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
 		} else {
-			tlsConfig, err = ctx.GetTenantClientTLSConfig()
+			tlsConfig, err = ctx.GetTenantTLSConfig()
 		}
 		if err != nil {
 			return nil, err

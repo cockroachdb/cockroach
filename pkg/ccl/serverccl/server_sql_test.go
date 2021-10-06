@@ -140,14 +140,15 @@ func TestTenantHTTP(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	httpClient, err := tc.Server(0).RPCContext().GetHTTPClient()
-	require.NoError(t, err)
-
 	tenant, err := tc.Server(0).StartTenant(ctx,
 		base.TestTenantArgs{
 			TenantID: serverutils.TestTenantID(),
 		})
 	require.NoError(t, err)
+
+	httpClient, err := tenant.RPCContext().GetHTTPClient()
+	require.NoError(t, err)
+
 	t.Run("prometheus", func(t *testing.T) {
 		resp, err := httpClient.Get("https://" + tenant.HTTPAddr() + "/_status/vars")
 		defer http.DefaultClient.CloseIdleConnections()

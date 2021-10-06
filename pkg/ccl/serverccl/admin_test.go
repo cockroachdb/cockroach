@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,6 +29,7 @@ var adminPrefix = "/_admin/v1/"
 // that we see all zone configs (#27718).
 func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -80,6 +82,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 // TestAdminAPIChartCatalog verifies that an error doesn't happen.
 func TestAdminAPIChartCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
