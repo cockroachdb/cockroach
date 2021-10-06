@@ -19,6 +19,7 @@ func init() {
 	mtCmd.AddCommand(mtTestDirectorySvr)
 
 	mtCertsCmd.AddCommand(
+		mtCreateSQLNodeCertCmd,
 		mtCreateTenantClientCACertCmd,
 		mtCreateTenantClientCertCmd,
 	)

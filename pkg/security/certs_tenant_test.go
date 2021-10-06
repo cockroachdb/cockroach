@@ -57,6 +57,9 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
+	require.NoError(t, security.CreateSQLNodePair(
+		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
+
 	return certsDir, cleanup
 }
 

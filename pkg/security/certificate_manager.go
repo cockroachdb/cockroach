@@ -53,6 +53,12 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+	metaTenantNodeExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.sql-node",
+		Help:        "Expiration for the SQL tenant server certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 	metaNodeClientExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node-client",
 		Help:        "Expiration for the node's client certificate. 0 means no certificate or error.",
@@ -121,6 +127,7 @@ type CertificateManager struct {
 	clientCACert   *CertInfo // optional: certificate to verify client certificates
 	uiCACert       *CertInfo // optional: certificate to verify UI certficates
 	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
+	tenantNodeCert *CertInfo // certificate for SQL tenant servers (always server cert, sometimes client cert)
 	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
 	clientCerts    map[SQLUsername]*CertInfo
@@ -148,6 +155,7 @@ type CertificateMetrics struct {
 	ClientCAExpiration       *metric.Gauge
 	UICAExpiration           *metric.Gauge
 	NodeExpiration           *metric.Gauge
+	TenantNodeExpiration     *metric.Gauge
 	NodeClientExpiration     *metric.Gauge
 	UIExpiration             *metric.Gauge
 	TenantClientCAExpiration *metric.Gauge
@@ -171,6 +179,7 @@ func makeCertificateManager(
 			ClientCAExpiration:       metric.NewGauge(metaClientCAExpiration),
 			UICAExpiration:           metric.NewGauge(metaUICAExpiration),
 			NodeExpiration:           metric.NewGauge(metaNodeExpiration),
+			TenantNodeExpiration:     metric.NewGauge(metaTenantNodeExpiration),
 			NodeClientExpiration:     metric.NewGauge(metaNodeClientExpiration),
 			UIExpiration:             metric.NewGauge(metaUIExpiration),
 			TenantClientCAExpiration: metric.NewGauge(metaTenantClientCAExpiration),
@@ -333,6 +342,12 @@ func (cl CertsLocator) NodeCertPath() string {
 	return filepath.Join(cl.certsDir, NodeCertFilename())
 }
 
+// SQLNodeCertPath returns the expected file path for the SQL server
+// certificate.
+func (cl CertsLocator) SQLNodeCertPath() string {
+	return filepath.Join(cl.certsDir, SQLNodeCertFilename())
+}
+
 // HasNodeCert returns true iff the node certificate file already exists.
 func (cl CertsLocator) HasNodeCert() (bool, error) {
 	_, err := os.Stat(cl.NodeCertPath())
@@ -350,14 +365,29 @@ func NodeCertFilename() string {
 	return "node" + certExtension
 }
 
+// SQLNodeCertFilename returns the expected file name for the SQL server certificate.
+func SQLNodeCertFilename() string {
+	return "sql-node" + certExtension
+}
+
 // NodeKeyPath returns the expected file path for the node key.
 func (cl CertsLocator) NodeKeyPath() string {
 	return filepath.Join(cl.certsDir, NodeKeyFilename())
 }
 
+// SQLNodeKeyPath returns the expected file path for the SQL server key.
+func (cl CertsLocator) SQLNodeKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLNodeKeyFilename())
+}
+
 // NodeKeyFilename returns the expected file name for the node key.
 func NodeKeyFilename() string {
 	return "node" + keyExtension
+}
+
+// SQLNodeKeyFilename returns the expected file name for the SQL server key.
+func SQLNodeKeyFilename() string {
+	return "sql-node" + keyExtension
 }
 
 // UICertPath returns the expected file path for the UI certificate.
@@ -589,7 +619,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return makeErrorf(err, "problem loading certs directory %s", cm.certsDir)
 	}
 
-	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
+	var caCert, clientCACert, uiCACert, tenantNodeCert, nodeCert, uiCert, nodeClientCert *CertInfo
 	var tenantClientCACert, tenantClientCert *CertInfo
 	clientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
@@ -602,6 +632,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
+		case TenantNodePem:
+			tenantNodeCert = ci
 		case TenantClientPem:
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
@@ -638,6 +670,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid node cert")
 		}
+		if err := checkCertIsValid(tenantNodeCert); checkCertIsValid(cm.tenantNodeCert) == nil && err != nil {
+			return makeError(err, "reload would lose valid tenant node cert")
+		}
 		if err := checkCertIsValid(nodeClientCert); checkCertIsValid(cm.nodeClientCert) == nil && err != nil {
 			return makeErrorf(err, "reload would lose valid client cert for '%s'", NodeUser)
 		}
@@ -659,14 +694,26 @@ func (cm *CertificateManager) LoadCertificates() error {
 		}
 	}
 
-	if tenantClientCert == nil && cm.tenantIdentifier != 0 {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d", cm.tenantIdentifier)
+	if cm.tenantIdentifier != 0 {
+		if tenantClientCert == nil {
+			return makeErrorf(errors.New("tenant client cert not found"), "for %d", cm.tenantIdentifier)
+		}
+		if tenantNodeCert == nil {
+			return errors.New("tenant node cert not found")
+		}
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {
 		// No client certificate for node, but we have a node certificate. Check that
 		// it contains the required client fields.
-		if err := validateDualPurposeNodeCert(nodeCert); err != nil {
+		if err := validateDualPurposeNodeCert(nodeCert, NodeUser); err != nil {
+			return err
+		}
+	}
+
+	if tenantNodeCert != nil {
+		// Check that the SQL tenant node cert contains the required client fields.
+		if err := validateDualPurposeNodeCert(tenantNodeCert, SQLNodeUser); err != nil {
 			return err
 		}
 	}
@@ -677,6 +724,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.uiCACert = uiCACert
 
 	cm.nodeCert = nodeCert
+	cm.tenantNodeCert = tenantNodeCert
 	cm.nodeClientCert = nodeClientCert
 	cm.uiCert = uiCert
 	cm.clientCerts = clientCerts
@@ -725,6 +773,11 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
 	// used to sign the node cert expires sooner, then that is the expiration time to report.
 	maybeSetMetric(cm.certMetrics.NodeExpiration, cm.nodeCert)
+
+	// Tenant node certificate expiration.
+	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
+	// used to sign the node cert expires sooner, then that is the expiration time to report.
+	maybeSetMetric(cm.certMetrics.TenantNodeExpiration, cm.tenantNodeCert)
 
 	// Node client certificate expiration.
 	maybeSetMetric(cm.certMetrics.NodeClientExpiration, cm.nodeClientCert)
@@ -889,10 +942,19 @@ func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 // getNodeCertLocked returns the node certificate.
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
-	if err := checkCertIsValid(cm.nodeCert); err != nil {
-		return nil, makeError(err, "problem with node certificate")
+	if cm.tenantIdentifier == 0 {
+		// Host cluster node. Use the regular node cert if present.
+		if err := checkCertIsValid(cm.nodeCert); err != nil {
+			return nil, makeError(err, "problem with node certificate")
+		}
+		return cm.nodeCert, nil
 	}
-	return cm.nodeCert, nil
+
+	// Tenant SQL server. Use the regular SQL server cert if present.
+	if err := checkCertIsValid(cm.tenantNodeCert); err != nil {
+		return nil, makeError(err, "problem with tenant node certificate")
+	}
+	return cm.tenantNodeCert, nil
 }
 
 // getUICertLocked returns the UI certificate if present, otherwise returns
@@ -1091,6 +1153,9 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	}
 	if cm.nodeCert != nil {
 		ret = append(ret, cm.nodeCert)
+	}
+	if cm.tenantNodeCert != nil {
+		ret = append(ret, cm.tenantNodeCert)
 	}
 	if cm.uiCert != nil {
 		ret = append(ret, cm.uiCert)

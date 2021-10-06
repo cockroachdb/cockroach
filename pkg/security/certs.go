@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -259,6 +260,42 @@ func createCACertAndKey(
 func CreateNodePair(
 	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
 ) error {
+	return createNodePairInternal(
+		certsDir,
+		caKeyPath,
+		keySize,
+		lifetime,
+		overwrite,
+		hosts,
+		false, /* forTenant */
+	)
+}
+
+// CreateSQLNodePair creates a SQL server key and certificate.
+// The CA cert and key must load properly. If multiple certificates
+// exist in the CA cert, the first one is used.
+func CreateSQLNodePair(
+	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
+) error {
+	return createNodePairInternal(
+		certsDir,
+		caKeyPath,
+		keySize,
+		lifetime,
+		overwrite,
+		hosts,
+		true, /* forTenant */
+	)
+}
+
+func createNodePairInternal(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	hosts []string,
+	forTenant bool,
+) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
 	}
@@ -276,6 +313,13 @@ func CreateNodePair(
 		return err
 	}
 
+	var baseNodeUser string
+	if forTenant {
+		baseNodeUser = SQLNodeUser
+	} else {
+		baseNodeUser = NodeUser
+	}
+
 	// Load the CA pair.
 	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
 	if err != nil {
@@ -291,7 +335,7 @@ func CreateNodePair(
 	// Allow control of the principal to place in the cert via an env var. This
 	// is intended for testing purposes only.
 	nodeUser, _ := MakeSQLUsernameFromUserInput(
-		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser),
+		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", baseNodeUser),
 		UsernameValidation)
 
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
@@ -300,17 +344,27 @@ func CreateNodePair(
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}
 
-	certPath := cm.NodeCertPath()
-	if err := writeCertificateToFile(certPath, nodeCert, overwrite); err != nil {
-		return errors.Wrapf(err, "error writing node server certificate to %s", certPath)
+	var certPath, keyPath string
+	var label redact.SafeString
+	if forTenant {
+		label = "SQL server"
+		certPath = cm.SQLNodeCertPath()
+		keyPath = cm.SQLNodeKeyPath()
+	} else {
+		label = "KV node"
+		certPath = cm.NodeCertPath()
+		keyPath = cm.NodeKeyPath()
 	}
-	log.Infof(context.Background(), "generated node certificate: %s", certPath)
 
-	keyPath := cm.NodeKeyPath()
-	if err := writeKeyToFile(keyPath, nodeKey, overwrite); err != nil {
-		return errors.Wrapf(err, "error writing node server key to %s", keyPath)
+	if err := writeCertificateToFile(certPath, nodeCert, overwrite); err != nil {
+		return errors.Wrapf(err, "error writing %s certificate to %s", label, certPath)
 	}
-	log.Infof(context.Background(), "generated node key: %s", keyPath)
+	log.Infof(context.Background(), "generated %s certificate: %s", label, certPath)
+
+	if err := writeKeyToFile(keyPath, nodeKey, overwrite); err != nil {
+		return errors.Wrapf(err, "error writing %s key to %s", label, keyPath)
+	}
+	log.Infof(context.Background(), "generated %s key: %s", label, keyPath)
 
 	return nil
 }

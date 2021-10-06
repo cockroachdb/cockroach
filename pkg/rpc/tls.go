@@ -73,6 +73,9 @@ type SecurityContext struct {
 func MakeSecurityContext(
 	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
 ) SecurityContext {
+	if tenID.ToUint64() == 0 {
+		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
+	}
 	return SecurityContext{
 		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
 		TLSSettings:  tlsSettings,

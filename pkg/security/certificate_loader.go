@@ -89,6 +89,9 @@ const (
 	// NodePem describes the server certificate for the node, possibly a combined server/client
 	// certificate for user Node if a separate 'client.node.crt' is not present.
 	NodePem
+	// TenantNodePem describes the server certificate for a SQL tenant
+	// server, for connections across SQL tenant servers.
+	TenantNodePem
 	// UIPem describes the server certificate for the admin UI.
 	UIPem
 	// ClientPem describes a client certificate.
@@ -125,6 +128,8 @@ func (p PemUsage) String() string {
 		return "UI CA"
 	case NodePem:
 		return "Node"
+	case TenantNodePem:
+		return "Tenant Node"
 	case UIPem:
 		return "UI"
 	case ClientPem:
@@ -214,6 +219,11 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = NodePem
 		if numParts != 2 {
 			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
+		}
+	case `sql-node`:
+		fileUsage = TenantNodePem
+		if numParts != 2 {
+			return nil, errors.Errorf("SQL node certificate filename should match node%s", certExtension)
 		}
 	case `ui`:
 		fileUsage = UIPem
@@ -459,7 +469,7 @@ func parseCertificate(ci *CertInfo) error {
 // This should only be called on the NodePem CertInfo when there is no specific
 // client certificate for the 'node' user.
 // Fields required for a valid server certificate are already checked.
-func validateDualPurposeNodeCert(ci *CertInfo) error {
+func validateDualPurposeNodeCert(ci *CertInfo, nodeUser string) error {
 	if ci == nil {
 		return errors.Errorf("no node certificate found")
 	}
@@ -471,9 +481,9 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
 	principals := getCertificatePrincipals(cert)
-	if !Contains(principals, NodeUser) {
+	if !Contains(principals, nodeUser) {
 		return errors.Errorf("client/server node certificate has principals %q, expected %q",
-			principals, NodeUser)
+			principals, nodeUser)
 	}
 
 	return nil
@@ -486,6 +496,9 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 	switch ci.FileUsage {
 	case NodePem:
 		// Common Name is checked only if there is no client certificate for 'node'.
+		// This is done in validateDualPurposeNodeCert.
+	case TenantNodePem:
+		// Common Name is checked only if there is no client certificate for 'sql-node'.
 		// This is done in validateDualPurposeNodeCert.
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.

@@ -65,6 +65,9 @@ type SQLUsername struct {
 // NodeUser is used by nodes for intra-cluster traffic.
 const NodeUser = "node"
 
+// SQLNodeUser is used by SQL servers (pods) for inter-pod traffic.
+const SQLNodeUser = "sql-node"
+
 // NodeUserName is the SQLUsername for NodeUser.
 func NodeUserName() SQLUsername { return SQLUsername{NodeUser} }
 
