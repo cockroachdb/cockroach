@@ -73,8 +73,8 @@ type testState struct {
 	controller multitenant.TenantSideCostController
 
 	// external usage values, accessed using atomic.
-	cpuUsage    time.Duration
-	pgwireBytes int64
+	cpuUsage          time.Duration
+	pgwireEgressBytes int64
 
 	requestDoneCh map[string]chan struct{}
 
@@ -145,8 +145,8 @@ func (ts *testState) start(t *testing.T) {
 	}
 	externalUsageFn := func(context.Context) multitenant.ExternalUsage {
 		return multitenant.ExternalUsage{
-			CPUSecs:     time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage))).Seconds(),
-			PGWireBytes: uint64(atomic.LoadInt64(&ts.pgwireBytes)),
+			CPUSecs:           time.Duration(atomic.LoadInt64((*int64)(&ts.cpuUsage))).Seconds(),
+			PGWireEgressBytes: uint64(atomic.LoadInt64(&ts.pgwireEgressBytes)),
 		}
 	}
 	nextLiveInstanceIDFn := func(ctx context.Context) base.SQLInstanceID {
@@ -205,7 +205,7 @@ var testStateCommands = map[string]func(
 	"wait-for-event": (*testState).waitForEvent,
 	"timers":         (*testState).timers,
 	"cpu":            (*testState).cpu,
-	"pgwire":         (*testState).pgwire,
+	"pgwire-egress":  (*testState).pgwireEgress,
 	"usage":          (*testState).usage,
 	"configure":      (*testState).configure,
 }
@@ -418,14 +418,14 @@ func (ts *testState) cpu(t *testing.T, d *datadriven.TestData, args cmdArgs) str
 	return ""
 }
 
-// pgwire adds PGWire usage which will be observed by the controller on the next
+// pgwire adds PGWire egress usage which will be observed by the controller on the next
 // main loop tick.
-func (ts *testState) pgwire(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
 	bytes, err := strconv.Atoi(d.Input)
 	if err != nil {
 		d.Fatalf(t, "error parsing pgwire bytes value: %v", err)
 	}
-	atomic.AddInt64(&ts.pgwireBytes, int64(bytes))
+	atomic.AddInt64(&ts.pgwireEgressBytes, int64(bytes))
 	return ""
 }
 
@@ -452,14 +452,14 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		"Reads:  %d requests (%d bytes)\n"+
 		"Writes:  %d requests (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
-		"PGWire: %d bytes\n",
+		"PGWire egress:  %d bytes\n",
 		c.RU,
 		c.ReadRequests,
 		c.ReadBytes,
 		c.WriteRequests,
 		c.WriteBytes,
 		c.SQLPodsCPUSeconds,
-		c.PGWireBytes,
+		c.PGWireEgressBytes,
 	)
 }
 
@@ -620,8 +620,8 @@ func TestConsumption(t *testing.T) {
 		if c.SQLPodsCPUSeconds == 0 {
 			return errors.New("no CPU usage reported")
 		}
-		if c.PGWireBytes == 0 {
-			return errors.New("no pgwire bytes reported")
+		if c.PGWireEgressBytes == 0 {
+			return errors.New("no pgwire egress bytes reported")
 		}
 		return nil
 	})
