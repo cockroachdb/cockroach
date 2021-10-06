@@ -1255,7 +1255,9 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string {
+func getFinalSourceQuery(
+	params runParams, source *tree.Select, evalCtx *tree.EvalContext,
+) (string, error) {
 	// Ensure that all the table names pretty-print as fully qualified, so we
 	// store that in the table descriptor.
 	//
@@ -1294,7 +1296,13 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	)
 	ctx.FormatNode(source)
 
-	return ctx.CloseAndGetString()
+	// Use IDs instead of sequence names because name resolution depends on
+	// session data, and the internal executor has different session data.
+	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.ctx, params.p, ctx.CloseAndGetString())
+	if err != nil {
+		return "", err
+	}
+	return sequenceReplacedQuery, nil
 }
 
 // newTableDescIfAs is the NewTableDesc method for when we have a table
@@ -1353,7 +1361,11 @@ func newTableDescIfAs(
 	if err != nil {
 		return nil, err
 	}
-	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
+	createQuery, err := getFinalSourceQuery(params, p.AsSource, evalContext)
+	if err != nil {
+		return nil, err
+	}
+	desc.CreateQuery = createQuery
 	return desc, nil
 }
 
