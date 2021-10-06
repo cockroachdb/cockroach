@@ -3224,6 +3224,46 @@ type EvalPlanner interface {
 
 	// ExternalWriteFile writes the content to an external file URI.
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
+
+	QueryRowEx(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{}) (Datums, error)
+
+	QueryIteratorEx(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+}
+
+// InternalRows is an iterator interface that's exposed by the internal
+// executor. It provides access to the rows from a query.
+type InternalRows interface {
+	// Next advances the iterator by one row, returning false if there are no
+	// more rows in this iterator or if an error is encountered (the latter is
+	// then returned).
+	//
+	// The iterator is automatically closed when false is returned, consequent
+	// calls to Next will return the same values as when the iterator was
+	// closed.
+	Next(context.Context) (bool, error)
+
+	// Cur returns the row at the current position of the iterator. The row is
+	// safe to hold onto (meaning that calling Next() or Close() will not
+	// invalidate it).
+	Cur() Datums
+
+	// Close closes this iterator, releasing any resources it held open. Close
+	// is idempotent and *must* be called once the caller is done with the
+	// iterator.
+	Close() error
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
@@ -3270,25 +3310,6 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-}
-
-// InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
-// implemented by sql.InternalExecutor) used by this sem/tree package which
-// can't even import sqlutil.
-//
-// Note that the functions offered here should be avoided when possible. They
-// execute the query as root if an user hadn't been previously set on the
-// executor through SetSessionData(). These functions are deprecated in
-// sql.InternalExecutor in favor of a safer interface. Unfortunately, those
-// safer functions cannot be exposed through this interface because they depend
-// on sqlbase, and this package cannot import sqlbase. When possible, downcast
-// this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
-// alternatives.
-type InternalExecutor interface {
-	// QueryRow is part of the sqlutil.InternalExecutor interface.
-	QueryRow(
-		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
-	) (Datums, error)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -3520,13 +3541,6 @@ type EvalContext struct {
 
 	// Context holds the context in which the expression is evaluated.
 	Context context.Context
-
-	// InternalExecutor gives access to an executor to be used for running
-	// "internal" statements. It may seem bizarre that "expression evaluation" may
-	// need to run a statement, and yet many builtin functions do it.
-	// Note that the executor will be "session-bound" - it will inherit session
-	// variables from a parent session.
-	InternalExecutor InternalExecutor
 
 	Planner EvalPlanner
 

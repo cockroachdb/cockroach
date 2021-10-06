@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -267,7 +269,10 @@ func validateForeignKey(
 			query,
 		)
 
-		values, err := ie.QueryRow(ctx, "validate foreign key constraint", txn, query)
+		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint",
+			txn, sessiondata.InternalExecutorOverride{
+				User: security.RootUserName(),
+			}, query)
 		if err != nil {
 			return err
 		}
@@ -292,7 +297,10 @@ func validateForeignKey(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate fk constraint", txn, query)
+	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
+		}, query)
 	if err != nil {
 		return err
 	}
@@ -387,7 +395,10 @@ func validateUniqueConstraint(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate unique constraint", txn, query)
+	values, err := ie.QueryRowEx(ctx, "validate unique constraint", txn,
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
+		}, query)
 	if err != nil {
 		return err
 	}

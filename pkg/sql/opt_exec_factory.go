@@ -1155,7 +1155,8 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 
 	c := makeStmtEnvCollector(
 		ef.planner.EvalContext().Context,
-		ef.planner.extendedEvalCtx.InternalExecutor.(*InternalExecutor),
+		ef.planner.extendedEvalCtx.ExecCfg.InternalExecutor,
+		ef.planner.SessionData(),
 	)
 
 	// Show the version of Cockroach running.

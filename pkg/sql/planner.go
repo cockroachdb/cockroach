@@ -101,6 +101,8 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
+
+	SchemaChangeInternalExecutor *InternalExecutor
 }
 
 // copy returns a deep copy of ctx.
@@ -457,7 +459,6 @@ func internalExtendedEvalCtx(
 			TestingKnobs:       evalContextTestingKnobs,
 			StmtTimestamp:      stmtTimestamp,
 			TxnTimestamp:       txnTimestamp,
-			InternalExecutor:   execCfg.InternalExecutor,
 			SQLStatsController: sqlStatsController,
 		},
 		SessionMutatorIterator: smi,
@@ -813,4 +814,32 @@ type txnModesSetter interface {
 func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Descriptor) error {
 	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
 	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
+}
+
+// QueryRowEx is like QueryRow, but allows the caller to override some session data
+// fields (e.g. the user).
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryRowEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	return p.ExecCfg().InternalExecutor.QueryRowEx(ctx, opName, txn, session, stmt, qargs...)
+}
+
+func (p *planner) QueryIteratorEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.InternalRows, error) {
+	rows, err := p.ExecCfg().InternalExecutor.QueryIteratorEx(ctx, opName, txn, session, stmt, qargs...)
+	return rows.(tree.InternalRows), err
 }

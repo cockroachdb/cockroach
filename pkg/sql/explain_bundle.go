@@ -320,7 +320,7 @@ The UI can then be accessed at http://localhost:16686/search`, stmt)
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
-	c := makeStmtEnvCollector(ctx, b.ie)
+	c := makeStmtEnvCollector(ctx, b.ie, nil)
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
@@ -411,23 +411,25 @@ func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 // which a statement was planned or run: version, relevant session settings,
 // schema, table statistics.
 type stmtEnvCollector struct {
-	ctx context.Context
-	ie  *InternalExecutor
+	ctx                 context.Context
+	ie                  *InternalExecutor
+	sessionDataOverride *sessiondata.SessionData
 }
 
-func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvCollector {
-	return stmtEnvCollector{ctx: ctx, ie: ie}
+func makeStmtEnvCollector(
+	ctx context.Context, ie *InternalExecutor, sessionDataOverride *sessiondata.SessionData,
+) stmtEnvCollector {
+	return stmtEnvCollector{ctx: ctx, ie: ie, sessionDataOverride: sessionDataOverride}
 }
 
 // environmentQuery is a helper to run a query that returns a single string
 // value.
 func (c *stmtEnvCollector) query(query string) (string, error) {
-	var row tree.Datums
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		sessiondata.InternalExecutorOverride{SessionData: c.sessionDataOverride},
 		query,
 	)
 	if err != nil {
@@ -548,7 +550,7 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		sessiondata.InternalExecutorOverride{SessionData: c.sessionDataOverride},
 		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",
 	)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,8 +107,10 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
 		indexName = n.index.GetName()
 	}
-	it, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryIteratorEx(
-		params.ctx, "split points query", params.p.txn, sessiondata.InternalExecutorOverride{},
+	it, err := params.p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+		params.ctx, "split points query", params.p.txn, sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
+		},
 		statement,
 		dbDesc.GetName(),
 		n.tableDesc.GetName(),

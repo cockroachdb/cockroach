@@ -125,11 +125,6 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
-// SetSessionDataStack binds the session variable stack to the internal executor.
-func (ie *InternalExecutor) SetSessionDataStack(sessionDataStack *sessiondata.Stack) {
-	ie.sessionDataStack = sessionDataStack
-}
-
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // takes in a StmtBuf into which commands can be pushed and a WaitGroup that
 // will be signaled when connEx.run() returns.
@@ -575,6 +570,9 @@ func (ie *InternalExecutor) QueryIteratorEx(
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
+	if o.SessionData != nil {
+		*sd = *o.SessionData
+	}
 	if !o.User.Undefined() {
 		sd.UserProto = o.User.EncodeProto()
 	}
@@ -590,6 +588,7 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.DatabaseIDToTempSchemaID != nil {
 		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
 	}
+	sd.StubCatalogTablesEnabled = o.StubCatalogTables
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(

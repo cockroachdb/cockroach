@@ -174,7 +174,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			// We need to re-create the evalCtx since the txn may retry.
 			ie := createSchemaChangeEvalCtx(
 				ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors,
-			).InternalExecutor.(*InternalExecutor)
+			).SchemaChangeInternalExecutor
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -717,19 +717,19 @@ func (sc *SchemaChanger) validateConstraints(
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.Check().Expr); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, sc.leaseMgr, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName(), evalCtx.Codec); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.Check().Expr); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -1655,7 +1655,8 @@ func ValidateInvertedIndexes(
 					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
 				}
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, sessiondata.InternalExecutorOverride{}, stmt)
+					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
+						sessiondata.NodeUserSessionDataOverride, stmt)
 					if err != nil {
 						return err
 					}
@@ -1777,7 +1778,8 @@ func ValidateForwardIndexes(
 				}
 
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
+					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
+						sessiondata.NodeUserSessionDataOverride, query)
 					if err != nil {
 						return err
 					}
@@ -1876,7 +1878,8 @@ func ValidateForwardIndexes(
 			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
 
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
+				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
+					sessiondata.NodeUserSessionDataOverride, query)
 				if err != nil {
 					return err
 				}
@@ -2198,7 +2201,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.LeaseMgr(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, planner.LeaseMgr(), &planner.semaCtx, planner.ExecCfg().InternalExecutor, tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2222,7 +2225,7 @@ func runSchemaChangesInTxn(
 			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.EvalContext(), tableDesc, planner.txn, c.GetName(),
+					ctx, planner.ExecCfg().InternalExecutor, tableDesc, planner.txn, c.GetName(),
 				); err != nil {
 					return err
 				}
@@ -2296,12 +2299,11 @@ func validateCheckInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	checkExpr string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
@@ -2326,12 +2328,12 @@ func validateCheckInTxn(
 func validateFkInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	fkName string,
+	codec keys.SQLCodec,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
@@ -2350,7 +2352,7 @@ func validateFkInTxn(
 	}
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
+		return validateForeignKey(ctx, tableDesc, fk, ie, txn, codec)
 	})
 }
 
@@ -2368,12 +2370,11 @@ func validateFkInTxn(
 // reuse an existing kv.Txn safely.
 func validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	constraintName string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)

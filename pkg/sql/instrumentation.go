@@ -291,7 +291,7 @@ func (ih *instrumentationHelper) Finish(
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
+		ie := p.extendedEvalCtx.ExecCfg.InternalExecutor
 		placeholders := p.extendedEvalCtx.Placeholders
 		ob := ih.buildExplainAnalyzePlan(
 			explain.Flags{Verbose: true, ShowTypes: true},

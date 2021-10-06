@@ -15,9 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -30,8 +32,9 @@ func (p *planner) ResolveOIDFromString(
 ) (*tree.DOid, error) {
 	return resolveOID(
 		ctx, p.Txn(),
-		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
+		p.extendedEvalCtx.ExecCfg.InternalExecutor,
 		resultType, toResolve,
+		p.SessionData().User(), p.SessionData().Database,
 	)
 }
 
@@ -41,8 +44,9 @@ func (p *planner) ResolveOIDFromOID(
 ) (*tree.DOid, error) {
 	return resolveOID(
 		ctx, p.Txn(),
-		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
+		p.extendedEvalCtx.ExecCfg.InternalExecutor,
 		resultType, toResolve,
+		p.SessionData().User(), p.SessionData().Database,
 	)
 }
 
@@ -52,6 +56,8 @@ func resolveOID(
 	ie sqlutil.InternalExecutor,
 	resultType *types.T,
 	toResolve tree.Datum,
+	user security.SQLUsername,
+	database string,
 ) (*tree.DOid, error) {
 	info, ok := regTypeInfos[resultType.Oid()]
 	if !ok {
@@ -70,7 +76,11 @@ func resolveOID(
 		"SELECT %s.oid, %s FROM pg_catalog.%s WHERE %s = $1",
 		info.tableName, info.nameCol, info.tableName, queryCol,
 	)
-	results, err := ie.QueryRow(ctx, "queryOid", txn, q, toResolve)
+	results, err := ie.QueryRowEx(ctx, "queryOid", txn,
+		sessiondata.InternalExecutorOverride{
+			User:     user,
+			Database: database,
+		}, q, toResolve)
 	if err != nil {
 		if errors.HasType(err, (*tree.MultipleResultsError)(nil)) {
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
