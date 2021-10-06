@@ -344,9 +344,11 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				// Make sure there is at least one tuple either buffered or already
 				// aggregated.
 				lowerBound := 0
-				if op.bufferingState.tuples.Length() == 0 && len(op.buckets) == 0 {
-					lowerBound = 1
-				}
+				/*
+					if op.bufferingState.tuples.Length() == 0 && len(op.buckets) == 0 {
+						lowerBound = 1
+					}
+				*/
 				var idx int
 				sel := op.bufferingState.pendingBatch.Selection()
 				if sel != nil {

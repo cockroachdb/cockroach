@@ -73,7 +73,7 @@ project
 opt
 SELECT min(b), a FROM abc GROUP BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: min:7 a:1
  ├── grouping columns: a:1
  ├── internal-ordering: +1
@@ -93,7 +93,7 @@ group-by
 opt
 SELECT min(b), c FROM abc GROUP BY c
 ----
-group-by
+group-by (hash)
  ├── columns: min:7 c:3
  ├── grouping columns: c:3
  ├── key: (3)
@@ -114,7 +114,7 @@ group-by
 opt
 SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 ----
-group-by
+group-by (hash)
  ├── columns: array_agg:7 b:2 c:3
  ├── grouping columns: b:2 c:3
  ├── internal-ordering: +1 opt(2,3)

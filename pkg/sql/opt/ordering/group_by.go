@@ -108,7 +108,7 @@ func StreamingGroupingColOrdering(
 	for i := range inputOrdering.Columns {
 		// Get any grouping column from the set. Normally there would be at most one
 		// because we have rules that remove redundant grouping columns.
-		cols := inputOrdering.Columns[i].Group.Intersection(g.GroupingCols)
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
 		colID, ok := cols.Next(0)
 		if !ok {
 			// This group refers to a column that is not a grouping column.
@@ -118,4 +118,39 @@ func StreamingGroupingColOrdering(
 		ordering[i] = opt.MakeOrderingColumn(colID, inputOrdering.Columns[i].Descending)
 	}
 	return ordering
+}
+
+type groupingOrder int
+
+const (
+	None groupingOrder = iota
+	Hybrid
+	Full
+)
+
+// GroupingColOrder calculates how many ordered columns that the grouping
+// and input columns have in common and returns None if there are none, Full if
+// all columns match, and Hybrid if only some match. It is similar to
+// StreamingGroupingColOrdering, but does not build an ordering.
+func GroupingColOrder(g *memo.GroupingPrivate, required *props.OrderingChoice) groupingOrder {
+	inputOrdering := required.Intersection(&g.Ordering)
+	count := 0
+	for i := range inputOrdering.Columns {
+		// Get any grouping column from the set. Normally there would be at most one
+		// because we have rules that remove redundant grouping columns.
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
+		_, ok := cols.Next(0)
+		if !ok {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		count++
+	}
+	if count == 0 {
+		return None
+	} else if count < g.GroupingCols.Len() {
+		return Hybrid
+	}
+	return Full
 }

@@ -216,6 +216,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
+	case *GroupByExpr:
+		fmt.Fprintf(f.Buffer, "%v ", e.Op())
+		if isStreamingAggregation(e.Private().(*GroupingPrivate), required) {
+			fmt.Fprintf(f.Buffer, "(streaming)")
+		} else if isPartialOrderAggregation(e.Private().(*GroupingPrivate), required) {
+			fmt.Fprintf(f.Buffer, "(hybrid)")
+		} else {
+			fmt.Fprintf(f.Buffer, "(hash)")
+		}
+
 	case *SortExpr:
 		if t.InputOrdering.Any() {
 			fmt.Fprintf(f.Buffer, "%v", e.Op())
@@ -1552,6 +1562,65 @@ func isSimpleColumnName(label string) bool {
 		} else if r != '.' && r != '_' && r != '"' && !unicode.IsNumber(r) && !unicode.IsLetter(r) {
 			return false
 		}
+	}
+	return true
+}
+
+// isStreamingAggregation returns true if the grouping is a streaming
+// aggregation, that is either it is a non-scalar group with no grouping columns
+// or the grouping columns match the ordering of the required ordering. This
+// should be kept in sync with xform.isStreamingAggregation and
+// ordering.GroupingColOrder.
+func isStreamingAggregation(g *GroupingPrivate, required *physical.Required) bool {
+	groupingColCount := g.GroupingCols.Len()
+	if groupingColCount == 0 {
+		return true
+	}
+	inputOrdering := required.Ordering.Intersection(&g.Ordering)
+	count := 0
+	for i := range inputOrdering.Columns {
+		// Get any grouping column from the set. Normally there would be at most one
+		// because we have rules that remove redundant grouping columns.
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
+		_, ok := cols.Next(0)
+		if !ok {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		count++
+	}
+	if count < groupingColCount {
+		return false
+	}
+	return true
+}
+
+// isPartialOrderAggregation returns true if the grouping is an aggregation in
+// which the grouping columns match the ordering of a subset of the required
+// ordering columns. This should be kept in sync with
+// xform.isPartialOrderAggregation and ordering.GroupingColOrder.
+func isPartialOrderAggregation(g *GroupingPrivate, required *physical.Required) bool {
+	groupingColCount := g.GroupingCols.Len()
+	if groupingColCount == 0 {
+		return false
+	}
+	inputOrdering := required.Ordering.Intersection(&g.Ordering)
+	count := 0
+	for i := range inputOrdering.Columns {
+		// Get any grouping column from the set. Normally there would be at most one
+		// because we have rules that remove redundant grouping columns.
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
+		_, ok := cols.Next(0)
+		if !ok {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		count++
+	}
+	if count == 0 || count >= g.GroupingCols.Len() {
+		return false
 	}
 	return true
 }
