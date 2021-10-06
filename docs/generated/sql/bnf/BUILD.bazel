@@ -186,6 +186,7 @@ genrule(
         "show_databases_stmt.bnf",
         "show_default_privileges_stmt.bnf",
         "show_enums.bnf",
+        "show_full_scans.bnf",
         "show_grants_stmt.bnf",
         "show_index.bnf",
         "show_indexes.bnf",
