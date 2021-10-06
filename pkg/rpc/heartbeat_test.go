@@ -12,17 +12,17 @@ package rpc
 
 import (
 	"context"
-	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -154,14 +154,15 @@ func TestManualHeartbeat(t *testing.T) {
 
 func TestClockOffsetMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println(r)
-			if match, _ := regexp.MatchString("locally configured maximum clock offset", r.(string)); !match {
-				t.Errorf("expected clock mismatch error")
-			}
+
+	var hasExited syncutil.AtomicBool
+	log.SetExitFunc(false, func(_ exit.Code) {
+		if hasExited.Get() {
+			t.Fatalf("multiple log.Fatal calls encountered")
 		}
-	}()
+		hasExited.Set(true)
+	})
+	defer log.ResetExitFunc()
 
 	ctx := context.Background()
 
@@ -181,8 +182,16 @@ func TestClockOffsetMismatch(t *testing.T) {
 		OriginMaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
 		ServerVersion:        st.Version.BinaryVersion(),
 	}
+
+	if hasExited.Get() {
+		t.Fatalf("fatal call arrived too early")
+	}
+
 	response, err := hs.Ping(context.Background(), request)
-	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
+
+	if !hasExited.Get() {
+		t.Fatalf("should not have reached but got response=%v err=%v", response, err)
+	}
 }
 
 func TestClusterIDCompare(t *testing.T) {
