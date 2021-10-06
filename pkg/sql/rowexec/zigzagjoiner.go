@@ -466,6 +466,15 @@ func (z *zigzagJoiner) setupInfo(
 		neededCols.Add(int(col))
 	}
 
+	// Add columns needed by OnExpr.
+	for _, v := range z.onCond.Vars.GetIndexedVars() {
+		// We only include the columns that come from this side (all such
+		// columns have the ordinals in [colOffset, maxCol) range).
+		if v.Idx >= colOffset && v.Idx < maxCol {
+			neededCols.Add(v.Idx - colOffset)
+		}
+	}
+
 	// Setup the RowContainers.
 	info.container.Reset()
 

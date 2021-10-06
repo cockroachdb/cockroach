@@ -250,3 +250,27 @@ SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
 
 statement error FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN
 SELECT * FROM a@{FORCE_ZIGZAG,NO_ZIGZAG_JOIN} WHERE a = 3 AND b = 7
+
+# Regression tests for not fetching columns that are only needed by the ON
+# expression (#71093).
+statement ok
+CREATE TABLE t71093 (a INT, b INT, c INT, d INT, INDEX a_idx(a) STORING (b), INDEX c_idx(c) STORING (d));
+INSERT INTO t71093 VALUES (0, 1, 2, 3)
+
+# ON expr needs the stored column from the left side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
+----
+1
+
+# ON expr needs the stored column from the right side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
+----
+1
+
+# ON expr needs the stored columns from both sides.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
+----
+1
