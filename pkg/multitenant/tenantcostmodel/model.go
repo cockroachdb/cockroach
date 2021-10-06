@@ -53,9 +53,9 @@ type Config struct {
 	// PodCPUSecond is the cost of using a CPU second on the SQL pod.
 	PodCPUSecond RU
 
-	// PGWireByte is the cost of transferring one byte between the client and the
-	// SQL pod.
-	PGWireByte RU
+	// PGWireEgressByte is the cost of transferring one byte from a SQL pod to the
+	// client.
+	PGWireEgressByte RU
 }
 
 // KVReadCost calculates the cost of a KV read operation.

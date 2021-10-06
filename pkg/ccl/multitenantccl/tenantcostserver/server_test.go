@@ -139,13 +139,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		NextLiveInstanceID uint32 `yaml:"next_live_instance_id"`
 		SeqNum             int64  `yaml:"seq_num"`
 		Consumption        struct {
-			RU              float64 `yaml:"ru"`
-			ReadReq         uint64  `yaml:"read_req"`
-			ReadBytes       uint64  `yaml:"read_bytes"`
-			WriteReq        uint64  `yaml:"write_req"`
-			WriteBytes      uint64  `yaml:"write_bytes"`
-			SQLPodsCPUUsage float64 `yaml:"sql_pods_cpu_usage"`
-			PGWireBytes     uint64  `yaml:"pgwire_bytes"`
+			RU                float64 `yaml:"ru"`
+			ReadReq           uint64  `yaml:"read_req"`
+			ReadBytes         uint64  `yaml:"read_bytes"`
+			WriteReq          uint64  `yaml:"write_req"`
+			WriteBytes        uint64  `yaml:"write_bytes"`
+			SQLPodsCPUUsage   float64 `yaml:"sql_pods_cpu_usage"`
+			PGWireEgressBytes uint64  `yaml:"pgwire_egress_bytes"`
 		}
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
@@ -178,7 +178,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteRequests:     args.Consumption.WriteReq,
 			WriteBytes:        args.Consumption.WriteBytes,
 			SQLPodsCPUSeconds: args.Consumption.SQLPodsCPUUsage,
-			PGWireBytes:       args.Consumption.PGWireBytes,
+			PGWireEgressBytes: args.Consumption.PGWireEgressBytes,
 		},
 		RequestedRU:         args.RU,
 		TargetRequestPeriod: period,
