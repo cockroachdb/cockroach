@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1906,7 +1905,7 @@ var payloadsForTraceGeneratorType = types.MakeLabeledTuple(
 type payloadsForTraceGenerator struct {
 	// Iterator over all internal rows of a query that retrieves all payloads
 	// of a trace.
-	it sqlutil.InternalRows
+	it tree.InternalRows
 }
 
 func makePayloadsForTraceGenerator(
@@ -1932,8 +1931,7 @@ func makePayloadsForTraceGenerator(
 									) SELECT * 
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
-	ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
-	it, err := ie.QueryIteratorEx(
+	it, err := ctx.Planner.QueryIteratorEx(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
 		ctx.Txn,
@@ -1994,11 +1992,11 @@ const (
 // showCreateAllSchemasGenerator supports the execution of
 // crdb_internal.show_create_all_schemas(dbName).
 type showCreateAllSchemasGenerator struct {
-	ie     sqlutil.InternalExecutor
-	txn    *kv.Txn
-	ids    []int64
-	dbName string
-	acc    mon.BoundAccount
+	evalPlanner tree.EvalPlanner
+	txn         *kv.Txn
+	ids         []int64
+	dbName      string
+	acc         mon.BoundAccount
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -2015,7 +2013,7 @@ func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 // Start implements the tree.ValueGenerator interface.
 func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	ids, err := getSchemaIDs(
-		ctx, s.ie, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2035,7 +2033,7 @@ func (s *showCreateAllSchemasGenerator) Next(ctx context.Context) (bool, error) 
 	}
 
 	createStmt, err := getSchemaCreateStatement(
-		ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err
@@ -2065,20 +2063,21 @@ func makeShowCreateAllSchemasGenerator(
 ) (tree.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllSchemasGenerator{
-		dbName: dbName,
-		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
-		acc:    ctx.Mon.MakeBoundAccount(),
+		evalPlanner: ctx.Planner,
+		dbName:      dbName,
+		acc:         ctx.Mon.MakeBoundAccount(),
 	}, nil
 }
 
 // showCreateAllTablesGenerator supports the execution of
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
-	ie     sqlutil.InternalExecutor
-	txn    *kv.Txn
-	ids    []int64
-	dbName string
-	acc    mon.BoundAccount
+	evalPlanner tree.EvalPlanner
+	txn         *kv.Txn
+	ids         []int64
+	dbName      string
+	acc         mon.BoundAccount
+	sessionData *sessiondata.SessionData
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -2110,7 +2109,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.ie, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2136,7 +2135,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
+			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -2182,7 +2181,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
+			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -2220,20 +2219,21 @@ func makeShowCreateAllTablesGenerator(
 ) (tree.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllTablesGenerator{
-		dbName: dbName,
-		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
-		acc:    ctx.Mon.MakeBoundAccount(),
+		evalPlanner: ctx.Planner,
+		dbName:      dbName,
+		acc:         ctx.Mon.MakeBoundAccount(),
+		sessionData: ctx.SessionData(),
 	}, nil
 }
 
 // showCreateAllTypesGenerator supports the execution of
 // crdb_internal.show_create_all_types(dbName).
 type showCreateAllTypesGenerator struct {
-	ie     sqlutil.InternalExecutor
-	txn    *kv.Txn
-	ids    []int64
-	dbName string
-	acc    mon.BoundAccount
+	evalPlanner tree.EvalPlanner
+	txn         *kv.Txn
+	ids         []int64
+	dbName      string
+	acc         mon.BoundAccount
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -2250,7 +2250,7 @@ func (s *showCreateAllTypesGenerator) ResolvedType() *types.T {
 // Start implements the tree.ValueGenerator interface.
 func (s *showCreateAllTypesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	ids, err := getTypeIDs(
-		ctx, s.ie, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2270,7 +2270,7 @@ func (s *showCreateAllTypesGenerator) Next(ctx context.Context) (bool, error) {
 	}
 
 	createStmt, err := getTypeCreateStatement(
-		ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err
@@ -2300,8 +2300,8 @@ func makeShowCreateAllTypesGenerator(
 ) (tree.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllTypesGenerator{
-		dbName: dbName,
-		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
-		acc:    ctx.Mon.MakeBoundAccount(),
+		evalPlanner: ctx.Planner,
+		dbName:      dbName,
+		acc:         ctx.Mon.MakeBoundAccount(),
 	}, nil
 }

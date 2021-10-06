@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -26,7 +25,7 @@ import (
 // crdb_internal.show_create_all_types for a specified database.
 func getTypeIDs(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	evalPlanner tree.EvalPlanner,
 	txn *kv.Txn,
 	dbName string,
 	acc *mon.BoundAccount,
@@ -36,7 +35,7 @@ func getTypeIDs(
 		FROM %s.crdb_internal.create_type_statements
 		WHERE database_name = $1
 		`, dbName)
-	it, err := ie.QueryIteratorEx(
+	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_types",
 		txn,
@@ -69,7 +68,7 @@ func getTypeIDs(
 // getTypeCreateStatement gets the create statement to recreate a type (ignoring fks)
 // for a given type id in a database.
 func getTypeCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -77,7 +76,7 @@ func getTypeCreateStatement(
 		FROM %s.crdb_internal.create_type_statements
 		WHERE descriptor_id = $1
 	`, dbName)
-	row, err := ie.QueryRowEx(
+	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_types",
 		txn,
