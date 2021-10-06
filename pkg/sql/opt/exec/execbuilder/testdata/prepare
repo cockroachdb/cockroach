@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: local
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
@@ -11,7 +11,7 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query T
 EXECUTE change_index
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
@@ -28,7 +28,7 @@ CREATE INDEX bindex ON ab (b)
 query T
 EXECUTE change_index
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
@@ -42,7 +42,7 @@ DROP INDEX bindex
 query T
 EXECUTE change_index
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
@@ -63,7 +63,7 @@ PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 query T
 EXECUTE change_stats
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join
@@ -90,7 +90,7 @@ CREATE STATISTICS s FROM ab
 query T retry
 EXECUTE change_stats
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join

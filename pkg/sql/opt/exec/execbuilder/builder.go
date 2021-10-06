@@ -172,7 +172,9 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks)
+
+	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Stats.RowCountIfAvailable())
+	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
