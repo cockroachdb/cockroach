@@ -127,6 +127,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	defer eng.Close()
 
 	batch := eng.NewBatch()
+	defer batch.Close()
 	for i := 0; i < 100; i++ {
 		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
 		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
@@ -461,10 +462,16 @@ func TestPebbleIterConsistency(t *testing.T) {
 	k1 := MVCCKey{[]byte("a"), ts1}
 	require.NoError(t, eng.PutMVCC(k1, []byte("a1")))
 
-	roEngine := eng.NewReadOnly()
-	batch := eng.NewBatch()
-	roEngine2 := eng.NewReadOnly()
-	batch2 := eng.NewBatch()
+	var (
+		roEngine  = eng.NewReadOnly()
+		batch     = eng.NewBatch()
+		roEngine2 = eng.NewReadOnly()
+		batch2    = eng.NewBatch()
+	)
+	defer roEngine.Close()
+	defer batch.Close()
+	defer roEngine2.Close()
+	defer batch2.Close()
 
 	require.False(t, eng.ConsistentIterators())
 	require.True(t, roEngine.ConsistentIterators())
@@ -486,6 +493,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
 
 	checkMVCCIter := func(iter MVCCIterator) {
+		defer iter.Close()
 		iter.SeekGE(MVCCKey{Key: []byte("a")})
 		valid, err := iter.Valid()
 		require.Equal(t, true, valid)
@@ -496,9 +504,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 		valid, err = iter.Valid()
 		require.False(t, valid)
 		require.NoError(t, err)
-		iter.Close()
 	}
 	checkEngineIter := func(iter EngineIterator) {
+		defer iter.Close()
 		valid, err := iter.SeekEngineKeyGE(EngineKey{Key: []byte("a")})
 		require.Equal(t, true, valid)
 		require.NoError(t, err)
@@ -512,7 +520,6 @@ func TestPebbleIterConsistency(t *testing.T) {
 		valid, err = iter.NextEngineKey()
 		require.False(t, valid)
 		require.NoError(t, err)
-		iter.Close()
 	}
 
 	checkMVCCIter(roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
@@ -534,6 +541,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	checkEngineIter(batch2.NewEngineIterator(IterOptions{Prefix: true}))
 
 	checkIterSeesBothValues := func(iter MVCCIterator) {
+		defer iter.Close()
 		iter.SeekGE(MVCCKey{Key: []byte("a")})
 		count := 0
 		for ; ; iter.Next() {
@@ -545,7 +553,6 @@ func TestPebbleIterConsistency(t *testing.T) {
 			count++
 		}
 		require.Equal(t, 2, count)
-		iter.Close()
 	}
 	// The eng iterator will see both values.
 	checkIterSeesBothValues(eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
@@ -602,6 +609,7 @@ func value(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
 
 func fillInData(ctx context.Context, engine Engine, data []testValue) error {
 	batch := engine.NewBatch()
+	defer batch.Close()
 	for _, val := range data {
 		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, val.value, val.txn); err != nil {
 			return err

@@ -3972,6 +3972,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			}
 
 			rw := engine.NewBatch()
+			defer rw.Close()
 
 			// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
@@ -4103,6 +4104,8 @@ func checkEngineEquality(
 		return iter
 	}
 	iter1, iter2 := makeIter(eng1), makeIter(eng2)
+	defer iter1.Close()
+	defer iter2.Close()
 	count := 0
 	for {
 		valid1, err1 := iter1.Valid()
@@ -4241,11 +4244,13 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		log.Infof(ctx, "LockUpdate: %s, %s", status.String(), lu.String())
 	}
 	for i := range engs {
-		batch := engs[i].eng.NewBatch()
-		_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
-		require.NoError(t, err)
-		require.NoError(t, batch.Commit(false))
-		batch.Close()
+		func() {
+			batch := engs[i].eng.NewBatch()
+			defer batch.Close()
+			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+			require.NoError(t, err)
+			require.NoError(t, batch.Commit(false))
+		}()
 	}
 	require.Equal(t, engs[0].stats, engs[1].stats)
 	// TODO(sumeer): mvccResolveWriteIntent has a bug when the txn is being
@@ -4257,11 +4262,13 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 	checkEngineEquality(t, lu.Span, engs[0].eng, engs[1].eng, false, debug)
 	if status == roachpb.ABORTED {
 		for i := range engs {
-			batch := engs[i].eng.NewBatch()
-			_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
-			require.NoError(t, err)
-			require.NoError(t, batch.Commit(false))
-			batch.Close()
+			func() {
+				batch := engs[i].eng.NewBatch()
+				defer batch.Close()
+				_, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, 0, i == 0)
+				require.NoError(t, err)
+				require.NoError(t, batch.Commit(false))
+			}()
 		}
 		checkEngineEquality(t, lu.Span, engs[0].eng, engs[1].eng, true, debug)
 	}

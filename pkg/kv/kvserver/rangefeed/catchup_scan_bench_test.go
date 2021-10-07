@@ -44,24 +44,27 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		iter := rangefeed.NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-			Header: roachpb.Header{
-				Timestamp: opts.ts,
-			},
-			WithDiff: opts.withDiff,
-			Span:     span,
-		}, opts.useTBI, func() {})
-		counter := 0
-		err := iter.CatchUpScan(storage.MakeMVCCMetadataKey(startKey), storage.MakeMVCCMetadataKey(endKey), opts.ts, opts.withDiff, func(*roachpb.RangeFeedEvent) error {
-			counter++
-			return nil
-		})
-		if err != nil {
-			b.Fatalf("failed catchUp scan: %+v", err)
-		}
-		if counter < 1 {
-			b.Fatalf("didn't emit any events!")
-		}
+		func() {
+			iter := rangefeed.NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
+				Header: roachpb.Header{
+					Timestamp: opts.ts,
+				},
+				WithDiff: opts.withDiff,
+				Span:     span,
+			}, opts.useTBI, func() {})
+			defer iter.Close()
+			counter := 0
+			err := iter.CatchUpScan(storage.MakeMVCCMetadataKey(startKey), storage.MakeMVCCMetadataKey(endKey), opts.ts, opts.withDiff, func(*roachpb.RangeFeedEvent) error {
+				counter++
+				return nil
+			})
+			if err != nil {
+				b.Fatalf("failed catchUp scan: %+v", err)
+			}
+			if counter < 1 {
+				b.Fatalf("didn't emit any events!")
+			}
+		}()
 	}
 }
 
