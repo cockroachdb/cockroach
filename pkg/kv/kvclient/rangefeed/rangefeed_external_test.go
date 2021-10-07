@@ -114,6 +114,124 @@ func TestRangeFeedIntegration(t *testing.T) {
 	}
 }
 
+// TestWithOnFrontierAdvance sets up a rangefeed on a span that has > 1 range
+// and ensures that the OnFrontierAdvance callback is called with the correct
+// timestamp.
+func TestWithOnFrontierAdvance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	mkKey := func(k string) roachpb.Key {
+		return encoding.EncodeStringAscending(scratchKey, k)
+	}
+
+	sp := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	{
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+		require.NoError(t, err)
+	}
+	{
+		// Lower the closed timestamp target duration to speed up the test.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+		require.NoError(t, err)
+	}
+
+	// Split the range into two so we know the frontier has > 1 spans to track
+	// for certain. We later write to both these ranges.
+	_, _, err := tc.SplitRange(mkKey("b"))
+	require.NoError(t, err)
+
+	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	require.NoError(t, err)
+
+	// mu protects secondWriteTS.
+	var mu syncutil.Mutex
+	secondWriteFinished := false
+	var once sync.Once
+	frontierAdvancedAfterSecondWrite := make(chan struct{})
+
+	// Track the checkpoint TS for spans belonging to both the ranges we split
+	// above. This can then be used to compute the minimum timestamp for both
+	// these spans. We use the key we write to for the ranges below as keys for
+	// this map.
+	spanCheckpointTimestamps := make(map[string]hlc.Timestamp)
+	rows := make(chan *roachpb.RangeFeedValue)
+	r, err := f.RangeFeed(ctx, "test", sp, db.Clock().Now(),
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+			select {
+			case rows <- value:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			forwardCheckpoint := func(key string) {
+				ts := hlc.MinTimestamp
+				if prevTS, found := spanCheckpointTimestamps[key]; found {
+					ts = prevTS
+				}
+				ts.Forward(checkpoint.ResolvedTS)
+				spanCheckpointTimestamps[key] = ts
+			}
+			if checkpoint.Span.ContainsKey(mkKey("a")) {
+				forwardCheckpoint("a")
+			}
+			if checkpoint.Span.ContainsKey(mkKey("c")) {
+				forwardCheckpoint("c")
+			}
+		}),
+		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
+			minTS := hlc.MaxTimestamp
+			for _, ts := range spanCheckpointTimestamps {
+				minTS.Backward(ts)
+			}
+			require.True(
+				t,
+				frontierTS.Equal(minTS),
+				"frontier advanced to timestamp %v past minimum timestamp across spans %v",
+				frontierTS,
+				minTS,
+			)
+			mu.Lock()
+			defer mu.Unlock()
+			if secondWriteFinished {
+				once.Do(func() {
+					close(frontierAdvancedAfterSecondWrite)
+				})
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Write to a key on both the ranges.
+	require.NoError(t, db.Put(ctx, mkKey("a"), 1))
+
+	v := <-rows
+	require.Equal(t, mkKey("a"), v.Key)
+
+	require.NoError(t, db.Put(ctx, mkKey("c"), 1))
+	mu.Lock()
+	secondWriteFinished = true
+	mu.Unlock()
+
+	v = <-rows
+	require.Equal(t, mkKey("c"), v.Key)
+
+	<-frontierAdvancedAfterSecondWrite
+}
+
 // TestWithOnCheckpoint verifies that we correctly emit rangefeed checkpoint
 // events.
 func TestWithOnCheckpoint(t *testing.T) {
