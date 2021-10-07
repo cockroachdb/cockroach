@@ -117,7 +117,7 @@ func computeMinIntentTimestamp(
 		}
 		engineKey, err := iter.EngineKey()
 		if err != nil {
-			continue
+			return hlc.Timestamp{}, nil, err
 		}
 		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
 		if err != nil {
