@@ -21,15 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
-	"golang.org/x/time/rate"
 )
-
-var sentryIssue46720Limiter = rate.NewLimiter(0.1, 1) // 1 every 10s
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
 // the supplied request union. Any run which exceeds a minimum length
@@ -397,19 +394,14 @@ func evaluateBatch(
 		// of results from the limit going forward. Exhausting the limit results
 		// in a limit of -1. This makes sure that we still execute the rest of
 		// the batch, but with limit-aware operations returning no data.
-		if limit, retResults := baHeader.MaxSpanRequestKeys, reply.Header().NumKeys; limit > 0 {
+		h := reply.Header()
+		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit != 0 && retResults > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
-				err := errorutil.UnexpectedWithIssueErrorf(46652,
+				return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
 					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(limit),
-					errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
-				if sentryIssue46720Limiter.Allow() {
-					log.Errorf(ctx, "%v", err)
-					errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
-				}
-				return nil, mergedResult, roachpb.NewError(err)
+					retResults, limit, ba.Header.MaxSpanRequestKeys,
+					redact.Safe(ba.Summary()), index))
 			} else if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
 			} else {
@@ -417,20 +409,12 @@ func evaluateBatch(
 				// mean "no limit").
 				baHeader.MaxSpanRequestKeys = -1
 			}
-		} else if limit < 0 {
-			if retResults > 0 {
-				index, retResults := index, retResults // don't alloc unless branch taken
-				log.Fatalf(ctx,
-					"received %d results, limit was exhausted (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
-			}
 		}
 		// Same as for MaxSpanRequestKeys above, keep track of the limit and
 		// make sure to fall through to -1 instead of hitting zero (which
 		// means no limit).
 		if baHeader.TargetBytes > 0 {
-			retBytes := reply.Header().NumBytes
+			retBytes := h.NumBytes
 			if baHeader.TargetBytes > retBytes {
 				baHeader.TargetBytes -= retBytes
 			} else {
