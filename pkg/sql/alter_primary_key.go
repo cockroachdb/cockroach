@@ -157,7 +157,7 @@ func (p *planner) AlterPrimaryKey(
 		// Allow reuse of existing primary key's name.
 		tableDesc.PrimaryIndex.Name != string(alterPKNode.Name) &&
 		nameExists(string(alterPKNode.Name)) {
-		return pgerror.Newf(pgcode.DuplicateObject, "constraint with name %s already exists", alterPKNode.Name)
+		return pgerror.Newf(pgcode.DuplicateRelation, "index with name %s already exists", alterPKNode.Name)
 	}
 	newPrimaryIndexDesc := &descpb.IndexDescriptor{
 		Name:              name,

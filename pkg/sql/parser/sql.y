@@ -2218,6 +2218,17 @@ alter_table_cmd:
       ValidationBehavior: $3.validationBehavior(),
     }
   }
+  // ALTER TABLE <name> ADD CONSTRAINT IF NOT EXISTS ...
+| ADD CONSTRAINT IF NOT EXISTS constraint_name constraint_elem opt_validate_behavior
+  {
+    def := $7.constraintDef()
+    def.SetName(tree.Name($6))
+    def.SetIfNotExists()
+    $$.val = &tree.AlterTableAddConstraint{
+      ConstraintDef: def,
+      ValidationBehavior: $8.validationBehavior(),
+    }
+  }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
   // ALTER TABLE <name> INHERITS ....
