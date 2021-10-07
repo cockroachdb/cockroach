@@ -206,7 +206,7 @@ func (l logger) Tables() []workload.Table {
 	-- total hack to get around pretty print but whatever
 	id TEXT NOT NULL DEFAULT gen_random_uuid()::string,
 	message TEXT NOT NULL,
-	%s,
+	%s
 ) TTL '%d seconds'`, pk, int(l.ttl.Seconds())),
 		},
 	}
