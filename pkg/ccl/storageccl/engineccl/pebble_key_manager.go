@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -480,7 +480,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 		// with a corrupt data key registry.
 		// TODO(jackson): Remove this for 22.1.
 		path := m.fs.PathJoin(m.dbDir, keyRegistryFilename)
-		if err = storage.SafeWriteToFile(m.fs, m.dbDir, path, bytes); err != nil {
+		if err = fs.SafeWriteToFile(m.fs, m.dbDir, path, bytes); err != nil {
 			return
 		}
 		m.mu.filename = keyRegistryFilename
