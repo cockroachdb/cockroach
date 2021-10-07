@@ -1437,6 +1437,14 @@ service Status {
     };
   }
 
+  // CancelLocalQuery cancels a SQL query running on this node given its ID.
+  rpc CancelLocalQuery(CancelQueryRequest) returns (CancelQueryResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_local_query"
+      body: "*"
+    };
+  }
+
   // ListContentionEvents retrieves the contention events across the entire
   // cluster.
   //
