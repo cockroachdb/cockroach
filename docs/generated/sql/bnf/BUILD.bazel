@@ -176,7 +176,6 @@ genrule(
         "set_session_stmt.bnf",
         "set_transaction.bnf",
         "set_transaction_stmt.bnf",
-        "set_var.bnf",
         "show_backup.bnf",
         "show_cluster_setting.bnf",
         "show_columns_stmt.bnf",
