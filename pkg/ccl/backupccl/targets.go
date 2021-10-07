@@ -47,8 +47,7 @@ import (
 // a descriptor the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
-	codec keys.SQLCodec,
-	db *kv.DB,
+	execCfg *sql.ExecutorConfig,
 	startTime, endTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 	expanded []descpb.ID,
@@ -56,7 +55,7 @@ func getRelevantDescChanges(
 	descriptorCoverage tree.DescriptorCoverage,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
-	allChanges, err := getAllDescChanges(ctx, codec, db, startTime, endTime, priorIDs)
+	allChanges, err := getAllDescChanges(ctx, execCfg.Codec, execCfg.DB, startTime, endTime, priorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +75,22 @@ func getRelevantDescChanges(
 	// point in the interval.
 	interestingIDs := make(map[descpb.ID]struct{}, len(descs))
 
+	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(ctx, execCfg)
+	if err != nil {
+		return nil, err
+	}
+	isExcludedDescriptor := func(id descpb.ID) bool {
+		if _, isOptOutSystemTable := systemTableIDsToExcludeFromBackup[id]; id == keys.SystemDatabaseID || isOptOutSystemTable {
+			return true
+		}
+		return false
+	}
+
 	isInterestingID := func(id descpb.ID) bool {
 		// We're interested in changes to all descriptors if we're targeting all
-		// descriptors except for the system database itself.
-		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
+		// descriptors except for the descriptors that we do not include in a
+		// cluster backup.
+		if descriptorCoverage == tree.AllDescriptors && !isExcludedDescriptor(id) {
 			return true
 		}
 		// A change to an ID that we're interested in is obviously interesting.
@@ -111,7 +122,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := backupresolver.LoadAllDescs(ctx, codec, db, startTime)
+		starting, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, startTime)
 		if err != nil {
 			return nil, err
 		}
