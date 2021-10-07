@@ -15,6 +15,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -188,71 +190,6 @@ func (s *testIterator) curKV() storage.MVCCKeyValue {
 	return s.kvs[s.cur]
 }
 
-func TestInitResolvedTSScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Mock processor. We just needs its eventC.
-	p := Processor{
-		Config: Config{
-			Span: roachpb.RSpan{
-				Key:    roachpb.RKey("d"),
-				EndKey: roachpb.RKey("w"),
-			},
-		},
-		eventC: make(chan *event, 100),
-	}
-
-	// Run an init rts scan over a test iterator with the following keys.
-	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	iter := newTestIterator([]storage.MVCCKeyValue{
-		makeKV("a", "val1", 10),
-		makeInline("b", "val2"),
-		makeIntent("c", txn1, "txnKey1", 15),
-		makeProvisionalKV("c", "txnKey1", 15),
-		makeKV("c", "val3", 11),
-		makeKV("c", "val4", 9),
-		makeIntent("d", txn2, "txnKey2", 21),
-		makeProvisionalKV("d", "txnKey2", 21),
-		makeKV("d", "val5", 20),
-		makeKV("d", "val6", 19),
-		makeInline("g", "val7"),
-		makeKV("m", "val8", 1),
-		makeIntent("n", txn1, "txnKey1", 12),
-		makeProvisionalKV("n", "txnKey1", 12),
-		makeIntent("r", txn1, "txnKey1", 19),
-		makeProvisionalKV("r", "txnKey1", 19),
-		makeKV("r", "val9", 4),
-		makeIntent("w", txn1, "txnKey1", 3),
-		makeProvisionalKV("w", "txnKey1", 3),
-		makeInline("x", "val10"),
-		makeIntent("z", txn2, "txnKey2", 21),
-		makeProvisionalKV("z", "txnKey2", 21),
-		makeKV("z", "val11", 4),
-	}, nil)
-
-	initScan := newInitResolvedTSScan(&p, iter)
-	initScan.Run(context.Background())
-	require.True(t, iter.closed)
-
-	// Compare the event channel to the expected events.
-	expEvents := []*event{
-		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn2, []byte("txnKey2"), hlc.Timestamp{WallTime: 21}),
-		}},
-		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn1, []byte("txnKey1"), hlc.Timestamp{WallTime: 12}),
-		}},
-		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn1, []byte("txnKey1"), hlc.Timestamp{WallTime: 19}),
-		}},
-		{initRTS: true},
-	}
-	require.Equal(t, len(expEvents), len(p.eventC))
-	for _, expEvent := range expEvents {
-		require.Equal(t, expEvent, <-p.eventC)
-	}
-}
-
 type testTxnPusher struct {
 	pushTxnsFn       func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
 	resolveIntentsFn func(ctx context.Context, intents []roachpb.LockUpdate) error
@@ -292,6 +229,154 @@ func (tp *testTxnPusher) intentsToTxns(intents []roachpb.LockUpdate) []enginepb.
 		txnIDs[txn.ID] = struct{}{}
 	}
 	return txns
+}
+
+func TestInitResolvedTSScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	startKey := roachpb.RKey("d")
+	endKey := roachpb.RKey("w")
+
+	makeTxn := func(key string, id uuid.UUID, ts hlc.Timestamp) roachpb.Transaction {
+		txnMeta := enginepb.TxnMeta{
+			Key:            []byte(key),
+			ID:             id,
+			Epoch:          1,
+			WriteTimestamp: ts,
+			MinTimestamp:   ts,
+		}
+		return roachpb.Transaction{
+			TxnMeta:       txnMeta,
+			ReadTimestamp: ts,
+		}
+	}
+
+	txn1ID := uuid.MakeV4()
+	txn1TS := hlc.Timestamp{WallTime: 15}
+	txn1Key := "txnKey1"
+	txn1 := makeTxn(txn1Key, txn1ID, txn1TS)
+
+	txn2ID := uuid.MakeV4()
+	txn2TS := hlc.Timestamp{WallTime: 21}
+	txn2Key := "txnKey2"
+	txn2 := makeTxn(txn2Key, txn2ID, txn2TS)
+
+	type op struct {
+		kv  storage.MVCCKeyValue
+		txn *roachpb.Transaction
+	}
+
+	makeEngine := func(enableSeparatedIntents bool) storage.Engine {
+		ctx := context.Background()
+		engine := storage.NewInMemForTesting(enableSeparatedIntents)
+		testData := []op{
+			{kv: makeKV("a", "val1", 10)},
+			{kv: makeInline("b", "val2")},
+			{kv: makeKV("c", "val4", 9)},
+			{kv: makeKV("c", "val3", 11)},
+			{
+				txn: &txn1,
+				kv:  makeProvisionalKV("c", "txnKey1", 15),
+			},
+			{kv: makeKV("d", "val6", 19)},
+			{kv: makeKV("d", "val5", 20)},
+			{
+				txn: &txn2,
+				kv:  makeProvisionalKV("d", "txnKey2", 21),
+			},
+			{kv: makeInline("g", "val7")},
+			{kv: makeKV("m", "val8", 1)},
+			{
+				txn: &txn1,
+				kv:  makeProvisionalKV("n", "txnKey1", 15),
+			},
+			{kv: makeKV("r", "val9", 4)},
+			{
+				txn: &txn1,
+				kv:  makeProvisionalKV("r", "txnKey1", 15),
+			},
+			{
+				txn: &txn1,
+				kv:  makeProvisionalKV("w", "txnKey1", 15),
+			},
+			{kv: makeInline("x", "val10")},
+			{kv: makeKV("z", "val11", 4)},
+			{
+				txn: &txn2,
+				kv:  makeProvisionalKV("z", "txnKey2", 21),
+			},
+		}
+		for _, op := range testData {
+			kv := op.kv
+			err := storage.MVCCPut(ctx, engine, nil, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, op.txn)
+			require.NoError(t, err)
+		}
+		return engine
+	}
+
+	expEvents := []*event{
+		{ops: []enginepb.MVCCLogicalOp{
+			writeIntentOpWithKey(txn2ID, []byte("txnKey2"), hlc.Timestamp{WallTime: 21}),
+		}},
+		{ops: []enginepb.MVCCLogicalOp{
+			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), hlc.Timestamp{WallTime: 15}),
+		}},
+		{ops: []enginepb.MVCCLogicalOp{
+			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), hlc.Timestamp{WallTime: 15}),
+		}},
+		{initRTS: true},
+	}
+
+	testCases := map[string]struct {
+		intentScanner func() (IntentScanner, func())
+	}{
+		"legacy intent scanner": {
+			intentScanner: func() (IntentScanner, func()) {
+				engine := makeEngine(true)
+				iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+					UpperBound: endKey.AsRawKey(),
+				})
+				return NewLegacyIntentScanner(iter), func() { engine.Close() }
+			},
+		},
+		"separated intent scanner": {
+			intentScanner: func() (IntentScanner, func()) {
+				engine := makeEngine(true)
+				require.True(t, engine.IsSeparatedIntentsEnabledForTesting(context.Background()))
+				lowerBound, _ := keys.LockTableSingleKey(startKey.AsRawKey(), nil)
+				upperBound, _ := keys.LockTableSingleKey(endKey.AsRawKey(), nil)
+				iter := engine.NewEngineIterator(storage.IterOptions{
+					LowerBound: lowerBound,
+					UpperBound: upperBound,
+				})
+				return NewSeparatedIntentScanner(iter), func() { engine.Close() }
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			// Mock processor. We just needs its eventC.
+			p := Processor{
+				Config: Config{
+					Span: roachpb.RSpan{
+						Key:    startKey,
+						EndKey: endKey,
+					},
+				},
+				eventC: make(chan *event, 100),
+			}
+			isc, cleanup := tc.intentScanner()
+			defer cleanup()
+			initScan := newInitResolvedTSScan(&p, isc)
+			initScan.Run(context.Background())
+			// Compare the event channel to the expected events.
+			assert.Equal(t, len(expEvents), len(p.eventC))
+			for _, expEvent := range expEvents {
+				assert.Equal(t, expEvent, <-p.eventC)
+			}
+
+		})
+	}
 }
 
 func TestTxnPushAttempt(t *testing.T) {
