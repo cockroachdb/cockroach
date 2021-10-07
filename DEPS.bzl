@@ -697,8 +697,8 @@ def go_deps():
         name = "com_github_cockroachdb_datadriven",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/datadriven",
-        sum = "h1:BHgxdYByzfRUAykFACqyzt014mS8RzwbfuW36NmkG/E=",
-        version = "v1.0.1-0.20201212195501-e89bf9ee1861",
+        sum = "h1:a197bPNBWPgSksS9OFr1vOLmp0KnLkDRYMchdA8g+Fk=",
+        version = "v1.0.1-0.20211007161720-b558070c3be0",
     )
     go_repository(
         name = "com_github_cockroachdb_errors",
@@ -708,8 +708,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sum = "h1:+nC/m4InLWfTRZJqB9r7KdJpTGxA7kDn5FUzXzd02Qw=",
-        version = "v1.8.5",
+        sum = "h1:Am9evxl/po3RzpokemQvq7S7Cd0mxv24xy0B/trlQF4=",
+        version = "v1.8.6",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
@@ -2668,8 +2668,8 @@ def go_deps():
         name = "com_github_kr_pretty",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/kr/pretty",
-        sum = "h1:Fmg33tUaq4/8ym9TJN1x7sLJnHVwhP33CNkpYV/7rwI=",
-        version = "v0.2.1",
+        sum = "h1:WgNl7dwNpEZ6jJ9k1snq4pZsg7DOEN8hP9Xw0Tsjwk0=",
+        version = "v0.3.0",
     )
     go_repository(
         name = "com_github_kr_pty",
@@ -3483,6 +3483,14 @@ def go_deps():
         version = "v0.0.0-20180916011732-0a3d74bf9ce4",
     )
     go_repository(
+        name = "com_github_pkg_diff",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/pkg/diff",
+        sum = "h1:aoZm08cpOy4WuID//EZDgcC4zIxODThtZNPirFr42+A=",
+        version = "v0.0.0-20210226163009-20ebb0f2a09e",
+    )
+
+    go_repository(
         name = "com_github_pkg_errors",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pkg/errors",
@@ -3649,8 +3657,8 @@ def go_deps():
         name = "com_github_rogpeppe_go_internal",
         build_file_proto_mode = "disable",
         importpath = "github.com/rogpeppe/go-internal",
-        sum = "h1:RR9dF3JtopPvtkroDZuVD7qquD0bnHlKSqaQhgwt8yk=",
-        version = "v1.3.0",
+        sum = "h1:FCbCCtXNOY3UtUuHUYaghJg4y7Fd14rXifAYUAtL9R8=",
+        version = "v1.8.0",
     )
     go_repository(
         name = "com_github_rs_cors",
