@@ -128,7 +128,7 @@ func (l *logger) Ops(
 	}
 	selectElemSQL := `SELECT * FROM logs WHERE ts >= now() - $1::interval LIMIT 1`
 	if !l.tsAsPrimaryKey {
-		selectElemSQL = `SELECT * FROM logs WHERE id >= %s::string LIMIT 1`
+		selectElemSQL = `SELECT * FROM logs WHERE id >= $1::string LIMIT 1`
 	}
 	selectElemStmt, err := db.Prepare(selectElemSQL)
 	if err != nil {
