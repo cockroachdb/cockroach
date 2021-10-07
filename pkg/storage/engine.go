@@ -854,6 +854,8 @@ type Batch interface {
 	Commit(sync bool) error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
+	// Count returns the number of memtable-modifying operations in the batch.
+	Count() uint32
 	// Len returns the size of the underlying representation of the batch.
 	// Because of the batch header, the size of the batch is never 0 and should
 	// not be used interchangeably with Empty. The method avoids the memory copy
