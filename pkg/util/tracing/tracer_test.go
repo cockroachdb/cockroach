@@ -699,3 +699,16 @@ span: a
             tags: _unfinished=1 _verbose=1
 `))
 }
+
+// Test that, when a parent span finishes, children that are still open become
+// roots and are inserted into the registry.
+func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx, WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+	s1 := tr.StartSpan("parent")
+	s2 := tr.StartSpan("child1", WithParentAndAutoCollection(s1))
+	s3 := tr.StartSpan("child2", WithParentAndAutoCollection(s1))
+	require.Equal(t, []*crdbSpan{s1.i.crdb}, tr.activeSpansRegistry.testingAll())
+	s1.Finish()
+	require.ElementsMatch(t, []*crdbSpan{s2.i.crdb, s3.i.crdb}, tr.activeSpansRegistry.testingAll())
+}
