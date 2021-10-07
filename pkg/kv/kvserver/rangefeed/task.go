@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -45,12 +46,12 @@ type runnable interface {
 //   been recorded, the TimeBoundIterator cannot have any lower bound.
 //
 type initResolvedTSScan struct {
-	p  *Processor
-	it storage.SimpleMVCCIterator
+	p              *Processor
+	intentConsumer IntentScanner
 }
 
-func newInitResolvedTSScan(p *Processor, it storage.SimpleMVCCIterator) runnable {
-	return &initResolvedTSScan{p: p, it: it}
+func newInitResolvedTSScan(p *Processor, c IntentScanner) runnable {
+	return &initResolvedTSScan{p: p, intentConsumer: c}
 }
 
 func (s *initResolvedTSScan) Run(ctx context.Context) {
@@ -66,50 +67,126 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := storage.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
-	endKey := storage.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
+	startKey := s.p.Span.Key.AsRawKey()
+	endKey := s.p.Span.EndKey.AsRawKey()
+	return s.intentConsumer.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
+		var ops [1]enginepb.MVCCLogicalOp
+		ops[0].SetValue(&op)
+		return s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
+	})
+}
 
-	// Iterate through all keys using NextKey. This will look at the first MVCC
-	// version for each key. We're only looking for MVCCMetadata versions, which
-	// will always be the first version of a key if it exists, so its fine that
-	// we skip over all other versions of keys.
+func (s *initResolvedTSScan) Cancel() {
+	s.intentConsumer.Close()
+}
+
+type eventConsumer func(enginepb.MVCCWriteIntentOp) bool
+
+type IntentScanner interface {
+	ConsumeIntents(ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer eventConsumer) error
+	Close()
+}
+
+// seperatedIntentScanner assumes that seperated intents are in use.
+type SeperatedIntentScanner struct {
+	iter storage.EngineIterator
+}
+
+func NewSeperatedIntentScanner(iter storage.EngineIterator) IntentScanner {
+	return &SeperatedIntentScanner{iter: iter}
+}
+
+func (s *SeperatedIntentScanner) ConsumeIntents(
+	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer eventConsumer,
+) error {
+	ltStart, _ := keys.LockTableSingleKey(startKey, nil)
 	var meta enginepb.MVCCMetadata
-	for s.it.SeekGE(startKey); ; s.it.NextKey() {
-		if ok, err := s.it.Valid(); err != nil {
+	for valid, err := s.iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = s.iter.NextEngineKey() {
+		if err != nil {
 			return err
-		} else if !ok || !s.it.UnsafeKey().Less(endKey) {
+		} else if !valid {
 			break
 		}
 
-		// If the key is not a metadata key, ignore it.
-		unsafeKey := s.it.UnsafeKey()
-		if unsafeKey.IsValue() {
-			continue
+		engineKey, err := s.iter.EngineKey()
+		if err != nil {
+			// TODO(ssd): should this return or continue?
+			return err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		if err != nil {
+			return errors.Wrapf(err, "decoding LockTable key: %s", lockedKey)
 		}
 
-		// Found a metadata key. Unmarshal.
-		if err := protoutil.Unmarshal(s.it.UnsafeValue(), &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+		if err := protoutil.Unmarshal(s.iter.UnsafeValue(), &meta); err != nil {
+			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", lockedKey)
 		}
 
-		// If this is an intent, inform the Processor.
 		if meta.Txn != nil {
-			var ops [1]enginepb.MVCCLogicalOp
-			ops[0].SetValue(&enginepb.MVCCWriteIntentOp{
+			consumer(enginepb.MVCCWriteIntentOp{
 				TxnID:           meta.Txn.ID,
 				TxnKey:          meta.Txn.Key,
 				TxnMinTimestamp: meta.Txn.MinTimestamp,
 				Timestamp:       meta.Txn.WriteTimestamp,
 			})
-			s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
 		}
 	}
 	return nil
 }
 
-func (s *initResolvedTSScan) Cancel() {
-	s.it.Close()
+func (s *SeperatedIntentScanner) Close() { s.iter.Close() }
+
+// legacyIntentCosnsumer assumes that intents might not be seperated.
+type LegacyIntentScanner struct {
+	iter storage.SimpleMVCCIterator
 }
+
+func NewLegacyIntentScanner(iter storage.SimpleMVCCIterator) IntentScanner {
+	return &LegacyIntentScanner{iter: iter}
+}
+
+func (l *LegacyIntentScanner) ConsumeIntents(
+	ctx context.Context, start roachpb.Key, end roachpb.Key, consumer eventConsumer,
+) error {
+	startKey := storage.MakeMVCCMetadataKey(start)
+	endKey := storage.MakeMVCCMetadataKey(end)
+	// Iterate through all keys using NextKey. This will look at the first MVCC
+	// version for each key. We're only looking for MVCCMetadata versions, which
+	// will always be the first version of a key if it exists, so its fine that
+	// we skip over all other versions of keys.
+	var meta enginepb.MVCCMetadata
+	for l.iter.SeekGE(startKey); ; l.iter.NextKey() {
+		if ok, err := l.iter.Valid(); err != nil {
+			return err
+		} else if !ok || !l.iter.UnsafeKey().Less(endKey) {
+			break
+		}
+
+		// If the key is not a metadata key, ignore it.
+		unsafeKey := l.iter.UnsafeKey()
+		if unsafeKey.IsValue() {
+			continue
+		}
+
+		// Found a metadata key. Unmarshal.
+		if err := protoutil.Unmarshal(l.iter.UnsafeValue(), &meta); err != nil {
+			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+		}
+
+		// If this is an intent, inform the Processor.
+		if meta.Txn != nil {
+			consumer(enginepb.MVCCWriteIntentOp{
+				TxnID:           meta.Txn.ID,
+				TxnKey:          meta.Txn.Key,
+				TxnMinTimestamp: meta.Txn.MinTimestamp,
+				Timestamp:       meta.Txn.WriteTimestamp,
+			})
+		}
+	}
+	return nil
+}
+
+func (l *LegacyIntentScanner) Close() { l.iter.Close() }
 
 // TxnPusher is capable of pushing transactions to a new timestamp and
 // cleaning up the intents of transactions that are found to be committed.
