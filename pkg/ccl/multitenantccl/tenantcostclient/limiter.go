@@ -93,19 +93,16 @@ func (l *limiter) Wait(ctx context.Context, needed tenantcostmodel.RU) error {
 	return l.qp.Acquire(ctx, r)
 }
 
-// AdjustTokens adds or removes tokens from the bucket. Tokens are added when we
-// receive more tokens from the host cluster. Tokens are removed when
-// consumption has occurred without Wait(): accounting for CPU usage and the
-// number of read bytes.
-func (l *limiter) AdjustTokens(now time.Time, delta tenantcostmodel.RU) {
-	if delta == 0 {
-		return
-	}
+// RemoveTokens removes tokens from the bucket.
+//
+// Tokens are removed when consumption has occurred without Wait(), like
+// accounting for CPU usage or for the number of read bytes.
+func (l *limiter) RemoveTokens(now time.Time, delta tenantcostmodel.RU) {
 	l.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
-		l.tb.AdjustTokens(now, delta)
-		// We notify the head of the queue if we added RUs, in which case that
-		// request might be allowed to go through earlier.
-		return delta > 0
+		l.tb.RemoveTokens(now, delta)
+		// Don't notify the head of the queue; this change can only delay the time
+		// it can go through.
+		return false
 	})
 }
 
