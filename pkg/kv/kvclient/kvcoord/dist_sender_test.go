@@ -4388,10 +4388,11 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			tr := tracing.NewTracer()
 			getRangeDescCacheSize := func() int64 {
 				return 1 << 20
 			}
-			rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper, st.Tracer)
+			rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper, tr)
 			rc.Insert(ctx, roachpb.RangeInfo{
 				Desc: desc,
 				Lease: roachpb.Lease{
@@ -4432,7 +4433,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+				AmbientCtx: log.AmbientContext{Tracer: tr},
 				Clock:      clock,
 				NodeDescs:  ns,
 				RPCContext: rpcContext,

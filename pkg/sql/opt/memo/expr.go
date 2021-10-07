@@ -202,10 +202,10 @@ func (n FiltersExpr) OuterCols() opt.ColSet {
 	return colSet
 }
 
-// Sort sorts the FilterItems in n by the IDs of the expression.
+// Sort sorts the FilterItems in n by the ranks of the expressions.
 func (n *FiltersExpr) Sort() {
 	sort.Slice(*n, func(i, j int) bool {
-		return (*n)[i].Condition.(opt.ScalarExpr).ID() < (*n)[j].Condition.(opt.ScalarExpr).ID()
+		return (*n)[i].Condition.Rank() < (*n)[j].Condition.Rank()
 	})
 }
 

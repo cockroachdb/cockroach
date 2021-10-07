@@ -527,8 +527,9 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	si, _, db := serverutils.StartServer(t, params)
+	defer si.Stopper().Stop(ctx)
+	s := si.(*server.TestServer)
 
 	// Setup a pushed txn.
 	txn := db.NewTxn(ctx, "test")
@@ -544,7 +545,7 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	txn.CommitTimestamp()
 	require.True(t, txn.IsSerializablePushAndRefreshNotPossible())
 
-	tr := s.Tracer().(*tracing.Tracer)
+	tr := s.Tracer()
 	execCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer cancel()
 	ie := s.InternalExecutor().(*sql.InternalExecutor)

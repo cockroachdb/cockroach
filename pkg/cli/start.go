@@ -413,7 +413,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// This span concludes when the startup goroutine started below
 	// has completed.
 	// TODO(andrei): we don't close the span on the early returns below.
-	tracer := serverCfg.Settings.Tracer
+	tracer := serverCfg.Tracer
 	startupSpan := tracer.StartSpan("server start")
 	ctx = tracing.ContextWithSpan(ctx, startupSpan)
 
@@ -1183,7 +1183,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: cfg.Settings.Tracer},
+		AmbientCtx: log.AmbientContext{Tracer: cfg.Tracer},
 		Config:     cfg.Config,
 		Clock:      clock,
 		Stopper:    stopper,
