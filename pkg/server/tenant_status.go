@@ -169,6 +169,53 @@ func (t *tenantStatusServer) ListLocalSessions(
 func (t *tenantStatusServer) CancelQuery(
 	ctx context.Context, request *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		return nil, err
+	}
+
+	response := serverpb.CancelQueryResponse{}
+	distinctErrorMessages := map[string]struct{}{}
+
+	if err := t.iteratePods(
+		ctx,
+		fmt.Sprintf("cancel query ID %s", request.QueryID),
+		t.dialCallback,
+		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+			return client.(serverpb.StatusClient).CancelLocalQuery(ctx, request)
+		},
+		func(_ base.SQLInstanceID, nodeResp interface{}) {
+			nodeCancelQueryResponse := nodeResp.(*serverpb.CancelQueryResponse)
+			if nodeCancelQueryResponse.Canceled {
+				response.Canceled = true
+			}
+			distinctErrorMessages[nodeCancelQueryResponse.Error] = struct{}{}
+		},
+		func(_ base.SQLInstanceID, err error) {
+			distinctErrorMessages[err.Error()] = struct{}{}
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	if !response.Canceled {
+		var errorMessages []string
+		for errorMessage := range distinctErrorMessages {
+			errorMessages = append(errorMessages, errorMessage)
+		}
+		response.Error = strings.Join(errorMessages, ", ")
+	}
+
+	return &response, nil
+}
+
+func (t *tenantStatusServer) CancelLocalQuery(
+	ctx context.Context, request *serverpb.CancelQueryRequest,
+) (*serverpb.CancelQueryResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
 		return nil, err
