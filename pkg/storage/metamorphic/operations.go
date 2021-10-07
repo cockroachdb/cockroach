@@ -720,8 +720,9 @@ func (r restartOp) run(ctx context.Context) string {
 		return "ok"
 	}
 
-	oldEngineName, newEngineName := r.m.restart()
-	r.m.printComment(fmt.Sprintf("restarting: %s -> %s", oldEngineName, newEngineName))
+	oldEngine, newEngine := r.m.restart()
+	r.m.printComment(fmt.Sprintf("restarting: %s -> %s", oldEngine.name, newEngine.name))
+	r.m.printComment(fmt.Sprintf("new options: %s", newEngine.opts.String()))
 	return "ok"
 }
 

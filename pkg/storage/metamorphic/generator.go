@@ -38,41 +38,6 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestPebbleEngine(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	if fs != nil {
-		pebbleConfig.Opts.FS = fs
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
-}
-
-func createTestPebbleManySSTs(path string, seed int64, fs vfs.FS) (storage.Engine, error) {
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	if fs != nil {
-		pebbleConfig.Opts.FS = fs
-	}
-	levels := pebbleConfig.Opts.Levels
-	for i := range levels {
-		if i == 0 {
-			levels[i].TargetFileSize = 1 << 8 // 256 bytes
-		} else {
-			levels[i].TargetFileSize = levels[i-1].TargetFileSize * 2
-		}
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
-}
 
 func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
 	return min + rng.Int63n(max-min)
@@ -122,20 +87,40 @@ func createTestPebbleVarOpts(path string, seed int64, fs vfs.FS) (storage.Engine
 	return storage.NewPebble(context.Background(), pebbleConfig)
 }
 
-type engineImpl struct {
+type engineConfig struct {
 	name   string
-	create func(path string, seed int64, fs vfs.FS) (storage.Engine, error)
+	opts   *pebble.Options
 }
 
-var _ fmt.Stringer = &engineImpl{}
+func (e *engineConfig) create(path string, fs vfs.FS) (storage.Engine, error) {
+	pebbleConfig := storage.PebbleConfig{
+		StorageConfig: makeStorageConfig(path),
+		Opts:          e.opts,
+	}
+	if pebbleConfig.Opts == nil {
+		pebbleConfig.Opts = storage.DefaultPebbleOptions()
+	}
+	if fs != nil {
+		pebbleConfig.Opts.FS = fs
+	}
+	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
+	defer pebbleConfig.Opts.Cache.Unref()
 
-func (e *engineImpl) String() string {
+	return storage.NewPebble(context.Background(), pebbleConfig)
+}
+
+var _ fmt.Stringer = &engineConfig{}
+
+func (e *engineConfig) String() string {
 	return e.name
 }
 
-var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
-var engineImplPebbleManySSTs = engineImpl{"pebble_many_ssts", createTestPebbleManySSTs}
-var engineImplPebbleVarOpts = engineImpl{"pebble_var_opts", createTestPebbleVarOpts}
+var engineConfigStandard = engineConfig{"standard=0", storage.DefaultPebbleOptions()}
+
+type engineSequence struct {
+	name    string
+	configs []engineConfig
+}
 
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
@@ -147,7 +132,7 @@ type metaTestRunner struct {
 	seed            int64
 	path            string
 	engineFS        vfs.FS
-	engineImpls     []engineImpl
+	engineSeq       engineSequence
 	curEngine       int
 	restarts        bool
 	engine          storage.Engine
@@ -179,7 +164,8 @@ func (m *metaTestRunner) init() {
 	m.curEngine = 0
 
 	var err error
-	m.engine, err = m.engineImpls[0].create(m.path, m.seed, m.engineFS)
+	m.engine, err = m.engineSeq.configs[0].create(m.path, m.engineFS)
+	m.printComment(fmt.Sprintf("engine options: %s", m.engineSeq.configs[0].opts.String()))
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
@@ -350,25 +336,25 @@ func (m *metaTestRunner) generateAndRun(n int) {
 }
 
 // Closes the current engine and starts another one up, with the same path.
-// Returns the engine transition that
-func (m *metaTestRunner) restart() (string, string) {
+// Returns the old and new engine configs.
+func (m *metaTestRunner) restart() (engineConfig, engineConfig) {
 	m.closeAll()
-	oldEngineName := m.engineImpls[m.curEngine].name
+	oldEngine := m.engineSeq.configs[m.curEngine]
 	// TODO(itsbilal): Select engines at random instead of cycling through them.
 	m.curEngine++
-	if m.curEngine >= len(m.engineImpls) {
+	if m.curEngine >= len(m.engineSeq.configs) {
 		// If we're restarting more times than the number of engine implementations
 		// specified, loop back around to the first engine type specified.
 		m.curEngine = 0
 	}
 
 	var err error
-	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed, m.engineFS)
+	m.engine, err = m.engineSeq.configs[m.curEngine].create(m.path, m.engineFS)
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
 	}
-	return oldEngineName, m.engineImpls[m.curEngine].name
+	return oldEngine, m.engineSeq.configs[m.curEngine]
 }
 
 func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
@@ -538,6 +524,7 @@ func (m *metaTestRunner) printOp(opName string, argStrings []string, output stri
 // printComment prints a comment line into the output file. Supports single-line
 // comments only.
 func (m *metaTestRunner) printComment(comment string) {
+	comment = strings.ReplaceAll(comment, "\n", "\n# ")
 	fmt.Fprintf(m.w, "# %s\n", comment)
 }
 
