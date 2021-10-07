@@ -43,9 +43,6 @@ import (
 // {{/*
 // Declarations to make the template compile properly.
 
-// _GOTYPESLICE is the template variable.
-type _GOTYPESLICE interface{}
-
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
@@ -84,27 +81,7 @@ type OrderedSynchronizer struct {
 	// batch has exceeded the memory limit.
 	maxCapacity int
 	output      coldata.Batch
-	outNulls    []*coldata.Nulls
-	// In order to reduce the number of interface conversions, we will get access
-	// to the underlying slice for the output vectors and will use them directly.
-	// {{range .}}
-	// {{range .WidthOverloads}}
-	out_TYPECols []_GOTYPESLICE
-	// {{end}}
-	// {{end}}
-	// outColsMap contains the positions of the corresponding vectors in the
-	// slice for the same types. For example, if we have an output batch with
-	// types = [Int64, Int64, Bool, Bytes, Bool, Int64], then outColsMap will be
-	//                      [0, 1, 0, 0, 1, 2]
-	//                       ^  ^  ^  ^  ^  ^
-	//                       |  |  |  |  |  |
-	//                       |  |  |  |  |  3rd among all Int64's
-	//                       |  |  |  |  2nd among all Bool's
-	//                       |  |  |  1st among all Bytes's
-	//                       |  |  1st among all Bool's
-	//                       |  2nd among all Int64's
-	//                       1st among all Int64's
-	outColsMap []int
+	outVecs     coldata.TypedVecs
 }
 
 var (
@@ -174,7 +151,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		for i := range o.typs {
 			vec := batch.ColVec(i)
 			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
-				o.outNulls[i].SetNull(outputIdx)
+				o.outVecs.Nulls[i].SetNull(outputIdx)
 			} else {
 				switch o.canonicalTypeFamilies[i] {
 				// {{range .}}
@@ -183,7 +160,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					// {{range .WidthOverloads}}
 					case _TYPE_WIDTH:
 						srcCol := vec._TYPE()
-						outCol := o.out_TYPECols[o.outColsMap[i]]
+						outCol := o.outVecs._TYPECols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
 						outCol.Set(outputIdx, v)
 						// {{end}}
@@ -227,28 +204,7 @@ func (o *OrderedSynchronizer) resetOutput() {
 		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
 	)
 	if reallocated {
-		// {{range .}}
-		// {{range .WidthOverloads}}
-		o.out_TYPECols = o.out_TYPECols[:0]
-		// {{end}}
-		// {{end}}
-		for i, outVec := range o.output.ColVecs() {
-			o.outNulls[i] = outVec.Nulls()
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
-			// {{range .}}
-			case _CANONICAL_TYPE_FAMILY:
-				switch o.typs[i].Width() {
-				// {{range .WidthOverloads}}
-				case _TYPE_WIDTH:
-					o.outColsMap[i] = len(o.out_TYPECols)
-					o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
-					// {{end}}
-				}
-			// {{end}}
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i]))
-			}
-		}
+		o.outVecs.SetBatch(o.output)
 	}
 }
 
@@ -259,8 +215,6 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 	}
 	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, "ordered sync")
 	o.inputIndices = make([]int, len(o.inputs))
-	o.outNulls = make([]*coldata.Nulls, len(o.typs))
-	o.outColsMap = make([]int, len(o.typs))
 	for i := range o.inputs {
 		o.inputs[i].Root.Init(o.Ctx)
 	}

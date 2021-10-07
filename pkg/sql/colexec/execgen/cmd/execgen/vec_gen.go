@@ -23,7 +23,9 @@ const vecTmpl = "pkg/col/coldata/vec_tmpl.go"
 func genVec(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer("_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPESLICE", "{{.GoTypeSliceNameInColdata}}",
 		"_GOTYPE", "{{.GoType}}",
+		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
