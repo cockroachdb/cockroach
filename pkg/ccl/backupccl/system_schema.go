@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -368,6 +370,36 @@ func GetSystemTablesToIncludeInClusterBackup() map[string]struct{} {
 	}
 
 	return systemTablesToInclude
+}
+
+// GetSystemTablesToIncludeInClusterBackup returns a set of system table ids
+// that should be included in a cluster backup.
+func GetSystemTableIDsToIncludeInClusterBackup(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) (map[descpb.ID]struct{}, error) {
+	systemTableIDsToInclude := make(map[descpb.ID]struct{})
+	for systemTableName, backupConfig := range systemTableBackupConfiguration {
+		if backupConfig.shouldIncludeInClusterBackup == optInToClusterBackup {
+			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
+				flags := tree.ObjectLookupFlagsWithRequired()
+				found, desc, err := col.GetMutableTableByName(ctx, txn, &tn, flags)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return errors.Newf("failed to resolve table descriptor for system table %s", systemTableName)
+				}
+				systemTableIDsToInclude[desc.ID] = struct{}{}
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return systemTableIDsToInclude, nil
 }
 
 // getSystemTablesToRestoreBeforeData returns the set of system tables that
