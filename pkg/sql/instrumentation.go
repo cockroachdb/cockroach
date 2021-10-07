@@ -303,7 +303,7 @@ func (ih *instrumentationHelper) Finish(
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 		placeholders := p.extendedEvalCtx.Placeholders
-		ob := ih.buildExplainAnalyzePlan(
+		ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 			explain.Flags{Verbose: true, ShowTypes: true},
 			statsCollector.PhaseTimes(),
 			&queryLevelStats,
@@ -424,10 +424,10 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	return ob.BuildProtoTree()
 }
 
-// buildExplainAnalyzePlan creates an explain.OutputBuilder and populates it
-// with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can be used on the
-// result.
-func (ih *instrumentationHelper) buildExplainAnalyzePlan(
+// emitExplainAnalyzePlanToOutputBuilder creates an explain.OutputBuilder and
+// populates it with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can
+// be used on the result.
+func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	flags explain.Flags, phaseTimes *sessionphase.Times, queryStats *execstats.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
@@ -484,7 +484,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 		return nil //nolint:returnerrcheck
 	}
 
-	ob := ih.buildExplainAnalyzePlan(ih.explainFlags, phaseTimes, queryLevelStats)
+	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
 	rows := ob.BuildStringRows()
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
