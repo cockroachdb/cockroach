@@ -2636,6 +2636,7 @@ alter_table_cmd ::=
 	| 'DROP' opt_column column_name opt_drop_behavior
 	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using
 	| 'ADD' table_constraint opt_validate_behavior
+	| 'ADD' 'CONSTRAINT' 'IF' 'NOT' 'EXISTS' constraint_name constraint_elem opt_validate_behavior
 	| 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' opt_hash_sharded
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
@@ -2925,6 +2926,12 @@ opt_validate_behavior ::=
 	'NOT' 'VALID'
 	| 
 
+constraint_elem ::=
+	'CHECK' '(' a_expr ')'
+	| 'UNIQUE' '(' index_params ')' opt_storing opt_partition_by_index opt_where_clause
+	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
+	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
+
 audit_mode ::=
 	'READ' 'WRITE'
 	| 'OFF'
@@ -3106,11 +3113,17 @@ interval_second ::=
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
 
-constraint_elem ::=
-	'CHECK' '(' a_expr ')'
-	| 'UNIQUE' '(' index_params ')' opt_storing opt_partition_by_index opt_where_clause
-	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
-	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
+key_match ::=
+	'MATCH' 'SIMPLE'
+	| 'MATCH' 'FULL'
+	| 
+
+reference_actions ::=
+	reference_on_update
+	| reference_on_delete
+	| reference_on_update reference_on_delete
+	| reference_on_delete reference_on_update
+	| 
 
 func_name ::=
 	type_function_name
@@ -3186,17 +3199,11 @@ col_qualification ::=
 	| 'CREATE' 'FAMILY'
 	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
 
-key_match ::=
-	'MATCH' 'SIMPLE'
-	| 'MATCH' 'FULL'
-	| 
+reference_on_update ::=
+	'ON' 'UPDATE' reference_action
 
-reference_actions ::=
-	reference_on_update
-	| reference_on_delete
-	| reference_on_update reference_on_delete
-	| reference_on_delete reference_on_update
-	| 
+reference_on_delete ::=
+	'ON' 'DELETE' reference_action
 
 type_function_name ::=
 	'identifier'
@@ -3267,11 +3274,12 @@ col_qualification_elem ::=
 	| generated_always_as 'IDENTITY'
 	| generated_by_default_as 'IDENTITY'
 
-reference_on_update ::=
-	'ON' 'UPDATE' reference_action
-
-reference_on_delete ::=
-	'ON' 'DELETE' reference_action
+reference_action ::=
+	'NO' 'ACTION'
+	| 'RESTRICT'
+	| 'CASCADE'
+	| 'SET' 'NULL'
+	| 'SET' 'DEFAULT'
 
 frame_extent ::=
 	frame_bound
@@ -3316,13 +3324,6 @@ generated_always_as ::=
 
 generated_by_default_as ::=
 	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
-
-reference_action ::=
-	'NO' 'ACTION'
-	| 'RESTRICT'
-	| 'CASCADE'
-	| 'SET' 'NULL'
-	| 'SET' 'DEFAULT'
 
 frame_bound ::=
 	'UNBOUNDED' 'PRECEDING'

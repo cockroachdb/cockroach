@@ -578,7 +578,7 @@ t  CREATE TABLE public.t (
 statement ok
 CREATE INDEX i ON t (x);
 
-statement error pq: constraint with name i already exists
+statement error pgcode 42710 constraint with name \"i\" already exists
 ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 
 # Regression for #45362.
@@ -622,13 +622,16 @@ statement error pq: relation "t" \([0-9]+\): unimplemented: primary key dropped 
 ALTER TABLE t DROP CONSTRAINT "t_pkey"
 
 statement error pq: multiple primary keys for table "t" are not allowed
-ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y), DROP CONSTRAINT "primary"
+ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y), DROP CONSTRAINT "t_pkey"
 
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
-statement ok
+statement error pgcode 42710 constraint with name \"t_pkey\" already exists
 ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey_v2" PRIMARY KEY (y)
 
 query TT
 SHOW CREATE t
@@ -636,10 +639,13 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey_v2 PRIMARY KEY (y ASC),
    FAMILY fam_0_x (x),
    FAMILY fam_1_y (y)
 )
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS "t_pkey" PRIMARY KEY (x)
 
 # Test that we can issue a DROP CONSTRAINT + ADD PRIMARY KEY
 # in the same transaction.
@@ -653,8 +659,22 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "t_pkey"
 
-statement ok
+statement error pgcode 42710 constraint with name \"t_pkey\" already exists
 ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
+
+statement ok
+ROLLBACK;
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "t_pkey"
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT "t_pkey_v2" PRIMARY KEY (y)
 
 statement ok
 COMMIT
@@ -665,7 +685,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC),
+   CONSTRAINT t_pkey_v2 PRIMARY KEY (y ASC),
    FAMILY fam_0_x (x),
    FAMILY fam_1_y (y)
 )
