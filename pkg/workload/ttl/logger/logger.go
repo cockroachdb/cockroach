@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,6 +37,7 @@ type logger struct {
 	ttl                                time.Duration
 	seed                               int64
 	minRowsPerInsert, maxRowsPerInsert int
+	tsAsPrimaryKey                     bool
 
 	prometheus struct {
 		numRows        prometheus.Gauge
@@ -57,6 +59,7 @@ var loggerMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.minRowsPerInsert, `min-rows-per-insert`, 10, `Minimum rows per insert.`)
 		g.flags.IntVar(&g.maxRowsPerInsert, `max-rows-per-insert`, 1000, `Maximum rows per insert.`)
+		g.flags.BoolVar(&g.tsAsPrimaryKey, `ts-as-primary-key`, true, `Whether timestamp should be part of the PK`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -123,9 +126,11 @@ func (l *logger) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	selectElemStmt, err := db.Prepare(
-		`SELECT * FROM logs WHERE ts >= now() - $1::interval LIMIT 1`,
-	)
+	selectElemSQL := `SELECT * FROM logs WHERE ts >= now() - $1::interval LIMIT 1`
+	if !l.tsAsPrimaryKey {
+		selectElemSQL = `SELECT * FROM logs WHERE id >= %s::string LIMIT 1`
+	}
+	selectElemStmt, err := db.Prepare(selectElemSQL)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -151,7 +156,13 @@ func (l *logger) Ops(
 		}
 		selectFn := func(ctx context.Context) error {
 			start := timeutil.Now()
-			_, err := selectElemStmt.Exec(l.ttl / 2)
+			placeholder := []interface{}{l.ttl / 2}
+			if !l.tsAsPrimaryKey {
+				id := uuid.MakeV4()
+				id.DeterministicV4(rng.Uint64(), uint64(1<<63))
+				placeholder = []interface{}{id.String()}
+			}
+			_, err := selectElemStmt.Exec(placeholder)
 			elapsed := timeutil.Since(start)
 			hists.Get(`select`).Record(elapsed)
 			return err
@@ -183,6 +194,10 @@ func (l logger) Meta() workload.Meta {
 }
 
 func (l logger) Tables() []workload.Table {
+	pk := `PRIMARY KEY (ts, id)`
+	if !l.tsAsPrimaryKey {
+		pk = `PRIMARY KEY (id)`
+	}
 	return []workload.Table{
 		{
 			Name: "logs",
@@ -191,8 +206,8 @@ func (l logger) Tables() []workload.Table {
 	-- total hack to get around pretty print but whatever
 	id TEXT NOT NULL DEFAULT gen_random_uuid()::string,
 	message TEXT NOT NULL,
-	PRIMARY KEY (ts, id)
-) TTL '%d seconds'`, int(l.ttl.Seconds())),
+	%s,
+) TTL '%d seconds'`, pk, int(l.ttl.Seconds())),
 		},
 	}
 }
