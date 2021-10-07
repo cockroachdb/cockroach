@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -41,6 +42,18 @@ type ttlResumer struct {
 
 var _ jobs.Resumer = (*ttlResumer)(nil)
 
+var ttlSelectBatchSize = settings.RegisterIntSetting(
+	"job.ttl.select_batch_size",
+	"default select size",
+	500,
+)
+
+var ttlDeleteBatchSize = settings.RegisterIntSetting(
+	"job.ttl.delete_batch_size",
+	"default select size",
+	100,
+)
+
 func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	ie := p.ExecCfg().InternalExecutor
@@ -50,7 +63,6 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	var pks []string
 	var pkStr string
 	var pkTypes []string
-	const batchSize = 500
 
 	metrics := p.ExecCfg().JobRegistry.MetricsStruct().TTL
 
@@ -124,6 +136,9 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				metrics.NumWorkers.Dec(1)
 			}()
 			var lastRows []interface{}
+
+			selectBatchSize := int(ttlSelectBatchSize.Get(p.ExecCfg().SV()))
+			deleteBatchSize := int(ttlDeleteBatchSize.Get(p.ExecCfg().SV()))
 			if err := func() error {
 				untilTS := timeutil.Unix(details.UntilUnix, 0)
 				for {
@@ -188,7 +203,7 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 							pkStr,
 							details.TableID,
 							cn.String(),
-							batchSize,
+							selectBatchSize,
 							filterClause,
 							pkStr,
 						)
@@ -223,44 +238,52 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					}
 
 					// TODO(XXX): account for schema changes.
-					if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-						placeholderVals := make([]interface{}, len(pks)*len(rows))
-						placeholderStr := ""
-						for i, row := range rows {
-							if i > 0 {
-								placeholderStr += ", "
-							}
-							placeholderStr += "("
-							for j := 0; j < len(pks); j++ {
-								if j > 0 {
+					for i := 0; i < len(rows); i += deleteBatchSize {
+						until := i + deleteBatchSize
+						if until > len(rows) {
+							until = len(rows)
+						}
+						deleteBatch := rows[i:until]
+
+						if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+							placeholderVals := make([]interface{}, len(pks)*len(deleteBatch))
+							placeholderStr := ""
+							for i, row := range deleteBatch {
+								if i > 0 {
 									placeholderStr += ", "
 								}
-								placeholderStr += fmt.Sprintf("$%d", 1+i*len(pks)+j)
-								placeholderVals[i*len(pks)+j] = row[j]
+								placeholderStr += "("
+								for j := 0; j < len(pks); j++ {
+									if j > 0 {
+										placeholderStr += ", "
+									}
+									placeholderStr += fmt.Sprintf("$%d", 1+i*len(pks)+j)
+									placeholderVals[i*len(pks)+j] = row[j]
+								}
+								placeholderStr += ")"
 							}
-							placeholderStr += ")"
-						}
-						// TODO(XXX): we should probably do a secondary check here if we decide against strict TTL.
-						q := fmt.Sprintf(`DELETE FROM [%d AS tbl_name] WHERE (%s) IN (%s)`, details.TableID, pkStr, placeholderStr)
-						//	fmt.Printf("%s\n", q)
-						deletionStartTime := timeutil.Now()
-						if _, err := ie.Exec(
-							ctx,
-							"ttl_delete",
-							txn,
-							q,
-							placeholderVals...,
-						); err != nil {
+							// TODO(XXX): we should probably do a secondary check here if we decide against strict TTL.
+							q := fmt.Sprintf(`DELETE FROM [%d AS tbl_name] WHERE (%s) IN (%s)`, details.TableID, pkStr, placeholderStr)
+							//	fmt.Printf("%s\n", q)
+							deletionStartTime := timeutil.Now()
+							if _, err := ie.Exec(
+								ctx,
+								"ttl_delete",
+								txn,
+								q,
+								placeholderVals...,
+							); err != nil {
+								return err
+							}
+							metrics.DeletionDeleteNanos.RecordValue(timeutil.Now().Sub(deletionStartTime).Nanoseconds())
+							metrics.RowDeletions.Inc(int64(len(rows)))
+							return nil
+						}); err != nil {
 							return err
 						}
-						metrics.DeletionDeleteNanos.RecordValue(timeutil.Now().Sub(deletionStartTime).Nanoseconds())
-						metrics.RowDeletions.Inc(int64(len(rows)))
-						return nil
-					}); err != nil {
-						return err
 					}
 
-					if len(rows) < batchSize {
+					if len(rows) < selectBatchSize {
 						break
 					}
 				}
