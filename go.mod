@@ -42,8 +42,8 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.1.1
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
-	github.com/cockroachdb/datadriven v1.0.1-0.20201212195501-e89bf9ee1861
-	github.com/cockroachdb/errors v1.8.5
+	github.com/cockroachdb/datadriven v1.0.1-0.20211007161720-b558070c3be0
+	github.com/cockroachdb/errors v1.8.6
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
@@ -103,7 +103,7 @@ require (
 	github.com/kisielk/gotool v1.0.0
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
-	github.com/kr/pretty v0.2.1
+	github.com/kr/pretty v0.3.0
 	github.com/kr/text v0.2.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lib/pq v1.10.2
@@ -140,6 +140,7 @@ require (
 	github.com/prometheus/prometheus v2.5.0+incompatible
 	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shirou/gopsutil v2.20.9+incompatible
