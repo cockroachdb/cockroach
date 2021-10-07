@@ -55,3 +55,22 @@ vectorized: true
       right table: t71093@c_idx
       right columns: (c, d)
       right fixed values: 1 column
+
+# Make sure that the zigzag join is used in the regression test for #71271.
+statement ok
+CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
+
+query T
+EXPLAIN SELECT d FROM t71271 WHERE c = 3 AND d = 4
+----
+distribution: local
+vectorized: true
+·
+• zigzag join
+  pred: (c = 3) AND (d = 4)
+  left table: t71271@t71271_c_idx
+  left columns: (c)
+  left fixed values: 1 column
+  right table: t71271@t71271_d_idx
+  right columns: (d)
+  right fixed values: 1 column
