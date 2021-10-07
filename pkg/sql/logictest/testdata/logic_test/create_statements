@@ -1082,6 +1082,7 @@ CREATE TABLE crdb_internal.session_variables (
 CREATE TABLE crdb_internal.statement_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
    plan_hash BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,
@@ -1090,6 +1091,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 )  CREATE TABLE crdb_internal.statement_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
    plan_hash BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,

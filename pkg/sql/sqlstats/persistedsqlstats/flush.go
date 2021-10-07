@@ -129,7 +129,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 
 		aggregatedTs := s.computeAggregatedTs()
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.ID))
-		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(dummyTransactionFingerprintID))
+		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.Key.TransactionFingerprintID))
 		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(uint64(dummyPlanHash))
 
 		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
@@ -384,9 +384,15 @@ WHERE fingerprint_id = $2
 	}
 
 	if rowsAffected == 0 {
-		return errors.AssertionFailedf("failed to update statement statistics fo  fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %d, node_id: %d",
-			serializedFingerprintID, stats.Key.App, aggregatedTs, dummyPlanHash,
-			s.cfg.SQLIDContainer.SQLInstanceID())
+		return errors.AssertionFailedf("failed to update statement statistics "+
+			"for fingerprint_id: %s, "+
+			"transaction_fingerprint_id: %s, "+
+			"app: %s, "+
+			"aggregated_ts: %s, "+
+			"plan_hash: %d, "+
+			"node_id: %d",
+			serializedFingerprintID, serializedTransactionFingerprintID, stats.Key.App,
+			aggregatedTs, dummyPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
 	return nil
