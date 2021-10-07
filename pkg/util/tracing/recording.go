@@ -29,14 +29,14 @@ import (
 type RecordingType int32
 
 const (
-	// RecordingOff means that the Span discards all events handed to it.
-	// Child spans created from it similarly won't be recording by default.
+	// RecordingOff means that the Span discards events passed in through
+	// Recordf(). Events passed in through RecordStructured() are still collected
+	// in the span's recording (so the name RecordingOff is a misnomer). Child
+	// spans will behave the same.
 	RecordingOff RecordingType = iota
-	// RecordingVerbose means that the Span is adding events passed in via LogKV
-	// and LogData to its recording and that derived spans will do so as well.
+	// RecordingVerbose means that the Span collects events passed in through
+	// Recordf() in its recording and that derived spans will do so as well.
 	RecordingVerbose
-
-	// TODO(tbg): add RecordingBackground for always-on tracing.
 )
 
 type traceLogData struct {
