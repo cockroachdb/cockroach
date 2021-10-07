@@ -48,12 +48,13 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	mu     crdbSpanMu
-	parent *crdbSpan
+	mu crdbSpanMu
 }
 
 type crdbSpanMu struct {
 	syncutil.Mutex
+	parent   *crdbSpan
+	finished bool
 	// duration is initialized to -1 and set on Finish().
 	duration  time.Duration
 	operation string // name of operation associated with the span
@@ -125,17 +126,16 @@ func (b *sizeLimitedBuffer) Reset() {
 // sync.Pool) after finish(), although we're not currently taking advantage of
 // this.
 func (s *crdbSpan) finish() bool {
-	if s.parent == nil {
-		s.tracer.activeSpansRegistry.removeSpan(s.spanID)
-	}
-
+	var children []*crdbSpan
+	var parent *crdbSpan
 	{
 		s.mu.Lock()
-		if s.mu.duration >= 0 {
+		if s.mu.finished {
 			// Already finished.
 			s.mu.Unlock()
 			return false
 		}
+		s.mu.finished = true
 
 		finishTime := timeutil.Now()
 		duration := finishTime.Sub(s.startTime)
@@ -144,12 +144,25 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.duration = duration
 
+		// Shallow-copy the children so they can be processed outside the lock.
+		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
+		copy(children, s.mu.recording.openChildren)
+
+		parent = s.mu.parent
+
 		s.mu.Unlock()
 	}
 
-	if s.parent != nil {
-		s.parent.childFinished(s)
+	if parent != nil {
+		parent.childFinished(s)
 	}
+
+	for _, c := range children {
+		c.parentFinished()
+	}
+
+	// Atomically replace s in the registry with all of its still-open children.
+	s.tracer.activeSpansRegistry.swap(s.spanID, children)
 
 	// TODO(andrei): All the children that are still open are getting orphaned by
 	// the finishing of this parent. We should make them all root spans and
@@ -515,6 +528,16 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	}
 }
 
+// parentFinished makes s a root.
+func (s *crdbSpan) parentFinished() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.finished {
+		return
+	}
+	s.mu.parent = nil
+}
+
 // SetVerboseRecursively is part of the RegistrySpan interface.
 func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	if to {
@@ -531,6 +554,13 @@ func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	for _, child := range children {
 		child.SetVerboseRecursively(to)
 	}
+}
+
+// withLock calls f while holding s' lock.
+func (s *crdbSpan) withLock(f func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f()
 }
 
 var sortPool = sync.Pool{

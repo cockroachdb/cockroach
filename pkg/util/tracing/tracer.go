@@ -196,17 +196,17 @@ func makeSpanRegistry() *spanRegistry {
 	return r
 }
 
-// removeSpan removes a span from the registry.
-func (r *spanRegistry) removeSpan(spanID uint64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *spanRegistry) removeSpanLocked(spanID uint64) {
 	delete(r.mu.m, spanID)
 }
 
 func (r *spanRegistry) addSpan(s *crdbSpan) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.addSpanLocked(s)
+}
 
+func (r *spanRegistry) addSpanLocked(s *crdbSpan) {
 	// Ensure that the registry does not grow unboundedly in case there
 	// is a leak. When the registry reaches max size, each new span added
 	// kicks out some old span. We rely on map iteration order here to
@@ -252,6 +252,30 @@ func (r *spanRegistry) visitSpans(visitor func(span RegistrySpan) error) error {
 		}
 	}
 	return nil
+}
+
+func (r *spanRegistry) all() []*crdbSpan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	res := make([]*crdbSpan, 0, len(r.mu.m))
+	for _, sp := range r.mu.m {
+		res = append(res, sp)
+	}
+	return res
+}
+
+// swap atomically swaps the span
+func (r *spanRegistry) swap(parentSpanID uint64, children []*crdbSpan) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.removeSpanLocked(parentSpanID)
+	for _, c := range children {
+		c.withLock(func() {
+			if !c.mu.finished {
+				r.addSpanLocked(c)
+			}
+		})
+	}
 }
 
 // TracerTestingKnobs contains knobs for a Tracer.
@@ -692,7 +716,7 @@ func (t *Tracer) startSpanGeneric(
 		// We inherit the recording type of the local parent, if any, over the
 		// remote parent, if any. If neither are specified, we're not recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
-			s.i.crdb.parent = opts.Parent.i.crdb
+			s.i.crdb.mu.parent = opts.Parent.i.crdb
 			defer opts.Parent.i.crdb.addChild(s.i.crdb)
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
