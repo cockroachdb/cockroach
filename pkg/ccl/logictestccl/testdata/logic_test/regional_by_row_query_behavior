@@ -1244,6 +1244,7 @@ LIMIT 1] OFFSET 2
                 │   │         columns: (a, b)
                 │   │         ordering: +a,+b
                 │   │         estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                │   │         limit hint: 3
                 │   │         table: t56201@key_a_b
                 │   │         spans: /"@"/!NULL-/"@"/PrefixEnd
                 │   │
@@ -1257,6 +1258,7 @@ LIMIT 1] OFFSET 2
                 │             columns: (a, b)
                 │             ordering: +a,+b
                 │             estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                │             limit hint: 3
                 │             table: t56201@key_a_b
                 │             spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
                 │
@@ -1270,6 +1272,7 @@ LIMIT 1] OFFSET 2
                           columns: (a, b)
                           ordering: +a,+b
                           estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
+                          limit hint: 3
                           table: t56201@key_a_b
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
@@ -1324,6 +1327,7 @@ LIMIT 1] OFFSET 2
                     │   │     columns: (b, crdb_region, rowid)
                     │   │     ordering: +b
                     │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                    │   │     limit hint: 3
                     │   │     table: t56201@key_b_partial (partial index)
                     │   │     spans: /"@"/!NULL-/"@"/PrefixEnd
                     │   │
@@ -1331,6 +1335,7 @@ LIMIT 1] OFFSET 2
                     │         columns: (b, crdb_region, rowid)
                     │         ordering: +b
                     │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                    │         limit hint: 3
                     │         table: t56201@key_b_partial (partial index)
                     │         spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
                     │
@@ -1338,6 +1343,7 @@ LIMIT 1] OFFSET 2
                           columns: (b, crdb_region, rowid)
                           ordering: +b
                           estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                          limit hint: 3
                           table: t56201@key_b_partial (partial index)
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
@@ -1388,6 +1394,7 @@ LIMIT 1] OFFSET 2
                 │   │     columns: (c)
                 │   │     ordering: +c
                 │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                │   │     limit hint: 3
                 │   │     table: t56201@key_c_partial (partial index)
                 │   │     spans: /"@"-/"@"/PrefixEnd
                 │   │
@@ -1395,6 +1402,7 @@ LIMIT 1] OFFSET 2
                 │         columns: (c)
                 │         ordering: +c
                 │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                │         limit hint: 3
                 │         table: t56201@key_c_partial (partial index)
                 │         spans: /"\x80"-/"\x80"/PrefixEnd
                 │
@@ -1402,6 +1410,7 @@ LIMIT 1] OFFSET 2
                       columns: (c)
                       ordering: +c
                       estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
+                      limit hint: 3
                       table: t56201@key_c_partial (partial index)
                       spans: /"\xc0"-/"\xc0"/PrefixEnd
 

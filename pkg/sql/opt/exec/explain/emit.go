@@ -439,6 +439,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				}
 			}
 		}
+		if s.LimitHint > 0.0 {
+			e.ob.AddField("limit hint", humanizeutil.Count(uint64(math.Round(s.LimitHint))))
+		}
 		// TODO(radu): we may want to emit estimated cost in Verbose mode.
 	}
 
