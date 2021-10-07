@@ -29,14 +29,13 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
-	tracer   *Tracer
-	rootSpan *crdbSpan // root span of the containing trace; could be itself
+	tracer *Tracer
 
 	// traceEmpty indicates whether or not the trace rooted at this span
 	// (provided it is a root span) contains any recordings or baggage. All
 	// spans hold a reference to the rootSpan; this field is accessed
 	// through that reference.
-	traceEmpty int32 // accessed atomically, through markTraceAsNonEmpty and inAnEmptyTrace
+	traceEmpty int32 // accessed atomically, through markTraceAsNonEmptyLocked and inAnEmptyTrace
 
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
@@ -55,12 +54,14 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	mu     crdbSpanMu
-	parent *crdbSpan
+	mu crdbSpanMu
 }
 
 type crdbSpanMu struct {
 	syncutil.Mutex
+	parent   *crdbSpan
+	rootSpan *crdbSpan // root span of the containing trace; could be itself
+	finished bool
 	// duration is initialized to -1 and set on Finish().
 	duration  time.Duration
 	operation string // name of operation associated with the span
@@ -126,17 +127,16 @@ func (b *sizeLimitedBuffer) Reset() {
 // sync.Pool) after finish(), although we're not currently taking advantage of
 // this.
 func (s *crdbSpan) finish() bool {
-	if s.parent == nil {
-		s.tracer.activeSpansRegistry.removeSpan(s.spanID)
-	}
-
+	var children []*crdbSpan
+	var parent *crdbSpan
 	{
 		s.mu.Lock()
-		if s.mu.duration >= 0 {
+		if s.mu.finished {
 			// Already finished.
 			s.mu.Unlock()
 			return false
 		}
+		s.mu.finished = true
 
 		finishTime := timeutil.Now()
 		duration := finishTime.Sub(s.startTime)
@@ -145,12 +145,25 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.duration = duration
 
+		// Shallow-copy the children so they can be processed outside the lock.
+		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
+		copy(children, s.mu.recording.openChildren)
+
+		parent = s.mu.parent
+
 		s.mu.Unlock()
 	}
 
-	if s.parent != nil {
-		s.parent.childFinished(s)
+	if parent != nil {
+		parent.childFinished(s)
 	}
+
+	for _, c := range children {
+		c.parentFinished()
+	}
+
+	// Atomically replace s in the registry with all of its still-open children.
+	s.tracer.activeSpansRegistry.swap(s.spanID, children)
 
 	// TODO(andrei): All the children that are still open are getting orphaned by
 	// the finishing of this parent. We should make them all root spans and
@@ -287,7 +300,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 		return
 	}
 
-	s.markTraceAsNonEmpty()
+	s.markTraceAsNonEmptyLocked()
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC Span that we don't collect.
@@ -353,18 +366,20 @@ type sizable interface {
 // inAnEmptyTrace indicates whether or not the containing trace is "empty" (i.e.
 // has any recordings or baggage).
 func (s *crdbSpan) inAnEmptyTrace() bool {
-	val := atomic.LoadInt32(&s.rootSpan.traceEmpty)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val := atomic.LoadInt32(&s.mu.rootSpan.traceEmpty)
 	return val == 0
 }
 
-func (s *crdbSpan) markTraceAsNonEmpty() {
-	atomic.StoreInt32(&s.rootSpan.traceEmpty, 1)
+func (s *crdbSpan) markTraceAsNonEmptyLocked() {
+	atomic.StoreInt32(&s.mu.rootSpan.traceEmpty, 1)
 }
 
 func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
-	s.markTraceAsNonEmpty()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.markTraceAsNonEmptyLocked()
 	size := int64(payload.Size())
 	if size > buffer.limit {
 		// The incoming payload alone blows past the memory limit. Let's just
@@ -386,9 +401,9 @@ func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
-	s.markTraceAsNonEmpty()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.markTraceAsNonEmptyLocked()
 	s.setBaggageItemLocked(restrictedKey, value)
 	// Don't set the tag if this is the special cased baggage item indicating
 	// span verbosity, as it is named nondescriptly and the recording knows
@@ -525,6 +540,17 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	}
 }
 
+// parentFinished makes s a root.
+func (s *crdbSpan) parentFinished() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.finished {
+		return
+	}
+	s.mu.parent = nil
+	s.mu.rootSpan = s
+}
+
 // SetVerboseRecursively is part of the RegistrySpan interface.
 func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	if to {
@@ -540,6 +566,19 @@ func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	for _, child := range children {
 		child.SetVerboseRecursively(to)
 	}
+}
+
+// withLock calls f while holding s' lock.
+func (s *crdbSpan) withLock(f func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f()
+}
+
+func (s *crdbSpan) rootSpan() *crdbSpan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.rootSpan
 }
 
 var sortPool = sync.Pool{
