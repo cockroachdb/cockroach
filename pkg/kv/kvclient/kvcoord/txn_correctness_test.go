@@ -165,7 +165,8 @@ func deleteCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
-	return txn.DelRange(ctx, c.getKey(), c.getEndKey())
+	_, err := txn.DelRange(ctx, c.getKey(), c.getEndKey(), false /* returnKeys */)
+	return err
 }
 
 // scanCmd reads the values from the db from [key, endKey).
