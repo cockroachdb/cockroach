@@ -989,7 +989,7 @@ func backupPlanHook(
 		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
 			priorIDs = make(map[descpb.ID]descpb.ID)
-			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg(), startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
 			if err != nil {
 				return err
 			}
