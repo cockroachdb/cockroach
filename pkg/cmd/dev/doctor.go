@@ -14,6 +14,7 @@ import (
 	"errors"
 	"log"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -63,13 +64,35 @@ Please perform the following steps:
 		}
 	}
 
-	// Check whether the dev config is active on a `bazel build`.
-	if _, err := d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:dev_toolchain_being_used"); err != nil {
+	// Check whether the build is properly configured to use stamping.
+	passedStampTest := true
+	if _, err := d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_stamping"); err != nil {
+		passedStampTest = false
+	} else {
+		bazelBin, err := d.getBazelBin(ctx)
+		if err != nil {
+			return err
+		}
+		fileContents, err := d.os.ReadFile(
+			filepath.Join(bazelBin, "build", "bazelutil", "test_stamping.txt"))
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_COMMIT") {
+			passedStampTest = false
+		}
+	}
+	if !passedStampTest {
 		success = false
-		log.Printf(`Your machine should be configured to build using the "dev" config.
-Please add the following to your ~/.bazelrc:`)
+		log.Printf(`Your machine is not configured to "stamp" your built executables.
+Please add one of the following to your ~/.bazelrc:`)
 		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
 			log.Printf("    build --config=devdarwinx86_64")
+		} else if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+			log.Printf("    build --config=dev")
+			log.Printf("             OR       ")
+			log.Printf("    build --config=crosslinux")
+			log.Printf("The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI.")
 		} else {
 			log.Printf("    build --config=dev")
 		}

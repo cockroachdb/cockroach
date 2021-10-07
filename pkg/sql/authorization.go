@@ -266,10 +266,10 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsernam
 		return false, errors.AssertionFailedf("cannot use HasAdminRole without a txn")
 	}
 
-	// Check if user is 'root' or 'node'.
+	// Check if user is either 'admin', 'root' or 'node'.
 	// TODO(knz): planner HasAdminRole has no business authorizing
 	// the "node" principal - node should not be issuing SQL queries.
-	if user.IsRootUser() || user.IsNodeUser() {
+	if user.IsAdminRole() || user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}
 

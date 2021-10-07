@@ -9500,15 +9500,6 @@ sortby:
     /* FORCE DOC */
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
-    // We currently only support the opposite of Postgres defaults.
-    if nullsOrder != tree.DefaultNullsOrder {
-      if dir == tree.Descending && nullsOrder == tree.NullsFirst {
-        return unimplementedWithIssue(sqllex, 6224)
-      }
-      if dir != tree.Descending && nullsOrder == tree.NullsLast {
-        return unimplementedWithIssue(sqllex, 6224)
-      }
-    }
     $$.val = &tree.Order{
       OrderType:  tree.OrderByColumn,
       Expr:       $1.expr(),
