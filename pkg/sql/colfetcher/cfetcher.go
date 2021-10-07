@@ -294,9 +294,9 @@ type cFetcher struct {
 		// batch is the output batch the fetcher writes to.
 		batch coldata.Batch
 
-		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
-		// having to call batch.Vec too often in the tight loop.
-		colvecs []coldata.Vec
+		// colvecs are the vectors of batch that have been converted to the well
+		// typed columns to avoid expensive type casts on each row.
+		colvecs coldata.TypedVecs
 
 		// timestampCol is the underlying ColVec for the timestamp output column,
 		// or nil if the timestamp column was not requested. It is pulled out from
@@ -354,13 +354,13 @@ func (rf *cFetcher) resetBatch() {
 		rf.table.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
 	)
 	if reallocated {
-		rf.machine.colvecs = rf.machine.batch.ColVecs()
+		rf.machine.colvecs.SetBatch(rf.machine.batch)
 		// Pull out any requested system column output vecs.
 		if rf.table.timestampOutputIdx != noOutputColumn {
-			rf.machine.timestampCol = rf.machine.colvecs[rf.table.timestampOutputIdx].Decimal()
+			rf.machine.timestampCol = rf.machine.colvecs.DecimalCols[rf.machine.colvecs.ColsMap[rf.table.timestampOutputIdx]]
 		}
 		if rf.table.oidOutputIdx != noOutputColumn {
-			rf.machine.tableoidCol = rf.machine.colvecs[rf.table.oidOutputIdx].Datum()
+			rf.machine.tableoidCol = rf.machine.colvecs.DatumCols[rf.machine.colvecs.ColsMap[rf.table.oidOutputIdx]]
 		}
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
@@ -810,7 +810,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
 				key, foundNull, rf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&rf.table.da,
-					rf.machine.colvecs,
+					&rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.indexColOrdinals,
 					checkAllColsForNull,
@@ -1030,7 +1030,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 	res := []tree.Datum{nil}
-	colconv.ColVecToDatumAndDeselect(res, rf.machine.colvecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
+	colconv.ColVecToDatumAndDeselect(res, rf.machine.colvecs.Vecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
 	return res[0]
 }
 
@@ -1121,7 +1121,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 				// column values from the value.
 				valueBytes, _, rf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&table.da,
-					rf.machine.colvecs,
+					&rf.machine.colvecs,
 					rf.machine.rowIdx,
 					table.extraValColOrdinals,
 					false, /* checkAllColsForNull */
@@ -1199,7 +1199,7 @@ func (rf *cFetcher) processValueSingle(
 		}
 		typ := rf.table.typs[idx]
 		err := colencoding.UnmarshalColumnValueToCol(
-			&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
+			&table.da, &rf.machine.colvecs, idx, rf.machine.rowIdx, typ, val,
 		)
 		if err != nil {
 			return "", "", err
@@ -1258,20 +1258,20 @@ func (rf *cFetcher) processValueBytes(
 		}
 		colID := lastColID + descpb.ColumnID(colIDDiff)
 		lastColID = colID
-		idx := -1
+		vecIdx := -1
 		// Find the ordinal into table.cols for the column ID we just decoded,
 		// by advancing through the sorted list of needed value columns until
 		// there's a match, or we passed the column ID we're looking for.
 		for ; lastColIDIndex < len(table.orderedColIdxMap.vals); lastColIDIndex++ {
 			nextID := table.orderedColIdxMap.vals[lastColIDIndex]
 			if nextID == colID {
-				idx = table.orderedColIdxMap.ords[lastColIDIndex]
+				vecIdx = table.orderedColIdxMap.ords[lastColIDIndex]
 				break
 			} else if nextID > colID {
 				break
 			}
 		}
-		if idx == -1 {
+		if vecIdx == -1 {
 			// This column wasn't requested, so read its length and skip it.
 			len, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 			if err != nil {
@@ -1285,21 +1285,19 @@ func (rf *cFetcher) processValueBytes(
 		}
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[vecIdx].GetName())
 		}
 
-		vec := rf.machine.colvecs[idx]
-
-		valTyp := rf.table.typs[idx]
 		valueBytes, err = colencoding.DecodeTableValueToCol(
-			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
+			&table.da, &rf.machine.colvecs, vecIdx, rf.machine.rowIdx, typ,
+			dataOffset, rf.table.typs[vecIdx], valueBytes,
 		)
 		if err != nil {
 			return "", "", err
 		}
-		rf.machine.remainingValueColsByIdx.Remove(idx)
+		rf.machine.remainingValueColsByIdx.Remove(vecIdx)
 		if rf.traceKV {
-			dVal := rf.getDatumAt(idx, rf.machine.rowIdx)
+			dVal := rf.getDatumAt(vecIdx, rf.machine.rowIdx)
 			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
@@ -1336,7 +1334,7 @@ func (rf *cFetcher) fillNulls() error {
 				table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
 				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
 		}
-		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
+		rf.machine.colvecs.Nulls[i].SetNull(rf.machine.rowIdx)
 	}
 	return nil
 }
@@ -1409,9 +1407,12 @@ func (rf *cFetcher) Release() {
 	if rf.table != nil {
 		rf.table.Release()
 	}
+	colvecs := rf.machine.colvecs
+	colvecs.Reset()
 	*rf = cFetcher{
 		scratch: rf.scratch[:0],
 	}
+	rf.machine.colvecs = colvecs
 	cFetcherPool.Put(rf)
 }
 

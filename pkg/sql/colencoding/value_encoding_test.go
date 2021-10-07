@@ -45,13 +45,17 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		}
 	}
 	batch := coldata.NewMemBatchWithCapacity(typs, 1 /* capacity */, coldataext.NewExtendedColumnFactory(nil /*evalCtx */))
+	var vecs coldata.TypedVecs
+	vecs.SetBatch(batch)
 	for i := 0; i < nCols; i++ {
 		typeOffset, dataOffset, _, typ, err := encoding.DecodeValueTag(buf)
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf, err = DecodeTableValueToCol(&da, batch.ColVec(i), 0 /* rowIdx */, typ,
-			dataOffset, typs[i], buf[typeOffset:])
+		buf, err = DecodeTableValueToCol(
+			&da, &vecs, i /* vecIdx */, 0 /* rowIdx */, typ,
+			dataOffset, typs[i], buf[typeOffset:],
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
