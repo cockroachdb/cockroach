@@ -11,13 +11,14 @@ package sqlproxyccl
 import (
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/jackc/pgproto3/v2"
 )
 
 // authenticate handles the startup of the pgwire protocol to the point where
 // the connections is considered authenticated. If that doesn't happen, it
 // returns an error.
-var authenticate = func(clientConn, crdbConn net.Conn) error {
+var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttler.AttemptStatus) *pgproto3.ErrorResponse) error {
 	fe := pgproto3.NewBackend(pgproto3.NewChunkReader(clientConn), clientConn)
 	be := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
 
@@ -30,6 +31,22 @@ var authenticate = func(clientConn, crdbConn net.Conn) error {
 		backendMsg, err := be.Receive()
 		if err != nil {
 			return newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+		}
+
+		var throttleError *pgproto3.ErrorResponse
+		switch backendMsg.(type) {
+		case *pgproto3.AuthenticationOk:
+			throttleError = throttleHook(throttler.AttemptOK)
+		case *pgproto3.ErrorResponse:
+			throttleError = throttleHook(throttler.AttemptInvalidCredentials)
+		}
+		if throttleError != nil {
+			// If the connection is throttled, do not forward the response from the server to the
+			// client. Send a generic throttle error to the client instead.
+			if err = fe.Send(throttleError); err != nil {
+				return newErrorf(codeClientWriteFailed, "unable to send throttle error to client: %v", err)
+			}
+			return newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
 		}
 
 		err = fe.Send(backendMsg)

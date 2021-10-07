@@ -28,13 +28,7 @@ func updateMetricsAndSendErrToClient(err error, conn net.Conn, metrics *metrics)
 	SendErrToClient(conn, err)
 }
 
-// SendErrToClient will encode and pass back to the SQL client an error message.
-// It can be called by the implementors of proxyHandler to give more
-// information to the end user in case of a problem.
-var SendErrToClient = func(conn net.Conn, err error) {
-	if err == nil || conn == nil {
-		return
-	}
+func toPgError(err error) *pgproto3.ErrorResponse {
 	codeErr := (*codeError)(nil)
 	if errors.As(err, &codeErr) {
 		var msg string
@@ -60,19 +54,28 @@ var SendErrToClient = func(conn net.Conn, err error) {
 		} else {
 			pgCode = "08004" // rejected connection
 		}
-		_, _ = conn.Write((&pgproto3.ErrorResponse{
+		return &pgproto3.ErrorResponse{
 			Severity: "FATAL",
 			Code:     pgCode,
 			Message:  msg,
-		}).Encode(nil))
-	} else {
-		// Return a generic "internal server error" message.
-		_, _ = conn.Write((&pgproto3.ErrorResponse{
-			Severity: "FATAL",
-			Code:     "08004", // rejected connection
-			Message:  "internal server error",
-		}).Encode(nil))
+		}
 	}
+	// Return a generic "internal server error" message.
+	return &pgproto3.ErrorResponse{
+		Severity: "FATAL",
+		Code:     "08004", // rejected connection
+		Message:  "internal server error",
+	}
+}
+
+// SendErrToClient will encode and pass back to the SQL client an error message.
+// It can be called by the implementors of proxyHandler to give more
+// information to the end user in case of a problem.
+var SendErrToClient = func(conn net.Conn, err error) {
+	if err == nil || conn == nil {
+		return
+	}
+	_, _ = conn.Write(toPgError(err).Encode(nil))
 }
 
 // ConnectionCopy does a bi-directional copy between the backend and frontend
