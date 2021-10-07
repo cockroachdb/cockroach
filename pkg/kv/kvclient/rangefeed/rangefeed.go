@@ -318,11 +318,15 @@ func (f *RangeFeed) processEvents(
 			case ev.Val != nil:
 				f.onValue(ctx, ev.Val)
 			case ev.Checkpoint != nil:
-				if _, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS); err != nil {
+				advanced, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS)
+				if err != nil {
 					return err
 				}
 				if f.onCheckpoint != nil {
 					f.onCheckpoint(ctx, ev.Checkpoint)
+				}
+				if advanced && f.onFrontierAdvance != nil {
+					f.onFrontierAdvance(ctx, frontier.Frontier())
 				}
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
