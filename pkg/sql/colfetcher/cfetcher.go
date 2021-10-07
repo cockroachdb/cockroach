@@ -58,9 +58,6 @@ type cTableInfo struct {
 	// schema changes.
 	cols []catalog.Column
 
-	// The ordered list of ColumnIDs that are required.
-	neededColsList []int
-
 	// The set of required value-component column ordinals in the table.
 	neededValueColsByIdx util.FastIntSet
 
@@ -70,10 +67,11 @@ type cTableInfo struct {
 	// notNeededColOrdinals will be set to have all null values.
 	notNeededColOrdinals []int
 
-	// Map used to get the index for columns in cols.
+	// Map used to get the index for columns in cols. It contains only the
+	// columns that are needed (or all columns if tracing is enabled).
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
 	// time.
-	colIdxMap *colIdxMap
+	neededColIdxMap *colIdxMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -143,7 +141,7 @@ var _ execinfra.Releasable = &cTableInfo{}
 var cTableInfoPool = sync.Pool{
 	New: func() interface{} {
 		return &cTableInfo{
-			colIdxMap: &colIdxMap{},
+			neededColIdxMap: &colIdxMap{},
 		}
 	},
 }
@@ -156,14 +154,13 @@ func newCTableInfo() *cTableInfo {
 func (c *cTableInfo) Release() {
 	// Note that all slices are being reused, but there is no need to deeply
 	// reset them since all of the slices are of Go native types.
-	c.colIdxMap.ords = c.colIdxMap.ords[:0]
-	c.colIdxMap.vals = c.colIdxMap.vals[:0]
+	c.neededColIdxMap.ords = c.neededColIdxMap.ords[:0]
+	c.neededColIdxMap.vals = c.neededColIdxMap.vals[:0]
 	*c = cTableInfo{
-		colIdxMap:            c.colIdxMap,
+		neededColIdxMap:      c.neededColIdxMap,
 		keyValTypes:          c.keyValTypes[:0],
 		extraTypes:           c.extraTypes[:0],
 		extraValDirections:   c.extraValDirections[:0],
-		neededColsList:       c.neededColsList[:0],
 		notNeededColOrdinals: c.notNeededColOrdinals[:0],
 		indexColOrdinals:     c.indexColOrdinals[:0],
 		extraValColOrdinals:  c.extraValColOrdinals[:0],
@@ -184,9 +181,8 @@ func (c *cTableInfo) Release() {
 type colIdxMap struct {
 	// vals is the sorted list of descpb.ColumnIDs in the table to fetch.
 	vals descpb.ColumnIDs
-	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
-	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
-	// in colIdxVals.
+	// ords is the list of ordinals in cols for each column in vals. The ith
+	// entry in ords is the ordinal within cols for the ith column in vals.
 	ords []int
 }
 
@@ -411,26 +407,20 @@ func (rf *cFetcher) Init(
 	rf.traceKV = traceKV
 
 	table := newCTableInfo()
-	nCols := tableArgs.ColIdxMap.Len()
-	if cap(table.colIdxMap.vals) < nCols {
-		table.colIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
-		table.colIdxMap.ords = make([]int, 0, nCols)
-	}
 	colDescriptors := tableArgs.Cols
 	for i := range colDescriptors {
 		//gcassert:bce
 		id := colDescriptors[i].GetID()
-		table.colIdxMap.vals = append(table.colIdxMap.vals, id)
-		table.colIdxMap.ords = append(table.colIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
+		table.neededColIdxMap.vals = append(table.neededColIdxMap.vals, id)
+		table.neededColIdxMap.ords = append(table.neededColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
-	sort.Sort(table.colIdxMap)
+	sort.Sort(table.neededColIdxMap)
 	*table = cTableInfo{
 		desc:                tableArgs.Desc,
-		colIdxMap:           table.colIdxMap,
+		neededColIdxMap:     table.neededColIdxMap,
 		index:               tableArgs.Index,
 		isSecondaryIndex:    tableArgs.IsSecondaryIndex,
 		cols:                colDescriptors,
-		neededColsList:      table.neededColsList[:0],
 		indexColOrdinals:    table.indexColOrdinals[:0],
 		extraValColOrdinals: table.extraValColOrdinals[:0],
 		timestampOutputIdx:  noOutputColumn,
@@ -455,8 +445,9 @@ func (rf *cFetcher) Init(
 	numNeededCols := tableArgs.ValNeededForCol.Len()
 	// Scan through the entire columns map to see which columns are required and
 	// which columns are not needed (the latter will be set to all null values).
-	if cap(table.neededColsList) < numNeededCols {
-		table.neededColsList = make([]int, 0, numNeededCols)
+	if cap(table.neededColIdxMap.vals) < numNeededCols {
+		table.neededColIdxMap.vals = make(descpb.ColumnIDs, 0, numNeededCols)
+		table.neededColIdxMap.ords = make([]int, 0, numNeededCols)
 	}
 	if cap(table.notNeededColOrdinals) < len(colDescriptors)-numNeededCols {
 		table.notNeededColOrdinals = make([]int, 0, len(colDescriptors)-numNeededCols)
@@ -465,10 +456,11 @@ func (rf *cFetcher) Init(
 		//gcassert:bce
 		col := colDescriptors[i].GetID()
 		idx := tableArgs.ColIdxMap.GetDefault(col)
-		if tableArgs.ValNeededForCol.Contains(idx) {
+		if tableArgs.ValNeededForCol.Contains(idx) || rf.traceKV {
 			// The idx-th column is required.
 			neededCols.Add(int(col))
-			table.neededColsList = append(table.neededColsList, int(col))
+			table.neededColIdxMap.vals = append(table.neededColIdxMap.vals, col)
+			table.neededColIdxMap.ords = append(table.neededColIdxMap.ords, idx)
 			// Set up extra metadata for system columns, if this is a system column.
 			switch colinfo.GetSystemColumnKindFromColumnID(col) {
 			case descpb.SystemColumnKind_MVCCTIMESTAMP:
@@ -481,7 +473,7 @@ func (rf *cFetcher) Init(
 			table.notNeededColOrdinals = append(table.notNeededColOrdinals, idx)
 		}
 	}
-	sort.Ints(table.neededColsList)
+	sort.Sort(table.neededColIdxMap)
 	sort.Ints(table.notNeededColOrdinals)
 
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
@@ -1217,7 +1209,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		prettyKey = buf.String()
 	}
 
-	if len(table.neededColsList) == 0 {
+	if table.neededColIdxMap.Len() == 0 {
 		// We don't need to decode any values.
 		if rf.traceKV {
 			prettyValue = tree.DNull.String()
@@ -1345,44 +1337,30 @@ func (rf *cFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	var needDecode bool
-	if rf.traceKV {
-		needDecode = true
-	} else {
-		for i := range table.neededColsList {
-			if table.neededColsList[i] == int(colID) {
-				needDecode = true
-				break
-			}
+	if idx, ok := table.neededColIdxMap.get(colID); ok {
+		if rf.traceKV {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
 		}
-	}
-
-	if needDecode {
-		if idx, ok := table.colIdxMap.get(colID); ok {
-			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
-			}
-			val := rf.machine.nextKV.Value
-			if len(val.RawBytes) == 0 {
-				return prettyKey, "", nil
-			}
-			typ := rf.typs[idx]
-			err := colencoding.UnmarshalColumnValueToCol(
-				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
-			)
-			if err != nil {
-				return "", "", err
-			}
-			rf.machine.remainingValueColsByIdx.Remove(idx)
-
-			if rf.traceKV {
-				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx).String()
-			}
-			if row.DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
-			}
-			return prettyKey, prettyValue, nil
+		val := rf.machine.nextKV.Value
+		if len(val.RawBytes) == 0 {
+			return prettyKey, "", nil
 		}
+		typ := rf.typs[idx]
+		err := colencoding.UnmarshalColumnValueToCol(
+			&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
+		)
+		if err != nil {
+			return "", "", err
+		}
+		rf.machine.remainingValueColsByIdx.Remove(idx)
+
+		if rf.traceKV {
+			prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx).String()
+		}
+		if row.DebugRowFetch {
+			log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
+		}
+		return prettyKey, prettyValue, nil
 	}
 
 	// No need to unmarshal the column value. Either the column was part of
@@ -1393,6 +1371,8 @@ func (rf *cFetcher) processValueSingle(
 	return "", "", nil
 }
 
+// processValueBytes reads value data from the input valueBytes, writing it into
+// the state machine's current row.
 func (rf *cFetcher) processValueBytes(
 	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
@@ -1413,13 +1393,14 @@ func (rf *cFetcher) processValueBytes(
 	})
 
 	var (
-		colIDDiff          uint32
-		lastColID          descpb.ColumnID
-		dataOffset         int
-		typ                encoding.Type
-		lastColIDIndex     int
-		lastNeededColIndex int
+		colIDDiff      uint32
+		lastColID      descpb.ColumnID
+		dataOffset     int
+		typ            encoding.Type
+		lastColIDIndex int
 	)
+	// Continue reading data until there's none left or we've finished
+	// populating the data for all of the requested columns.
 	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
 		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
@@ -1427,17 +1408,20 @@ func (rf *cFetcher) processValueBytes(
 		}
 		colID := lastColID + descpb.ColumnID(colIDDiff)
 		lastColID = colID
-		var colIsNeeded bool
-		for ; lastNeededColIndex < len(table.neededColsList); lastNeededColIndex++ {
-			nextNeededColID := table.neededColsList[lastNeededColIndex]
-			if nextNeededColID == int(colID) {
-				colIsNeeded = true
+		idx := -1
+		// Find the ordinal into table.cols for the column ID we just decoded,
+		// by advancing through the sorted list of needed value columns until
+		// there's a match, or we passed the column ID we're looking for.
+		for ; lastColIDIndex < len(table.neededColIdxMap.vals); lastColIDIndex++ {
+			nextID := table.neededColIdxMap.vals[lastColIDIndex]
+			if nextID == colID {
+				idx = table.neededColIdxMap.ords[lastColIDIndex]
 				break
-			} else if nextNeededColID > int(colID) {
+			} else if nextID > colID {
 				break
 			}
 		}
-		if !colIsNeeded {
+		if idx == -1 {
 			// This column wasn't requested, so read its length and skip it.
 			len, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 			if err != nil {
@@ -1448,16 +1432,6 @@ func (rf *cFetcher) processValueBytes(
 				log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 			}
 			continue
-		}
-		idx := -1
-		for ; lastColIDIndex < len(table.colIdxMap.vals); lastColIDIndex++ {
-			if table.colIdxMap.vals[lastColIDIndex] == colID {
-				idx = table.colIdxMap.ords[lastColIDIndex]
-				break
-			}
-		}
-		if idx == -1 {
-			return "", "", errors.Errorf("missing colid %d", colID)
 		}
 
 		if rf.traceKV {
