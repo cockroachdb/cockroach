@@ -384,6 +384,12 @@ SELECT
 ----
 true  true
 
+statement error invalid GeoJSON input
+select st_geomfromgeojson(json_typeof('null'))
+
+statement error invalid GeoJSON input
+select st_geogfromgeojson(json_typeof('null'))
+
 query TTTTTTT
 SELECT
   ST_AsText(geom),
