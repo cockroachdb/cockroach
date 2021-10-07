@@ -292,7 +292,7 @@ func newJoinReader(
 		return nil, err
 	}
 
-	rightCols := jr.neededRightCols()
+	rightCols := jr.neededRightCols(len(columnTypes))
 	if isSecondary {
 		set, err := getIndexColSet(jr.index, jr.colIdxMap)
 		if err != nil {
@@ -463,7 +463,7 @@ func (jr *joinReader) Spilled() bool {
 
 // neededRightCols returns the set of column indices which need to be fetched
 // from the right side of the join (jr.desc).
-func (jr *joinReader) neededRightCols() util.FastIntSet {
+func (jr *joinReader) neededRightCols(numRightTypes int) util.FastIntSet {
 	neededCols := jr.Out.NeededColumns()
 
 	if jr.readerType == indexJoinReaderType {
@@ -488,13 +488,7 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 		neededRightCols.Remove(lastCol)
 	}
 
-	// Add columns needed by OnExpr.
-	for _, v := range jr.onCond.Vars.GetIndexedVars() {
-		rightIdx := v.Idx - numInputTypes
-		if rightIdx >= 0 {
-			neededRightCols.Add(rightIdx)
-		}
-	}
+	jr.addColumnsNeededByOnExpr(&neededRightCols, numInputTypes, numInputTypes+numRightTypes)
 
 	return neededRightCols
 }
