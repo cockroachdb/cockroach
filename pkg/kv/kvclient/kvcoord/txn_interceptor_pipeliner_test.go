@@ -1601,7 +1601,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		if tc.span.EndKey != nil {
-			if err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey); err != nil {
+			if _, err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey, false /* returnKeys */); err != nil {
 				t.Fatal(err)
 			}
 		} else {

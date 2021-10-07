@@ -733,7 +733,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x"); err != nil {
+		if _, err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x", false /* returnKeys */); err != nil {
 			t.Fatalf("%d: unable to clean up: %s", k, err)
 		}
 		concurrentIncrements(db, t)

@@ -721,6 +721,10 @@ func (s spanSetBatch) Empty() bool {
 	return s.b.Empty()
 }
 
+func (s spanSetBatch) Count() uint32 {
+	return s.b.Count()
+}
+
 func (s spanSetBatch) Len() int {
 	return s.b.Len()
 }
