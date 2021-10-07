@@ -17,7 +17,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,7 +42,7 @@ type testRun struct {
 	inMem           bool
 	checkFile       string
 	restarts        bool
-	engineSequences [][]engineImpl
+	engineSequences []engineSequence
 }
 
 type testRunForEngines struct {
@@ -54,7 +53,7 @@ type testRunForEngines struct {
 	restarts       bool
 	checkFile      io.Reader
 	outputFile     io.Writer
-	engineSequence []engineImpl
+	engineSequence engineSequence
 }
 
 func runMetaTestForEngines(run testRunForEngines) {
@@ -70,14 +69,14 @@ func runMetaTestForEngines(run testRunForEngines) {
 	}
 
 	testRunner := metaTestRunner{
-		ctx:         run.ctx,
-		t:           run.t,
-		w:           run.outputFile,
-		engineFS:    fs,
-		seed:        run.seed,
-		restarts:    run.restarts,
-		engineImpls: run.engineSequence,
-		path:        filepath.Join(tempDir, "store"),
+		ctx:       run.ctx,
+		t:         run.t,
+		w:         run.outputFile,
+		engineFS:  fs,
+		seed:      run.seed,
+		restarts:  run.restarts,
+		engineSeq: run.engineSequence,
+		path:      filepath.Join(tempDir, "store"),
 	}
 	fmt.Printf("store path = %s\n", testRunner.path)
 
@@ -106,12 +105,8 @@ func runMetaTest(run testRun) {
 	fmt.Printf("first run output file: %s\n", firstRunOutput)
 
 	for _, engineSequence := range run.engineSequences {
-		var engineNames []string
-		for _, engineImpl := range engineSequence {
-			engineNames = append(engineNames, engineImpl.name)
-		}
 
-		t.Run(strings.Join(engineNames, ","), func(t *testing.T) {
+		t.Run(fmt.Sprintf("engine/%s", engineSequence.name), func(t *testing.T) {
 			innerTempDir, cleanup := testutils.TempDir(t)
 			defer func() {
 				if !*keep && !t.Failed() {
@@ -172,17 +167,37 @@ func TestPebbleEquivalence(t *testing.T) {
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
 
+	engineSeqs := make([]engineSequence, 0, numStandardOptions + numRandomOptions)
+
+	for i := 0; i < numStandardOptions; i++ {
+		engineSeq := engineSequence{
+			configs: []engineConfig{{
+				name:   fmt.Sprintf("standard=%d", i),
+				opts:   standardOptions(i),
+			}},
+		}
+		engineSeq.name = engineSeq.configs[0].name
+		engineSeqs = append(engineSeqs, engineSeq)
+	}
+
+	for i := 0; i < numRandomOptions; i++ {
+		engineSeq := engineSequence{
+			configs: []engineConfig{{
+				name:   fmt.Sprintf("random=%d", i),
+				opts:   randomOptions(i, *seed),
+			}},
+		}
+		engineSeq.name = engineSeq.configs[0].name
+		engineSeqs = append(engineSeqs, engineSeq)
+	}
+
 	run := testRun{
-		ctx:      ctx,
-		t:        t,
-		seed:     *seed,
-		restarts: false,
-		inMem:    true,
-		engineSequences: [][]engineImpl{
-			{engineImplPebble},
-			{engineImplPebbleManySSTs},
-			{engineImplPebbleVarOpts},
-		},
+		ctx:             ctx,
+		t:               t,
+		seed:            *seed,
+		restarts:        false,
+		inMem:           true,
+		engineSequences: engineSeqs,
 	}
 	runMetaTest(run)
 }
@@ -196,6 +211,22 @@ func TestPebbleRestarts(t *testing.T) {
 	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
 
+	engineConfigs := make([]engineConfig, 0, numStandardOptions + numRandomOptions)
+	// Create one config sequence that contains all options.
+	for i := 0; i < numStandardOptions; i++ {
+		engineConfigs = append(engineConfigs, engineConfig{
+			name:   fmt.Sprintf("standard=%d", i),
+			opts:   standardOptions(i),
+		})
+	}
+
+	for i := 0; i < numRandomOptions; i++ {
+		engineConfigs = append(engineConfigs, engineConfig{
+			name:   fmt.Sprintf("random=%d", i),
+			opts:   randomOptions(i, *seed),
+		})
+	}
+
 	ctx := context.Background()
 	run := testRun{
 		ctx:      ctx,
@@ -203,10 +234,12 @@ func TestPebbleRestarts(t *testing.T) {
 		seed:     *seed,
 		inMem:    true,
 		restarts: true,
-		engineSequences: [][]engineImpl{
-			{engineImplPebble},
-			{engineImplPebble, engineImplPebble},
-			{engineImplPebble, engineImplPebbleManySSTs, engineImplPebbleVarOpts},
+		engineSequences: []engineSequence{
+			{name: "standard", configs: []engineConfig{engineConfigStandard}},
+			{
+				name: fmt.Sprintf("standards=%d,randoms=%d", numStandardOptions, numRandomOptions),
+				configs: engineConfigs,
+			},
 		},
 	}
 	runMetaTest(run)
@@ -231,8 +264,8 @@ func TestPebbleCheck(t *testing.T) {
 			checkFile: *check,
 			restarts:  true,
 			inMem:     true,
-			engineSequences: [][]engineImpl{
-				{engineImplPebble},
+			engineSequences: []engineSequence{
+				{name: "standard", configs: []engineConfig{engineConfigStandard}},
 			},
 		}
 		runMetaTest(run)
