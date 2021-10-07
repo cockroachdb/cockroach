@@ -149,6 +149,8 @@ func (b *Event) Timestamp() hlc.Timestamp {
 			return b.backfillTimestamp
 		}
 		return b.kv.Value.Timestamp
+	case TypeFlush:
+		return hlc.Timestamp{}
 	default:
 		log.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
@@ -165,6 +167,8 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 		return b.resolved.Timestamp
 	case TypeKV:
 		return b.kv.Value.Timestamp
+	case TypeFlush:
+		return hlc.Timestamp{}
 	default:
 		log.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
