@@ -156,11 +156,12 @@ func (l *logger) Ops(
 		}
 		selectFn := func(ctx context.Context) error {
 			start := timeutil.Now()
-			placeholder := []interface{}{l.ttl / 2}
+			var placeholder interface{}
+			placeholder = l.ttl / 2
 			if !l.tsAsPrimaryKey {
 				id := uuid.MakeV4()
 				id.DeterministicV4(rng.Uint64(), uint64(1<<63))
-				placeholder = []interface{}{id.String()}
+				placeholder = id.String()
 			}
 			_, err := selectElemStmt.Exec(placeholder)
 			elapsed := timeutil.Since(start)
