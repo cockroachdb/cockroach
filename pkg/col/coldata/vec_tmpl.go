@@ -123,6 +123,21 @@ func (v *TypedVecs) SetBatch(batch Batch) {
 	}
 }
 
+// Reset performs a deep reset of v while keeping the references to the slices.
+func (v *TypedVecs) Reset() {
+	v.Vecs = nil
+	for i := range v.Nulls {
+		v.Nulls[i] = nil
+	}
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	for i := range v._TYPECols {
+		v._TYPECols[i] = nil
+	}
+	// {{end}}
+	// {{end}}
+}
+
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {
 	// {{range .}}

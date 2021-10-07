@@ -169,6 +169,47 @@ func (v *TypedVecs) SetBatch(batch Batch) {
 	}
 }
 
+// Reset performs a deep reset of v while keeping the references to the slices.
+func (v *TypedVecs) Reset() {
+	v.Vecs = nil
+	for i := range v.Nulls {
+		v.Nulls[i] = nil
+	}
+	for i := range v.BoolCols {
+		v.BoolCols[i] = nil
+	}
+	for i := range v.BytesCols {
+		v.BytesCols[i] = nil
+	}
+	for i := range v.DecimalCols {
+		v.DecimalCols[i] = nil
+	}
+	for i := range v.Int16Cols {
+		v.Int16Cols[i] = nil
+	}
+	for i := range v.Int32Cols {
+		v.Int32Cols[i] = nil
+	}
+	for i := range v.Int64Cols {
+		v.Int64Cols[i] = nil
+	}
+	for i := range v.Float64Cols {
+		v.Float64Cols[i] = nil
+	}
+	for i := range v.TimestampCols {
+		v.TimestampCols[i] = nil
+	}
+	for i := range v.IntervalCols {
+		v.IntervalCols[i] = nil
+	}
+	for i := range v.JSONCols {
+		v.JSONCols[i] = nil
+	}
+	for i := range v.DatumCols {
+		v.DatumCols[i] = nil
+	}
+}
+
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {
 	case types.BoolFamily:
