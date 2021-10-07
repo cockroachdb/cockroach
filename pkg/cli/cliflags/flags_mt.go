@@ -34,14 +34,9 @@ var (
 		Description: "Listen address for incoming connections.",
 	}
 
-	TokenBucketPeriod = FlagInfo{
-		Name:        "token-bucket-period",
-		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
-	}
-
-	TokenBucketSize = FlagInfo{
-		Name:        "token-bucket-size",
-		Description: "Size of the token bucket used to throttle connection attempts.",
+	ThrottleBaseDelay = FlagInfo{
+		Name:        "throttle-base-delay",
+		Description: "Initial value for the exponential backoff used to throttle connection attempts.",
 	}
 
 	ListenCert = FlagInfo{
