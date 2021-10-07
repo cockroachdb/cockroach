@@ -12,12 +12,13 @@ package ssmemstorage
 
 import (
 	"context"
+	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,6 +36,8 @@ var (
 	// the roachpb.ExecStats can be recorded.
 	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
+
+var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 var _ sqlstats.Writer = &Container{}
 
@@ -67,8 +70,12 @@ func (s *Container) RecordStatement(
 
 	// Get the statistics object.
 	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
-		key.Query, key.ImplicitTxn, key.Database,
-		key.Failed, createIfNonExistent,
+		key.Query,
+		key.ImplicitTxn,
+		key.Database,
+		key.Failed,
+		key.TransactionFingerprintID,
+		createIfNonExistent,
 	)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
@@ -96,7 +103,8 @@ func (s *Container) RecordStatement(
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
-		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = timeutil.Now()
+		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
+		s.setLogicalPlanLastSampled(statementKey.planKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -113,7 +121,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
-	stats.mu.data.LastExecTimestamp = timeutil.Now()
+	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
@@ -128,8 +136,18 @@ func (s *Container) RecordStatement(
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafe() + statementKey.size() + 8
+
+		// We also accounts for the memory used for s.sampledPlanMetadataCache.
+		// timestamp size + key size + hash.
+		estimatedMemoryAllocBytes += timestampSize + statementKey.planKey.size() + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
+
+		// If the monitor is nil, we do not track memory usage.
+		if s.mu.acc.Monitor() == nil {
+			return stats.ID, nil
+		}
+
 		// We attempt to account for all the memory we used. If we have exceeded our
 		// memory budget, delete the entry that we just created and report the error.
 		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
@@ -146,7 +164,14 @@ func (s *Container) RecordStatementExecStats(
 	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
 	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNotExists */)
+		s.getStatsForStmt(
+			key.Query,
+			key.ImplicitTxn,
+			key.Database,
+			key.Failed,
+			key.TransactionFingerprintID,
+			false, /* createIfNotExists */
+		)
 	if stmtStats == nil {
 		return ErrExecStatsFingerprintFlushed
 	}
@@ -158,9 +183,12 @@ func (s *Container) RecordStatementExecStats(
 func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(fingerprint, implicitTxn, database, false /* failed */, false /* createIfNotExists */)
-	return s.shouldSaveLogicalPlanDescription(stmtStats)
+	lastSampled := s.getLogicalPlanLastSampled(planKey{
+		anonymizedStmt: fingerprint,
+		implicitTxn:    implicitTxn,
+		database:       database,
+	})
+	return s.shouldSaveLogicalPlanDescription(lastSampled)
 }
 
 // RecordTransaction implements sqlstats.Writer interface and saves
@@ -201,10 +229,14 @@ func (s *Container) RecordTransaction(
 		estimatedMemAllocBytes :=
 			stats.sizeUnsafe() + key.Size() + 8 /* hash of transaction key */
 		s.mu.Lock()
-		if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
-			delete(s.mu.txns, key)
-			s.mu.Unlock()
-			return ErrMemoryPressure
+
+		// If the monitor is nil, we do not track memory usage.
+		if s.mu.acc.Monitor() != nil {
+			if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
+				delete(s.mu.txns, key)
+				s.mu.Unlock()
+				return ErrMemoryPressure
+			}
 		}
 		s.mu.Unlock()
 	}

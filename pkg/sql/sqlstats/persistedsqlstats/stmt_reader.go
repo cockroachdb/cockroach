@@ -102,6 +102,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 	selectedColumns := []string{
 		"aggregated_ts",
 		"fingerprint_id",
+		"transaction_fingerprint_id",
 		"plan_hash",
 		"app_name",
 		"metadata",
@@ -138,6 +139,7 @@ FROM
 		orderByColumns = append(orderByColumns, "metadata ->> 'query'")
 	}
 
+	orderByColumns = append(orderByColumns, "transaction_fingerprint_id")
 	query = fmt.Sprintf("%s ORDER BY %s", query, strings.Join(orderByColumns, ","))
 
 	return query, len(selectedColumns)
@@ -151,26 +153,33 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 	if err != nil {
 		return nil, err
 	}
-
 	stats.ID = roachpb.StmtFingerprintID(stmtFingerprintID)
-	stats.Key.PlanHash, err = sqlstatsutil.DatumToUint64(row[2])
+
+	transactionFingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
+	if err != nil {
+		return nil, err
+	}
+	stats.Key.TransactionFingerprintID =
+		roachpb.TransactionFingerprintID(transactionFingerprintID)
+
+	stats.Key.PlanHash, err = sqlstatsutil.DatumToUint64(row[3])
 	if err != nil {
 		return nil, err
 	}
 
-	stats.Key.App = string(tree.MustBeDString(row[3]))
+	stats.Key.App = string(tree.MustBeDString(row[4]))
 
-	metadata := tree.MustBeDJSON(row[4]).JSON
+	metadata := tree.MustBeDJSON(row[5]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadata, &stats); err != nil {
 		return nil, err
 	}
 
-	statistics := tree.MustBeDJSON(row[5]).JSON
+	statistics := tree.MustBeDJSON(row[6]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statistics, &stats.Stats); err != nil {
 		return nil, err
 	}
 
-	jsonPlan := tree.MustBeDJSON(row[6]).JSON
+	jsonPlan := tree.MustBeDJSON(row[7]).JSON
 	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(jsonPlan)
 	if err != nil {
 		return nil, err

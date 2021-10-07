@@ -29,7 +29,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -48,7 +47,9 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
@@ -56,8 +57,10 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "@com_github_stretchr_testify//require",
     ],
 )

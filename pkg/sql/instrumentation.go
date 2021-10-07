@@ -278,6 +278,16 @@ func (ih *instrumentationHelper) Finish(
 			Database:    p.SessionData().Database,
 			Failed:      retErr != nil,
 		}
+		// We populate transaction fingerprint ID if this is an implicit transaction.
+		// See executor_statement_metrics.go:recordStatementSummary() for further
+		// explanation.
+		if ih.implicitTxn {
+			stmtFingerprintID := stmtStatsKey.FingerprintID()
+			txnFingerprintHash := util.MakeFNV64()
+			txnFingerprintHash.Add(uint64(stmtFingerprintID))
+			stmtStatsKey.TransactionFingerprintID =
+				roachpb.TransactionFingerprintID(txnFingerprintHash.Sum())
+		}
 		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {
