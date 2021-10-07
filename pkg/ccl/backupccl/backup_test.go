@@ -8624,7 +8624,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 // Regression test for #66797 ensuring that the span merging optimization
 // doesn't produce an error when there are span-merging opportunities on
 // descriptor revisions from before the GC threshold of the table.
-func TestSpanMergeingBeforeGCThreshold(t *testing.T) {
+func TestSpanMergingBeforeGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

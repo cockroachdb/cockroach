@@ -997,3 +997,31 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 		destDB.ExpectErr(t, `relation "restoredb.bank" does not exist`, `SELECT count(*) FROM restoredb.bank`)
 	})
 }
+
+// TestClusterRevisionDoesNotBackupOptOutSystemTables is a regression test for a
+// bug that was introduced where we would include revisions for descriptors that
+// are not supposed to be backed up egs: system tables that are opted out.
+//
+// The test would previously fail with an error that the descriptors table (an
+// opt out system table) did not have a span covering the time between the
+// `EndTime` of the first backup and second backup, since there are no revisions
+// to it between those backups.
+func TestClusterRevisionDoesNotBackupOptOutSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, _, _, cleanup := BackupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer cleanup()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE test;
+USE test;
+CREATE TABLE foo (id INT);
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+CREATE TABLE bar (id INT);
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+`)
+}
