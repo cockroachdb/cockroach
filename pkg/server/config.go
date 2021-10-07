@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -111,6 +112,7 @@ type BaseConfig struct {
 	Settings *cluster.Settings
 	*base.Config
 
+	Tracer *tracing.Tracer
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
@@ -159,9 +161,13 @@ type BaseConfig struct {
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	baseCfg := BaseConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Tracer:            tr,
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
@@ -395,7 +401,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
-	baseCfg := MakeBaseConfig(st)
+	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	baseCfg := MakeBaseConfig(st, tr)
 	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{

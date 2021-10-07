@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -66,16 +67,22 @@ import (
 // makeTestConfig returns a config for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func makeTestConfig(st *cluster.Settings) Config {
+func makeTestConfig(st *cluster.Settings, tr *tracing.Tracer) Config {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	return Config{
-		BaseConfig: makeTestBaseConfig(st),
+		BaseConfig: makeTestBaseConfig(st, tr),
 		KVConfig:   makeTestKVConfig(),
 		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID),
 	}
 }
 
-func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
-	baseCfg := MakeBaseConfig(st)
+func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
+	baseCfg := MakeBaseConfig(st, tr)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
 	// Configure test storage engine.
@@ -129,7 +136,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		st = cluster.MakeClusterSettings()
 	}
 	st.ExternalIODir = params.ExternalIODir
-	cfg := makeTestConfig(st)
+	tr := params.Tracer
+	if params.Tracer == nil {
+		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
+	}
+	cfg := makeTestConfig(st, tr)
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
@@ -575,7 +586,11 @@ func (ts *TestServer) StartTenant(
 	if params.TempStorageConfig != nil {
 		sqlCfg.TempStorageConfig = *params.TempStorageConfig
 	}
-	baseCfg := makeTestBaseConfig(st)
+	tr := params.Tracer
+	if params.Tracer == nil {
+		tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	}
+	baseCfg := makeTestBaseConfig(st, tr)
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
@@ -1167,8 +1182,13 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
-// Tracer is part of the TestServerInterface.
-func (ts *TestServer) Tracer() interface{} {
+// TracerI is part of the TestServerInterface.
+func (ts *TestServer) TracerI() interface{} {
+	return ts.Tracer()
+}
+
+// Tracer is like TracerI(), but returns the actual type.
+func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 

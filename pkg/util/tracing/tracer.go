@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
@@ -187,7 +188,16 @@ type Tracer struct {
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
-	testing *testingKnob
+	testing TracerTestingKnobs
+}
+
+// TracerTestingKnobs contains knobs for a Tracer.
+type TracerTestingKnobs struct {
+	// Clock allows the time source for spans to be controlled.
+	Clock timeutil.TimeSource
+	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
+	// is otherwise disabled.
+	ForceRealSpans bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -200,6 +210,64 @@ func NewTracer() *Tracer {
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
 	return t
+}
+
+// NewTracerWithOpt creates a Tracer and configures it according to the
+// passed-in options.
+func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
+	var o tracerOptions
+	for _, opt := range opts {
+		opt.apply(&o)
+	}
+
+	t := NewTracer()
+	if o.sv != nil {
+		t.Configure(ctx, o.sv)
+	}
+	t.testing = o.knobs
+	return t
+}
+
+// tracerOptions groups configuration for Tracer construction.
+type tracerOptions struct {
+	sv    *settings.Values
+	knobs TracerTestingKnobs
+}
+
+// TracerOption is implemented by the arguments to the Tracer constructor.
+type TracerOption interface {
+	apply(opt *tracerOptions)
+}
+
+type clusterSettingsOpt struct {
+	sv *settings.Values
+}
+
+func (o clusterSettingsOpt) apply(opt *tracerOptions) {
+	opt.sv = o.sv
+}
+
+var _ TracerOption = clusterSettingsOpt{}
+
+// WithClusterSettings configures the Tracer according to the relevant cluster
+// settings. Future changes to those cluster settings will update the Tracer.
+func WithClusterSettings(sv *settings.Values) TracerOption {
+	return clusterSettingsOpt{sv: sv}
+}
+
+type knobsOpt struct {
+	knobs TracerTestingKnobs
+}
+
+func (o knobsOpt) apply(opt *tracerOptions) {
+	opt.knobs = o.knobs
+}
+
+var _ TracerOption = knobsOpt{}
+
+// WithTestingKnobs configures the Tracer with the specified knobs.
+func WithTestingKnobs(knobs TracerTestingKnobs) TracerOption {
+	return knobsOpt{knobs: knobs}
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -413,6 +481,9 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
+	if t.testing.ForceRealSpans {
+		return true
+	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil
 }
@@ -523,7 +594,7 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
-		testing: t.testing,
+		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)

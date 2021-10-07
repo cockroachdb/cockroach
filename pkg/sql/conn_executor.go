@@ -2447,6 +2447,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			NodeID:                 ex.server.cfg.NodeID,
 			Codec:                  ex.server.cfg.Codec,
 			Locality:               ex.server.cfg.Locality,
+			Tracer:                 ex.server.cfg.AmbientCtx.Tracer,
 			ReCache:                ex.server.reCache,
 			InternalExecutor:       &ie,
 			DB:                     ex.server.cfg.DB,

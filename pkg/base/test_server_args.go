@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test
@@ -130,6 +131,7 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	Tracer *tracing.Tracer
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
@@ -240,6 +242,7 @@ type TestTenantArgs struct {
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
+	Tracer   *tracing.Tracer
 
 	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
 	// cluster settings.
