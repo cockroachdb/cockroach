@@ -148,7 +148,23 @@ var (
 	// transaction records. The additional detail is the transaction id.
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
-	// 4. Store local keys
+	// 4. Range local operations keys
+	//
+	// LocalRangeOperationsPrefix is the prefix identifying per-range
+	// operations indexed by range key (either start key, or some key in
+	// the range). The keys stored within this prefix describe
+	// operations on a range's data that live outside the user key
+	// range.
+	//
+	// Currently, the only operation type is the MVCC Range Deletion,
+	// which uses an additional sub-prefix.
+	LocalRangeOperationsPrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("o")))
+	// LocalRangeOperationsRangeDelsPrefix is the prefix identifying a
+	// range's MVCC range tombstones.
+	LocalRangeOperationsRangeDelsPrefix = makeKey(LocalRangeOperationsPrefix, roachpb.RKey("r"))
+	LocalRangeOperationsMax             = LocalRangeOperationsPrefix.PrefixEnd()
+
+	// 5. Store local keys
 	//
 	// LocalStorePrefix is the prefix identifying per-store data.
 	LocalStorePrefix = makeKey(LocalPrefix, roachpb.Key("s"))
@@ -184,7 +200,7 @@ var (
 	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
 	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
-	// 5. Lock table keys
+	// 6. Lock table keys
 	//
 	// LocalRangeLockTablePrefix specifies the key prefix for the lock
 	// table. It is immediately followed by the LockTableSingleKeyInfix,

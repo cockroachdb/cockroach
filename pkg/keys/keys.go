@@ -416,6 +416,35 @@ func RangeProbeKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeProbeSuffix, nil)
 }
 
+// MVCCRangeDeletionKey creates a range-local operations key
+// representing a MVCC range deletion tombstone.
+func MVCCRangeDeletionKey(key roachpb.RKey) roachpb.Key {
+	buf := make(roachpb.Key, 0, len(LocalRangeOperationsRangeDelsPrefix)+len(key)+1)
+	buf = append(buf, LocalRangeOperationsRangeDelsPrefix...)
+	buf = encoding.EncodeBytesAscending(buf, key)
+	return buf
+}
+
+// DecodeMVCCRangeDeletionKey decodes the range key into the tombstone's
+// start key.
+func DecodeMVCCRangeDeletionKey(key roachpb.Key) (startKey roachpb.RKey, err error) {
+	if !bytes.HasPrefix(key, LocalRangeOperationsRangeDelsPrefix) {
+		return nil, errors.Errorf("key %q does not have %q prefix",
+			key, LocalRangeOperationsRangeDelsPrefix)
+	}
+	// Cut the prefix and decode the key.
+	b := key[len(LocalRangeOperationsRangeDelsPrefix):]
+	b, startKey, err = encoding.DecodeBytesAscending(b, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) != 0 {
+		return nil, errors.Errorf("key %q has an unexpected suffix of length %d",
+			key, len(b))
+	}
+	return startKey, err
+}
+
 // LockTableSingleKey creates a key under which all single-key locks for the
 // given key can be found. buf is used as scratch-space, up to its capacity,
 // to avoid allocations -- its contents will be overwritten and not appended
@@ -516,11 +545,15 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 		if bytes.HasPrefix(k, LocalRangeIDPrefix) {
 			return nil, errors.Errorf("local range ID key %q is not addressable", k)
 		}
-		if !bytes.HasPrefix(k, LocalRangePrefix) {
-			return nil, errors.Errorf("local key %q malformed; should contain prefix %q",
-				k, LocalRangePrefix)
+		switch {
+		case bytes.HasPrefix(k, LocalRangePrefix):
+			k = k[len(LocalRangePrefix):]
+		case bytes.HasPrefix(k, LocalRangeOperationsRangeDelsPrefix):
+			k = k[len(LocalRangeOperationsRangeDelsPrefix):]
+		default:
+			return nil, errors.Errorf("local key %q malformed; should contain prefix %q or %q",
+				k, LocalRangePrefix, LocalRangeOperationsRangeDelsPrefix)
 		}
-		k = k[len(LocalRangePrefix):]
 		var err error
 		// Decode the encoded key, throw away the suffix and detail.
 		if _, k, err = encoding.DecodeBytesAscending(k, nil); err != nil {

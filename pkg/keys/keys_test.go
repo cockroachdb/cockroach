@@ -738,6 +738,24 @@ func TestTenantPrefix(t *testing.T) {
 	}
 }
 
+func TestMVCCRangeDeletionEncodeDecode(t *testing.T) {
+	testCases := []roachpb.RKey{
+		roachpb.RKey("foo"),
+		roachpb.RKey("a"),
+		roachpb.RKey(""),
+		roachpb.RKey("baz"),
+	}
+	for _, testKey := range testCases {
+		t.Run(testKey.String(), func(t *testing.T) {
+			rdelKey := MVCCRangeDeletionKey(testKey)
+			require.True(t, bytes.HasPrefix(rdelKey, LocalRangeOperationsRangeDelsPrefix))
+			k, err := DecodeMVCCRangeDeletionKey(rdelKey)
+			require.NoError(t, err)
+			require.Equal(t, testKey.AsRawKey(), k)
+		})
+	}
+}
+
 func TestLockTableKeyEncodeDecode(t *testing.T) {
 	expectedPrefix := append([]byte(nil), LocalRangeLockTablePrefix...)
 	expectedPrefix = append(expectedPrefix, LockTableSingleKeyInfix...)

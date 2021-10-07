@@ -215,7 +215,17 @@ var _ = [...]interface{}{
 	RangeDescriptorKey,    // "rdsc"
 	TransactionKey,        // "txn-"
 
-	//   4. Store local keys: These contain metadata about an individual store.
+	//   4. Range local operation keys: These also store metadata that
+	//   pertains to a range as a whole. They are replicated and
+	//   addressable. They currently are only used for storing MVCC
+	//   Range tombstones that mark a span of keys within the range is
+	//   deleted. They all share `LocalRangeOperationsPrefix`.
+	//
+	//   All range tombstones are grouped together under the operations
+	//   prefix, sharing `LocalRangeOperationsRangeDelsPrefix`.
+	MVCCRangeDeletionKey,
+
+	//   5. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
 	StoreClusterVersionKey, // "cver"
@@ -226,7 +236,7 @@ var _ = [...]interface{}{
 	StoreLastUpKey,         // "uptm"
 	StoreCachedSettingsKey, // "stng"
 
-	//   5. Range lock keys for all replicated locks. All range locks share
+	//   6. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on
 	//   range local keys. Currently, locks are only on single keys, i.e., not
 	//   on a range of keys. Only exclusive locks are currently supported, and
