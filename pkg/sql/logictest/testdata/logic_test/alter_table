@@ -28,6 +28,12 @@ b            INT8       true         NULL            ·                      {pr
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (b)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)
+
 query TTTTRT
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -116,7 +122,7 @@ statement ok
 DELETE FROM t WHERE a = -2
 
 statement ok
-ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a > 0)
 
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
@@ -132,8 +138,17 @@ t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a < 0)
+
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT fk_f_ref_other FOREIGN KEY (a) REFERENCES other (b)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS fk_f_ref_other FOREIGN KEY (a) REFERENCES other (b)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS fk_f_ref_other CHECK (a < 0)
 
 # added constraints with generated names avoid name collisions.
 statement ok

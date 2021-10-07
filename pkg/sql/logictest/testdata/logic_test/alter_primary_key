@@ -578,7 +578,7 @@ t  CREATE TABLE public.t (
 statement ok
 CREATE INDEX i ON t (x);
 
-statement error pq: constraint with name i already exists
+statement error pgcode 42P07 duplicate index name: "i"
 ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 
 # Regression for #45362.
@@ -628,7 +628,10 @@ statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (y)
+ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT IF NOT EXISTS "primary" PRIMARY KEY (y)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS "primary" PRIMARY KEY (x)
 
 query TT
 SHOW CREATE t
