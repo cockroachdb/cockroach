@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,9 +177,10 @@ func NewProcessor(cfg Config) *Processor {
 	}
 }
 
-// IteratorConstructor is used to construct an iterator. It should be called
-// from underneath a stopper task to ensure that the engine has not been closed.
-type IteratorConstructor func() storage.SimpleMVCCIterator
+// IntentScannerConstructor is used to construct an IntentScanner. It
+// should be called from underneath a stopper task to ensure that the
+// engine has not been closed.
+type IntentScannerConstructor func() IntentScanner
 
 // CatchUpIteratorConstructor is used to construct an iterator that
 // can be used for catchup-scans. It should be called from underneath
@@ -198,7 +198,7 @@ type CatchUpIteratorConstructor func() *CatchUpIterator
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
 		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
@@ -213,7 +213,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor
 func (p *Processor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
-	rtsIterFunc IteratorConstructor,
+	rtsIterFunc IntentScannerConstructor,
 	stopper *stop.Stopper,
 ) {
 	defer close(p.stoppedC)
