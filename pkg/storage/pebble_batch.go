@@ -519,6 +519,11 @@ func (p *pebbleBatch) Empty() bool {
 	return p.batch.Count() == 0
 }
 
+// Count implements the Batch interface.
+func (p *pebbleBatch) Count() uint32 {
+	return p.batch.Count()
+}
+
 // Len implements the Batch interface.
 func (p *pebbleBatch) Len() int {
 	return len(p.batch.Repr())
