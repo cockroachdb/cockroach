@@ -636,7 +636,7 @@ func (s *Container) freeLocked(ctx context.Context) {
 	atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(-len(s.mu.stmts)))
 	atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(-len(s.mu.txns)))
 
-	s.mu.acc.Empty(ctx)
+	s.mu.acc.Clear(ctx)
 }
 
 // MergeApplicationStatementStats implements the sqlstats.ApplicationStats interface.
