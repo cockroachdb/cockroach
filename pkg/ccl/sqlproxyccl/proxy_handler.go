@@ -98,10 +98,9 @@ type ProxyOptions struct {
 	// DrainTimeout if set, will close DRAINING connections that have been idle
 	// for this duration.
 	DrainTimeout time.Duration
-
-	// Token bucket policy used to throttle (IP, TenantID) connection pairs that
-	// have no history of successful authentication.
-	ThrottlePolicy throttler.BucketPolicy
+	// ThrottleBaseDelay is the initial exponential backoff triggered in
+	// response to the first connection failure.
+	ThrottleBaseDelay time.Duration
 }
 
 // proxyHandler is the default implementation of a proxy handler.
@@ -135,6 +134,8 @@ type proxyHandler struct {
 	certManager *certmgr.CertManager
 }
 
+var throttledError = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
 func newProxyHandler(
@@ -163,7 +164,7 @@ func newProxyHandler(
 	}
 
 	handler.throttleService = throttler.NewLocalService(
-		throttler.WithPolicy(handler.ThrottlePolicy),
+		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
 
 	if handler.DirectoryAddr != "" {
@@ -260,9 +261,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer removeListener()
 
 	throttleTags := throttler.ConnectionTags{IP: ipAddr, TenantID: tenID.String()}
-	if err := handler.throttleService.LoginCheck(throttleTags); err != nil {
+	throttleTime, err := handler.throttleService.LoginCheck(throttleTags)
+	if err != nil {
 		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
-		err = newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
+		err = throttledError
 		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		return err
 	}
@@ -397,14 +399,20 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer func() { _ = crdbConn.Close() }()
 
 	// Perform user authentication.
-	if err := authenticate(conn, crdbConn); err != nil {
+	if err := authenticate(conn, crdbConn, func(status throttler.AttemptStatus) *pgproto3.ErrorResponse {
+		err := handler.throttleService.ReportAttempt(ctx, throttleTags, throttleTime, status)
+		if err != nil {
+			log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
+			return toPgError(throttledError)
+		}
+		return nil
+	}); err != nil {
 		handler.metrics.updateForError(err)
 		log.Ops.Errorf(ctx, "authenticate: %s", err)
 		return err
 	}
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
-	handler.throttleService.ReportSuccess(throttleTags)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
