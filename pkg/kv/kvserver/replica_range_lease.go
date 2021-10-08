@@ -356,7 +356,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// later block on this lease acquisition too, and we can't include the
 			// acquisition's trace in all of them, but let's at least include it in
 			// the request that triggered it.
-			ChildSpan: true,
+			SpanOpt: stop.ChildSpan,
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()

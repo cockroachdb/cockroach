@@ -691,7 +691,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	nl.mu.engines = opts.Engines
 	nl.mu.Unlock()
 
-	_ = opts.Stopper.RunAsyncTask(ctx, "liveness-hb", func(context.Context) {
+	_ = opts.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
 		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())

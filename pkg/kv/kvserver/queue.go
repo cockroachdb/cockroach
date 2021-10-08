@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -788,85 +789,88 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 // stopper signals exit.
 func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.Background())
-	stop := func() {
+	done := func() {
 		bq.mu.Lock()
 		bq.mu.stopped = true
 		bq.mu.Unlock()
 	}
-	if err := stopper.RunAsyncTask(ctx, "queue-loop", func(ctx context.Context) {
-		defer stop()
+	if err := stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "queue-loop", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			defer done()
 
-		// nextTime is initially nil; we don't start any timers until the queue
-		// becomes non-empty.
-		var nextTime <-chan time.Time
+			// nextTime is initially nil; we don't start any timers until the queue
+			// becomes non-empty.
+			var nextTime <-chan time.Time
 
-		immediately := make(chan time.Time)
-		close(immediately)
+			immediately := make(chan time.Time)
+			close(immediately)
 
-		for {
-			select {
-			// Exit on stopper.
-			case <-stopper.ShouldQuiesce():
-				return
+			for {
+				select {
+				// Exit on stopper.
+				case <-stopper.ShouldQuiesce():
+					return
 
-			// Incoming signal sets the next time to process if there were previously
-			// no replicas in the queue.
-			case <-bq.incoming:
-				if nextTime == nil {
-					// When a replica is added, wake up immediately. This is mainly
-					// to facilitate testing without unnecessary sleeps.
-					nextTime = immediately
-
-					// In case we're in a test, still block on the impl.
-					bq.impl.timer(0)
-				}
-			// Process replicas as the timer expires.
-			case <-nextTime:
-				// Acquire from the process semaphore.
-				bq.processSem <- struct{}{}
-
-				repl := bq.pop()
-				if repl != nil {
-					annotatedCtx := repl.AnnotateCtx(ctx)
-					if stopper.RunAsyncTask(
-						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
-						func(ctx context.Context) {
-							// Release semaphore when finished processing.
-							defer func() { <-bq.processSem }()
-
-							start := timeutil.Now()
-							err := bq.processReplica(ctx, repl)
-
-							duration := timeutil.Since(start)
-							bq.recordProcessDuration(ctx, duration)
-
-							bq.finishProcessingReplica(ctx, stopper, repl, err)
-						}) != nil {
-						// Release semaphore on task failure.
-						<-bq.processSem
-						return
-					}
-				} else {
-					// Release semaphore if no replicas were available.
-					<-bq.processSem
-				}
-
-				if bq.Length() == 0 {
-					nextTime = nil
-				} else {
-					// lastDur will be 0 after the first processing attempt.
-					lastDur := bq.lastProcessDuration()
-					switch t := bq.impl.timer(lastDur); t {
-					case 0:
+				// Incoming signal sets the next time to process if there were previously
+				// no replicas in the queue.
+				case <-bq.incoming:
+					if nextTime == nil {
+						// When a replica is added, wake up immediately. This is mainly
+						// to facilitate testing without unnecessary sleeps.
 						nextTime = immediately
-					default:
-						nextTime = time.After(t)
+
+						// In case we're in a test, still block on the impl.
+						bq.impl.timer(0)
+					}
+				// Process replicas as the timer expires.
+				case <-nextTime:
+					// Acquire from the process semaphore.
+					bq.processSem <- struct{}{}
+
+					repl := bq.pop()
+					if repl != nil {
+						annotatedCtx := repl.AnnotateCtx(ctx)
+						if stopper.RunAsyncTaskEx(annotatedCtx, stop.TaskOpts{
+							TaskName: bq.processOpName() + " [outer]",
+						},
+							func(ctx context.Context) {
+								// Release semaphore when finished processing.
+								defer func() { <-bq.processSem }()
+
+								start := timeutil.Now()
+								err := bq.processReplica(ctx, repl)
+
+								duration := timeutil.Since(start)
+								bq.recordProcessDuration(ctx, duration)
+
+								bq.finishProcessingReplica(ctx, stopper, repl, err)
+							}) != nil {
+							// Release semaphore on task failure.
+							<-bq.processSem
+							return
+						}
+					} else {
+						// Release semaphore if no replicas were available.
+						<-bq.processSem
+					}
+
+					if bq.Length() == 0 {
+						nextTime = nil
+					} else {
+						// lastDur will be 0 after the first processing attempt.
+						lastDur := bq.lastProcessDuration()
+						switch t := bq.impl.timer(lastDur); t {
+						case 0:
+							nextTime = immediately
+						default:
+							nextTime = time.After(t)
+						}
 					}
 				}
 			}
-		}
-	}); err != nil {
-		stop()
+		}); err != nil {
+		done()
 	}
 }
 
@@ -888,7 +892,8 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // called externally to the queue. bq.mu.Lock must not be held
 // while calling this method.
 //
-// ctx should already be annotated by repl.AnnotateCtx().
+// ctx should already be annotated by both bq.AnnotateCtx() and
+// repl.AnnotateCtx().
 func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
 	// Load the system config if it's needed.
 	var confReader spanconfig.StoreReader
@@ -913,7 +918,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		return nil
 	}
 
-	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
+	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
@@ -1141,7 +1146,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	}
 
 	workerCtx := bq.AnnotateCtx(context.Background())
-	_ = stopper.RunAsyncTask(workerCtx, "purgatory", func(ctx context.Context) {
+	_ = stopper.RunAsyncTaskEx(workerCtx, stop.TaskOpts{TaskName: bq.name + ".purgatory", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		ticker := time.NewTicker(purgatoryReportInterval)
 		for {
 			select {
@@ -1172,8 +1177,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 						}
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if stopper.RunTask(
-							annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
-							func(ctx context.Context) {
+							annotatedCtx, bq.processOpName(), func(ctx context.Context) {
 								err := bq.processReplica(ctx, repl)
 								bq.finishProcessingReplica(ctx, stopper, repl, err)
 							}) != nil {
@@ -1302,10 +1306,14 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 	// time it returns.
 	defer bq.lockProcessing()()
 
-	ctx := bq.AnnotateCtx(context.TODO())
+	ctx := bq.AnnotateCtx(context.Background())
 	for repl := bq.pop(); repl != nil; repl = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
 		err := bq.processReplica(annotatedCtx, repl)
 		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 	}
+}
+
+func (bq *baseQueue) processOpName() string {
+	return fmt.Sprintf("queue.%s: processing replica", bq.name)
 }

@@ -223,6 +223,13 @@ func (sp *Span) TraceID() uint64 {
 	return sp.i.TraceID()
 }
 
+// IsSterile returns true if this span does not want to have children spans. In
+// that case, trying to create a child span will result in the would-be child
+// being a root span.
+func (sp *Span) IsSterile() bool {
+	return sp.i.sterile
+}
+
 // SpanMeta is information about a Span that is not local to this
 // process. Typically, SpanMeta is populated from information
 // about a Span on the other end of an RPC, and is used to derive
@@ -252,6 +259,18 @@ type SpanMeta struct {
 
 	// The Span's associated baggage.
 	Baggage map[string]string
+
+	// sterile is set if this span does not want to have children spans. In that
+	// case, trying to create a child span will result in the would-be child being
+	// a root span. This is useful for span corresponding to long-running
+	// operations that don't want to be associated with derived operations.
+	//
+	// Note that this field is unlike all the others in that it doesn't make it
+	// across the wire through a carrier. As can be seen in
+	// Tracer.InjectMetaInto(carrier), if sterile is set, then we don't propagate
+	// any info about the span in order to not have a child be created on the
+	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
+	sterile bool
 }
 
 // Empty returns whether or not the SpanMeta is a zero value.

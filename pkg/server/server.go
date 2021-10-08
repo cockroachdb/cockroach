@@ -268,7 +268,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
-	// If the tracer has a Close function, call it after the server stops.
+	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 
 	// Add a dynamic log tag value for the node ID.
@@ -2567,69 +2567,73 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 		}
 	}
 
-	return cfg.stopper.RunAsyncTask(ctx, "mem-logger", func(ctx context.Context) {
-		var goMemStats atomic.Value // *status.GoMemStats
-		goMemStats.Store(&status.GoMemStats{})
-		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
+	return cfg.stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "mem-logger", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			var goMemStats atomic.Value // *status.GoMemStats
+			goMemStats.Store(&status.GoMemStats{})
+			var collectingMemStats int32 // atomic, 1 when stats call is ongoing
 
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		timer.Reset(cfg.minSampleInterval)
+			timer := timeutil.NewTimer()
+			defer timer.Stop()
+			timer.Reset(cfg.minSampleInterval)
 
-		for {
-			select {
-			case <-cfg.stopper.ShouldQuiesce():
-				return
-			case <-timer.C:
-				timer.Read = true
-				timer.Reset(cfg.minSampleInterval)
+			for {
+				select {
+				case <-cfg.stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					timer.Read = true
+					timer.Reset(cfg.minSampleInterval)
 
-				// We read the heap stats on another goroutine and give up after 1s.
-				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
-				// "stops the world" and that requires first waiting for any current GC
-				// run to finish. With a large heap and under extreme conditions, a
-				// single GC run may take longer than the default sampling period of
-				// 10s. Under normal operations and with more recent versions of Go,
-				// this hasn't been observed to be a problem.
-				statsCollected := make(chan struct{})
-				if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
-					if err := cfg.stopper.RunAsyncTask(ctx, "get-mem-stats", func(ctx context.Context) {
-						var ms status.GoMemStats
-						runtime.ReadMemStats(&ms.MemStats)
-						ms.Collected = timeutil.Now()
-						log.VEventf(ctx, 2, "memstats: %+v", ms)
+					// We read the heap stats on another goroutine and give up after 1s.
+					// This is necessary because as of Go 1.12, runtime.ReadMemStats()
+					// "stops the world" and that requires first waiting for any current GC
+					// run to finish. With a large heap and under extreme conditions, a
+					// single GC run may take longer than the default sampling period of
+					// 10s. Under normal operations and with more recent versions of Go,
+					// this hasn't been observed to be a problem.
+					statsCollected := make(chan struct{})
+					if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
+						if err := cfg.stopper.RunAsyncTaskEx(ctx,
+							stop.TaskOpts{TaskName: "get-mem-stats"},
+							func(ctx context.Context) {
+								var ms status.GoMemStats
+								runtime.ReadMemStats(&ms.MemStats)
+								ms.Collected = timeutil.Now()
+								log.VEventf(ctx, 2, "memstats: %+v", ms)
 
-						goMemStats.Store(&ms)
-						atomic.StoreInt32(&collectingMemStats, 0)
-						close(statsCollected)
-					}); err != nil {
-						close(statsCollected)
+								goMemStats.Store(&ms)
+								atomic.StoreInt32(&collectingMemStats, 0)
+								close(statsCollected)
+							}); err != nil {
+							close(statsCollected)
+						}
+					}
+
+					select {
+					case <-statsCollected:
+						// Good; we managed to read the Go memory stats quickly enough.
+					case <-time.After(time.Second):
+					}
+
+					curStats := goMemStats.Load().(*status.GoMemStats)
+					cgoStats := status.GetCGoMemStats(ctx)
+					cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
+					if goroutineDumper != nil {
+						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
+					}
+					if heapProfiler != nil {
+						heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
+						nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
+						statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
+					}
+					if queryProfiler != nil {
+						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
 				}
-
-				select {
-				case <-statsCollected:
-					// Good; we managed to read the Go memory stats quickly enough.
-				case <-time.After(time.Second):
-				}
-
-				curStats := goMemStats.Load().(*status.GoMemStats)
-				cgoStats := status.GetCGoMemStats(ctx)
-				cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
-				if goroutineDumper != nil {
-					goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
-				}
-				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
-					nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
-					statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
-				}
-				if queryProfiler != nil {
-					queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
-				}
 			}
-		}
-	})
+		})
 }
 
 // Stop stops the server.

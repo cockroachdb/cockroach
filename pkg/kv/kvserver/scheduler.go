@@ -196,13 +196,27 @@ func (s *raftScheduler) Start(ctx context.Context, stopper *stop.Stopper) {
 		s.mu.Unlock()
 		s.mu.cond.Broadcast()
 	}
-	if err := stopper.RunAsyncTask(ctx, "raftsched-wait-quiesce", waitQuiesce); err != nil {
+	if err := stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "raftsched-wait-quiesce",
+			// This task doesn't reference a parent because it runs for the server's
+			// lifetime.
+			SpanOpt: stop.SterileRootSpan,
+		},
+		waitQuiesce); err != nil {
 		waitQuiesce(ctx)
 	}
 
 	s.done.Add(s.numWorkers)
 	for i := 0; i < s.numWorkers; i++ {
-		if err := stopper.RunAsyncTask(ctx, "raft-worker", s.worker); err != nil {
+		if err := stopper.RunAsyncTaskEx(ctx,
+			stop.TaskOpts{
+				TaskName: "raft-worker",
+				// This task doesn't reference a parent because it runs for the server's
+				// lifetime.
+				SpanOpt: stop.SterileRootSpan,
+			},
+			s.worker); err != nil {
 			s.done.Done()
 		}
 	}
