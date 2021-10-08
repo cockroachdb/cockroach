@@ -1092,6 +1092,8 @@ testlogic: testbaselogic testoptlogic testccllogic
 testbaselogic: ## Run SQL Logic Tests.
 testbaselogic: bin/logictest
 
+testtenantlogic: bin/logictestccl
+
 testccllogic: ## Run SQL CCL Logic Tests.
 testccllogic: bin/logictestccl
 
@@ -1100,6 +1102,7 @@ testoptlogic: bin/logictestopt
 
 logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testbaselogic: TESTS := TestLogic/$(logic-test-selector)
+testtenantlogic: TESTS := TestTenantLogic/$(logic-test-selector)
 testccllogic: TESTS := TestCCLLogic/$(logic-test-selector)
 testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 
@@ -1109,8 +1112,8 @@ testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 # does not prevent loading and initializing every default config in
 # turn (including setting up the test clusters, etc.). By specifying
 # -config, the extra initialization overhead is averted.
-testbaselogic testccllogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
-testbaselogic testccllogic testoptlogic:
+testbaselogic testtenantlogic testccllogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
+testbaselogic testtenantlogic testccllogic testoptlogic:
 	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
