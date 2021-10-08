@@ -274,14 +274,38 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		},
 	}
 
+	var destinations []string
+	for i := range backupNode.To {
+		dest, ok := backupNode.To[i].(*tree.StrVal)
+		if !ok {
+			return "", errors.Errorf("unexpected %T destination in backup statement", dest)
+		}
+		destinations = append(destinations, dest.RawString())
+	}
+
+	var kmsURIs []string
+	for i := range backupNode.Options.EncryptionKMSURI {
+		kmsURI, ok := backupNode.Options.EncryptionKMSURI[i].(*tree.StrVal)
+		if !ok {
+			return "", errors.Errorf("unexpected %T kmsURI in backup statement", kmsURI)
+		}
+		kmsURIs = append(kmsURIs, kmsURI.RawString())
+	}
+
+	redactedBackupNode, err := GetRedactedBackupNode(backupNode.Backup, destinations,
+		nil /* incrementalFrom */, kmsURIs, "", false /* hasBeenPlanned */)
+	if err != nil {
+		return "", err
+	}
+
 	node := &tree.ScheduledBackup{
 		ScheduleLabelSpec: tree.ScheduleLabelSpec{
 			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel())},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
-		Targets:         backupNode.Targets,
-		To:              backupNode.To,
-		BackupOptions:   backupNode.Options,
+		Targets:         redactedBackupNode.Targets,
+		To:              redactedBackupNode.To,
+		BackupOptions:   redactedBackupNode.Options,
 		ScheduleOptions: scheduleOptions,
 	}
 

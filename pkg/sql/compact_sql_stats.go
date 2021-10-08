@@ -244,11 +244,11 @@ func (e *scheduledSQLStatsCompactionExecutor) Metrics() metric.Struct {
 
 // GetCreateScheduleStatement implements the jobs.ScheduledJobExecutor interface.
 func (e *scheduledSQLStatsCompactionExecutor) GetCreateScheduleStatement(
-	_ context.Context,
-	_ scheduledjobs.JobSchedulerEnv,
-	_ *kv.Txn,
-	_ *jobs.ScheduledJob,
-	_ sqlutil.InternalExecutor,
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	sj *jobs.ScheduledJob,
+	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	return "SELECT crdb_internal.schedule_sql_stats_compact()", nil
 }
