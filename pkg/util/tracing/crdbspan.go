@@ -410,7 +410,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		// -1 indicates an unfinished Span. For a recording it's better to put some
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
-		rs.Duration = timeutil.Now().Sub(rs.StartTime)
+		rs.Duration = timeutil.Since(rs.StartTime)
 		rs.Finished = false
 	} else {
 		rs.Finished = true
