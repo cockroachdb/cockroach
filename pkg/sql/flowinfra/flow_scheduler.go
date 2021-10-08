@@ -263,6 +263,8 @@ func (fs *FlowScheduler) Start() {
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
 
+		quiesceCh := fs.stopper.ShouldQuiesce()
+
 		for {
 			if stopped && atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
 				// TODO(radu): somehow error out the flows that are still in the queue.
@@ -300,9 +302,11 @@ func (fs *FlowScheduler) Start() {
 					atomic.AddInt32(&fs.atomics.numRunning, -1)
 				}
 
-			case <-fs.stopper.ShouldQuiesce():
+			case <-quiesceCh:
 				fs.mu.Lock()
 				stopped = true
+				// Inhibit this arm of the select so that we don't spin on it.
+				quiesceCh = nil
 			}
 		}
 	})
