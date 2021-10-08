@@ -177,7 +177,10 @@ type RecordedSpan struct {
 	GoroutineID uint64 `protobuf:"varint,12,opt,name=goroutine_id,json=goroutineId,proto3" json:"goroutine_id,omitempty"`
 	// True if the span has been Finish()ed, false otherwise.
 	Finished bool `protobuf:"varint,13,opt,name=finished,proto3" json:"finished,omitempty"`
-	// StructuredRecords contains StructuredRecord events recorded in the span.
+	// StructuredRecords contains StructuredRecord events recorded either in this
+	// span, or in children spans that have finished while our span was not
+	// recording verbosely.
+	//
 	// A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
 	// information about when this event occurred.
 	// DeprecatedInternalStructured only stores the Payloads.
