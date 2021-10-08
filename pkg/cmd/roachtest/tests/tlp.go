@@ -155,12 +155,11 @@ func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt fun
 	})
 }
 
-// runTLPQuery runs two queries to perform TLP. If the results of the query are
-// not equal, an error is returned. Currently GenerateTLP always returns
-// unpartitioned and partitioned queries of the form "SELECT count(*) ...". The
-// resulting counts of the queries are compared in order to verify logical
-// correctness. See GenerateTLP for more information on TLP and the generated
-// queries.
+// runTLPQuery runs two queries to perform TLP. One is partitioned and one is
+// unpartitioned. If the results of the queries are not equal, an error is
+// returned. GenerateTLP also returns any placeholder arguments needed for the
+// partitioned query. See GenerateTLP for more information on TLP and the
+// generated queries.
 func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)) error {
 	// Ignore panics from GenerateTLP.
 	defer func() {
@@ -169,7 +168,7 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 		}
 	}()
 
-	unpartitioned, partitioned := smither.GenerateTLP()
+	unpartitioned, partitioned, args := smither.GenerateTLP()
 
 	return runWithTimeout(func() error {
 		rows1, err := conn.Query(unpartitioned)
@@ -185,7 +184,7 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			//nolint:returnerrcheck
 			return nil
 		}
-		rows2, err := conn.Query(partitioned)
+		rows2, err := conn.Query(partitioned, args...)
 		if err != nil {
 			// Ignore errors.
 			//nolint:returnerrcheck
@@ -203,8 +202,8 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			logStmt(unpartitioned)
 			logStmt(partitioned)
 			return errors.Newf(
-				"expected unpartitioned results to equal partitioned results\n%s\nsql: %s\n%s",
-				diff, unpartitioned, partitioned)
+				"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
+				diff, unpartitioned, partitioned, args)
 		}
 		return nil
 	})
