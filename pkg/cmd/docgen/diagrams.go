@@ -830,7 +830,7 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_table_partition_by",
 		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by"},
+		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
 		replace: map[string]string{"relation_expr": "table_name"},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
@@ -843,14 +843,6 @@ var specs = []stmtSpec{
 		stmt:    "alter_oneindex_stmt",
 		inline:  []string{"alter_index_cmds", "alter_index_cmd", "partition_by", "table_index_name"},
 		replace: map[string]string{"standalone_index_name": "index_name"},
-	},
-	{
-		name:    "create_table_partition_by",
-		stmt:    "create_table_stmt",
-		inline:  []string{"opt_partition_by", "partition_by"},
-		replace: map[string]string{"opt_table_elem_list": "table_definition", "opt_interleave": ""},
-		match:   []*regexp.Regexp{regexp.MustCompile("PARTITION")},
-		unlink:  []string{"table_definition"},
 	},
 	{
 		name:   "explain_stmt",
@@ -1032,12 +1024,9 @@ var specs = []stmtSpec{
 		inline: []string{"savepoint_name"},
 	},
 	{
-		name:    "rename_column",
-		stmt:    "alter_rename_table_stmt",
-		inline:  []string{"opt_column"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'TABLE' .* 'RENAME' ('COLUMN'|name)")},
-		replace: map[string]string{"relation_expr": "table_name", "name 'TO'": "current_name 'TO'"},
-		unlink:  []string{"table_name", "current_name"},
+		name:  "rename_column",
+		stmt:  "alter_table_cmd",
+		match: []*regexp.Regexp{regexp.MustCompile("'RENAME' opt_column column_name 'TO' column_name")},
 	},
 	{
 		name:    "rename_constraint",
@@ -1245,13 +1234,6 @@ var specs = []stmtSpec{
 		inline: []string{"with_comment"},
 	},
 	{
-		name:    "show_constraints",
-		stmt:    "show_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CONSTRAINTS'")},
-		replace: map[string]string{"var_name": "table_name"},
-		unlink:  []string{"table_name"},
-	},
-	{
 		name:    "show_create_stmt",
 		replace: map[string]string{"table_name": "object_name"},
 		unlink:  []string{"object_name"},
@@ -1302,21 +1284,13 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
-		name:   "show_indexes",
+		name:   "show_indexes_stmt",
 		inline: []string{"with_comment"},
 		stmt:   "show_indexes_stmt",
 	},
 	{
-		name:    "show_index",
-		stmt:    "show_stmt",
-		inline:  []string{"with_comment"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")},
-		replace: map[string]string{"var_name": "table_name"},
-		unlink:  []string{"table_name"},
-	},
-	{
 		name:  "show_keys",
-		stmt:  "show_stmt",
+		stmt:  "show_indexes_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
 	},
 	{
@@ -1392,9 +1366,8 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'EXPERIMENTAL_REPLICA'")},
 	},
 	{
-		name:  "show_transaction",
-		stmt:  "show_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")},
+		name:   "show_transactions_stmt",
+		inline: []string{"opt_cluster"},
 	},
 	{
 		name:  "show_savepoint_status",
