@@ -253,7 +253,6 @@ func (q *Queue) Clear(disable bool) {
 
 	metrics := q.cfg.Metrics
 	metrics.PusheeWaiting.Dec(int64(len(q.mu.txns)))
-	metrics.QueryWaiting.Dec(int64(waitingQueriesCount))
 
 	if log.V(1) {
 		log.Infof(
@@ -415,8 +414,6 @@ func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) 
 
 func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
 	if w, ok := q.mu.queries[txnID]; ok {
-		metrics := q.cfg.Metrics
-		metrics.QueryWaiting.Dec(int64(w.count))
 		log.VEventf(ctx, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
 		close(w.pending)
 		delete(q.mu.queries, txnID)
@@ -717,7 +714,6 @@ func (q *Queue) MaybeWaitForQuery(
 	if !req.WaitForUpdate {
 		return nil
 	}
-	metrics := q.cfg.Metrics
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
@@ -757,26 +753,26 @@ func (q *Queue) MaybeWaitForQuery(
 		}
 		q.mu.queries[req.Txn.ID] = query
 	}
-	metrics.QueryWaiting.Inc(1)
 	q.mu.Unlock()
 
-	tBegin := timeutil.Now()
-	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
-
-	// When we return, make sure to unregister the query so that it doesn't
-	// leak. If query.pending if closed, the query will have already been
-	// cleaned up, so this will be a no-op.
+	// When we return, make sure to unregister the query. If the query's reference
+	// count drops to 0, remove it from the queries map. Only do so if the map
+	// still contains the same waitingQueries reference, as it may have been
+	// removed already and replaced.
 	defer func() {
 		q.mu.Lock()
-		if query == q.mu.queries[req.Txn.ID] {
-			query.count--
-			metrics.QueryWaiting.Dec(1)
-			if query.count == 0 {
-				delete(q.mu.queries, req.Txn.ID)
-			}
+		query.count--
+		if query.count == 0 && query == q.mu.queries[req.Txn.ID] {
+			delete(q.mu.queries, req.Txn.ID)
 		}
 		q.mu.Unlock()
 	}()
+
+	metrics := q.cfg.Metrics
+	metrics.QueryWaiting.Inc(1)
+	defer metrics.QueryWaiting.Dec(1)
+	tBegin := timeutil.Now()
+	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
 
 	log.VEventf(ctx, 2, "waiting on query for %s", req.Txn.ID.Short())
 	select {
