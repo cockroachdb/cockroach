@@ -430,6 +430,43 @@ func TestFormatPgwireText(t *testing.T) {
 	}
 }
 
+func TestFormatNodeSummary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		stmt     string
+		expected string
+	}{
+		// This here checks encodeSQLString on non-tree.DString strings also
+		// calls encodeSQLString with the right formatter.
+		// See TestFormatExprs below for the test on DStrings.
+		{`SELECT (SELECT count(*) FROM system.jobs) AS j, num_running, s.* FROM system.scheduled_jobs AS s WHERE next_run < current_timestamp() ORDER BY random() LIMIT 10 FOR UPDATE`,
+			`SELECT (SELECT FROM sy... FROM system.scheduled_jobs AS s`},
+		{`INSERT INTO vehicles (vehicles, rides) VALUES (1), (2), (3), (4), (5)`,
+			`INSERT INTO vehicles (vehicles, rides)`},
+		{`INSERT INTO vehicles (vehicles, rides) SELECT vehicle_ids, rides FROM riders`,
+			`INSERT INTO vehicles SELECT vehicle_ids, ri... FROM riders`},
+		{`UPDATE vehicles SET vehicles = '1928354' WHERE vehicles = '234234'`,
+			`UPDATE vehicles SET vehicles = '_' WHERE vehicles = '_'`},
+		{`UPDATE vehicles SET (vehicles, make) = (1928354, Toyota) WHERE vehicles = '234234'`,
+			`UPDATE vehicles SET (vehicles, make... WHERE vehicles = '_'`},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+			exprStr := tree.AsShortStringWithFlags(stmt.AST, fmtFlags)
+			if exprStr != test.expected {
+				t.Fatalf("expected %s, got %s", test.expected, exprStr)
+			}
+		})
+	}
+}
+
 // BenchmarkFormatRandomStatements measures the time needed to format
 // 1000 random statements.
 func BenchmarkFormatRandomStatements(b *testing.B) {
