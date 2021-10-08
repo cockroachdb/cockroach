@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	otelsdk "go.opentelemetry.io/otel/sdk/trace"
@@ -70,8 +71,12 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	if err := CheckRecordedSpans(s1.GetRecording(), `
-		span: a
+	require.Nil(t, s1.GetRecording())
+
+	s1.RecordStructured(&types.Int32Value{Value: 5})
+	if err := CheckRecording(s1.GetRecording(), `
+		=== operation:a
+		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":5}
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -158,11 +163,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
-	if err := CheckRecordedSpans(s1.GetRecording(), `
-		span: a
-	`); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, s1.GetRecording())
 
 	// The child Span, now finished, will drop future recordings.
 	s3.Recordf("x=%d", 5)
@@ -711,4 +712,7 @@ func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
 	require.Equal(t, []*crdbSpan{s1.i.crdb}, tr.activeSpansRegistry.all())
 	s1.Finish()
 	require.ElementsMatch(t, []*crdbSpan{s2.i.crdb, s3.i.crdb}, tr.activeSpansRegistry.all())
+	s2.Finish()
+	s3.Finish()
+	require.Len(t, tr.activeSpansRegistry.all(), 0)
 }

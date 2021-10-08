@@ -48,6 +48,8 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
+	// Locking rules: if locking both a parent and a child, the parent must be
+	// locked first. In practice, children don't take the parent's lock.
 	mu crdbSpanMu
 }
 
@@ -65,8 +67,11 @@ type crdbSpanMu struct {
 		// but its 'swap' method requires the mutex.
 		recordingType atomicRecordingType
 
-		logs       sizeLimitedBuffer // of *tracingpb.LogRecords
-		structured sizeLimitedBuffer // of Structured events
+		logs sizeLimitedBuffer // of *tracingpb.LogRecords
+		// structured accumulates StructuredRecord's. It will contain the events
+		// recorded on this span, and also the ones recorded on children that
+		// finished while this parent span's recording was not verbose.
+		structured sizeLimitedBuffer
 
 		// dropped is true if the span has capped out it's memory limits for
 		// logs and structured events, and has had to drop some. It's used to
@@ -81,6 +86,11 @@ type crdbSpanMu struct {
 		// grandchildren recursively). This includes remote child span recordings
 		// that were manually imported, as well as recordings from local children
 		// that Finish()ed.
+		//
+		// Only child spans that finished while this span was in the
+		// RecordingVerbose mode are included here. For children finished while this
+		// span is not in RecordingVerbose, only their structured events are copied
+		// to structured above.
 		finishedChildren []tracingpb.RecordedSpan
 	}
 
@@ -148,6 +158,7 @@ func (s *crdbSpan) finish() bool {
 		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
 		copy(children, s.mu.recording.openChildren)
 
+		// We'll operate on the parent outside of the child's lock.
 		parent = s.mu.parent
 
 		s.mu.Unlock()
@@ -205,7 +216,7 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.recording.structured.Reset()
 	s.mu.recording.dropped = false
 	s.mu.recording.openChildren = s.mu.recording.openChildren[:0]
-	s.mu.recording.finishedChildren = nil
+	s.mu.recording.finishedChildren = s.mu.recording.finishedChildren[:0]
 }
 
 func (s *crdbSpan) disableRecording() {
@@ -232,22 +243,18 @@ func (s *crdbSpan) TraceID() uint64 {
 
 // GetRecording is part of the RegistrySpan interface.
 func (s *crdbSpan) GetRecording() Recording {
-	// If the span is not verbose, optimize by avoiding the tags.
-	// This span is likely only used to carry payloads around.
-	//
-	// TODO(andrei): The optimization for avoiding the tags was done back when
-	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
-	// That has become cheap since, so this optimization might not be worth it any
-	// more.
-	wantTags := s.recordingType() == RecordingVerbose
-	return s.getRecording(wantTags)
+	switch s.recordingType() {
+	case RecordingVerbose:
+		return s.getVerboseRecording()
+	case RecordingOff:
+		return s.getStructuredRecording()
+	default:
+		panic("unreachable")
+	}
 }
 
-// getRecording returns the Span's recording, including its children.
-//
-// When wantTags is false, no tags will be added. This is a performance
-// optimization as stringifying the tag values can be expensive.
-func (s *crdbSpan) getRecording(wantTags bool) Recording {
+// getVerboseRecording returns the Span's recording, including its children.
+func (s *crdbSpan) getVerboseRecording() Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -256,15 +263,13 @@ func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	// The capacity here is approximate since we don't know how many
 	// grandchildren there are.
 	result := make(Recording, 0, 1+len(s.mu.recording.openChildren)+len(s.mu.recording.finishedChildren))
-	result = append(result, s.getRecordingNoChildrenLocked(wantTags))
+	result = append(result, s.getRecordingNoChildrenLocked(RecordingVerbose))
 	result = append(result, s.mu.recording.finishedChildren...)
-	children := make([]*crdbSpan, len(s.mu.recording.openChildren))
-	copy(children, s.mu.recording.openChildren)
-	s.mu.Unlock()
 
-	for _, child := range children {
-		result = append(result, child.getRecording(wantTags)...)
+	for _, child := range s.mu.recording.openChildren {
+		result = append(result, child.getVerboseRecording()...)
 	}
+	s.mu.Unlock()
 
 	// Sort the spans by StartTime, except the first Span (the root of this
 	// recording) which stays in place.
@@ -274,6 +279,56 @@ func (s *crdbSpan) getRecording(wantTags bool) Recording {
 	*toSort = nil
 	sortPool.Put(toSort)
 	return result
+}
+
+// getStructuredRecording returns the structured events in this span and
+// in all the children. The results are returned as a Recording for the caller's
+// convenience (and for optimizing memory allocations). The Recording will by
+// nil if there are no structured events. If not nil, the Recording will have
+// exactly one span corresponding to the receiver, will all events handing from
+// this span (even if the events had been recorded on different spans).
+//
+// The caller does not take ownership of the events.
+func (s *crdbSpan) getStructuredRecording() Recording {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	buffer := make([]*tracingpb.StructuredRecord, 0, 3)
+	for _, c := range s.mu.recording.finishedChildren {
+		for i := range c.StructuredRecords {
+			buffer = append(buffer, &c.StructuredRecords[i])
+		}
+	}
+	for _, c := range s.mu.recording.openChildren {
+		buffer = c.getStructuredEventsRecursively(buffer)
+	}
+
+	if len(buffer) == 0 && s.mu.recording.structured.Len() == 0 {
+		// Optimize out the allocations below.
+		return nil
+	}
+
+	res := s.getRecordingNoChildrenLocked(RecordingOff)
+	// If necessary, grow res.StructuredRecords to have space for buffer.
+	var reservedSpace []tracingpb.StructuredRecord
+	if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
+		// res.StructuredRecords does not have enough capacity to accommodate the
+		// elements of buffer. We allocate a new, larger array and copy over the old
+		// entries.
+		old := res.StructuredRecords
+		res.StructuredRecords = make([]tracingpb.StructuredRecord, len(old)+len(buffer))
+		copy(res.StructuredRecords, old)
+		reservedSpace = res.StructuredRecords[len(old):]
+	} else {
+		// res.StructuredRecords has enough capacity for buffer. We extend it in
+		// place.
+		oldLen := len(res.StructuredRecords)
+		res.StructuredRecords = res.StructuredRecords[:oldLen+len(buffer)]
+		reservedSpace = res.StructuredRecords[oldLen:]
+	}
+	for i, e := range buffer {
+		reservedSpace[i] = *e
+	}
+	return Recording{res}
 }
 
 // recordFinishedChildren adds `children` to the receiver's recording.
@@ -292,12 +347,22 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 		return
 	}
 
-	// Change the root of the remote recording to be a child of this Span. This is
-	// usually already the case, except with DistSQL traces where remote
-	// processors run in spans that FollowFrom an RPC Span that we don't collect.
-	children[0].ParentSpanID = s.spanID
+	// Depending on the type of recording, we either keep all the information
+	// received, or only the structured events.
+	if s.recordingType() == RecordingVerbose {
+		// Change the root of the remote recording to be a child of this Span. This is
+		// usually already the case, except with DistSQL traces where remote
+		// processors run in spans that FollowFrom an RPC Span that we don't collect.
+		children[0].ParentSpanID = s.spanID
 
-	s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
+		s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
+	} else {
+		for _, c := range children {
+			for _, e := range c.StructuredRecords {
+				s.recordInternalLocked(&e, &s.mu.recording.structured)
+			}
+		}
+	}
 }
 
 func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
@@ -311,6 +376,7 @@ func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
 	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
+// recordStructured includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
 		return
@@ -334,6 +400,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	s.recordInternal(logRecord, &s.mu.recording.logs)
 }
 
+// recordStructured includes a structured event in s' recording.
 func (s *crdbSpan) recordStructured(item Structured) {
 	p, err := types.MarshalAny(item)
 	if err != nil {
@@ -369,6 +436,10 @@ type memorySizable interface {
 func (s *crdbSpan) recordInternal(payload memorySizable, buffer *sizeLimitedBuffer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.recordInternalLocked(payload, buffer)
+}
+
+func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimitedBuffer) {
 	size := int64(payload.MemorySize())
 	if size > buffer.limit {
 		// The incoming payload alone blows past the memory limit. Let's just
@@ -412,12 +483,45 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 	s.mu.baggage[restrictedKey] = value
 }
 
+// getStructuredEventsRecursively returns the structured events accumulated by
+// this span and its finished and still-open children.
+func (s *crdbSpan) getStructuredEventsRecursively(
+	buffer []*tracingpb.StructuredRecord,
+) []*tracingpb.StructuredRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	buffer = s.getStructuredEventsLocked(buffer)
+	for _, c := range s.mu.recording.openChildren {
+		buffer = c.getStructuredEventsRecursively(buffer)
+	}
+	for _, c := range s.mu.recording.finishedChildren {
+		for i := range c.StructuredRecords {
+			buffer = append(buffer, &c.StructuredRecords[i])
+		}
+	}
+	return buffer
+}
+
+func (s *crdbSpan) getStructuredEventsLocked(
+	buffer []*tracingpb.StructuredRecord,
+) []*tracingpb.StructuredRecord {
+	numEvents := s.mu.recording.structured.Len()
+	for i := 0; i < numEvents; i++ {
+		event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
+		buffer = append(buffer, event)
+	}
+	return buffer
+}
+
 // getRecordingNoChildrenLocked returns the Span's recording without including
 // children.
 //
-// When wantTags is false, no tags will be added. This is a performance
-// optimization as stringifying the tag values can be expensive.
-func (s *crdbSpan) getRecordingNoChildrenLocked(wantTags bool) tracingpb.RecordedSpan {
+// The tags are included in the result only if recordingType==RecordingVerbose.
+// This is a performance optimization as stringifying the tag values can be
+// expensive.
+func (s *crdbSpan) getRecordingNoChildrenLocked(
+	recordingType RecordingType,
+) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:        s.traceID,
 		SpanID:         s.spanID,
@@ -433,7 +537,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(wantTags bool) tracingpb.Recorde
 		// -1 indicates an unfinished Span. For a recording it's better to put some
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
-		rs.Duration = timeutil.Now().Sub(rs.StartTime)
+		rs.Duration = time.Since(rs.StartTime)
 		rs.Finished = false
 	} else {
 		rs.Finished = true
@@ -446,13 +550,19 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(wantTags bool) tracingpb.Recorde
 		rs.Tags[k] = v
 	}
 
+	// If the span is not verbose, optimize by avoiding the tags.
+	// This span is likely only used to carry payloads around.
+	//
+	// TODO(andrei): The optimization for avoiding the tags was done back when
+	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
+	// That has become cheap since, so this optimization might not be worth it any
+	// more.
+	wantTags := recordingType == RecordingVerbose
 	if wantTags {
 		if s.mu.duration == -1 {
 			addTag("_unfinished", "1")
 		}
-		if s.mu.recording.recordingType.load() == RecordingVerbose {
-			addTag("_verbose", "1")
-		}
+		addTag("_verbose", "1")
 		if s.mu.recording.dropped {
 			addTag("_dropped", "1")
 		}
@@ -509,12 +619,30 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 //
 // child is the child span that just finished.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
-	rec := child.GetRecording()
+	// Collect the recording outside of s' lock, to avoid locking the parent and
+	// the child at the same time (to not have to think about deadlocks).
+	var rec Recording
+	var events []*tracingpb.StructuredRecord
+	var verbose bool
+	if s.recordingType() == RecordingVerbose {
+		verbose = true
+		rec = child.GetRecording()
+	} else {
+		verbose = false
+		events = make([]*tracingpb.StructuredRecord, 0, 3)
+		events = child.getStructuredEventsRecursively(events)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.recordFinishedChildrenLocked(rec)
+	if verbose {
+		s.recordFinishedChildrenLocked(rec)
+	} else {
+		for i := range events {
+			s.recordInternalLocked(events[i], &s.mu.recording.structured)
+		}
+	}
 
 	l := len(s.mu.recording.openChildren)
 	for i, c := range s.mu.recording.openChildren {
@@ -547,11 +675,8 @@ func (s *crdbSpan) SetVerboseRecursively(to bool) {
 	}
 
 	s.mu.Lock()
-	children := make([]*crdbSpan, len(s.mu.recording.openChildren))
-	copy(children, s.mu.recording.openChildren)
-	s.mu.Unlock()
-
-	for _, child := range children {
+	defer s.mu.Unlock()
+	for _, child := range s.mu.recording.openChildren {
 		child.SetVerboseRecursively(to)
 	}
 }
