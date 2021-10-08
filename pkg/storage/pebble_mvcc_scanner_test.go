@@ -205,17 +205,20 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		GlobalUncertaintyLimit: ts1,
 	}
 	val := roachpb.Value{RawBytes: bytes.Repeat([]byte("v"), 1000)}
-	batch := eng.NewBatch()
-	for i := 0; i < 10; i++ {
-		key := makeKey(nil, i)
-		require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
-	}
-	require.NoError(t, batch.Commit(true))
-	batch.Close()
+	func() {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < 10; i++ {
+			key := makeKey(nil, i)
+			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
+		}
+		require.NoError(t, batch.Commit(true))
+	}()
 
 	// iterator that can span over all the written keys.
 	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	defer iter.Close()
 
 	// Narrow scan succeeds with a budget of 6000.
 	scanner := &pebbleMVCCScanner{
