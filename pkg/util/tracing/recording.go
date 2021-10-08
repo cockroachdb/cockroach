@@ -215,22 +215,20 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), l.Time, lastLog.Timestamp))
 	}
 
-	// If the span was verbose then the Structured events would have been
-	// stringified and included in the Logs above. If the span was not verbose
-	// we should add the Structured events now.
-	if !isVerbose(sp) {
-		sp.Structured(func(sr *types.Any, t time.Time) {
-			str, err := MessageToJSONString(sr, true /* emitDefaults */)
-			if err != nil {
-				return
-			}
-			lastLog := ownLogs[len(ownLogs)-1]
-			var sb redact.StringBuilder
-			sb.SafeString("structured:")
-			_, _ = sb.WriteString(str)
-			ownLogs = append(ownLogs, conv(sb.RedactableString(), t, lastLog.Timestamp))
-		})
-	}
+	// If the span was verbose at the time when the structured event was recorded,
+	// then the Structured events will also have been stringified and included in
+	// the Logs above.
+	sp.Structured(func(sr *types.Any, t time.Time) {
+		str, err := MessageToJSONString(sr, true /* emitDefaults */)
+		if err != nil {
+			return
+		}
+		lastLog := ownLogs[len(ownLogs)-1]
+		var sb redact.StringBuilder
+		sb.SafeString("structured:")
+		_, _ = sb.WriteString(str)
+		ownLogs = append(ownLogs, conv(sb.RedactableString(), t, lastLog.Timestamp))
+	})
 
 	childSpans := make([][]traceLogData, 0)
 	for _, osp := range r {
