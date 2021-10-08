@@ -41,7 +41,8 @@ type CommonSQLExecDetails struct {
 	NumRetries uint32 `protobuf:"varint,6,opt,name=num_retries,json=numRetries,proto3" json:",omitempty"`
 	// Whether the query contains a full table scan.
 	FullTableScan bool `protobuf:"varint,7,opt,name=full_table_scan,json=fullTableScan,proto3" json:",omitempty"`
-	// Whether the query contains a full secondary index scan.
+	// Whether the query contains a full secondary index scan of a non-partial
+	// index.
 	FullIndexScan bool `protobuf:"varint,8,opt,name=full_index_scan,json=fullIndexScan,proto3" json:",omitempty"`
 	// The sequence number of the SQL transaction inside its session.
 	TxnCounter uint32 `protobuf:"varint,9,opt,name=txn_counter,json=txnCounter,proto3" json:",omitempty"`

@@ -37,7 +37,8 @@ message CommonSQLExecDetails {
   uint32 num_retries = 6 [(gogoproto.jsontag) = ",omitempty"];
   // Whether the query contains a full table scan.
   bool full_table_scan = 7 [(gogoproto.jsontag) = ",omitempty"];
-  // Whether the query contains a full secondary index scan.
+  // Whether the query contains a full secondary index scan of a non-partial
+  // index.
   bool full_index_scan = 8 [(gogoproto.jsontag) = ",omitempty"];
   // The sequence number of the SQL transaction inside its session.
   uint32 txn_counter = 9 [(gogoproto.jsontag) = ",omitempty"];

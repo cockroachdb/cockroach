@@ -660,9 +660,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	isUnfiltered := scan.IsUnfiltered(md)
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
-	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
+	if !tab.IsVirtualTable() && isUnfiltered {
 		stats := scan.Relational().Stats
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
