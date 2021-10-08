@@ -24,15 +24,15 @@ func Now() time.Time {
 }
 
 // Since returns the time elapsed since t.
-// It is shorthand for Now().Sub(t).
+// It is shorthand for Now().Sub(t), but more efficient.
 func Since(t time.Time) time.Duration {
-	return Now().Sub(t)
+	return time.Since(t)
 }
 
 // Until returns the duration until t.
-// It is shorthand for t.Sub(Now()).
+// It is shorthand for t.Sub(Now()), but more efficient.
 func Until(t time.Time) time.Duration {
-	return t.Sub(Now())
+	return time.Until(t)
 }
 
 // UnixEpoch represents the Unix epoch, January 1, 1970 UTC.
