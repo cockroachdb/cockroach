@@ -1415,7 +1415,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ctx,
 		stop.TaskOpts{
 			TaskName:   "kv.DistSender: sending partial batch",
-			ChildSpan:  true,
+			SpanOpt:    stop.ChildSpan,
 			Sem:        ds.asyncSenderSem,
 			WaitForSem: false,
 		},
