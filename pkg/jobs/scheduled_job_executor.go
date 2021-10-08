@@ -54,8 +54,8 @@ type ScheduledJobExecutor interface {
 	// GetCreateScheduleStatement returns a `CREATE SCHEDULE` statement that is
 	// functionally equivalent to the statement that led to the creation of
 	// the passed in `schedule`.
-	GetCreateScheduleStatement(ctx context.Context, env scheduledjobs.JobSchedulerEnv, txn *kv.Txn,
-		schedule *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
+	GetCreateScheduleStatement(ctx context.Context, env scheduledjobs.JobSchedulerEnv,
+		txn *kv.Txn, sj *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
 }
 
 // ScheduledJobController is an interface describing hooks that will execute
