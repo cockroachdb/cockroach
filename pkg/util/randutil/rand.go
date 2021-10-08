@@ -56,10 +56,11 @@ func NewTestPseudoRand() (*rand.Rand, int64) {
 	return rng, seed
 }
 
-// NewTestRandFromGlobalSeed returns an instance of math/rand.Rand seeded from
-// the seed set globally.
-func NewTestRandFromGlobalSeed() (*rand.Rand, int64) {
-	return rand.New(rand.NewSource(globalSeed)), globalSeed
+// NewTestRand returns an instance of math/rand.Rand seeded from the global
+// rand. This rand.Rand is useful in testing for deterministic behavior.
+func NewTestRand() (*rand.Rand, int64) {
+	seed := rand.Int63()
+	return rand.New(rand.NewSource(seed)), seed
 }
 
 // RandIntInRange returns a value in [min, max)

@@ -32,15 +32,6 @@ func TestPseudoRand(t *testing.T) {
 	}
 }
 
-func TestNewTestRandFromGlobalSeed(t *testing.T) {
-	numbers := make(map[int]bool)
-	rand1, _ := randutil.NewTestRandFromGlobalSeed()
-	rand2, _ := randutil.NewTestRandFromGlobalSeed()
-	if numbers[rand1.Int()] != numbers[rand2.Int()] {
-		t.Errorf("expected numbers to be equal; got different")
-	}
-}
-
 func TestRandIntInRange(t *testing.T) {
 	rand, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
