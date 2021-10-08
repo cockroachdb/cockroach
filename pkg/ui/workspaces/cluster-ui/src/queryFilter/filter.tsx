@@ -236,7 +236,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  isOptionSelected = (option: string, field: string) => {
+  isOptionSelected = (option: string, field: string): boolean => {
     const selection = field.split(",");
     if (selection.length > 0 && selection.includes(option)) return true;
     return false;
