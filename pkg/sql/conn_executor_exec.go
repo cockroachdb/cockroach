@@ -694,8 +694,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
 	stmtTraceThreshold := traceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
 	if !alreadyRecording && stmtTraceThreshold > 0 {
-		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer, tracing.WithForceRealSpan())
-		stmtThresholdSpan.SetVerbose(true)
+		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer, tracing.WithRecording(tracing.RecordingVerbose))
 	}
 
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
