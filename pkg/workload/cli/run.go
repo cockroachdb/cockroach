@@ -47,6 +47,7 @@ var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on er
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
+var countErrors = runFlags.Bool("count-errors", false, "If true, unsuccessful operations count towards --max-ops limit.")
 var duration = runFlags.Duration("duration", 0,
 	"The duration to run (in addition to --ramp). If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init. DEPRECATED: Use workload init instead.")
@@ -241,7 +242,8 @@ func SetCmdDefaults(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-// numOps keeps a global count of successful operations.
+// numOps keeps a global count of successful operations (if countErrors is
+// false) or of all operations (if countErrors is true).
 var numOps uint64
 
 // workerRun is an infinite loop in which the worker continuously attempts to
@@ -278,7 +280,11 @@ func workerRun(
 				return
 			}
 			errCh <- err
-			continue
+			if !*countErrors {
+				// Continue to the next iteration of the infinite loop only if
+				// we are not counting the errors.
+				continue
+			}
 		}
 
 		v := atomic.AddUint64(&numOps, 1)
