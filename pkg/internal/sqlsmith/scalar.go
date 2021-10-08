@@ -73,6 +73,15 @@ func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
 	return makeBoolExprContext(s, emptyCtx, refs)
 }
 
+func makeBoolExprPlaceholder(s *Smither, refs colRefs) (tree.Expr, []interface{}) {
+	expr := makeBoolExprContext(s, emptyCtx, refs)
+
+	// Replace constants with placeholders if the type is numeric or bool.
+	visitor := tree.ReplaceDatumPlaceholderVisitor{}
+	exprFmt := expr.Walk(&visitor)
+	return exprFmt, visitor.Args
+}
+
 func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.boolExprSampler, s, ctx, types.Bool, refs)
 }

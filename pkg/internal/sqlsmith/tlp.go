@@ -33,7 +33,7 @@ import (
 // possible to use TLP to test other aggregations, GROUP BY, and HAVING, which
 // have all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
-func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
+func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []interface{}) {
 	// Set disableImpureFns to true so that generated predicates are immutable.
 	originalDisableImpureFns := s.disableImpureFns
 	s.disableImpureFns = true
@@ -41,16 +41,44 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
-	switch tlpType := rand.Intn(4); tlpType {
+	switch tlpType := rand.Intn(5); tlpType {
 	case 0:
-		return s.generateWhereTLP()
+		partitioned, unpartitioned = s.generateWhereTLP()
 	case 1:
-		return s.generateOuterJoinTLP()
+		partitioned, unpartitioned = s.generateOuterJoinTLP()
 	case 2:
-		return s.generateInnerJoinTLP()
+		partitioned, unpartitioned = s.generateInnerJoinTLP()
+	case 3:
+		partitioned, unpartitioned = s.generateAggregationTLP()
 	default:
-		return s.generateAggregationTLP()
+		return s.generatePrepareTLP()
 	}
+	return partitioned, unpartitioned, nil
+}
+
+func (s *Smither) generatePrepareTLP() (unpartitioned, partitioned string, args []interface{}) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table, _, _, cols, ok := s.getSchemaTable()
+	if !ok {
+		panic(errors.AssertionFailedf("failed to find random table"))
+	}
+	table.Format(f)
+	tableName := f.CloseAndGetString()
+
+	unpartitioned = fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	pred, args := makeBoolExprPlaceholder(s, cols)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
+	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
+	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+
+	partitioned = fmt.Sprintf("(%s) UNION ALL (%s) UNION ALL (%s)", part1, part2, part3)
+
+	return unpartitioned, partitioned, args
 }
 
 // generateWhereTLP returns two SQL queries as strings that can be used by the

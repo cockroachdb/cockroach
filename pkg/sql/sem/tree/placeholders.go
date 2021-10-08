@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -210,3 +211,29 @@ func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	}
 	return false
 }
+
+// ReplaceDatumPlaceholderVisitor replaces occurrences of numeric and bool Datum
+// expressions with placeholders, and updates Args with the corresponding Datum
+// values. This is used to prepare and execute a statement with placeholders.
+type ReplaceDatumPlaceholderVisitor struct{
+	Args []interface{}
+}
+
+var _ Visitor = &ReplaceDatumPlaceholderVisitor{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v *ReplaceDatumPlaceholderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case Datum:
+		if t.ResolvedType().IsNumeric() || t.ResolvedType() == types.Bool {
+			v.Args = append(v.Args, expr)
+			placeholder, _ := NewPlaceholder(strconv.Itoa(len(v.Args)))
+			return false, placeholder
+		}
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (*ReplaceDatumPlaceholderVisitor) VisitPost(expr Expr) Expr { return expr }
