@@ -96,7 +96,7 @@ func TestSampleReservoir(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 
 	for _, n := range []int{10, 100, 1000, 10000} {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		ranks := make([]int, n)
 		for i := range ranks {
 			ranks[i] = rng.Int()

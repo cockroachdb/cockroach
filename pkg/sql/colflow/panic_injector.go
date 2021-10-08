@@ -44,7 +44,7 @@ const (
 
 // newPanicInjector creates a new panicInjector.
 func newPanicInjector(input colexecop.Operator) colexecop.Operator {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	return &panicInjector{
 		OneInputNode: colexecop.OneInputNode{Input: input},
 		rng:          rng,

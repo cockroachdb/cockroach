@@ -124,7 +124,7 @@ func TestCompare(t *testing.T) {
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
 			t.Logf("starting test: %s", confName)
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			setup := config.setup(rng)
 			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
 

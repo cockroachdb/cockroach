@@ -757,7 +757,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	testWithTargetSize := func(t *testing.T, targetSize uint64) {
 		e, cleanup := mkEngine(t)
 		defer cleanup()
-		rnd, _ := randutil.NewPseudoRand()
+		rnd, _ := randutil.NewTestRand()
 		numKeys := getNumKeys(t, rnd, targetSize)
 		keys, timestamps := mkData(t, e, rnd, numKeys)
 		var (

@@ -377,7 +377,7 @@ func TestHLCTimestampDecimalRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		ts := hlc.Timestamp{WallTime: rng.Int63(), Logical: rng.Int31()}
 		dec := tree.TimestampToDecimalDatum(ts)
