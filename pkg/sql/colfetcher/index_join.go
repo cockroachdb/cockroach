@@ -210,7 +210,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 // result batches. TODO(drewk): once the Streamer work is finished, the fetcher
 // logic will be able to control result size without sacrificing parallelism, so
 // we can remove this limit.
-const inputBatchSizeLimit = 4 << 20 /* 4 MB */
+var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
+	"ColIndexJoin-batch-size",
+	4<<20, /* 4 MB */
+	1,     /* min */
+	4<<20, /* max */
+))
 
 // findEndIndex returns an index endIdx into s.batch such that generating spans
 // for rows in the interval [s.startIdx, endIdx) will get as close to the memory
