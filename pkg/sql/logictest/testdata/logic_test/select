@@ -740,7 +740,7 @@ SET disallow_full_table_scans = true;
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of partial indexes are allowed.
@@ -780,7 +780,7 @@ ALTER TABLE t_disallow_scans INJECT STATISTICS '[
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Internal statements should still be allowed with this setting.
@@ -808,7 +808,7 @@ SET large_full_scan_rows = 2
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Cleanup
