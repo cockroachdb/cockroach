@@ -99,9 +99,15 @@ func ShowCreateView(
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
+	multiCol := len(desc.PublicColumns()) > 1
 	for i, col := range desc.PublicColumns() {
 		if i > 0 {
-			f.WriteString(",\n\t")
+			f.WriteString(",")
+		}
+		// We need this check to prevent views with only one column from
+		// printing on multiple lines.
+		if multiCol {
+			f.WriteString("\n\t")
 		}
 		name := col.GetName()
 		f.FormatNameP(&name)
@@ -127,7 +133,7 @@ func ShowCreateView(
 		}
 		// Pretty things up a bit more by adding new lines after each column.
 		sequenceReplacedViewQuery = strings.Replace(
-			sequenceReplacedViewQuery, ",", ",\n\t\t", -1)
+			sequenceReplacedViewQuery, ", ", ",\n\t\t", -1)
 		f.WriteString(sequenceReplacedViewQuery)
 	}
 
