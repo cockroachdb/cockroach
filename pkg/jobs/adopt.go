@@ -390,7 +390,7 @@ func (r *Registry) runJob(
 	// A new root span will be created on every resumption of the job.
 	var spanOptions []tracing.SpanOption
 	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
-		spanOptions = append(spanOptions, tracing.WithForceRealSpan())
+		spanOptions = append(spanOptions, tracing.WithRecording(tracing.RecordingStructured))
 	}
 	// TODO(ajwerner): Move this writing up the trace ID down into
 	// stepThroughStateMachine where we're already often (and soon with

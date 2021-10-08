@@ -188,7 +188,7 @@ func TestImportRemoteSpans(t *testing.T) {
 	for _, verbose := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
 			tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
-			sp := tr.StartSpan("root")
+			sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 			ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
 			ch.RecordStructured(&types.Int32Value{Value: 4})
 			if verbose {
@@ -220,7 +220,7 @@ func TestImportRemoteSpans(t *testing.T) {
 
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 
 	sp.RecordStructured(&types.Int32Value{Value: 4})
@@ -248,7 +248,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	clock := timeutil.NewManualTime(now)
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
 
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 
 	pad := func(i int) string { return fmt.Sprintf("%06d", i) }
@@ -421,9 +421,9 @@ func TestSpanReset(t *testing.T) {
 	require.False(t, found)
 }
 
-func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
+func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
@@ -441,10 +441,10 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 // track at most maxChildrenPerSpan direct children.
 func TestSpanMaxChildren(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithForceRealSpan())
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 	for i := 0; i < maxChildrenPerSpan+123; i++ {
-		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
+		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp))
 		exp := i + 1
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
@@ -567,7 +567,7 @@ func TestStructureRecording(t *testing.T) {
 			for _, finishCh2 := range []bool{true, false} {
 				t.Run(fmt.Sprintf("finish2=%t", finishCh2), func(t *testing.T) {
 					tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
-					sp := tr.StartSpan("root")
+					sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 					ch1 := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 					ch2 := tr.StartSpan("grandchild", WithParentAndAutoCollection(ch1))
 					for i := int32(0); i < 5; i++ {

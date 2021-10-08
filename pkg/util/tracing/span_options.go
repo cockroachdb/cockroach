@@ -11,6 +11,8 @@
 package tracing
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"go.opentelemetry.io/otel/attribute"
@@ -52,6 +54,12 @@ type spanOptions struct {
 	ForceRealSpan bool                   // see WithForceRealSpan
 	SpanKind      oteltrace.SpanKind     // see WithSpanKind
 	Sterile       bool                   // see WithSterile
+
+	// recordingTypeExplicit is set if the WithRecording() option was used. In
+	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
+	// not set, recordingType() looks at the parent.
+	recordingTypeExplicit bool
+	recordingTypeOpt      RecordingType
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
@@ -73,6 +81,10 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 }
 
 func (opts *spanOptions) recordingType() RecordingType {
+	if opts.recordingTypeExplicit {
+		return opts.recordingTypeOpt
+	}
+
 	recordingType := RecordingOff
 	if opts.Parent != nil && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
@@ -238,13 +250,44 @@ var forceRealSpanSingleton = SpanOption(forceRealSpanOption{})
 //
 // When tracing is disabled all spans are noopSpans; these spans aren't
 // capable of recording, so this option should be passed to StartSpan if the
-// caller wants to be able to call StartRecording on the resulting Span.
+// caller wants to be able to call SetVerbose(true) on the span later. If the
+// span should be recording from the beginning, use WithRecording() instead.
 func WithForceRealSpan() SpanOption {
 	return forceRealSpanSingleton
 }
 
 func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 	opts.ForceRealSpan = true
+	return opts
+}
+
+type recordingSpanOption struct {
+	recType RecordingType
+}
+
+var structuredRecordingSingleton = SpanOption(recordingSpanOption{recType: RecordingStructured})
+var verboseRecordingSingleton = SpanOption(recordingSpanOption{recType: RecordingVerbose})
+
+// WithRecording configures the span to record in the given mode.
+//
+// The recording mode can be changed later with SetVerbose().
+func WithRecording(recType RecordingType) SpanOption {
+	switch recType {
+	case RecordingStructured:
+		return structuredRecordingSingleton
+	case RecordingVerbose:
+		return verboseRecordingSingleton
+	case RecordingOff:
+		panic("invalid recording option: RecordingOff")
+	default:
+		recCpy := recType // copy excaping to the heap
+		panic(fmt.Sprintf("invalid recording option: %d", recCpy))
+	}
+}
+
+func (o recordingSpanOption) apply(opts spanOptions) spanOptions {
+	opts.recordingTypeExplicit = true
+	opts.recordingTypeOpt = o.recType
 	return opts
 }
 
