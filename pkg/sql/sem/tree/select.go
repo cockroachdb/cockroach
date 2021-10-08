@@ -90,6 +90,15 @@ type SelectClause struct {
 
 // Format implements the NodeFormatter interface.
 func (node *SelectClause) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(FmtSummary) {
+		ctx.WriteString("SELECT")
+		if len(node.From.Tables) > 0 {
+			ctx.WriteByte(' ')
+			ctx.FormatNode(&node.From)
+		}
+		return
+	}
 	if node.TableSelect {
 		ctx.WriteString("TABLE ")
 		ctx.FormatNode(node.From.Tables[0])

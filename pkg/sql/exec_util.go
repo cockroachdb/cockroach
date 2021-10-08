@@ -3049,6 +3049,18 @@ func formatStatementHideConstants(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
+// formatStatementSummary formats the statement using tree.FmtSummary
+// and tree.FmtHideConstants. This returns a summarized version of the
+// query. It does *not* anonymize the statement, since the result will
+// still contain names and identifiers.
+func formatStatementSummary(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
+	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+	return tree.AsStringWithFlags(ast, fmtFlags)
+}
+
 // DescsTxn is a convenient method for running a transaction on descriptors
 // when you have an ExecutorConfig.
 func DescsTxn(
