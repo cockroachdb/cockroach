@@ -49,13 +49,6 @@ func NewPseudoRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
-// NewTestPseudoRand wraps NewTestRand logging the seed for recovery later.
-func NewTestPseudoRand() (*rand.Rand, int64) {
-	rng, seed := NewPseudoRand()
-	log.Printf("random seed: %v", seed)
-	return rng, seed
-}
-
 // NewTestRand returns an instance of math/rand.Rand seeded from the global
 // rand. This rand.Rand is useful in testing for deterministic behavior.
 func NewTestRand() (*rand.Rand, int64) {

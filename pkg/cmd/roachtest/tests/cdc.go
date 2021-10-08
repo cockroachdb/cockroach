@@ -92,7 +92,7 @@ func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 
 const randomSettingPercent = 0.50
 
-var rng, _ = randutil.NewTestPseudoRand()
+var rng, _ = randutil.NewTestRand()
 
 func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
 	if rng.Float64() < randomSettingPercent {

@@ -91,7 +91,7 @@ func TestBlockingBuffer(t *testing.T) {
 
 	// Start adding KVs to the buffer until we block.
 	wg.GoCtx(func(ctx context.Context) error {
-		rnd, _ := randutil.NewTestPseudoRand()
+		rnd, _ := randutil.NewTestRand()
 		for {
 			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
@@ -134,7 +134,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 
 	// Start adding KVs to the buffer until we block.
 	wg.GoCtx(func(ctx context.Context) error {
-		rnd, _ := randutil.NewTestPseudoRand()
+		rnd, _ := randutil.NewTestRand()
 		for {
 			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
