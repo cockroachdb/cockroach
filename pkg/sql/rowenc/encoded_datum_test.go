@@ -127,7 +127,7 @@ func TestEncDatumNull(t *testing.T) {
 	}
 
 	var alloc rowenc.DatumAlloc
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Generate random EncDatums (some of which are null), and verify that a datum
 	// created from its encoding has the same IsNull() value.
@@ -208,7 +208,7 @@ func TestEncDatumCompare(t *testing.T) {
 	a := &rowenc.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for _, typ := range types.OidToType {
 		switch typ.Family() {
@@ -267,7 +267,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	var alloc rowenc.DatumAlloc
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for test := 0; test < 20; test++ {
 		var err error
 		// Generate a set of random datums.
@@ -470,7 +470,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
 			colTypes := randgen.RandColumnTypes(rng, cols)
@@ -509,7 +509,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 }
 
 func TestValueEncodeDecodeTuple(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]*types.T, 1000)
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())

@@ -228,7 +228,7 @@ func TestSlice(t *testing.T) {
 }
 
 func TestNullsOr(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	randomNulls := NewNulls(BatchSize())
 	for i := 0; i < BatchSize(); i++ {
 		if rng.Float64() < 0.5 {

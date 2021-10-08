@@ -45,7 +45,7 @@ func uploadFile(
 	db *kv.DB,
 ) ([]byte, error) {
 	data := make([]byte, fileSize)
-	randGen, _ := randutil.NewPseudoRand()
+	randGen, _ := randutil.NewTestRand()
 	randutil.ReadTestdataBytes(randGen, data)
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -279,7 +279,7 @@ func TestReadWriteFile(t *testing.T) {
 		fileSize := 1024
 
 		data := make([]byte, fileSize)
-		randGen, _ := randutil.NewPseudoRand()
+		randGen, _ := randutil.NewTestRand()
 		randutil.ReadTestdataBytes(randGen, data)
 
 		writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize)

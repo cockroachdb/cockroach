@@ -39,7 +39,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rRand, _ := randutil.NewPseudoRand()
+	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	// Some arbitrary data sizes we'll load into a table and then use to derive

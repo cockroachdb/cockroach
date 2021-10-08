@@ -196,7 +196,7 @@ func prettyByteSlice(b [][]byte) string {
 func TestBytesRefImpl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	const (
 		maxNumberOfCalls = 64
@@ -454,7 +454,7 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Abbreviated", func(t *testing.T) {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 
 		// Create a vector with random bytes values.
 		b := NewBytes(250)
@@ -489,7 +489,7 @@ func TestProportionalSize(t *testing.T) {
 	// Use a large value so that the bytes vector needs to expand.
 	value := make([]byte, 3*BytesInitialAllocationFactor)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// We need a number divisible by 4.
 	fullCapacity := (1 + rng.Intn(100)) * 4
 	b := NewBytes(fullCapacity)
@@ -516,7 +516,7 @@ const letters = "abcdefghijklmnopqrstuvwxyz"
 func TestToArrowSerializationFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nullChance := 0.2
 	maxStringLength := 10
 	numElements := 1 + rng.Intn(BatchSize())

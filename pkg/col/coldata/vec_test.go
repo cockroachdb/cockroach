@@ -25,7 +25,7 @@ import (
 func TestMemColumnWindow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	c := coldata.NewMemColumn(types.Int, coldata.BatchSize(), coldata.StandardColumnFactory)
 
@@ -359,7 +359,7 @@ func TestCopyNulls(t *testing.T) {
 }
 
 func TestCopyWithReorderedSource(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var typ = types.Int
 
 	for _, hasNulls := range []bool{false, true} {
@@ -397,7 +397,7 @@ func TestCopyWithReorderedSource(t *testing.T) {
 }
 
 func BenchmarkAppend(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {
@@ -444,7 +444,7 @@ func BenchmarkAppend(b *testing.B) {
 }
 
 func BenchmarkCopy(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {

@@ -204,7 +204,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	// in this test.
 	unblockEventsChan := make(chan struct{})
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
 	tu := newTestUtils(ctx)
@@ -316,7 +316,7 @@ func TestRouterOutputNext(t *testing.T) {
 	// never write to it in this test.
 	unblockedEventsChan := make(chan struct{})
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
 	tu := newTestUtils(ctx)
@@ -503,7 +503,7 @@ func TestRouterOutputRandom(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var (
 		maxValues        = coldata.BatchSize() * 4
@@ -876,7 +876,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	sel := coldatatestutils.RandomSel(rng, coldata.BatchSize(), rng.Float64())
 
@@ -950,7 +950,7 @@ func TestHashRouterRandom(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var (
 		maxValues        = coldata.BatchSize() * 4
@@ -1077,14 +1077,14 @@ func TestHashRouterRandom(t *testing.T) {
 					switch injectErrorScenario {
 					case hashRouterOutputErrorOnAddBatch:
 						op.testingKnobs.addBatchTestInducedErrorCb = func() error {
-							addBatchRng, _ := randutil.NewPseudoRand()
+							addBatchRng, _ := randutil.NewTestRand()
 							// Sleep between 0 and ~5 milliseconds.
 							time.Sleep(time.Microsecond * time.Duration(addBatchRng.Intn(5000)))
 							return errors.New(addBatchErrMsg)
 						}
 					case hashRouterOutputErrorOnNext:
 						op.testingKnobs.nextTestInducedErrorCb = func() error {
-							nextRng, _ := randutil.NewPseudoRand()
+							nextRng, _ := randutil.NewTestRand()
 							// Sleep between 0 and ~5 milliseconds.
 							time.Sleep(time.Microsecond * time.Duration(nextRng.Intn(5000)))
 							return errors.New(nextErrMsg)
@@ -1129,7 +1129,7 @@ func TestHashRouterRandom(t *testing.T) {
 				}{}
 				for i := range outputsAsOps {
 					go func(i int) {
-						outputRng, _ := randutil.NewPseudoRand()
+						outputRng, _ := randutil.NewTestRand()
 						outputsAsOps[i].Init(ctx)
 						for {
 							var b coldata.Batch

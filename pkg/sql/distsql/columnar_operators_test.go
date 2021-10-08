@@ -105,7 +105,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 20
 	nRows := 100
 	nAggFnsToTest := 5
@@ -345,7 +345,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 10
 	nRows := 10
 	maxCols := 3
@@ -474,7 +474,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 5
 	nRows := 8 * coldata.BatchSize()
 	maxCols := 5
@@ -549,7 +549,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 5
 	nRows := 5 * coldata.BatchSize() / 4
 	maxCols := 3
@@ -661,7 +661,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		},
 	}
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -860,7 +860,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		},
 	}
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -1079,7 +1079,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 
 	const manyRowsProbability = 0.05
 	const fewRows = 10

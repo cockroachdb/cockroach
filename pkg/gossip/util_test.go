@@ -78,7 +78,7 @@ func assertModified(
 
 func TestSystemConfigDeltaFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	df := MakeSystemConfigDeltaFilter(nil)
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
@@ -108,7 +108,7 @@ func TestSystemConfigDeltaFilter(t *testing.T) {
 
 func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	df := MakeSystemConfigDeltaFilter(keyFromInt(12))
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
@@ -134,7 +134,7 @@ func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
 
 func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
 	df := MakeSystemConfigDeltaFilter(keyFromInt(1))
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Create two configs.
 	cfg1, cfg2 := config.NewSystemConfig(zonepb.DefaultZoneConfigRef()), config.NewSystemConfig(zonepb.DefaultZoneConfigRef())

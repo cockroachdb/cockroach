@@ -29,7 +29,7 @@ import (
 
 func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 	const maxTyps = 16
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
@@ -87,7 +87,7 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for run := 0; run < 10; run++ {
 		var typs []*types.T
 		var src coldata.Batch
@@ -137,7 +137,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	// to in order to reduce benchmark noise.
 	const fixedLen = 64
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	typs := []*types.T{
 		types.Bool,

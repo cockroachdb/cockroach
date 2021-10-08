@@ -39,7 +39,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(4)
 	var typs []*types.T
 	for len(typs) < nCols {
@@ -101,7 +101,7 @@ func BenchmarkMaterializer(b *testing.B) {
 		EvalCtx: &evalCtx,
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nBatches := 10
 	nRows := nBatches * coldata.BatchSize()
 	for _, typ := range []*types.T{types.Int, types.Float, types.Bytes} {

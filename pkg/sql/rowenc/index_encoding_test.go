@@ -141,7 +141,7 @@ func decodeIndex(
 }
 
 func TestIndexKey(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var a DatumAlloc
 
 	tests := []indexKeyTest{
@@ -503,7 +503,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
@@ -644,7 +644,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 

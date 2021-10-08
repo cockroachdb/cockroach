@@ -25,7 +25,7 @@ import (
 )
 
 func TestDecodeTableValueToCol(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var (
 		da           rowenc.DatumAlloc
 		buf, scratch []byte

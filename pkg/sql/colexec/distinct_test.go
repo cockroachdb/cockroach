@@ -366,7 +366,7 @@ func (tc *distinctTestCase) runTests(
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
 		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
@@ -398,7 +398,7 @@ func TestDistinct(t *testing.T) {
 func TestUnorderedDistinctRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(3)
 	typs := make([]*types.T, nCols)
 	distinctCols := make([]uint32, nCols)
@@ -446,7 +446,7 @@ func runDistinctBenchmarks(
 	namePrefix string,
 	isExternal bool,
 ) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const nCols = 2
 	const bytesValueLength = 8
 	distinctCols := []uint32{0, 1}

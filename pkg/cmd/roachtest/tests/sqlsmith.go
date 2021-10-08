@@ -83,7 +83,7 @@ func registerSQLSmith(r registry.Registry) {
 			fmt.Fprint(smithLog, "\n\n")
 		}
 
-		rng, seed := randutil.NewPseudoRand()
+		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, t.Cockroach(), "./cockroach")

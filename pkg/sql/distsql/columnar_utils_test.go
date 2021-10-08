@@ -75,7 +75,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
 	rng := args.rng
 	if rng == nil {
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 	}
 	if rng.Float64() < 0.5 {
 		randomBatchSize := 1 + rng.Intn(3)

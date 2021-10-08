@@ -78,7 +78,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -382,7 +382,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			Direction: encoding.Descending,
 		},
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// Use random types and random rows.
 	types := randgen.RandSortingTypes(rng, numCols)
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)

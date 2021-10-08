@@ -60,7 +60,7 @@ func TestSpansSortAndMerge(t *testing.T) {
 	// creating a constraint per span and calculating the union. We generate
 	// random cases and cross-check.
 	for testIdx := 0; testIdx < 100; testIdx++ {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		n := 1 + rng.Intn(10)
 		var spans Spans
 		for i := 0; i < n; i++ {

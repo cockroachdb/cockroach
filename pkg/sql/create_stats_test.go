@@ -91,7 +91,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 			goroutineErr = err
 			return
 		}
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		for {
 			select {
 			case <-stopCh:
