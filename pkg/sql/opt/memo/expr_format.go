@@ -422,6 +422,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoZigzagJoin {
 				b.WriteString(" no-zigzag-join")
 			}
+			if private.Flags.NoFullScan {
+				b.WriteString(" no-full-scan")
+			}
 			tp.Child(b.String())
 		}
 		if private.Locking != nil {
