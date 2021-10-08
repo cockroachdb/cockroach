@@ -1556,6 +1556,14 @@ func restorePlanHook(
 		}
 	}
 
+	var preserveGrantsForFn func() (string, error)
+	if restoreStmt.Options.PreserveGrantsFor != nil {
+		preserveGrantsForFn, err = p.TypeAsString(ctx, restoreStmt.Options.PreserveGrantsFor, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -1635,7 +1643,15 @@ func restorePlanHook(
 				return err
 			}
 		}
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, newDBName, endTime,
+
+		var preserveGrantsFor string
+		if preserveGrantsForFn != nil {
+			preserveGrantsFor, err = preserveGrantsForFn()
+			if err != nil {
+				return err
+			}
+		}
+		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, newDBName, preserveGrantsFor, endTime,
 			resultsCh)
 	}
 
@@ -1760,6 +1776,7 @@ func doRestorePlan(
 	kms []string,
 	intoDB string,
 	newDBName string,
+	preserveGrantsFor string,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -2080,6 +2097,7 @@ func doRestorePlan(
 			Tenants:            tenants,
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
+			PreserveGrantsFor:  preserveGrantsFor,
 			Encryption:         encryption,
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,

@@ -1071,6 +1071,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRESERVE'
+	| 'PRESERVE_GRANTS_FOR'
 	| 'PRIORITY'
 	| 'PRIVILEGES'
 	| 'PUBLIC'
@@ -2131,6 +2132,7 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
+	| 'PRESERVE_GRANTS_FOR' '=' string_or_placeholder
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

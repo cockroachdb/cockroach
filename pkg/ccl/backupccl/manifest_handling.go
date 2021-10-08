@@ -655,7 +655,7 @@ func checkForLatestFileInCollection(
 	return true, nil
 }
 
-// resolveBackupManifests resolves a list of list of URIs that point to the
+// resolveBackupManifests resolves a list of URIs that point to the
 // incremental layers (each of which can be partitioned) of backups into the
 // actual backup manifests and metadata required to RESTORE. If only one layer
 // is explicitly provided, it is inspected to see if it contains "appended"

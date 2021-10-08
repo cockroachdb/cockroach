@@ -200,6 +200,7 @@ message RestoreDetails {
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
   reserved 13;
   repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
+  string preserve_grants_for = 22;
 
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 
@@ -251,7 +252,7 @@ message RestoreDetails {
   // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
   string debug_pause_on = 20;
 
-  // NEXT ID: 22.
+  // NEXT ID: 23.
 }
 
 message RestoreProgress {
