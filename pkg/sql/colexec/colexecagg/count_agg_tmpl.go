@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for count_agg.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
