@@ -315,7 +315,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ### `sensitive_table_access`
@@ -349,7 +349,7 @@ a table marked as audited.
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL Execution Log
@@ -390,7 +390,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## SQL Logical Schema Changes
@@ -1961,7 +1961,7 @@ set to a non-zero value, AND
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ### `txn_rows_read_limit`
@@ -2080,7 +2080,7 @@ the "slow query" condition.
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ### `txn_rows_read_limit_internal`
@@ -2257,7 +2257,7 @@ contains common SQL event/execution details.
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## Zone config events
