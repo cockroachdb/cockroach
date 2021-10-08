@@ -3537,7 +3537,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	_, tc, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{ExternalIODir: dir}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var backupDirs []string
 	var checksums []uint32
@@ -3629,7 +3629,7 @@ func TestBackupRestorePartitionedIncremental(t *testing.T) {
 	_, _, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 0, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{ExternalIODir: dir}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Each incremental backup is written to two different subdirectories in
 	// defaultDir and dc1Dir, respectively.
@@ -3712,7 +3712,7 @@ func TestBackupRestorePartitionedIncremental(t *testing.T) {
 func startBackgroundWrites(
 	stopper *stop.Stopper, sqlDB *gosql.DB, maxID int, wake chan<- struct{}, allowErrors *int32,
 ) error {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for {
 		select {
@@ -6202,7 +6202,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		allowRequest = make(chan struct{})
 		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
-		rRand, _ := randutil.NewPseudoRand()
+		rRand, _ := randutil.NewTestRand()
 		writeGarbage := func(from, to int) {
 			for i := from; i < to; i++ {
 				runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))

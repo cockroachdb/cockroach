@@ -37,7 +37,7 @@ func TestMemoryAllocations(t *testing.T) {
 	poolAllocSizes := []int64{1, 2, 9, 10, 11, 100}
 	preBudgets := []int64{0, 1, 2, 9, 10, 11, 100}
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()

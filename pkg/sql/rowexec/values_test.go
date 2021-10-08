@@ -30,7 +30,7 @@ import (
 
 func TestValuesProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, numRows := range []int{0, 1, 10, 13, 15} {
 		for _, numCols := range []int{0, 1, 3} {
 			t.Run(fmt.Sprintf("%d-%d", numRows, numCols), func(t *testing.T) {

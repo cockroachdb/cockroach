@@ -277,7 +277,7 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 func TestGenerateSubzoneSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	partitioningTests := allPartitioningTests(rng)
 	for _, test := range partitioningTests {
