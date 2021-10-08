@@ -1115,11 +1115,10 @@ func (p *planner) AlterDatabasePlacement(
 	if !p.EvalContext().SessionData().PlacementEnabled {
 		return nil, errors.WithHint(pgerror.New(
 			pgcode.FeatureNotSupported,
-			"ALTER DATABASE PLACEMENT requires that the session setting "+
-				"enable_multiregion_placement_policy is enabled",
+			"ALTER DATABASE PLACEMENT requires enabling the session setting "+
+				"enable_multiregion_placement_policy",
 		),
-			"to enable, enable the session setting or the cluster "+
-				"setting sql.defaults.multiregion_placement_policy.enabled",
+			`to enable, use SET enable_multiregion_placement_policy = "true"`,
 		)
 	}
 
