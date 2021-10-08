@@ -87,7 +87,10 @@ message RecordedSpan {
   // True if the span has been Finish()ed, false otherwise.
   bool finished = 13;
 
-  // StructuredRecords contains StructuredRecord events recorded in the span.
+  // StructuredRecords contains StructuredRecord events recorded either in this
+  // span, or in children spans that have finished while our span was not
+  // recording verbosely.
+  //
   // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
   // information about when this event occurred.
   // DeprecatedInternalStructured only stores the Payloads.
