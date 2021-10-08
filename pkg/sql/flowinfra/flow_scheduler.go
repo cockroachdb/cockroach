@@ -256,8 +256,6 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 // Start launches the main loop of the scheduler.
 func (fs *FlowScheduler) Start() {
 	ctx := fs.AnnotateCtx(context.Background())
-	// TODO(radu): we may end up with a few flows in the queue that will
-	// never be processed. Is that an issue?
 	_ = fs.stopper.RunAsyncTask(ctx, "flow-scheduler", func(context.Context) {
 		stopped := false
 		fs.mu.Lock()
@@ -266,11 +264,28 @@ func (fs *FlowScheduler) Start() {
 		quiesceCh := fs.stopper.ShouldQuiesce()
 
 		for {
-			if stopped && atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
-				// TODO(radu): somehow error out the flows that are still in the queue.
-				return
+			if stopped {
+				// Drain the queue.
+				if l := fs.mu.queue.Len(); l > 0 {
+					log.Infof(ctx, "abandoning %d flows that will never run", l)
+				}
+				for {
+					e := fs.mu.queue.Front()
+					if e == nil {
+						break
+					}
+					fs.mu.queue.Remove(e)
+					n := e.Value.(*flowWithCtx)
+					// TODO(radu): somehow send an error to whoever is waiting on this flow.
+					n.CleanupBeforeRun()
+				}
+
+				if atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
+					return
+				}
 			}
 			fs.mu.Unlock()
+
 			select {
 			case <-fs.flowDoneCh:
 				fs.mu.Lock()
@@ -305,6 +320,9 @@ func (fs *FlowScheduler) Start() {
 			case <-quiesceCh:
 				fs.mu.Lock()
 				stopped = true
+				if l := atomic.LoadInt32(&fs.atomics.numRunning); l != 0 {
+					log.Infof(ctx, "waiting for %d running flows", l)
+				}
 				// Inhibit this arm of the select so that we don't spin on it.
 				quiesceCh = nil
 			}
