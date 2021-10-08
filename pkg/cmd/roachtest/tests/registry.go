@@ -105,6 +105,7 @@ func RegisterTests(r registry.Registry) {
 	registerTPCC(r)
 	registerTPCDSVec(r)
 	registerTPCE(r)
+	registerTPCHConcurrency(r)
 	registerTPCHVec(r)
 	registerKVBench(r)
 	registerTypeORM(r)
