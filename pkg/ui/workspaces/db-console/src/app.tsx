@@ -29,6 +29,7 @@ import {
   rangeIDAttr,
   sessionAttr,
   statementAttr,
+  tabAttr,
   tableNameAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/NotFound";
@@ -59,6 +60,7 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
+import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import StatementsPage from "src/views/statements/statementsPage";
 import SessionsPage from "src/views/sessions/sessionsPage";
@@ -175,6 +177,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   path="/data-distribution"
                   component={DataDistributionPage}
+                />
+
+                {/* SQL activity */}
+                <Route exact path="/sql-activity" component={SQLActivityPage} />
+                <Route
+                  exact
+                  path={`/sql-activity/:${tabAttr}`}
+                  component={SQLActivityPage}
                 />
 
                 {/* statement statistics */}
