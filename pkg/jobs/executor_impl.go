@@ -94,6 +94,7 @@ func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 
 func (e *inlineScheduledJobExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	schedule *ScheduledJob,

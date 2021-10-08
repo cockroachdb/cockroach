@@ -61,6 +61,7 @@ func (s *statusTrackingExecutor) Metrics() metric.Struct {
 
 func (s *statusTrackingExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	schedule *ScheduledJob,

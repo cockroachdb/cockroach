@@ -264,6 +264,7 @@ func (n *recordScheduleExecutor) Metrics() metric.Struct {
 
 func (n *recordScheduleExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	schedule *ScheduledJob,
@@ -488,6 +489,7 @@ func (e *returnErrorExecutor) Metrics() metric.Struct {
 
 func (e *returnErrorExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	schedule *ScheduledJob,
@@ -671,6 +673,7 @@ func (e *txnConflictExecutor) Metrics() metric.Struct {
 
 func (e *txnConflictExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	schedule *ScheduledJob,

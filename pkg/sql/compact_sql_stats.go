@@ -245,6 +245,7 @@ func (e *scheduledSQLStatsCompactionExecutor) Metrics() metric.Struct {
 // GetCreateScheduleStatement implements the jobs.ScheduledJobExecutor interface.
 func (e *scheduledSQLStatsCompactionExecutor) GetCreateScheduleStatement(
 	_ context.Context,
+	_ interface{},
 	_ scheduledjobs.JobSchedulerEnv,
 	_ *kv.Txn,
 	_ *jobs.ScheduledJob,

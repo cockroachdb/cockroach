@@ -173,6 +173,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 
 func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
+	planHookState interface{},
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	sj *jobs.ScheduledJob,
@@ -274,14 +275,42 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		},
 	}
 
+	p, ok := planHookState.(sql.PlanHookState)
+	if !ok {
+		return "", errors.AssertionFailedf("unexpected PlanHookState type: %T", p)
+	}
+	toFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupNode.To), scheduleBackupOp)
+	if err != nil {
+		return "", err
+	}
+	destinations, err := toFn()
+	if err != nil {
+		return "", err
+	}
+
+	kmsURIsFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupNode.Options.EncryptionKMSURI), scheduleBackupOp)
+	if err != nil {
+		return "", err
+	}
+	kmsURIs, err := kmsURIsFn()
+	if err != nil {
+		return "", err
+	}
+
+	redactedBackupNode, err := GetRedactedBackupNode(backupNode.Backup, destinations,
+		nil /* incrementalFrom */, kmsURIs, "", false /* hasBeenPlanned */)
+	if err != nil {
+		return "", err
+	}
+
 	node := &tree.ScheduledBackup{
 		ScheduleLabelSpec: tree.ScheduleLabelSpec{
 			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel())},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
-		Targets:         backupNode.Targets,
-		To:              backupNode.To,
-		BackupOptions:   backupNode.Options,
+		Targets:         redactedBackupNode.Targets,
+		To:              redactedBackupNode.To,
+		BackupOptions:   redactedBackupNode.Options,
 		ScheduleOptions: scheduleOptions,
 	}
 

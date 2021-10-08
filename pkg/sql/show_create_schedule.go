@@ -113,7 +113,7 @@ func (p *planner) ShowCreateSchedule(
 					return nil, err
 				}
 
-				createStmtStr, err := ex.GetCreateScheduleStatement(ctx,
+				createStmtStr, err := ex.GetCreateScheduleStatement(ctx, p,
 					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj, p.ExecCfg().InternalExecutor)
 				if err != nil {
 					return nil, err
