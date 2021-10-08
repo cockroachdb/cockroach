@@ -81,6 +81,14 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
+// CleanupBeforeRun cleans up the flow's resources in case this flow will never
+// run.
+func (f *flowWithCtx) CleanupBeforeRun() {
+	// Note: passing f.ctx is important; that's the context that has the flow's
+	// span in it, and that span needs Finish()ing.
+	f.flow.CleanupBeforeRun(f.ctx)
+}
+
 // NewFlowScheduler creates a new FlowScheduler which must be initialized before
 // use.
 func NewFlowScheduler(
@@ -240,6 +248,7 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 			fs.mu.queue.Remove(e)
 			fs.metrics.FlowsQueued.Dec(1)
 			numCanceled++
+			f.CleanupBeforeRun()
 		}
 	}
 }
