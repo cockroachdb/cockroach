@@ -202,7 +202,7 @@ func (t *MVCCValueMerger) ensureOrder(oldToNew bool) {
 
 func (t *MVCCValueMerger) deserializeMVCCValueAndAppend(value []byte) error {
 	if err := protoutil.Unmarshal(value, &t.meta); err != nil {
-		return errors.Errorf("corrupted operand value: %v", err)
+		return errors.Wrap(err, "corrupted operand value")
 	}
 	if len(t.meta.RawBytes) < mvccHeaderSize {
 		return errors.Errorf("operand value too short")
@@ -214,7 +214,7 @@ func (t *MVCCValueMerger) deserializeMVCCValueAndAppend(value []byte) error {
 		t.timeSeriesOps = append(t.timeSeriesOps, roachpb.InternalTimeSeriesData{})
 		ts := &t.timeSeriesOps[len(t.timeSeriesOps)-1]
 		if err := protoutil.Unmarshal(t.meta.RawBytes[mvccHeaderSize:], ts); err != nil {
-			return errors.Errorf("corrupted timeseries: %v", err)
+			return errors.Wrap(err, "corrupted timeseries")
 		}
 	} else {
 		if t.timeSeriesOps != nil {
@@ -256,7 +256,7 @@ func (t *MVCCValueMerger) MergeOlder(value []byte) error {
 // In case of non-timeseries the values are simply concatenated from old to new. In case
 // of timeseries the values are sorted, deduplicated, and potentially migrated to columnar
 // format. When deduplicating, only the latest sample for a given offset is retained.
-func (t *MVCCValueMerger) Finish() ([]byte, io.Closer, error) {
+func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 	isColumnar := false
 	if t.timeSeriesOps == nil && t.rawByteOps == nil {
 		return nil, nil, errors.Errorf("empty merge unsupported")
@@ -329,4 +329,67 @@ func (t *MVCCValueMerger) Finish() ([]byte, io.Closer, error) {
 		return nil, nil, err
 	}
 	return res, nil, nil
+}
+
+func serializeMergeInputs(sources ...roachpb.InternalTimeSeriesData) ([][]byte, error) {
+	// Wrap each proto in an inlined MVCC value, and marshal each wrapped value
+	// to bytes. This is the format required by the engine.
+	srcBytes := make([][]byte, 0, len(sources))
+	var val roachpb.Value
+	for _, src := range sources {
+		if err := val.SetProto(&src); err != nil {
+			return nil, err
+		}
+		bytes, err := protoutil.Marshal(&enginepb.MVCCMetadata{
+			RawBytes: val.RawBytes,
+		})
+		if err != nil {
+			return nil, err
+		}
+		srcBytes = append(srcBytes, bytes)
+	}
+	return srcBytes, nil
+}
+
+func deserializeMergeOutput(mergedBytes []byte) (roachpb.InternalTimeSeriesData, error) {
+	// Unmarshal merged bytes and extract the time series value within.
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(mergedBytes, &meta); err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	mergedTS, err := MakeValue(meta).GetTimeseries()
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	return mergedTS, nil
+}
+
+// MergeInternalTimeSeriesData exports the engine's MVCC merge logic for
+// InternalTimeSeriesData to higher level packages. This is intended primarily
+// for consumption by high level testing of time series functionality.
+// If usePartialMerge is true, the operands are merged together using a partial
+// merge operation first, and are then merged in to the initial state.
+func MergeInternalTimeSeriesData(
+	usePartialMerge bool, sources ...roachpb.InternalTimeSeriesData,
+) (roachpb.InternalTimeSeriesData, error) {
+	// Merge every element into a nil byte slice, one at a time.
+	var mvccMerger MVCCValueMerger
+	srcBytes, err := serializeMergeInputs(sources...)
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	for _, bytes := range srcBytes {
+		if err := mvccMerger.MergeNewer(bytes); err != nil {
+			return roachpb.InternalTimeSeriesData{}, err
+		}
+	}
+	resBytes, closer, err := mvccMerger.Finish(!usePartialMerge)
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	res, err := deserializeMergeOutput(resBytes)
+	if closer != nil {
+		_ = closer.Close()
+	}
+	return res, err
 }

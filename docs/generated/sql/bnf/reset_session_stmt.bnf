@@ -1,0 +1,3 @@
+reset_session_stmt ::=
+	'RESET' session_var
+	| 'RESET' 'SESSION' session_var

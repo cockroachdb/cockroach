@@ -28,10 +28,11 @@ import "sql/pgwire/pgerror/errors.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/encoded_datum.proto";
 import "sql/types/types.proto";
-import "util/tracing/recorded_span.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 
 // Error is a generic representation including a string message.
 message Error {
@@ -58,7 +59,7 @@ message Expression {
 }
 
 // Ordering defines an order - specifically a list of column indices and
-// directions. See sqlbase.ColumnOrdering.
+// directions. See colinfo.ColumnOrdering.
 message Ordering {
   option (gogoproto.equal) = true;
 
@@ -108,6 +109,10 @@ message StreamEndpointSpec {
   optional int32 target_node_id = 4 [(gogoproto.nullable) = false,
                                      (gogoproto.customname) = "TargetNodeID",
                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Node ID of the origin node, only used for REMOTE streams.
+  optional int32 origin_node_id = 5 [(gogoproto.nullable) = false,
+                                    (gogoproto.customname) = "OriginNodeID",
+                                    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   reserved 3;
 }
 
@@ -115,12 +120,17 @@ message StreamEndpointSpec {
 // to interleave rows from multiple input streams.
 message InputSyncSpec {
   enum Type {
-    // Rows from the input streams are interleaved arbitrarily.
-    UNORDERED = 0;
+    // Rows from the input streams are interleaved arbitrarily. Each input
+    // stream runs in a separate goroutine in order to not block on the slow
+    // producers.
+    PARALLEL_UNORDERED = 0;
     // The input streams are guaranteed to be ordered according to the column
     // ordering field; rows from the streams are interleaved to preserve that
     // ordering.
     ORDERED = 1;
+    // Each input stream is consumed fully, in turn, before the next input
+    // stream is received from.
+    SERIAL_UNORDERED = 2;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
 
@@ -247,7 +257,7 @@ message RemoteProducerMetadata {
     repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
   }
   message TraceData {
-    repeated util.tracing.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
+    repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
   }
   // RowNum is used to count the rows sent from a processor. It is used in tests
   // to check that metadata is propagated correctly.
@@ -275,6 +285,7 @@ message RemoteProducerMetadata {
     map<int32, int64> resume_pos = 3;
     // Used to stream back progress to the coordinator of a bulk job.
     optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
+    optional roachpb.BulkOpSummary bulk_summary = 5 [(gogoproto.nullable) = false];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
@@ -282,6 +293,8 @@ message RemoteProducerMetadata {
     optional int64 bytes_read = 1 [(gogoproto.nullable) = false];
     // Total number of rows read while executing a statement.
     optional int64 rows_read = 2 [(gogoproto.nullable) = false];
+    // Total number of rows modified while executing a statement.
+    optional int64 rows_written = 3 [(gogoproto.nullable) = false];
   }
   oneof value {
     RangeInfos range_info = 1;
@@ -293,7 +306,7 @@ message RemoteProducerMetadata {
     Metrics metrics = 8;
     BulkProcessorProgress bulk_processor_progress = 9;
   }
-  reserved 6;
+  reserved 6, 10;
 }
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information

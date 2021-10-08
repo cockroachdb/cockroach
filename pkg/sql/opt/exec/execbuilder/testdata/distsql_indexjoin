@@ -23,23 +23,73 @@ NULL       /10      {1}       1
 /40        NULL     {5}       5
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50]
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFr4zAQhe_7K4Z3ShYtK-9SKDolNA41pE5qG1pIfVDtIRgcy5Xk0hL830vspKGHQo_zvqfRxxzgXmoopOEqvMmoszUtk_UdbcPHzWoexTRZRGmW3q-mdKr8HgueHm7DJKTJKz11Uv5nCuSU5vHiMynoSk5zCDSm5Fjv2UFtESAXaK0p2Dljj9FhKETlG5QUqJq288c4FyiMZagDfOVrhkKmn2tOWJds_0oIlOx1VQ9r_ay11V7bdwikrW6coj8QWFa1Z6toMvt30VRKRXF2fbI9k6PumSDvBUznLyrO6x1DBb34uW7CrjWN4y-m322WfS7A5Y7HkzjT2YI31hTDN-O4Ht4NQcnOjzQYh6gZUZ_3vz4CAAD__x1Pj38=
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (v > 10) AND (v < 50)
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-xTCn9sdKNxVB9tRiUwzUtCYBBc1hTYYSSLNxdyNKyHeXZK21QkWP8968P7wWzXOJAv37zWoehDBaBHES367GEPsr_yqB_7CM1jdg4e7aj3wYvcBjw_k5gcfHMA8Xn0gGF3yMDCuVUyh3ZFA8oIcpw1qrjIxRuofa4SHIX1FwhkVVN7aHU4aZ0oSiRVvYklBgIp9KikjmpCccGeZkZVEOtnZW62In9RsyjGtZGQFnmHYMVWMPhsbKLaHwOvb70GVRWtKkJ95xosMFjGbTwwBCiCBMLj922DP9EHvmZKnpX0pFZGpVGTqqdMqZdylDyrfk1jaq0RlttMqGGHeuB90A5GSsYz13BJWj-oJfxd6P4uk3cdr9ew8AAP__FVC8zg==
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v]
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkM9L40AUx-_7Vzzeqd2dpZMsCzKnVptioKY1CajUHMbkUQJpJs5MilLyv0uS1lqhosf3_TUfZofmuUCBkTf3rmKodQGzcHEDK-9-OZ_4AQymfhRHt_Mh7CO_-4CFu2sv9GCwhcea838EDh_CJJi-Kyn850NYhFMvhMsH2CbIsFQZBXJDBsUKHUwYVlqlZIzSrbTrAn72goIzzMuqtq2cMEyVJhQ7tLktCAXG8qmgkGRGesSRYUZW5kU3a8eVzjdSvyLDqJKlEfAXGc7ywpIWMBi7R2IhhB_EF3vwg9OSHxxMGoaqtkcUY-WaUDgN-z5upLQlPXJOScfun7Pz7k_mQzKVKg2dzJ9b5k3CkLI19T9uVK1TWmqVds_056LrdUJGxvau0x9-2Vst4Mey82XZ_VROml9vAQAA__9lcsVp
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +v
+│
+└── • filter
+    │ filter: (v > 10) AND (v < 50)
+    │
+    └── • scan
+          missing stats
+          table: t@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLw0AQhe_-imFOra40SRFkT602xUBNaxJQ0RzWZCiBNBt3N0Up-e-SxFortNjjvLfvm8fsBvV7jhzdp8Vs7PnQm3hhFD7M-hC6M_c2gnOYBvN7MPB45wYu9NbwWlnWkMC2-jD2Jz9KAldWH-bBxA3g5hnWyLCQKfliRRr5C9oYMyyVTEhrqRpp0z7w0g_kFsOsKCvTyDHDRCpCvkGTmZyQYyTecgpIpKQGFjJMyYgsb7FmVKpsJdQnMgxLUWgOlxjXDGVldkBtxJKQ2zX7_9JplhtSpAb2_sZO59AbObtbcM49P7r-PsnWaW6ydQ6Wck4pFUplSA2c_Uoj5-IgfngKPiBdykLTHv4Q2apjhpQuqftMLSuV0ELJpF3TjfM21wopadO5djd4RWc1BX-H7aNh53jYORoe_gnH9dlXAAAA__8M7_K8
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v]
+EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd9Lg1AUx9_7Kw7naaMbU0cQ98nVHAlLlwoVywfTwxCc1-69rmL4v4e6tRYs6vF-f5zvB-4W1WuBHENn7txEUMsCZoF_B0vncTGfuB4Mpm4YhffzIewib31Aw8OtEzgw2MBzbRhjAtMYwsSbfikpXBpD8IOpE8D1E2xiZFiKjLxkTQr5Ek2MGVZSpKSUkK207QJu9o7cYJiXVa1bOWaYCknIt6hzXRByjJKXggJKMpIjAxlmpJO86M5qu5L5OpEfyDCsklJxuECGs7zQJDkMbOtAzDl3vehqB753WvK9gwz9WnOwLWaPMW4YilofuJROVoTcbNjf2UMhNcmReYxtm-eHrZND1n-GAlKVKBUdDZ26bDQxQ8pW1H-EErVMaSFF2s30T7_rdUJGSveu2T_csrdawO9l89ey9aMcN2efAQAA__-TC8s8
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +v
+│
+└── • filter
+    │ filter: (v > 10) AND (v < 50)
+    │
+    └── • scan
+          missing stats
+          table: t@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1ro0AUfd9fcblPCTtLHGVhmSezG8MKWc2qsFtaH6xegmAcOzOmLcH_XtSmaQoJzeM9Z84HZ_aoHyoU6P1fr-Z-AJOFHyfx39UUYm_l_UrgEZZR-AcM_PvtRR5MdnDXWpZDwK0pzIPFG5LDd2sKYbTwIvh5AztkWMuCgmxLGsUtckwZNkrmpLVUPbQfHvjFEwqLYVk3renhlGEuFaHYoylNRSgwye4riigrSM0sZFiQycpqsDVuo8ptpp6RYdxktRbwDRmGrRHg2sx1MO0YytYc3bXJNoSCd-zzDZZlZUiRmvHT-BEXMHH5cRghhB8kP173OTD9QAfmbCn7mlKxVIbUzD6t5PKvxwHOBjnXBEWkG1lrOgk652x1KUMqNjT-sZatymmtZD7EjGc46AagIG1Glo-HX49UX_C9mF8U25fF9kWx80Gcdl9eAgAA__92zfiN
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v]
+EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUHPmkAQhu_9FZM5abKGBfSyJ22lKY0FCyZtYzlQmBgSZOnuYtsY_nsDGKsm0u877jvvMw8Zzqh_ligw9jbeux00qoT3UfgJ9t7X7WblBzBZ-_Eu_ryZwqXyaygY-PLBizyYnOB7w7lLMOdTWAXra5LBgk8hjNZeBG-_wSlBhpXMKUiPpFHs0UaGC0wY1kpmpLVUXXzuS37-GwVnWFR1Y7o4YZhJRSjOaApTEgoM5EzWloMMczJpUfa1lqFszD9Im_RAKNyW3Sy2xxfv0h8lRZTmpCx-tx7N8oQM4zqttABrbs-sRdcIGyNgaeMzvf0a_UdZVBe7_WivVXFM1Z-r0n2qdO6U_zllRLqWlaYX3ZK3CUPKDzT8Li0bldFWyazXDM-w5_ogJ22GqTs8_GoYdR94C9ujsDMOO6Mwf4CT9s3fAAAA___99PGJ
+distribution: full
+vectorized: true
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@v
+      spans: [/41 - /49]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7KSbzpMkaFtCXfdJWmtJYsGDSNi0PFCaGBFm6u9i7GL77Bbh4aiJ39zj_md_8YPaE-l-JAr2f283KD2Cy9uNd_H0zhdjbeJ928B8-R-E3MPDjixd5MDnCn4Zzl2DOp7AK1uckgwWfQhitvQg-_oIjMqxkTkF6II3iN9rIcIEJw1rJjLSWqotP_ZCfP6DgDIuqbkwXJwwzqQjFCU1hSkKBgZzJ2nKQYU4mLcp-rGUoG_MCaZPuCYXbsovF9vjiXfq3pIjSnJTFr9ajWXa_EddppQVYc3tmLbqJsDECljbe09vv0X-VRfVst2_ttSoOqXo8K927SudK-copI9K1rDS96Za8TRhSvqfhubRsVEZbJbNeM5Rhz_VBTtoMXXco_GpodR94CdujsDMOO6Mwv4GT9sNTAAAA__82C-wq

@@ -1,0 +1,108 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "norm",
+    srcs = [
+        "bool_funcs.go",
+        "comp_funcs.go",
+        "decorrelate_funcs.go",
+        "factory.go",
+        "fold_constants_funcs.go",
+        "general_funcs.go",
+        "groupby_funcs.go",
+        "inline_funcs.go",
+        "join_funcs.go",
+        "limit_funcs.go",
+        "list_sorter.go",
+        "mutation_funcs.go",
+        "ordering_funcs.go",
+        "project_builder.go",
+        "project_funcs.go",
+        "project_set_funcs.go",
+        "prune_cols_funcs.go",
+        "reject_nulls_funcs.go",
+        "scalar_funcs.go",
+        "select_funcs.go",
+        "set_funcs.go",
+        "window_funcs.go",
+        "with_funcs.go",
+        ":gen-factory",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/norm",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/parser",
+        "//pkg/sql/privilege",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/arith",
+        "//pkg/util/encoding",
+        "//pkg/util/errorutil",
+        "//pkg/util/json",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "norm_test",
+    size = "small",
+    srcs = [
+        "decorrelate_funcs_test.go",
+        "factory_test.go",
+        "general_funcs_test.go",
+        "norm_test.go",
+    ],
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
+    ],
+    embed = [":norm"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+# Define a file group for all the normalization rules.
+rules = filegroup(
+    name = "rules",
+    srcs = glob(["rules/*.opt"]),
+    visibility = ["//visibility:public"],
+)
+
+# Define a generator for expression tree creation and normalization functions.
+genrule(
+    name = "gen-factory",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        ":rules",
+    ],
+    outs = ["factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
+const selectionOpsTmpl = "pkg/sql/colexec/colexecsel/selection_ops_tmpl.go"
 
 func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 	r := strings.NewReplacer(
@@ -36,12 +36,6 @@ func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
-
-	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
-	s = replaceManipulationFuncsAmbiguous(".Left", s)
-	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
-	s = strings.ReplaceAll(s, "_R_SLICE", "execgen.SLICE")
-	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
 	s = strings.ReplaceAll(s, "_HAS_NULLS", "$hasNulls")
 	selConstLoop := makeFunctionRegex("_SEL_CONST_LOOP", 1)

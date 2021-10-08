@@ -1,0 +1,76 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecsel",
+    srcs = [
+        "like_ops.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",  # keep
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexeccmp",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecerror",  # keep
+        "//pkg/sql/colexecop",
+        "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",  # keep
+        "//pkg/util/duration",  # keep
+        "//pkg/util/json",  # keep
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colexecsel_test",
+    srcs = [
+        "dep_test.go",
+        "like_ops_test.go",
+        "main_test.go",
+        "selection_ops_test.go",
+    ],
+    embed = [":colexecsel"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil/pgdate",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("default_cmp_sel_ops.eg.go", "default_cmp_sel_ops_tmpl.go"),
+    ("selection_ops.eg.go", "selection_ops_tmpl.go"),
+    ("sel_like_ops.eg.go", "selection_ops_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

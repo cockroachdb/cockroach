@@ -1,0 +1,152 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+    k INT PRIMARY KEY,
+    i INT,
+    s STRING,
+    j JSON,
+    FAMILY (k, i, s, j),
+    INVERTED INDEX (i, j),
+    INVERTED INDEX (i, s, j)
+)
+
+query T kvtrace
+SELECT k FROM t WHERE i = 10 AND j @> '1'
+----
+Scan /Table/53/2/10/1{-/PrefixEnd}, /Table/53/2/10/Arr/1{-/PrefixEnd}
+
+query T kvtrace
+SELECT k FROM t WHERE i = 10 AND s = 'foo' AND j @> '1'
+----
+Scan /Table/53/3/10/"foo"/1{-/PrefixEnd}, /Table/53/3/10/"foo"/Arr/1{-/PrefixEnd}
+
+query T kvtrace
+SELECT k FROM t WHERE i = 10 AND s = 'foo' AND j @> '{"a": "b"}'
+----
+Scan /Table/53/3/10/"foo"/"a"/"b"{-/PrefixEnd}
+
+query T kvtrace
+INSERT INTO t VALUES (1, 333, 'foo', '{"a": "b"}'::json)
+----
+CPut /Table/53/1/1/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
+InitPut /Table/53/2/333/"a"/"b"/1/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/"a"/"b"/1/0 -> /BYTES/
+
+# This test shows an inverted index scan followed by a primary index scan to
+# retrieve all the table's columns.
+query T kvtrace
+SELECT * FROM t WHERE i = 333 AND j @> '{"a": "b"}'
+----
+Scan /Table/53/2/333/"a"/"b"{-/PrefixEnd}
+Scan /Table/53/1/1/0
+
+# Don't insert duplicate values.
+query T kvtrace
+INSERT INTO t VALUES (2, 333, 'foo', '[7, 0, 7]'::json)
+----
+CPut /Table/53/1/2/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
+InitPut /Table/53/2/333/Arr/0/2/0 -> /BYTES/
+InitPut /Table/53/2/333/Arr/7/2/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/Arr/0/2/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/Arr/7/2/0 -> /BYTES/
+
+query T kvtrace
+INSERT INTO t VALUES (3, 333, 'foo', '[{"a": "b"}, 3, {"a": "b"}]'::json)
+----
+CPut /Table/53/1/3/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
+InitPut /Table/53/2/333/Arr/3/3/0 -> /BYTES/
+InitPut /Table/53/2/333/Arr/"a"/"b"/3/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/Arr/3/3/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/Arr/"a"/"b"/3/0 -> /BYTES/
+
+# Don't delete duplicate values.
+query T kvtrace
+DELETE FROM t WHERE k = 2
+----
+Scan /Table/53/1/2/0
+Del /Table/53/2/333/Arr/0/2/0
+Del /Table/53/2/333/Arr/7/2/0
+Del /Table/53/3/333/"foo"/Arr/0/2/0
+Del /Table/53/3/333/"foo"/Arr/7/2/0
+Del /Table/53/1/2/0
+
+query T kvtrace
+DELETE FROM t WHERE k = 3
+----
+Scan /Table/53/1/3/0
+Del /Table/53/2/333/Arr/3/3/0
+Del /Table/53/2/333/Arr/"a"/"b"/3/0
+Del /Table/53/3/333/"foo"/Arr/3/3/0
+Del /Table/53/3/333/"foo"/Arr/"a"/"b"/3/0
+Del /Table/53/1/3/0
+
+# Don't insert NULL values in the inverted column.
+query T kvtrace
+INSERT INTO t VALUES (4, 333, 'foo', NULL)
+----
+CPut /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo
+
+# Update away from NULL.
+query T kvtrace
+UPDATE t SET j = '[1]' WHERE k = 4
+----
+Scan /Table/53/1/4/0
+Put /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
+InitPut /Table/53/2/333/Arr/1/4/0 -> /BYTES/
+InitPut /Table/53/3/333/"foo"/Arr/1/4/0 -> /BYTES/
+
+# Update back to NULL.
+query T kvtrace
+UPDATE t SET j = NULL WHERE k = 4
+----
+Scan /Table/53/1/4/0
+Put /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo
+Del /Table/53/2/333/Arr/1/4/0
+Del /Table/53/3/333/"foo"/Arr/1/4/0
+
+# Deleting a NULL shouldn't remove anything from the inv idx.
+query T kvtrace
+DELETE FROM t WHERE k = 4
+----
+Scan /Table/53/1/4/0
+Del /Table/53/1/4/0
+
+# Insert NULL non-inverted value.
+query T kvtrace
+INSERT INTO t VALUES (5, NULL, 'foo', '{"a": "b"}'::json)
+----
+CPut /Table/53/1/5/0 -> /TUPLE/3:3:Bytes/foo/
+InitPut /Table/53/2/NULL/"a"/"b"/5/0 -> /BYTES/
+InitPut /Table/53/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
+
+# Update away from NULL.
+query T kvtrace
+UPDATE t SET i = 333 WHERE k = 5
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
+Del /Table/53/2/NULL/"a"/"b"/5/0
+InitPut /Table/53/2/333/"a"/"b"/5/0 -> /BYTES/
+Del /Table/53/3/NULL/"foo"/"a"/"b"/5/0
+InitPut /Table/53/3/333/"foo"/"a"/"b"/5/0 -> /BYTES/
+
+# Update back to NULL.
+query T kvtrace
+UPDATE t SET i = NULL WHERE k = 5
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/3:3:Bytes/foo/
+Del /Table/53/2/333/"a"/"b"/5/0
+InitPut /Table/53/2/NULL/"a"/"b"/5/0 -> /BYTES/
+Del /Table/53/3/333/"foo"/"a"/"b"/5/0
+InitPut /Table/53/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
+
+# Delete row with NULL non-inverted row.
+query T kvtrace
+DELETE FROM t WHERE k = 5
+----
+Scan /Table/53/1/5/0
+Del /Table/53/2/NULL/"a"/"b"/5/0
+Del /Table/53/3/NULL/"foo"/"a"/"b"/5/0
+Del /Table/53/1/5/0

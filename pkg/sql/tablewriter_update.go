@@ -14,9 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // tableUpdater handles writing kvs and forming table rows for updates.
@@ -31,8 +32,10 @@ var _ tableWriter = &tableUpdater{}
 func (*tableUpdater) desc() string { return "updater" }
 
 // init is part of the tableWriter interface.
-func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
-	tu.tableWriterBase.init(txn, tu.tableDesc())
+func (tu *tableUpdater) init(
+	_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+) error {
+	tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv)
 	return nil
 }
 
@@ -58,7 +61,7 @@ func (tu *tableUpdater) rowForUpdate(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *tableUpdater) tableDesc() *sqlbase.ImmutableTableDescriptor {
+func (tu *tableUpdater) tableDesc() catalog.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
 

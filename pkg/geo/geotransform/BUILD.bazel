@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geotransform",
+    srcs = ["geotransform.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geotransform",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoproj",
+        "//pkg/geo/geoprojbase",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+go_test(
+    name = "geotransform_test",
+    size = "small",
+    srcs = ["geotransform_test.go"],
+    embed = [":geotransform"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)

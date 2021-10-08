@@ -1,0 +1,35 @@
+# LogicTest: 5node !metamorphic
+
+# The following tests check that if the joiners can separate a row request
+# into separate families that it does, and generates spans for each family
+# instead of reading the entire row when it doesn't need to.
+
+statement ok
+CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
+
+statement ok
+INSERT INTO family_split_1 VALUES (1)
+
+statement ok
+CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
+
+statement ok
+INSERT INTO family_split_2 VALUES (1, 2, 3)
+
+query T kvtrace(Scan)
+SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
+----
+Scan /Table/53/{1-2}
+Scan /Table/54/1/1/0, /Table/54/1/1/2/1
+
+statement ok
+CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
+
+statement ok
+INSERT INTO family_index_join VALUES (1, 2, 3, 4)
+
+query T kvtrace(Scan)
+SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
+----
+Scan /Table/55/2/{2-3}
+Scan /Table/55/1/1/{0-1/2}, /Table/55/1/1/3/1

@@ -13,13 +13,15 @@ package explain
 import (
 	"bytes"
 	"fmt"
-	"text/tabwriter"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // OutputBuilder is used to build the output of an explain tree.
@@ -56,9 +58,18 @@ func (e *entry) isNode() bool {
 	return e.level > 0
 }
 
+// fieldStr returns a "field" or "field: val" string; only used when this entry
+// is a field.
+func (e *entry) fieldStr() string {
+	if e.fieldVal == "" {
+		return e.field
+	}
+	return fmt.Sprintf("%s: %s", e.field, e.fieldVal)
+}
+
 // EnterNode creates a new node as a child of the current node.
 func (ob *OutputBuilder) EnterNode(
-	name string, columns sqlbase.ResultColumns, ordering sqlbase.ColumnOrdering,
+	name string, columns colinfo.ResultColumns, ordering colinfo.ColumnOrdering,
 ) {
 	var colStr, ordStr string
 	if ob.flags.Verbose {
@@ -95,6 +106,15 @@ func (ob *OutputBuilder) AddField(key, value string) {
 	ob.entries = append(ob.entries, entry{field: key, fieldVal: value})
 }
 
+// AddRedactableField adds an information field under the current node, hiding
+// the value depending depending on the given redact flag.
+func (ob *OutputBuilder) AddRedactableField(flag RedactFlags, key, value string) {
+	if ob.flags.Redact.Has(flag) {
+		value = "<hidden>"
+	}
+	ob.AddField(key, value)
+}
+
 // Attr adds an information field under the current node.
 func (ob *OutputBuilder) Attr(key string, value interface{}) {
 	ob.AddField(key, fmt.Sprint(value))
@@ -116,7 +136,7 @@ func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
 // Expr adds an information field with an expression. The expression's
 // IndexedVars refer to the given columns. If the expression is nil, nothing is
 // emitted.
-func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinfo.ResultColumns) {
 	if expr == nil {
 		return
 	}
@@ -127,18 +147,20 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbas
 	if ob.flags.HideValues {
 		flags |= tree.FmtHideConstants
 	}
-	f := tree.NewFmtCtx(flags)
-	f.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-		// Ensure proper quoting.
-		n := tree.Name(varColumns[idx].Name)
-		ctx.WriteString(n.String())
-	})
+	f := tree.NewFmtCtx(
+		flags,
+		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			// Ensure proper quoting.
+			n := tree.Name(varColumns[idx].Name)
+			ctx.WriteString(n.String())
+		}),
+	)
 	f.FormatNode(expr)
 	ob.AddField(key, f.CloseAndGetString())
 }
 
 // VExpr is a verbose-only variant of Expr.
-func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns colinfo.ResultColumns) {
 	if ob.flags.Verbose {
 		ob.Expr(key, expr, varColumns)
 	}
@@ -204,22 +226,66 @@ func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 	return rows
 }
 
+// BuildStringRows creates a string representation of the plan information and
+// returns it as a list of strings (one for each row). The strings do not end in
+// newline.
+func (ob *OutputBuilder) BuildStringRows() []string {
+	var result []string
+	tp := treeprinter.NewWithStyle(treeprinter.BulletStyle)
+	stack := []treeprinter.Node{tp}
+	entries := ob.entries
+
+	pop := func() *entry {
+		e := &entries[0]
+		entries = entries[1:]
+		return e
+	}
+
+	popField := func() *entry {
+		if len(entries) > 0 && !entries[0].isNode() {
+			return pop()
+		}
+		return nil
+	}
+
+	// There may be some top-level non-node entries (like "distributed"). Print
+	// them separately, as they can't be part of the tree.
+	for e := popField(); e != nil; e = popField() {
+		result = append(result, e.fieldStr())
+	}
+	if len(result) > 0 {
+		result = append(result, "")
+	}
+
+	for len(entries) > 0 {
+		entry := pop()
+		child := stack[entry.level-1].Child(entry.node)
+		stack = append(stack[:entry.level], child)
+		if entry.columns != "" {
+			child.AddLine(fmt.Sprintf("columns: %s", entry.columns))
+		}
+		if entry.ordering != "" {
+			child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+		}
+		// Add any fields for the node.
+		for entry = popField(); entry != nil; entry = popField() {
+			child.AddLine(entry.fieldStr())
+		}
+	}
+	result = append(result, tp.FormattedRows()...)
+	return result
+}
+
 // BuildString creates a string representation of the plan information.
 // The output string always ends in a newline.
 func (ob *OutputBuilder) BuildString() string {
+	rows := ob.BuildStringRows()
 	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-	treeRows := ob.buildTreeRows()
-	for i, e := range ob.entries {
-		fmt.Fprintf(tw, "%s\t%s\t%s", treeRows[i], e.field, e.fieldVal)
-		if ob.flags.Verbose {
-			fmt.Fprintf(tw, "\t%s\t%s", e.columns, e.ordering)
-		}
-		fmt.Fprintf(tw, "\n")
+	for _, row := range rows {
+		buf.WriteString(row)
+		buf.WriteString("\n")
 	}
-	_ = tw.Flush()
-	return util.RemoveTrailingSpaces(buf.String())
+	return buf.String()
 }
 
 // BuildProtoTree creates a representation of the plan as a tree of
@@ -247,4 +313,111 @@ func (ob *OutputBuilder) BuildProtoTree() *roachpb.ExplainTreePlanNode {
 	}
 
 	return sentinel.Children[0]
+}
+
+// AddTopLevelField adds a top-level field. Cannot be called while inside a
+// node.
+func (ob *OutputBuilder) AddTopLevelField(key, value string) {
+	if ob.level != 0 {
+		panic(errors.AssertionFailedf("inside node"))
+	}
+	ob.AddField(key, value)
+}
+
+// AddRedactableTopLevelField adds a top-level field, hiding the value depending
+// depending on the given redact flag.
+func (ob *OutputBuilder) AddRedactableTopLevelField(redactFlag RedactFlags, key, value string) {
+	if ob.flags.Redact.Has(redactFlag) {
+		value = "<hidden>"
+	}
+	ob.AddTopLevelField(key, value)
+}
+
+// AddDistribution adds a top-level distribution field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddDistribution(value string) {
+	ob.AddRedactableTopLevelField(RedactDistribution, "distribution", value)
+}
+
+// AddVectorized adds a top-level vectorized field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddVectorized(value bool) {
+	ob.AddRedactableTopLevelField(RedactVectorized, "vectorized", fmt.Sprintf("%t", value))
+}
+
+// AddPlanningTime adds a top-level planning time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
+	if ob.flags.Redact.Has(RedactVolatile) {
+		delta = 10 * time.Microsecond
+	}
+	ob.AddTopLevelField("planning time", humanizeutil.Duration(delta))
+}
+
+// AddExecutionTime adds a top-level execution time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
+	if ob.flags.Redact.Has(RedactVolatile) {
+		delta = 100 * time.Microsecond
+	}
+	ob.AddTopLevelField("execution time", humanizeutil.Duration(delta))
+}
+
+// AddKVReadStats adds a top-level field for the bytes/rows read from KV.
+func (ob *OutputBuilder) AddKVReadStats(rows, bytes int64) {
+	ob.AddTopLevelField("rows read from KV", fmt.Sprintf(
+		"%s (%s)", humanizeutil.Count(uint64(rows)), humanizeutil.IBytes(bytes),
+	))
+}
+
+// AddKVTime adds a top-level field for the cumulative time spent in KV.
+func (ob *OutputBuilder) AddKVTime(kvTime time.Duration) {
+	ob.AddRedactableTopLevelField(RedactVolatile, "cumulative time spent in KV", humanizeutil.Duration(kvTime))
+}
+
+// AddContentionTime adds a top-level field for the cumulative contention time.
+func (ob *OutputBuilder) AddContentionTime(contentionTime time.Duration) {
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"cumulative time spent due to contention",
+		humanizeutil.Duration(contentionTime),
+	)
+}
+
+// AddMaxMemUsage adds a top-level field for the memory used by the query.
+func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
+	ob.AddRedactableTopLevelField(
+		RedactVolatile, "maximum memory usage", humanizeutil.IBytes(bytes),
+	)
+}
+
+// AddNetworkStats adds a top-level field for network statistics.
+func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"network usage",
+		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+	)
+}
+
+// AddMaxDiskUsage adds a top-level field for the sql temporary disk space used
+// by the query. If we're redacting leave this out to keep logic test output
+// independent of disk spilling. Disk spilling is controlled by a metamorphic
+// constant so it may or may not occur randomly so it makes sense to omit this
+// information entirely if we're redacting. Since disk spilling is rare we only
+// include this field is bytes is greater than zero.
+func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
+	if !ob.flags.Redact.Has(RedactVolatile) && bytes > 0 {
+		ob.AddTopLevelField("max sql temp disk usage",
+			humanizeutil.IBytes(bytes))
+	}
+}
+
+// AddRegionsStats adds a top-level field for regions executed on statistics.
+func (ob *OutputBuilder) AddRegionsStats(regions []string) {
+	ob.AddRedactableTopLevelField(
+		RedactNodes,
+		"regions",
+		strings.Join(regions, ", "),
+	)
 }

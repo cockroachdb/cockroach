@@ -170,11 +170,12 @@ type TxnSender interface {
 	// such that the transaction can't be pushed to a different
 	// timestamp.
 	//
-	// This is used to support historical queries (AS OF SYSTEM TIME
-	// queries and backups). This method must be called on every
-	// transaction retry (but note that retries should be rare for
-	// read-only queries with no clock uncertainty).
-	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp)
+	// This is used to support historical queries (AS OF SYSTEM TIME queries
+	// and backups). This method must be called on every transaction retry
+	// (but note that retries should be rare for read-only queries with no
+	// clock uncertainty). The method must not be called after the
+	// transaction has been used in the current epoch to read or write.
+	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error
 
 	// ManualRestart bumps the transactions epoch, and can upgrade the
 	// timestamp and priority.
@@ -230,6 +231,11 @@ type TxnSender interface {
 	// field on TxnMeta.
 	ProvisionalCommitTimestamp() hlc.Timestamp
 
+	// RequiredFrontier returns the largest timestamp at which the
+	// transaction may read values when performing a read-only
+	// operation.
+	RequiredFrontier() hlc.Timestamp
+
 	// IsSerializablePushAndRefreshNotPossible returns true if the
 	// transaction is serializable, its timestamp has been pushed and
 	// there's no chance that refreshing the read spans will succeed
@@ -253,6 +259,9 @@ type TxnSender interface {
 
 	// Epoch returns the txn's epoch.
 	Epoch() enginepb.TxnEpoch
+
+	// IsLocking returns whether the transaction has begun acquiring locks.
+	IsLocking() bool
 
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
@@ -290,6 +299,31 @@ type TxnSender interface {
 	// GetSteppingMode accompanies ConfigureStepping. It is provided
 	// for use in tests and assertion checks.
 	GetSteppingMode(ctx context.Context) (curMode SteppingMode)
+
+	// ManualRefresh attempts to refresh a transactions read timestamp up to its
+	// provisional commit timestamp. In the case that the two are already the
+	// same, it is a no-op. The reason one might want to do that is to ensure
+	// that a transaction can commit without experiencing another push.
+	//
+	// A transaction which has proven all of its intents and has been fully
+	// refreshed and does not perform any additional reads or writes that does not
+	// contend with any other transactions will not be pushed further. This
+	// method's reason for existence is to ensure that range merge requests can
+	// be pushed but then can later commit without the possibility of needing to
+	// refresh reads performed on the RHS after the RHS has been subsumed but
+	// before the merge transaction completed.
+	ManualRefresh(ctx context.Context) error
+
+	// DeferCommitWait defers the transaction's commit-wait operation, passing
+	// responsibility of commit-waiting from the TxnSender to the caller of this
+	// method. The method returns a function which the caller must eventually
+	// run if the transaction completes without error. This function is safe to
+	// call multiple times.
+	//
+	// WARNING: failure to call the returned function could lead to consistency
+	// violations where a future, causally dependent transaction may fail to
+	// observe the writes performed by this transaction.
+	DeferCommitWait(ctx context.Context) func(context.Context) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

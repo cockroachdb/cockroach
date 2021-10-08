@@ -14,6 +14,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/rand"
@@ -115,6 +116,47 @@ type zoneConfig struct {
 	strategy partitionStrategy
 }
 
+type survivalGoal int
+
+const (
+	survivalGoalZone survivalGoal = iota
+	survivalGoalRegion
+)
+
+// Part of pflag's Value interface.
+func (s survivalGoal) String() string {
+	switch s {
+	case survivalGoalZone:
+		return "zone"
+	case survivalGoalRegion:
+		return "region"
+	}
+	panic("unexpected")
+}
+
+// Part of pflag's Value interface.
+func (s *survivalGoal) Set(value string) error {
+	switch value {
+	case "zone":
+		*s = survivalGoalZone
+	case "region":
+		*s = survivalGoalRegion
+	default:
+		return errors.Errorf("unknown survival goal %q", value)
+	}
+	return nil
+}
+
+// Part of pflag's Value interface.
+func (s survivalGoal) Type() string {
+	return "survival_goal"
+}
+
+type multiRegionConfig struct {
+	regions      []string
+	survivalGoal survivalGoal
+}
+
 // partitioner encapsulates all logic related to partitioning discrete numbers
 // of warehouses into disjoint sets of roughly equal sizes. Partitions are then
 // evenly assigned "active" warehouses, which allows for an even split of live
@@ -129,6 +171,109 @@ type partitioner struct {
 	partElems    [][]int     // the elements active in each partition
 	partElemsMap map[int]int // mapping from element to partition index
 	totalElems   []int       // all active elements
+}
+
+// makeMRPartitioner makes a multi-region partitioner. This is different from
+// the base partitioner in that it handles multi-region setups which, instead of
+// partitioning in consecutive blocks, distributes the warehouses in a
+// round-robin fashion across all regions.
+func makeMRPartitioner(total, active, parts int) (*partitioner, error) {
+	if total <= 0 {
+		return nil, errors.Errorf("total must be positive; %d", total)
+	}
+	if active <= 0 {
+		return nil, errors.Errorf("active must be positive; %d", active)
+	}
+	if parts <= 0 {
+		return nil, errors.Errorf("parts must be positive; %d", parts)
+	}
+	if active > total {
+		return nil, errors.Errorf("active > total; %d > %d", active, total)
+	}
+	if parts > total {
+		return nil, errors.Errorf("parts > total; %d > %d", parts, total)
+	}
+
+	// Partition sizes.
+	//
+	// Contains the number of elements that are active in each partition.
+	// Since we're distributing warehouses in a round-robin fashion, if there
+	// is an uneven number of partitions, some partitions at the beginning will
+	// have one more warehouse assigned to then than partitions towards the end.
+	//
+	//  active = 10
+	//  parts  = 3
+	//  sizes  = [4, 3, 3]
+	//
+	sizes := make([]int, parts)
+	adjustment := active % parts
+	for i := range sizes {
+		// active / parts + distribution of mod
+		base := active / parts
+		if adjustment > 0 {
+			base++
+			adjustment--
+		}
+		sizes[i] = base
+	}
+
+	// Partitions.
+	//
+	// partElems enumerates the active elements in each partition.
+	//
+	//  total     = 20
+	//  active    = 10
+	//  parts     = 3
+	//  partElems = [[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]]
+	//
+	partElems := make([][]int, parts)
+	for i := 0; i < active; i++ {
+		if i < parts {
+			partAct := make([]int, sizes[i])
+			partElems[i] = partAct
+		}
+		partElems[i%parts][i/parts] = i
+	}
+
+	// Partition reverse mapping.
+	//
+	// partElemsMap maps each active element to its partition index.
+	//
+	//  total        = 20
+	//  active       = 10
+	//  parts        = 3
+	//  partElemsMap = {0:0, 3:0, 6:0, 9:0, 1:1, 4:1, 7:1, 2:2, 5:2, 8:2}
+	//
+	partElemsMap := make(map[int]int)
+	for p, elems := range partElems {
+		for _, elem := range elems {
+			partElemsMap[elem] = p
+		}
+	}
+
+	// Total elements.
+	//
+	// totalElems aggregates all active elements into a single slice.
+	//
+	//  total      = 20
+	//  active     = 10
+	//  parts      = 3
+	//  totalElems = [0, 3, 6, 9, 1, 4, 7, 2, 5, 8]
+	//
+	var totalElems []int
+	for _, elems := range partElems {
+		totalElems = append(totalElems, elems...)
+	}
+
+	return &partitioner{
+		total:  total,
+		active: active,
+		parts:  parts,
+
+		partElems:    partElems,
+		partElemsMap: partElemsMap,
+		totalElems:   totalElems,
+	}, nil
 }
 
 func makePartitioner(total, active, parts int) (*partitioner, error) {
@@ -313,15 +458,12 @@ func partitionTable(
 func partitionIndex(
 	db *gosql.DB, cfg zoneConfig, p *partitioner, table, index, col string, idx int,
 ) error {
+	indexStr := fmt.Sprintf("%s@%s", table, index)
 	if exists, err := indexExists(db, table, index); err != nil {
 		return err
 	} else if !exists {
-		// If the index doesn't exist then there's nothing to do. This is the
-		// case for a few of the indexes that are only needed for foreign keys
-		// when foreign keys are disabled.
-		return nil
+		return errors.Errorf("could not find index %q", indexStr)
 	}
-	indexStr := fmt.Sprintf("%s@%s", table, index)
 	return partitionObject(db, cfg, p, "INDEX", indexStr, col, table, idx)
 }
 
@@ -345,16 +487,10 @@ func partitionOrder(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 }
 
 func partitionOrderLine(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	if err := partitionTable(db, cfg, wPart, "order_line", "ol_w_id", 0); err != nil {
-		return err
-	}
-	return partitionIndex(db, cfg, wPart, "order_line", "order_line_stock_fk_idx", "ol_supply_w_id", 1)
+	return partitionTable(db, cfg, wPart, "order_line", "ol_w_id", 0)
 }
 
 func partitionStock(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	// The stock_item_fk_idx can't be partitioned because it doesn't have a
-	// warehouse prefix. It's an all-around unfortunate index that we only
-	// need because of a restriction in SQL. See #36859 and #37255.
 	return partitionTable(db, cfg, wPart, "stock", "s_w_id", 0)
 }
 
@@ -366,20 +502,56 @@ func partitionCustomer(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 }
 
 func partitionHistory(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	if err := partitionTable(db, cfg, wPart, "history", "h_w_id", 0); err != nil {
-		return err
-	}
-	if err := partitionIndex(db, cfg, wPart, "history", "history_customer_fk_idx", "h_c_w_id", 1); err != nil {
-		return err
-	}
-	return partitionIndex(db, cfg, wPart, "history", "history_district_fk_idx", "h_w_id", 2)
+	return partitionTable(db, cfg, wPart, "history", "h_w_id", 0)
 }
 
-// replicateItem creates a covering "replicated index" for the item table for
-// each of the zones provided. The item table is immutable, so this comes at a
-// negligible cost and allows all lookups into it to be local. If there are no
-// zone it assumes that each partition corresponds to a rack.
+// replicateColumns creates covering replicated indexes for a given table
+// for each of the zones provided.
+//
+// It is recommended to do this for columns that are immutable as it allows
+// lookups on those columns to be local within the provided zone. If there are
+// no zones, it assumes that each partition corresponds to a rack.
+func replicateColumns(
+	db *gosql.DB,
+	cfg zoneConfig,
+	wPart *partitioner,
+	name string,
+	pkColumns []string,
+	storedColumns []string,
+) error {
+	constraints := synthesizeConstraints(cfg, wPart)
+	for i, constraint := range constraints {
+		if _, err := db.Exec(
+			fmt.Sprintf(`CREATE UNIQUE INDEX %[1]s_idx_%[2]d ON %[1]s (%[3]s) STORING (%[4]s)`,
+				name, i, strings.Join(pkColumns, ","), strings.Join(storedColumns, ",")),
+		); err != nil {
+			return err
+		}
+		if _, err := db.Exec(fmt.Sprintf(
+			`ALTER INDEX %[1]s@%[1]s_idx_%[2]d
+CONFIGURE ZONE USING num_replicas = COPY FROM PARENT, constraints='{"%[3]s": 1}', lease_preferences='[[%[3]s]]'`,
+			name, i, constraint)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replicateWarehouse(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
+	return replicateColumns(db, cfg, wPart, "warehouse", []string{"w_id"}, []string{"w_tax"})
+}
+
+func replicateDistrict(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
+	return replicateColumns(db, cfg, wPart, "district", []string{"d_w_id", "d_id"},
+		[]string{"d_name", "d_street_1", "d_street_2", "d_city", "d_state", "d_zip"})
+}
+
 func replicateItem(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
+	return replicateColumns(db, cfg, wPart, "item", []string{"i_id"},
+		[]string{"i_im_id", "i_name", "i_price", "i_data"})
+}
+
+func synthesizeConstraints(cfg zoneConfig, wPart *partitioner) []string {
 	var constraints []string
 	if len(cfg.zones) > 0 {
 		for _, zone := range cfg.zones {
@@ -391,30 +563,12 @@ func replicateItem(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 			constraints = append(constraints, fmt.Sprintf("+rack=%d", i))
 		}
 	}
-	for i, constraint := range constraints {
-		idxName := fmt.Sprintf("replicated_idx_%d", i)
-
-		create := fmt.Sprintf(`
-			CREATE UNIQUE INDEX %s
-			ON item (i_id)
-			STORING (i_im_id, i_name, i_price, i_data)`,
-			idxName)
-		if _, err := db.Exec(create); err != nil {
-			return errors.Wrapf(err, "Couldn't exec %q", create)
-		}
-
-		configure := fmt.Sprintf(`
-			ALTER INDEX item@%s
-			CONFIGURE ZONE USING num_replicas = COPY FROM PARENT, constraints = '{"%s":1}', lease_preferences = '[[%s]]'`,
-			idxName, constraint, constraint)
-		if _, err := db.Exec(configure); err != nil {
-			return errors.Wrapf(err, "Couldn't exec %q", configure)
-		}
-	}
-	return nil
+	return constraints
 }
 
-func partitionTables(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
+func partitionTables(
+	db *gosql.DB, cfg zoneConfig, wPart *partitioner, replicateStaticColumns bool,
+) error {
 	if err := partitionWarehouse(db, cfg, wPart); err != nil {
 		return err
 	}
@@ -439,6 +593,14 @@ func partitionTables(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 	if err := partitionHistory(db, cfg, wPart); err != nil {
 		return err
 	}
+	if replicateStaticColumns {
+		if err := replicateDistrict(db, cfg, wPart); err != nil {
+			return err
+		}
+		if err := replicateWarehouse(db, cfg, wPart); err != nil {
+			return err
+		}
+	}
 	return replicateItem(db, cfg, wPart)
 }
 
@@ -458,6 +620,9 @@ func partitionCount(db *gosql.DB) (int, error) {
 }
 
 func indexExists(db *gosql.DB, table, index string) (bool, error) {
+	// Strip any quotes around the table name.
+	table = strings.ReplaceAll(table, `"`, ``)
+
 	var exists bool
 	if err := db.QueryRow(`
 		SELECT count(*) > 0

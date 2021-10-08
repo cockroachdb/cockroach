@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -48,8 +50,9 @@ func newErrBufferCapacityExceeded() *roachpb.Error {
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
-	Clock *hlc.Clock
-	Span  roachpb.RSpan
+	Clock   *hlc.Clock
+	RangeID roachpb.RangeID
+	Span    roachpb.RSpan
 
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
@@ -116,9 +119,26 @@ type Processor struct {
 	lenResC    chan int
 	filterReqC chan struct{}
 	filterResC chan *Filter
-	eventC     chan event
+	eventC     chan *event
 	stopC      chan *roachpb.Error
 	stoppedC   chan struct{}
+}
+
+var eventSyncPool = sync.Pool{
+	New: func() interface{} {
+		return new(event)
+	},
+}
+
+func getPooledEvent(ev event) *event {
+	e := eventSyncPool.Get().(*event)
+	*e = ev
+	return e
+}
+
+func putPooledEvent(ev *event) {
+	*ev = event{}
+	eventSyncPool.Put(ev)
 }
 
 // event is a union of different event types that the Processor goroutine needs
@@ -152,11 +172,22 @@ func NewProcessor(cfg Config) *Processor {
 		lenResC:    make(chan int),
 		filterReqC: make(chan struct{}),
 		filterResC: make(chan *Filter),
-		eventC:     make(chan event, cfg.EventChanCap),
+		eventC:     make(chan *event, cfg.EventChanCap),
 		stopC:      make(chan *roachpb.Error, 1),
 		stoppedC:   make(chan struct{}),
 	}
 }
+
+// IteratorConstructor is used to construct an iterator. It should be called
+// from underneath a stopper task to ensure that the engine has not been closed.
+type IteratorConstructor func() storage.SimpleMVCCIterator
+
+// CatchUpIteratorConstructor is used to construct an iterator that
+// can be used for catchup-scans. It should be called from underneath
+// a stopper task to ensure that the engine has not been closed.
+//
+// The constructed iterator must have an UpperBound set.
+type CatchUpIteratorConstructor func() *CatchUpIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
@@ -167,10 +198,10 @@ func NewProcessor(cfg Config) *Processor {
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIter storage.SimpleIterator) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
-		p.run(ctx, rtsIter, stopper)
+		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
 	}); err != nil {
 		pErr := roachpb.NewError(err)
 		p.reg.DisconnectWithErr(all, pErr)
@@ -180,7 +211,10 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter storage.SimpleIterator)
 
 // run is called from Start and runs the rangefeed.
 func (p *Processor) run(
-	ctx context.Context, rtsIter storage.SimpleIterator, stopper *stop.Stopper,
+	ctx context.Context,
+	_forStacks roachpb.RangeID,
+	rtsIterFunc IteratorConstructor,
+	stopper *stop.Stopper,
 ) {
 	defer close(p.stoppedC)
 	ctx, cancelOutputLoops := context.WithCancel(ctx)
@@ -188,7 +222,8 @@ func (p *Processor) run(
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-	if rtsIter != nil {
+	if rtsIterFunc != nil {
+		rtsIter := rtsIterFunc()
 		initScan := newInitResolvedTSScan(p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
@@ -219,6 +254,11 @@ func (p *Processor) run(
 				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 			}
 
+			// Construct the catchUpIter before notifying the registration that it
+			// has been registered. Note that if the catchUpScan is never run, then
+			// the iterator constructed here will be closed in disconnect.
+			r.maybeConstructCatchUpIter()
+
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
 
@@ -232,16 +272,13 @@ func (p *Processor) run(
 
 			// Run an output loop for the registry.
 			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx)
+				r.runOutputLoop(ctx, p.RangeID)
 				select {
 				case p.unregC <- &r:
 				case <-p.stoppedC:
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				if r.catchupIter != nil {
-					r.catchupIter.Close() // clean up
-				}
 				r.disconnect(roachpb.NewError(err))
 				p.reg.Unregister(&r)
 			}
@@ -263,6 +300,7 @@ func (p *Processor) run(
 		// Transform and route events.
 		case e := <-p.eventC:
 			p.consumeEvent(ctx, e)
+			putPooledEvent(e)
 
 		// Check whether any unresolved intents need a push.
 		case <-txnPushTickerC:
@@ -368,7 +406,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter storage.SimpleIterator,
+	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
@@ -379,7 +417,7 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIter, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
 		p.Config.EventChanCap, p.Metrics, stream, errC,
 	)
 	select {
@@ -449,7 +487,7 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 	if p == nil {
 		return true
 	}
-	if closedTS == (hlc.Timestamp{}) {
+	if closedTS.IsEmpty() {
 		return true
 	}
 	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
@@ -459,20 +497,21 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
 func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
+	ev := getPooledEvent(e)
 	if timeout == 0 {
 		select {
-		case p.eventC <- e:
+		case p.eventC <- ev:
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		}
 	} else {
 		select {
-		case p.eventC <- e:
+		case p.eventC <- ev:
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		default:
 			select {
-			case p.eventC <- e:
+			case p.eventC <- ev:
 			case <-p.stoppedC:
 				// Already stopped. Do nothing.
 			case <-time.After(timeout):
@@ -497,8 +536,9 @@ func (p *Processor) setResolvedTSInitialized() {
 // It does so by flushing the event pipeline.
 func (p *Processor) syncEventC() {
 	syncC := make(chan struct{})
+	ev := getPooledEvent(event{syncC: syncC})
 	select {
-	case p.eventC <- event{syncC: syncC}:
+	case p.eventC <- ev:
 		select {
 		case <-syncC:
 		// Synchronized.
@@ -510,11 +550,11 @@ func (p *Processor) syncEventC() {
 	}
 }
 
-func (p *Processor) consumeEvent(ctx context.Context, e event) {
+func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
 		p.consumeLogicalOps(ctx, e.ops)
-	case e.ct != hlc.Timestamp{}:
+	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.initRTS:
 		p.initResolvedTS(ctx)
@@ -530,7 +570,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e event) {
 		}
 		close(e.syncC)
 	default:
-		panic("missing event variant")
+		panic(fmt.Sprintf("missing event variant: %+v", e))
 	}
 }
 
@@ -559,7 +599,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 			// No updates to publish.
 
 		default:
-			panic(fmt.Sprintf("unknown logical op %T", t))
+			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
 		// Determine whether the operation caused the resolved timestamp to

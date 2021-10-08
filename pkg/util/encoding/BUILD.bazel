@@ -1,0 +1,95 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "encoding",
+    srcs = [
+        "complement_fast.go",
+        "complement_safe.go",
+        "decimal.go",
+        "encoding.go",
+        "float.go",
+        ":gen-type-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/encoding/encodingtype",
+        "//pkg/util/ipaddr",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "encoding_test",
+    size = "small",
+    srcs = [
+        "decimal_test.go",
+        "encoding_test.go",
+        "float_test.go",
+        "main_test.go",
+        "printer_test.go",
+    ],
+    embed = [":encoding"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/ipaddr",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-type-stringer",
+    srcs = [
+        "encoding.go",
+    ],
+    outs = ["type_string.go"],
+    # golang.org/x/tools executes commands via
+    # golang.org/x/sys/execabs which requires all PATH lookups to
+    # result in absolute paths. To account for this, we resolve the
+    # relative path returned by location to an absolute path.
+    #
+    # We do an additional hack here, replacing `type Type encodingtype.T`
+    # with `type Type int`, as stringer in a bazel environment does not
+    # enjoy encodingtype being a separate package. All our attempts
+    # ended up in the error `stringer: no values defined for type Type`,
+    # which is due to some weird stringer interaction with the packages.Load.
+    #
+    # This has caused a long day of headache for @otan / weeks for @alan-mas.
+    # Try and fix this at the risk of banging your head against 100 watermelons
+    # in Guinness World Record time.
+    cmd = """
+       GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+       # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+       sed -e 's/type Type encodingtype.T/type Type int/' $(location encoding.go) > encoding_tmp.go && \
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
+         $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type encoding_tmp.go
+    """,
+    exec_tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)

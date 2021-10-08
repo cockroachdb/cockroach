@@ -1,0 +1,54 @@
+load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanlatch",
+    srcs = [
+        "doc.go",
+        "list.go",
+        "manager.go",
+        "signal.go",
+        ":latch_interval_btree.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanlatch_test",
+    size = "large",
+    srcs = [
+        "manager_test.go",
+        "signal_test.go",
+        ":latch_interval_btree_test.go",  # keep
+    ],
+    embed = [":spanlatch"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",  # keep
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+gen_interval_btree(
+    name = "spanlatch_interval_btree",
+    package = "spanlatch",
+    type = "*latch",
+)

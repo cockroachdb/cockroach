@@ -136,7 +136,7 @@ func TestVerifier(t *testing.T) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
 						var resp roachpb.BatchResponse
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
-							FailedRanges: []roachpb.RangeDescriptor{{
+							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  42,
 								StartKey: roachpb.RKey(r.Spans[0].Key),
 								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
@@ -146,7 +146,9 @@ func TestVerifier(t *testing.T) {
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.Regexp(t, "failed to verify protection.*r42", ptv.Verify(ctx, r.ID).Error())
+				require.Regexp(t, "protected ts verification error: failed to verify protection.*\n"+
+					"range ID: 42, range span: /Table/42 - /Table/43",
+					ptv.Verify(ctx, r.ID).Error())
 				ensureVerified(t, r.ID, false)
 				release(t, r.ID)
 			},
@@ -162,24 +164,59 @@ func TestVerifier(t *testing.T) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
 						var resp roachpb.BatchResponse
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
-							FailedRanges: []roachpb.RangeDescriptor{{
+							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  42,
 								StartKey: roachpb.RKey(r.Spans[0].Key),
 								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
+								Reason:   "foo",
 							}},
 						})
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
-							FailedRanges: []roachpb.RangeDescriptor{{
+							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  12,
 								StartKey: roachpb.RKey(r.Spans[1].Key),
 								EndKey:   roachpb.RKey(r.Spans[1].EndKey),
+								Reason:   "bar",
 							}},
 						})
 						return &resp, nil
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.Regexp(t, "failed to verify protection.*r42.*r12", ptv.Verify(ctx, r.ID).Error())
+				require.Regexp(t, "protected ts verification error: failed to verify protection.*\n"+
+					"range ID: 42, "+
+					"range span: /Table/42 - /Table/43: foo\nrange ID: 12, "+
+					"range span: /Table/12 - /Table/13: bar",
+					ptv.Verify(ctx, r.ID).Error())
+				ensureVerified(t, r.ID, false)
+				release(t, r.ID)
+			},
+		},
+		{
+			// TODO(adityamaru): Remove in 21.2.
+			name: "verification failed with deprecated failed ranges response",
+			test: func(t *testing.T) {
+				defer senderFunc.Store(senderFunc.Load())
+				r := createRecord(t, 42)
+				senderFunc.Store(kv.SenderFunc(func(
+					ctx context.Context, ba roachpb.BatchRequest,
+				) (*roachpb.BatchResponse, *roachpb.Error) {
+					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
+						var resp roachpb.BatchResponse
+						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
+							DeprecatedFailedRanges: []roachpb.RangeDescriptor{{
+								RangeID:  42,
+								StartKey: roachpb.RKey(r.Spans[0].Key),
+								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
+							}},
+						})
+						return &resp, nil
+					}
+					return ds.Send(ctx, ba)
+				}))
+				require.Regexp(t, "protected ts verification error: failed to verify protection."+
+					"*\nrange ID: 42, range span: /Table/42 - /Table/43",
+					ptv.Verify(ctx, r.ID).Error())
 				ensureVerified(t, r.ID, false)
 				release(t, r.ID)
 			},

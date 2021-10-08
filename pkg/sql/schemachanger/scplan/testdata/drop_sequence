@@ -1,0 +1,53 @@
+create-sequence
+CREATE SEQUENCE defaultdb.SQ1
+----
+
+ops
+DROP SEQUENCE defaultdb.SQ1 CASCADE
+----
+Stage 0
+  *scop.MarkDescriptorAsDropped
+    TableID: 52
+  *scop.DrainDescriptorName
+    TableID: 52
+  *scop.CreateGcJobForDescriptor
+    DescID: 52
+
+create-table
+CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+----
+
+create-table
+CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+----
+
+ops
+DROP SEQUENCE defaultdb.SQ1 CASCADE
+----
+Stage 0
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 53
+  *scop.UpdateRelationDeps
+    TableID: 53
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 54
+  *scop.UpdateRelationDeps
+    TableID: 54
+Stage 1
+  *scop.MarkDescriptorAsDropped
+    TableID: 52
+  *scop.DrainDescriptorName
+    TableID: 52
+  *scop.CreateGcJobForDescriptor
+    DescID: 52
+
+
+deps
+DROP SEQUENCE defaultdb.SQ1 CASCADE
+----
+- from: [Sequence:{DescID: 52}, PUBLIC]
+  to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT]
+- from: [Sequence:{DescID: 52}, PUBLIC]
+  to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT]

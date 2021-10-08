@@ -1,0 +1,12 @@
+<testsuites>
+	<testsuite errors="0" failures="1" skipped="1" tests="131" time="2.949" name="github.com/cockroachdb/cockroach/pkg/rpc">
+		<testcase classname="rpc" name="TestGRPCDialClass" time="0.010"></testcase>
+		<testcase classname="rpc" name="TestGRPCKeepaliveFailureFailsInflightRPCs" time="0.000">
+			<skipped message="Skipped" type="">=== RUN   TestGRPCKeepaliveFailureFailsInflightRPCs&#xA;    context_test.go:1004: [https://github.com/cockroachdb/cockroach/issues/51800 Takes too long given https://github.com/grpc/grpc-go/pull/2642]&#xA;--- SKIP: TestGRPCKeepaliveFailureFailsInflightRPCs (0.00s)&#xA;</skipped>
+		</testcase>
+		<testcase classname="rpc" name="TestRemoteOffsetString" time="0.000">
+			<failure message="Failed" type="">=== RUN   TestRemoteOffsetString&#xA;    heartbeat_test.go:32: something unusual happened&#xA;--- FAIL: TestRemoteOffsetString (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="rpc" name="TestRemoteOffsetUnhealthy" time="0.070"></testcase>
+	</testsuite>
+</testsuites>

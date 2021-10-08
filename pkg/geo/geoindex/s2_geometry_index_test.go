@@ -29,7 +29,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 
 	ctx := context.Background()
 	var index GeometryIndex
-	shapes := make(map[string]*geo.Geometry)
+	shapes := make(map[string]geo.Geometry)
 	datadriven.RunTest(t, "testdata/s2_geometry", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
@@ -81,7 +81,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 func TestClipByRect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var g *geo.Geometry
+	var g geo.Geometry
 	var err error
 	datadriven.RunTest(t, "testdata/clip", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -128,25 +128,24 @@ func TestNoClippingAtSRIDBounds(t *testing.T) {
 	// Test that indexes that use the SRID bounds don't clip shapes that touch
 	// those bounds. This test uses point shapes representing the four corners
 	// of the bounds.
-	for srid, projInfo := range geoprojbase.Projections {
-		t.Run(strconv.Itoa(int(srid)), func(t *testing.T) {
+	for _, projInfo := range geoprojbase.AllProjections() {
+		t.Run(strconv.Itoa(int(projInfo.SRID)), func(t *testing.T) {
 			b := projInfo.Bounds
-			config, err := GeometryIndexConfigForSRID(srid)
+			config, err := GeometryIndexConfigForSRID(projInfo.SRID)
 			require.NoError(t, err)
 			index := NewS2GeometryIndex(*config.S2Geometry)
 			// Four corners of the bounds, proceeding clockwise from the lower-left.
 			xCorners := []float64{b.MinX, b.MinX, b.MaxX, b.MaxX}
 			yCorners := []float64{b.MinY, b.MaxY, b.MaxY, b.MinY}
 			for i := range xCorners {
-				g, err := geo.NewGeometryFromPointCoords(xCorners[i], yCorners[i])
+				g, err := geo.MakeGeometryFromPointCoords(xCorners[i], yCorners[i])
 				require.NoError(t, err)
-				keys, err := index.InvertedIndexKeys(context.Background(), g)
+				keys, _, err := index.InvertedIndexKeys(context.Background(), g)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(keys))
 				require.NotEqual(t, Key(exceedsBoundsCellID), keys[0],
-					"SRID: %d, Point: %f, %f", srid, xCorners[i], yCorners[i])
+					"SRID: %d, Point: %f, %f", projInfo.SRID, xCorners[i], yCorners[i])
 			}
 		})
 	}
-
 }

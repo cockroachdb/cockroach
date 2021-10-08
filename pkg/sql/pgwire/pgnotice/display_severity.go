@@ -19,7 +19,7 @@ import (
 // purposes of displaying notices.
 // This corresponds to the allowed values for the `client_min_messages`
 // variable in postgres.
-type DisplaySeverity int
+type DisplaySeverity uint32
 
 // It is important to keep the same order here as Postgres.
 // See https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-CLIENT-MIN-MESSAGES.
@@ -62,7 +62,7 @@ func ParseDisplaySeverity(k string) (DisplaySeverity, bool) {
 }
 
 func (ns DisplaySeverity) String() string {
-	if ns < 0 || ns > DisplaySeverity(len(noticeDisplaySeverityNames)-1) {
+	if ns >= DisplaySeverity(len(noticeDisplaySeverityNames)) {
 		return fmt.Sprintf("DisplaySeverity(%d)", ns)
 	}
 	return noticeDisplaySeverityNames[ns]

@@ -15,9 +15,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -53,7 +52,7 @@ func (b sz) String() string {
 // expensive on-split retries.
 type SSTBatcher struct {
 	db         SSTSender
-	rc         *kvcoord.RangeDescriptorCache
+	rc         *rangecache.RangeCache
 	settings   *cluster.Settings
 	maxSize    func() int64
 	splitAfter func() int64
@@ -65,12 +64,21 @@ type SSTBatcher struct {
 	// which are the same, will all correspond to the same kv in the inverted
 	// index. The method which generates these kvs does not dedup, thus we rely on
 	// the SSTBatcher to dedup them (by skipping), rather than throwing a
-	// DuplicateKeyError. This is also true when used with IMPORT. Import
+	// DuplicateKeyError.
+	// This is also true when used with IMPORT. Import
 	// generally prohibits the ingestion of KVs which will shadow existing data,
 	// with the exception of duplicates having the same value and timestamp. To
 	// maintain uniform behavior, duplicates in the same batch with equal values
 	// will not raise a DuplicateKeyError.
 	skipDuplicates bool
+	// ingestAll can only be set when disallowShadowing and skipDuplicates are
+	// false. It will never return a duplicateKey error and continue ingesting all
+	// data provided to it.
+	ingestAll bool
+
+	// batchTS is the timestamp that will be set on batch requests used to send
+	// produced SSTs.
+	batchTS hlc.Timestamp
 
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
@@ -113,6 +121,16 @@ func MakeSSTBatcher(
 	return b, err
 }
 
+// MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
+// that might be received from a cluster to cluster stream.
+func MakeStreamSSTBatcher(
+	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+) (*SSTBatcher, error) {
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
+	err := b.Reset(ctx)
+	return b, err
+}
+
 func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)
@@ -134,7 +152,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
+	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
 		}
@@ -181,11 +199,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
-	if b.settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
-	} else {
-		b.sstWriter = storage.MakeBackupSSTWriter(b.sstFile)
-	}
+	b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -213,7 +227,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if k, err := keys.Addr(nextKey); err != nil {
 			log.Warningf(ctx, "failed to get RKey for flush key lookup")
 		} else {
-			r := b.rc.GetCached(k, false /* inverted */)
+			r := b.rc.GetCached(ctx, k, false /* inverted */)
 			if r != nil {
 				b.flushKey = r.Desc().EndKey.AsRawKey()
 				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)
@@ -267,7 +281,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// non-overlapping keyspace this split partitions off "our" target space for
 		// future splitting/scattering, while if they don't, doing this only once
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
-		if b.flushCounts.total == 1 {
+		//
+		// We only do this splitting if the caller expects the sst_batcher to
+		// split and scatter the data as it ingests it (which is the case when
+		// splitAfter) is set.
+		if b.flushCounts.total == 1 && b.splitAfter != nil {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "%v", err)
 			} else {
@@ -296,7 +314,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS)
 	if err != nil {
 		return err
 	}
@@ -335,14 +353,19 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
+	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	b.totalRows.DataSize += b.sstWriter.DataSize
 	return nil
 }
 
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close() {
 	b.sstWriter.Close()
+}
+
+// GetBatchSummary returns this batcher's total added rows/bytes/etc.
+func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+	return b.rowCounter.BulkOpSummary
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
@@ -353,7 +376,13 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 // SSTSender is an interface to send SST data to an engine.
 type SSTSender interface {
 	AddSSTable(
-		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
+		ctx context.Context,
+		begin, end interface{},
+		data []byte,
+		disallowShadowing bool,
+		stats *enginepb.MVCCStats,
+		ingestAsWrites bool,
+		batchTs hlc.Timestamp,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -376,6 +405,7 @@ func AddSSTable(
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
+	batchTs hlc.Timestamp,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -387,7 +417,7 @@ func AddSSTable(
 
 	var stats enginepb.MVCCStats
 	if (ms == enginepb.MVCCStats{}) {
-		stats, err = storage.ComputeStatsGo(iter, start, end, now.UnixNano())
+		stats, err = storage.ComputeStatsForRange(iter, start, end, now.UnixNano())
 		if err != nil {
 			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
@@ -421,7 +451,7 @@ func AddSSTable(
 					ingestAsWriteBatch = true
 				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch, batchTs)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
@@ -437,7 +467,7 @@ func AddSSTable(
 						return err
 					}
 
-					right.stats, err = storage.ComputeStatsGo(
+					right.stats, err = storage.ComputeStatsForRange(
 						iter, right.start, right.end, now.UnixNano(),
 					)
 					if err != nil {
@@ -476,16 +506,11 @@ func createSplitSSTable(
 	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
-	iter storage.SimpleIterator,
+	iter storage.SimpleMVCCIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}
-	var w storage.SSTWriter
-	if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		w = storage.MakeIngestionSSTWriter(sstFile)
-	} else {
-		w = storage.MakeBackupSSTWriter(sstFile)
-	}
+	w := storage.MakeIngestionSSTWriter(sstFile)
 	defer w.Close()
 
 	split := false
@@ -515,11 +540,7 @@ func createSplitSSTable(
 				disallowShadowing: disallowShadowing,
 			}
 			*sstFile = storage.MemFile{}
-			if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-				w = storage.MakeIngestionSSTWriter(sstFile)
-			} else {
-				w = storage.MakeBackupSSTWriter(sstFile)
-			}
+			w = storage.MakeIngestionSSTWriter(sstFile)
 			split = true
 			first = nil
 			last = nil

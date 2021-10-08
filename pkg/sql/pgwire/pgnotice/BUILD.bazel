@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgnotice",
+    srcs = [
+        "display_severity.go",
+        "pgnotice.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

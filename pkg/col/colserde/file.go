@@ -111,7 +111,7 @@ func (s *FileSerializer) AppendBatch(batch coldata.Batch) error {
 	if err != nil {
 		return err
 	}
-	metadataLen, bodyLen, err := s.rb.Serialize(s.w, arrow)
+	metadataLen, bodyLen, err := s.rb.Serialize(s.w, arrow, batch.Length())
 	if err != nil {
 		return err
 	}
@@ -243,10 +243,11 @@ func (d *FileDeserializer) GetBatch(batchIdx int, b coldata.Batch) error {
 		return err
 	}
 	d.arrowScratch = d.arrowScratch[:0]
-	if err := d.rb.Deserialize(&d.arrowScratch, buf); err != nil {
+	batchLength, err := d.rb.Deserialize(&d.arrowScratch, buf)
+	if err != nil {
 		return err
 	}
-	return d.a.ArrowToBatch(d.arrowScratch, b)
+	return d.a.ArrowToBatch(d.arrowScratch, batchLength, b)
 }
 
 // read gets the next `n` bytes from the start of the buffer, consuming them.
@@ -333,7 +334,7 @@ func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
 			fbTyp = arrowserde.TypeBool
-		case types.BytesFamily:
+		case types.BytesFamily, types.JsonFamily:
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeBinary

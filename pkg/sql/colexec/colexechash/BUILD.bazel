@@ -1,0 +1,75 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexechash",
+    srcs = [
+        "hash.go",
+        "hash_utils.go",
+        "hashtable.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/memsize",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/json",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colexechash_test",
+    srcs = [
+        "dep_test.go",
+        "hash_test.go",
+        "hash_utils_test.go",
+        "main_test.go",
+    ],
+    embed = [":colexechash"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+    ],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("hash_utils.eg.go", "hash_utils_tmpl.go"),
+    ("hashtable_distinct.eg.go", "hashtable_tmpl.go"),
+    ("hashtable_full_default.eg.go", "hashtable_tmpl.go"),
+    ("hashtable_full_deleting.eg.go", "hashtable_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

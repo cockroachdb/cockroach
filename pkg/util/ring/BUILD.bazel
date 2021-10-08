@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ring",
+    srcs = ["ring_buffer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ring",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "ring_test",
+    size = "small",
+    srcs = ["ring_buffer_test.go"],
+    embed = [":ring"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

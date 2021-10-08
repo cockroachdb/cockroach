@@ -12,26 +12,38 @@ package colexec
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // hashAggregatorState represents the state of the hash aggregator operator.
 type hashAggregatorState int
 
 const (
+	// hashAggregatorBuffering is the state in which the hashAggregator reads
+	// the batches from the input and buffers them up. Once the number of
+	// buffered tuples reaches hashAggregatorMaxBuffered or the input has been
+	// fully exhausted, the hashAggregator transitions to
+	// hashAggregatorAggregating state.
+	hashAggregatorBuffering hashAggregatorState = iota
+
 	// hashAggregatorAggregating is the state in which the hashAggregator is
-	// reading the batches from the input and performing aggregation on them,
-	// one at a time. After the input has been fully exhausted, hashAggregator
-	// transitions to hashAggregatorOutputting state.
-	hashAggregatorAggregating hashAggregatorState = iota
+	// performing the aggregation on the buffered tuples. If the input has been
+	// fully exhausted and the buffer is empty, the hashAggregator transitions
+	// to hashAggregatorOutputting state.
+	hashAggregatorAggregating
 
 	// hashAggregatorOutputting is the state in which the hashAggregator is
 	// writing its aggregation results to the output buffer.
@@ -52,22 +64,50 @@ const (
 // Note that throughout this file "buckets" and "groups" mean the same thing
 // and are used interchangeably.
 type hashAggregator struct {
-	OneInputNode
+	// Note that we don't use colexecop.OneInputInitCloserHelper here instead of
+	// the three options below because we need a custom behavior for Init() and
+	// Close().
+	colexecop.OneInputNode
+	colexecop.InitHelper
+	colexecop.CloserHelper
 
-	allocator *colmem.Allocator
-	spec      *execinfrapb.AggregatorSpec
+	hashTableAllocator *colmem.Allocator
+	accountingHelper   colmem.SetAccountingHelper
+	spec               *execinfrapb.AggregatorSpec
 
+	aggHelper          aggregatorHelper
 	inputTypes         []*types.T
 	outputTypes        []*types.T
-	inputArgsConverter *vecToDatumConverter
+	inputArgsConverter *colconv.VecToDatumConverter
 
+	bufferingState struct {
+		// tuples contains the tuples that we have buffered up for aggregation.
+		// Its length will not exceed hashAggregatorMaxBuffered.
+		tuples *colexecutils.AppendOnlyBufferedBatch
+		// pendingBatch stores the last read batch from the input that hasn't
+		// been fully processed yet.
+		pendingBatch coldata.Batch
+		// unprocessedIdx is the index of the first tuple in pendingBatch that
+		// hasn't been processed yet.
+		unprocessedIdx int
+	}
+
+	// numPreviouslyCreatedBuckets tracks the maximum number of buckets that
+	// have been created throughout the lifetime of this hashAggregator. This
+	// matters if the hashAggregator is reset - we reuse the same buckets on the
+	// next run.
+	// If non-zero, all buckets available to use are in
+	// buckets[len(buckets):numPreviouslyCreatedBuckets] range. Note that
+	// cap(buckets) might be higher than this number, but all buckets past
+	// numPreviouslyCreatedBuckets haven't been instantiated properly, so
+	// cap(buckets) should be ignored.
+	numPreviouslyCreatedBuckets int
 	// buckets contains all aggregation groups that we have so far. There is
-	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
-	// the buckets has been flushed, buckets will be sliced up accordingly.
-	buckets []*hashAggFuncs
+	// 1-to-1 mapping between buckets[i] and ht.Vals[i].
+	buckets []*aggBucket
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
-	ht *hashTable
+	ht *colexechash.HashTable
 
 	// state stores the current state of hashAggregator.
 	state hashAggregatorState
@@ -86,21 +126,33 @@ type hashAggregator struct {
 		anotherIntSlice []int
 	}
 
-	output coldata.Batch
-
-	testingKnobs struct {
-		// numOfHashBuckets is the number of hash buckets that each tuple will be
-		// assigned to. When it is 0, hash aggregator will not enforce maximum
-		// number of hash buckets. It is used to test hash collision.
-		numOfHashBuckets uint64
+	// inputTrackingState tracks all the input tuples which is needed in order
+	// to fallback to the external hash aggregator.
+	inputTrackingState struct {
+		tuples            *colexecutils.SpillingQueue
+		zeroBatchEnqueued bool
 	}
 
-	aggFnsAlloc *aggregateFuncsAlloc
-	hashAlloc   hashAggFuncsAlloc
-	toClose     Closers
+	// curOutputBucketIdx tracks the index in buckets to be flushed next when
+	// populating the output.
+	curOutputBucketIdx int
+
+	maxOutputBatchMemSize int64
+	// maxCapacity if non-zero indicates the target capacity of the output
+	// batch. It is set when, after setting a row, we realize that the output
+	// batch has exceeded the memory limit.
+	maxCapacity int
+	output      coldata.Batch
+
+	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
+	hashAlloc   aggBucketAlloc
+	datumAlloc  rowenc.DatumAlloc
+	toClose     colexecop.Closers
 }
 
-var _ closableOperator = &hashAggregator{}
+var _ colexecop.ResettableOperator = &hashAggregator{}
+var _ colexecop.BufferingInMemoryOperator = &hashAggregator{}
+var _ colexecop.ClosableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
 // aggregator's allocators. This number was chosen after running benchmarks of
@@ -108,104 +160,198 @@ var _ closableOperator = &hashAggregator{}
 // from 1 to 4096).
 const hashAggregatorAllocSize = 128
 
+// hashAggregatorMaxBuffered determines the maximum number of tuples that are
+// buffered up for aggregation at once.
+var hashAggregatorMaxBuffered = coldata.MaxBatchSize
+
+// randomizeHashAggregatorMaxBuffered enables the metamorphic randomization for
+// hashAggregatorMaxBuffered. It cannot be executed in init() function in
+// colexec package because the tests might change coldata.BatchSize() value.
+// This function should only be called from the test code.
+func randomizeHashAggregatorMaxBuffered() {
+	maxHashAggregatorMaxBuffered := 4 * coldata.BatchSize()
+	if maxHashAggregatorMaxBuffered > coldata.MaxBatchSize {
+		maxHashAggregatorMaxBuffered = coldata.MaxBatchSize
+	}
+	hashAggregatorMaxBuffered = util.ConstantWithMetamorphicTestRange(
+		"hash-aggregator-max-buffered",
+		coldata.MaxBatchSize,
+		coldata.BatchSize(),
+		maxHashAggregatorMaxBuffered,
+	)
+}
+
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
+// newSpillingQueueArgs - when non-nil - specifies the arguments to
+// instantiate a SpillingQueue with which will be used to keep all of the
+// input tuples in case the in-memory hash aggregator needs to fallback to
+// the disk-backed operator. Pass in nil in order to not track all input
+// tuples.
 func NewHashAggregator(
-	allocator *colmem.Allocator,
-	input colexecbase.Operator,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	evalCtx *tree.EvalContext,
-	constructors []execinfrapb.AggregateConstructor,
-	constArguments []tree.Datums,
-	outputTypes []*types.T,
-) (colexecbase.Operator, error) {
-	aggFnsAlloc, inputArgsConverter, toClose, err := newAggregateFuncsAlloc(
-		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
-		outputTypes, hashAggregatorAllocSize, true, /* isHashAgg */
+	args *colexecagg.NewAggregatorArgs,
+	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
+	outputUnlimitedAllocator *colmem.Allocator,
+	maxOutputBatchMemSize int64,
+) (colexecop.ResettableOperator, error) {
+	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
+		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
 	)
 	hashAgg := &hashAggregator{
-		OneInputNode:       NewOneInputNode(input),
-		allocator:          allocator,
-		spec:               spec,
-		state:              hashAggregatorAggregating,
-		inputTypes:         inputTypes,
-		outputTypes:        outputTypes,
-		inputArgsConverter: inputArgsConverter,
-		toClose:            toClose,
-		aggFnsAlloc:        aggFnsAlloc,
-		hashAlloc:          hashAggFuncsAlloc{allocator: allocator},
+		OneInputNode:          colexecop.NewOneInputNode(args.Input),
+		hashTableAllocator:    args.Allocator,
+		spec:                  args.Spec,
+		state:                 hashAggregatorBuffering,
+		inputTypes:            args.InputTypes,
+		outputTypes:           args.OutputTypes,
+		inputArgsConverter:    inputArgsConverter,
+		toClose:               toClose,
+		maxOutputBatchMemSize: maxOutputBatchMemSize,
+		aggFnsAlloc:           aggFnsAlloc,
+		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
+	}
+	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes, nil /* notNeededVecIdxs */)
+	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
+	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
+	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)
+	if newSpillingQueueArgs != nil {
+		hashAgg.inputTrackingState.tuples = colexecutils.NewSpillingQueue(newSpillingQueueArgs)
 	}
 	return hashAgg, err
 }
 
-func (op *hashAggregator) Init() {
-	op.input.Init()
-	// Note that we use a batch with fixed capacity because aggregate functions
-	// hold onto the vectors passed in into their Init method, so we cannot
-	// simply reallocate the output batch.
-	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
-	// updating the output vector.
-	op.output = op.allocator.NewMemBatchWithFixedCapacity(op.outputTypes, coldata.BatchSize())
-	op.scratch.eqChains = make([][]int, coldata.BatchSize())
-	op.scratch.intSlice = make([]int, coldata.BatchSize())
-	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
-	// TODO(yuzefovich): tune this.
-	numOfHashBuckets := uint64(HashTableNumBuckets)
-	if op.testingKnobs.numOfHashBuckets != 0 {
-		numOfHashBuckets = op.testingKnobs.numOfHashBuckets
+func (op *hashAggregator) Init(ctx context.Context) {
+	if !op.InitHelper.Init(ctx) {
+		return
 	}
-	op.ht = newHashTable(
-		op.allocator,
-		numOfHashBuckets,
+	op.Input.Init(op.Ctx)
+	// These numbers were chosen after running the micro-benchmarks and relevant
+	// TPCH queries using tpchvec/bench.
+	const hashTableLoadFactor = 0.1
+	const hashTableNumBuckets = 256
+	op.ht = colexechash.NewHashTable(
+		op.Ctx,
+		op.hashTableAllocator,
+		hashTableLoadFactor,
+		hashTableNumBuckets,
 		op.inputTypes,
 		op.spec.GroupCols,
 		true, /* allowNullEquality */
-		hashTableDistinctBuildMode,
-		hashTableDefaultProbeMode,
+		colexechash.HashTableDistinctBuildMode,
+		colexechash.HashTableDefaultProbeMode,
 	)
 }
 
-func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
+func (op *hashAggregator) Next() coldata.Batch {
 	for {
 		switch op.state {
-		case hashAggregatorAggregating:
-			b := op.input.Next(ctx)
-			if b.Length() == 0 {
-				// TODO(yuzefovich): we no longer need the hash table, so we
-				// could be releasing its memory here.
-				op.state = hashAggregatorOutputting
+		case hashAggregatorBuffering:
+			if op.bufferingState.pendingBatch != nil && op.bufferingState.unprocessedIdx < op.bufferingState.pendingBatch.Length() {
+				op.bufferingState.tuples.AppendTuples(
+					op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx, op.bufferingState.pendingBatch.Length(),
+				)
+			}
+			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(), 0
+			n := op.bufferingState.pendingBatch.Length()
+			if op.inputTrackingState.tuples != nil {
+				op.inputTrackingState.tuples.Enqueue(op.Ctx, op.bufferingState.pendingBatch)
+				op.inputTrackingState.zeroBatchEnqueued = n == 0
+			}
+			if n == 0 {
+				// This is the last input batch.
+				if op.bufferingState.tuples.Length() == 0 {
+					// There are currently no buffered tuples to perform the
+					// aggregation on.
+					if len(op.buckets) == 0 {
+						// We don't have any buckets which means that there were
+						// no input tuples whatsoever, so we can transition to
+						// finished state right away.
+						op.state = hashAggregatorDone
+					} else {
+						// There are some buckets, so we proceed to the
+						// outputting state.
+						op.state = hashAggregatorOutputting
+					}
+				} else {
+					// There are some buffered tuples on which we need to run
+					// the aggregation.
+					op.state = hashAggregatorAggregating
+				}
 				continue
 			}
-			// TODO(yuzefovich): benchmark whether it is beneficial to buffer
-			// up several batches from the input before proceeding to online
-			// aggregation.
-			op.inputArgsConverter.convertBatch(b)
-			op.onlineAgg(ctx, b)
+			toBuffer := n
+			if op.bufferingState.tuples.Length()+toBuffer > hashAggregatorMaxBuffered {
+				toBuffer = hashAggregatorMaxBuffered - op.bufferingState.tuples.Length()
+			}
+			if toBuffer > 0 {
+				op.bufferingState.tuples.AppendTuples(op.bufferingState.pendingBatch, 0 /* startIdx */, toBuffer)
+				op.bufferingState.unprocessedIdx = toBuffer
+			}
+			if op.bufferingState.tuples.Length() == hashAggregatorMaxBuffered {
+				op.state = hashAggregatorAggregating
+				continue
+			}
+
+		case hashAggregatorAggregating:
+			op.inputArgsConverter.ConvertBatch(op.bufferingState.tuples)
+			op.onlineAgg(op.bufferingState.tuples)
+			if op.bufferingState.pendingBatch.Length() == 0 {
+				if len(op.buckets) == 0 {
+					op.state = hashAggregatorDone
+				} else {
+					op.state = hashAggregatorOutputting
+				}
+				continue
+			}
+			op.bufferingState.tuples.ResetInternalBatch()
+			op.state = hashAggregatorBuffering
+
 		case hashAggregatorOutputting:
-			op.output.ResetInternalBatch()
+			// Note that ResetMaybeReallocate truncates the requested capacity
+			// at coldata.BatchSize(), so we can just try asking for
+			// len(op.buckets) capacity.
+			op.output, _ = op.accountingHelper.ResetMaybeReallocate(
+				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
+			)
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
-				bucket := op.buckets[curOutputIdx]
-				for _, fn := range bucket.fns {
+			for curOutputIdx < op.output.Capacity() &&
+				op.curOutputBucketIdx < len(op.buckets) &&
+				(op.maxCapacity == 0 || curOutputIdx < op.maxCapacity) {
+				bucket := op.buckets[op.curOutputBucketIdx]
+				for fnIdx, fn := range bucket.fns {
+					fn.SetOutput(op.output.ColVec(fnIdx))
 					fn.Flush(curOutputIdx)
 				}
+				op.accountingHelper.AccountForSet(curOutputIdx)
 				curOutputIdx++
+				op.curOutputBucketIdx++
+				if op.maxCapacity == 0 && op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
+					op.maxCapacity = curOutputIdx
+				}
 			}
-			op.buckets = op.buckets[curOutputIdx:]
-			if len(op.buckets) == 0 {
+			if op.curOutputBucketIdx >= len(op.buckets) {
 				op.state = hashAggregatorDone
 			}
 			op.output.SetLength(curOutputIdx)
 			return op.output
+
 		case hashAggregatorDone:
 			return coldata.ZeroBatch
+
 		default:
-			colexecerror.InternalError("hash aggregator in unhandled state")
+			colexecerror.InternalError(errors.AssertionFailedf("hash aggregator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
+	}
+}
+
+func (op *hashAggregator) setupScratchSlices(numBuffered int) {
+	if len(op.scratch.eqChains) < numBuffered {
+		op.scratch.eqChains = make([][]int, numBuffered)
+		op.scratch.intSlice = make([]int, numBuffered)
+		op.scratch.anotherIntSlice = make([]int, numBuffered)
 	}
 }
 
@@ -223,16 +369,16 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].
-//   1. a) compute hash buckets: probeScratch.next = [reserved, 1, 1, 0, 1]
+//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 1, 1, 0, 1]
 //      b) build 'next' chains between hash buckets:
-//           probeScratch.first = [3, 1] (length of first == # of hash buckets)
-//           probeScratch.next = [reserved, 2, 4, 0, 0]
+//           ProbeScratch.first = [3, 1] (length of first == # of hash buckets)
+//           ProbeScratch.next = [reserved, 2, 4, 0, 0]
 //         (Note that we have a hash collision in the bucket with hash 1.)
-//      c) find "equality" buckets (populate headID):
-//           probeScratch.headID = [1, 1, 3, 4]
+//      c) find "equality" buckets (populate HeadID):
+//           ProbeScratch.HeadID = [1, 1, 3, 4]
 //         (This means that tuples at position 0 and 1 are the same, and the
-//          tuple at position headID-1 is the head of the equality chain.)
-//   2. divide all tuples into the equality chains based on headID:
+//          tuple at position HeadID-1 is the head of the equality chain.)
+//   2. divide all tuples into the equality chains based on HeadID:
 //        eqChains[0] = [0, 1]
 //        eqChains[1] = [2]
 //        eqChains[2] = [3]
@@ -243,47 +389,49 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 //   After we do so, we will have three buckets and the hash table will contain
 //   three tuples (with buckets and tuples corresponding to each other):
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>]
-//     ht.vals = [-3, -2, -1].
+//     ht.Vals = [-3, -2, -1].
 //   We have fully processed the first batch.
 //
 // II. we get a batch [-4, -1, -1, -4].
-//   1. a) compute hash buckets: probeScratch.next = [reserved, 0, 1, 1, 0]
+//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 0, 1, 1, 0]
 //      b) build 'next' chains between hash buckets:
-//           probeScratch.first = [1, 2]
-//           probeScratch.next = [reserved, 4, 3, 0, 0]
+//           ProbeScratch.first = [1, 2]
+//           ProbeScratch.next = [reserved, 4, 3, 0, 0]
 //      c) find "equality" buckets:
-//           probeScratch.headID = [1, 2, 2, 1]
-//   2. divide all tuples into the equality chains based on headID:
+//           ProbeScratch.HeadID = [1, 2, 2, 1]
+//   2. divide all tuples into the equality chains based on HeadID:
 //        eqChains[0] = [0, 3]
 //        eqChains[1] = [1, 2]
 //      The special "heads of equality chains" selection vector is [0, 1].
 //   3. probe that special "heads" selection vector against the tuples already
 //      present in the hash table:
-//        probeScratch.headID = [0, 3]
+//        ProbeScratch.HeadID = [0, 3]
 //      Value 0 indicates that the first equality chain doesn't have an
 //      existing bucket, but the second chain does and the ID of its bucket is
-//      headID-1 = 2. We aggregate the second equality chain into that bucket.
+//      HeadID-1 = 2. We aggregate the second equality chain into that bucket.
 //   4. the first equality chain contains tuples from a new aggregation group,
 //      so we create a new bucket for it and perform the aggregation.
 //   After we do so, we will have four buckets and the hash table will contain
 //   four tuples:
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>, <bucket for -4>]
-//     ht.vals = [-3, -2, -1, -4].
+//     ht.Vals = [-3, -2, -1, -4].
 //   We have fully processed the second batch.
 //
 //  We have processed the input fully, so we're ready to emit the output.
-func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
+//
+// NOTE: b *must* be non-zero length batch.
+func (op *hashAggregator) onlineAgg(b coldata.Batch) {
+	op.setupScratchSlices(b.Length())
 	inputVecs := b.ColVecs()
 	// Step 1: find "equality" buckets: we compute the hash buckets for all
 	// tuples, build 'next' chains between them, and then find equality buckets
 	// for the tuples.
-	op.ht.computeHashAndBuildChains(ctx, b)
-	op.ht.findBuckets(
-		b, op.ht.probeScratch.keys, op.ht.probeScratch.first,
-		op.ht.probeScratch.next, op.ht.checkProbeForDistinct,
+	op.ht.ComputeHashAndBuildChains(b)
+	op.ht.FindBuckets(
+		b, op.ht.Keys, op.ht.ProbeScratch.First, op.ht.ProbeScratch.Next, op.ht.CheckProbeForDistinct,
 	)
 
-	// Step 2: now that we have op.ht.probeScratch.headID populated we can
+	// Step 2: now that we have op.ht.ProbeScratch.HeadID populated we can
 	// populate the equality chains.
 	eqChainsCount, eqChainsHeadsSel := op.populateEqChains(b)
 	b.SetLength(eqChainsCount)
@@ -298,24 +446,23 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	// the equality chains (which the selection vector on b currently contains)
 	// against the heads of the existing groups.
 	if len(op.buckets) > 0 {
-		op.ht.findBuckets(
-			b, op.ht.probeScratch.keys, op.ht.buildScratch.first,
-			op.ht.buildScratch.next, op.ht.checkBuildForAggregation,
+		op.ht.FindBuckets(
+			b, op.ht.Keys, op.ht.BuildScratch.First, op.ht.BuildScratch.Next, op.ht.CheckBuildForAggregation,
 		)
-		for eqChainsSlot, headID := range op.ht.probeScratch.headID[:eqChainsCount] {
-			if headID != 0 {
+		for eqChainsSlot, HeadID := range op.ht.ProbeScratch.HeadID[:eqChainsCount] {
+			if HeadID != 0 {
 				// Tuples in this equality chain belong to an already existing
 				// group.
 				eqChain := op.scratch.eqChains[eqChainsSlot]
-				bucket := op.buckets[headID-1]
-				bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
+				bucket := op.buckets[HeadID-1]
+				op.aggHelper.performAggregation(
+					op.Ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+				)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
 			}
 		}
-		copy(op.ht.probeScratch.headID[:eqChainsCount], zeroUint64Column)
-		copy(op.ht.probeScratch.differs[:eqChainsCount], zeroBoolColumn)
 	}
 
 	// Step 4: now we go over all equality chains and check whether there are
@@ -326,20 +473,35 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	for eqChainSlot, eqChain := range op.scratch.eqChains[:eqChainsCount] {
 		if len(eqChain) > 0 {
 			// Tuples in this equality chain belong to a new aggregation group,
-			// so we'll create a new bucket and make sure that the head of this
+			// so we'll use a new bucket and make sure that the head of this
 			// equality chain is appended to the hash table in the
 			// corresponding position.
-			bucket := op.hashAlloc.newHashAggFuncs()
-			bucket.fns = op.aggFnsAlloc.makeAggregateFuncs()
-			op.buckets = append(op.buckets, bucket)
-			// bucket knows that all selected tuples in b belong to the same
-			// single group, so we can pass 'nil' for the first argument.
-			bucket.init(nil /* group */, op.output)
-			bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
+			var bucket *aggBucket
+			if nextBucketIdx := len(op.buckets); op.numPreviouslyCreatedBuckets > nextBucketIdx {
+				// We still have a bucket created on the previous run of the
+				// hash aggregator. Increase the length of op.buckets, using
+				// previously-allocated capacity, and then reset the bucket for
+				// reuse.
+				op.buckets = op.buckets[:nextBucketIdx+1]
+				bucket = op.buckets[nextBucketIdx]
+				bucket.reset()
+			} else {
+				// Need to allocate a new bucket.
+				bucket = op.hashAlloc.newAggBucket()
+				op.buckets = append(op.buckets, bucket)
+				// We know that all selected tuples belong to the same single
+				// group, so we can pass 'nil' for the 'groups' argument.
+				bucket.init(
+					op.aggFnsAlloc.MakeAggregateFuncs(), op.aggHelper.makeSeenMaps(), nil, /* groups */
+				)
+			}
+			op.aggHelper.performAggregation(
+				op.Ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+			)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
-			op.ht.probeScratch.hashBuffer[newGroupCount] = op.ht.probeScratch.hashBuffer[eqChainSlot]
+			op.ht.ProbeScratch.HashBuffer[newGroupCount] = op.ht.ProbeScratch.HashBuffer[eqChainSlot]
 			newGroupCount++
 			op.scratch.eqChains[eqChainSlot] = op.scratch.eqChains[eqChainSlot][:0]
 		}
@@ -350,62 +512,56 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 		// buckets to the hash table.
 		copy(b.Selection(), newGroupsHeadsSel)
 		b.SetLength(newGroupCount)
-		op.ht.appendAllDistinct(ctx, b)
+		op.ht.AppendAllDistinct(b)
 	}
 }
 
-// reset resets the hashAggregator for another run. Primarily used for
-// benchmarks.
-func (op *hashAggregator) reset(ctx context.Context) {
-	if r, ok := op.input.(resetter); ok {
-		r.reset(ctx)
+func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch {
+	if !op.inputTrackingState.zeroBatchEnqueued {
+		// Per the contract of the spilling queue, we need to append a
+		// zero-length batch.
+		op.inputTrackingState.tuples.Enqueue(op.Ctx, coldata.ZeroBatch)
+		op.inputTrackingState.zeroBatchEnqueued = true
 	}
+	batch, err := op.inputTrackingState.tuples.Dequeue(op.Ctx)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return batch
+}
+
+func (op *hashAggregator) Reset(ctx context.Context) {
+	if r, ok := op.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+	op.bufferingState.tuples.ResetInternalBatch()
+	op.bufferingState.pendingBatch = nil
+	op.bufferingState.unprocessedIdx = 0
+	if op.numPreviouslyCreatedBuckets < len(op.buckets) {
+		op.numPreviouslyCreatedBuckets = len(op.buckets)
+	}
+	// Set up buckets for reuse.
 	op.buckets = op.buckets[:0]
-	op.state = hashAggregatorAggregating
-	op.ht.reset(ctx)
-	op.output.ResetInternalBatch()
-	op.output.SetLength(0)
-}
-
-func (op *hashAggregator) Close(ctx context.Context) error {
-	return op.toClose.Close(ctx)
-}
-
-// hashAggFuncs stores the aggregation functions for the corresponding
-// aggregation group.
-type hashAggFuncs struct {
-	fns []aggregateFunc
-}
-
-const sizeOfHashAggFuncs = unsafe.Sizeof(hashAggFuncs{})
-
-func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
-	for fnIdx, fn := range v.fns {
-		fn.Init(group, b.ColVec(fnIdx))
+	op.ht.Reset(ctx)
+	if op.inputTrackingState.tuples != nil {
+		op.inputTrackingState.tuples.Reset(ctx)
+		op.inputTrackingState.zeroBatchEnqueued = false
 	}
+	op.curOutputBucketIdx = 0
+	op.state = hashAggregatorBuffering
 }
 
-func (v *hashAggFuncs) compute(
-	vecs []coldata.Vec, spec *execinfrapb.AggregatorSpec, inputLen int, sel []int,
-) {
-	for fnIdx, fn := range v.fns {
-		fn.Compute(vecs, spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
+func (op *hashAggregator) Close() error {
+	if !op.CloserHelper.Close() {
+		return nil
 	}
-}
-
-// hashAggFuncsAlloc is a utility struct that batches allocations of
-// hashAggFuncs.
-type hashAggFuncsAlloc struct {
-	allocator *colmem.Allocator
-	buf       []hashAggFuncs
-}
-
-func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
-	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfHashAggFuncs))
-		a.buf = make([]hashAggFuncs, hashAggregatorAllocSize)
+	op.accountingHelper.Release()
+	var retErr error
+	if op.inputTrackingState.tuples != nil {
+		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
 	}
-	ret := &a.buf[0]
-	a.buf = a.buf[1:]
-	return ret
+	if err := op.toClose.Close(); err != nil {
+		retErr = err
+	}
+	return retErr
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,7 +36,7 @@ func TestAsOfTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }}
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -121,8 +122,18 @@ func TestAsOfTime(t *testing.T) {
 		}
 	})
 
-	// Future queries shouldn't work.
+	// Future queries shouldn't work if not marked as synthetic.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
+		t.Fatal(err)
+	}
+
+	// Future queries shouldn't work if too far in the future.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h?'").Scan(&i); !testutils.IsError(err, "pq: request timestamp .* too far in future") {
+		t.Fatal(err)
+	}
+
+	// Future queries work if marked as synthetic and only slightly in future.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms?'").Scan(&i); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,7 +311,7 @@ func TestAsOfRetry(t *testing.T) {
 			defer magicVals.Unlock()
 
 			switch req := args.Req.(type) {
-			case *roachpb.ScanRequest:
+			case *roachpb.GetRequest:
 				if kv.TestingIsRangeLookupRequest(req) {
 					return nil
 				}

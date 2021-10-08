@@ -13,6 +13,8 @@ package roachpb
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddNumericStats(t *testing.T) {
@@ -80,4 +82,16 @@ func TestAddNumericStats(t *testing.T) {
 	if a != combined {
 		t.Fatalf("a.Add(b) should match add(a, b): %+v vs %+v", a, combined)
 	}
+}
+
+func TestAddExecStats(t *testing.T) {
+	numericStatA := NumericStat{Mean: 354.123, SquaredDiffs: 34.34123}
+	numericStatB := NumericStat{Mean: 9.34354, SquaredDiffs: 75.321}
+	a := ExecStats{Count: 3, NetworkBytes: numericStatA}
+	b := ExecStats{Count: 1, NetworkBytes: numericStatB}
+	expectedNumericStat := AddNumericStats(a.NetworkBytes, b.NetworkBytes, a.Count, b.Count)
+	a.Add(b)
+	require.Equal(t, int64(4), a.Count)
+	epsilon := 0.00000001
+	require.True(t, expectedNumericStat.AlmostEqual(a.NetworkBytes, epsilon), "expected %+v, but found %+v", expectedNumericStat, a.NetworkMessages)
 }

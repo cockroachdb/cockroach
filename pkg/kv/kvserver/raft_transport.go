@@ -20,7 +20,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -30,8 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 )
 
@@ -148,18 +148,18 @@ type RaftTransport struct {
 	stopper *stop.Stopper
 
 	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
-	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
+	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
 	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
+func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st,
+	return NewRaftTransport(log.AmbientContext{Tracer: tracer}, st,
 		nodedialer.New(nil, resolver), nil, nil)
 }
 
@@ -191,7 +191,7 @@ func NewRaftTransport(
 	}
 	if t.stopper != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
-		t.stopper.RunWorker(ctx, func(ctx context.Context) {
+		_ = t.stopper.RunAsyncTask(ctx, "raft-transport", func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -255,7 +255,7 @@ func NewRaftTransport(
 					}
 					lastTime = now
 					log.Infof(ctx, "stats:\n%s", buf.String())
-				case <-t.stopper.ShouldStop():
+				case <-t.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -331,52 +331,50 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.stopper.RunTask(
+	if err := t.stopper.RunAsyncTask(
 		stream.Context(), "storage.RaftTransport: processing batch",
 		func(ctx context.Context) {
-			t.stopper.RunWorker(ctx, func(ctx context.Context) {
-				errCh <- func() error {
-					var stats *raftTransportStats
-					stream := &lockedRaftMessageResponseStream{wrapped: stream}
-					for {
-						batch, err := stream.Recv()
-						if err != nil {
-							return err
-						}
-						if len(batch.Requests) == 0 {
-							continue
-						}
+			errCh <- func() error {
+				var stats *raftTransportStats
+				stream := &lockedRaftMessageResponseStream{wrapped: stream}
+				for {
+					batch, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					if len(batch.Requests) == 0 {
+						continue
+					}
 
-						// This code always uses the DefaultClass. Class is primarily a
-						// client construct and the server has no way to determine which
-						// class an inbound connection holds on the client side. Because of
-						// this we associate all server receives and sends with the
-						// DefaultClass. This data is exclusively used to print a debug
-						// log message periodically. Using this policy may lead to a
-						// DefaultClass log line showing a high rate of server recv but
-						// a low rate of client sends if most of the traffic is due to
-						// system ranges.
-						//
-						// TODO(ajwerner): consider providing transport metadata to inform
-						// the server of the connection class or keep shared stats for all
-						// connection with a host.
-						if stats == nil {
-							stats = t.getStats(batch.Requests[0].FromReplica.NodeID, rpc.DefaultClass)
-						}
+					// This code always uses the DefaultClass. Class is primarily a
+					// client construct and the server has no way to determine which
+					// class an inbound connection holds on the client side. Because of
+					// this we associate all server receives and sends with the
+					// DefaultClass. This data is exclusively used to print a debug
+					// log message periodically. Using this policy may lead to a
+					// DefaultClass log line showing a high rate of server recv but
+					// a low rate of client sends if most of the traffic is due to
+					// system ranges.
+					//
+					// TODO(ajwerner): consider providing transport metadata to inform
+					// the server of the connection class or keep shared stats for all
+					// connection with a host.
+					if stats == nil {
+						stats = t.getStats(batch.Requests[0].FromReplica.NodeID, rpc.DefaultClass)
+					}
 
-						for i := range batch.Requests {
-							req := &batch.Requests[i]
-							atomic.AddInt64(&stats.serverRecv, 1)
-							if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
-								atomic.AddInt64(&stats.serverSent, 1)
-								if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
-									return err
-								}
+					for i := range batch.Requests {
+						req := &batch.Requests[i]
+						atomic.AddInt64(&stats.serverRecv, 1)
+						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
+							atomic.AddInt64(&stats.serverSent, 1)
+							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+								return err
 							}
 						}
 					}
-				}()
-			})
+				}
+			}()
 		}); err != nil {
 		return err
 	}
@@ -418,7 +416,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	select {
-	case <-t.stopper.ShouldStop():
+	case <-t.stopper.ShouldQuiesce():
 		return nil
 	case err := <-errCh:
 		return err
@@ -449,30 +447,29 @@ func (t *RaftTransport) processQueue(
 ) error {
 	errCh := make(chan error, 1)
 
-	// Starting workers in a task prevents data races during shutdown.
-	if err := t.stopper.RunTask(
-		stream.Context(), "storage.RaftTransport: processing queue",
+	ctx := stream.Context()
+
+	if err := t.stopper.RunAsyncTask(
+		ctx, "storage.RaftTransport: processing queue",
 		func(ctx context.Context) {
-			t.stopper.RunWorker(ctx, func(ctx context.Context) {
-				errCh <- func() error {
-					for {
-						resp, err := stream.Recv()
-						if err != nil {
-							return err
-						}
-						atomic.AddInt64(&stats.clientRecv, 1)
-						handler, ok := t.getHandler(resp.ToReplica.StoreID)
-						if !ok {
-							log.Warningf(ctx, "no handler found for store %s in response %s",
-								resp.ToReplica.StoreID, resp)
-							continue
-						}
-						if err := handler.HandleRaftResponse(ctx, resp); err != nil {
-							return err
-						}
+			errCh <- func() error {
+				for {
+					resp, err := stream.Recv()
+					if err != nil {
+						return err
 					}
-				}()
-			})
+					atomic.AddInt64(&stats.clientRecv, 1)
+					handler, ok := t.getHandler(resp.ToReplica.StoreID)
+					if !ok {
+						log.Warningf(ctx, "no handler found for store %s in response %s",
+							resp.ToReplica.StoreID, resp)
+						continue
+					}
+					if err := handler.HandleRaftResponse(ctx, resp); err != nil {
+						return err
+					}
+				}
+			}()
 		}); err != nil {
 		return err
 	}
@@ -483,7 +480,7 @@ func (t *RaftTransport) processQueue(
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.stopper.ShouldStop():
+		case <-t.stopper.ShouldQuiesce():
 			return nil
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
@@ -618,11 +615,15 @@ func (t *RaftTransport) startProcessNewQueue(
 		}
 		defer cleanup(ch)
 		defer t.queues[class].Delete(int64(toNodeID))
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		// NB: we dial without a breaker here because the caller has already
+		// checked the breaker. Checking it again can cause livelock, see:
+		// https://github.com/cockroachdb/cockroach/issues/68419
+		conn, err := t.dialer.DialNoBreaker(ctx, toNodeID, class)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
+
 		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -637,11 +638,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}
-	// Starting workers in a task prevents data races during shutdown.
-	workerTask := func(ctx context.Context) {
-		t.stopper.RunWorker(ctx, worker)
-	}
-	err := t.stopper.RunTask(ctx, "storage.RaftTransport: sending messages", workerTask)
+	err := t.stopper.RunAsyncTask(ctx, "storage.RaftTransport: sending messages", worker)
 	if err != nil {
 		t.queues[class].Delete(int64(toNodeID))
 		return false
@@ -653,23 +650,20 @@ func (t *RaftTransport) startProcessNewQueue(
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
-	raftCfg *base.RaftConfig,
 	storePool *StorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() storage.Batch,
 	sent func(),
 ) error {
-	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return err
 	}
-
 	client := NewMultiRaftClient(conn)
-	stream, err = client.RaftSnapshot(ctx)
+	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
 		return err
 	}
@@ -679,5 +673,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(
+		ctx, t.st, stream, storePool, header, snap, newBatch, sent,
+	)
 }

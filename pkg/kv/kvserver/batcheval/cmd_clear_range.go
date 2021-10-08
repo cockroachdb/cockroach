@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -37,15 +36,15 @@ func init() {
 }
 
 func declareKeysClearRange(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
@@ -75,6 +74,32 @@ func ClearRange(
 		}
 	}
 
+	// Check for any intents, and return them for the caller to resolve. This
+	// prevents removal of intents belonging to implicitly committed STAGING
+	// txns. Otherwise, txn recovery would fail to find these intents and
+	// consider the txn incomplete, uncommitting it and its writes (even those
+	// outside of the cleared range).
+	//
+	// We return 1000 at a time, or 1 MB. The intent resolver currently
+	// processes intents in batches of 100, so this gives it a few to chew on.
+	//
+	// NOTE: This only takes into account separated intents, which are currently
+	// not enabled by default. For interleaved intents we would have to do full
+	// range scans, which would be too expensive. We could mitigate this by
+	// relying on statistics to skip scans when no intents are known, but due
+	// to #60585 we are often likely to encounter intents. See discussion in:
+	// https://github.com/cockroachdb/cockroach/pull/61850
+	var (
+		maxIntents  int64 = 1000
+		intentBytes int64 = 1e6
+	)
+	intents, err := storage.ScanSeparatedIntents(readWriter, from, to, maxIntents, intentBytes)
+	if err != nil {
+		return result.Result{}, err
+	} else if len(intents) > 0 {
+		return result.Result{}, &roachpb.WriteIntentError{Intents: intents}
+	}
+
 	// Before clearing, compute the delta in MVCCStats.
 	statsDelta, err := computeStatsDelta(ctx, readWriter, cArgs, from, to)
 	if err != nil {
@@ -83,34 +108,22 @@ func ClearRange(
 	cArgs.Stats.Subtract(statsDelta)
 
 	// If the total size of data to be cleared is less than
-	// clearRangeBytesThreshold, clear the individual values manually,
+	// clearRangeBytesThreshold, clear the individual values with an iterator,
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		if err := readWriter.Iterate(from, to,
-			func(kv storage.MVCCKeyValue) (bool, error) {
-				return false, readWriter.Clear(kv.Key)
-			},
-		); err != nil {
+		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			LowerBound: from,
+			UpperBound: to,
+		})
+		defer iter.Close()
+		if err = readWriter.ClearIterRange(iter, from, to); err != nil {
 			return result.Result{}, err
 		}
 		return pd, nil
 	}
 
-	// Otherwise, suggest a compaction for the cleared range and clear
-	// the key span using engine.ClearRange.
-	pd.Replicated.SuggestedCompactions = []kvserverpb.SuggestedCompaction{
-		{
-			StartKey: from,
-			EndKey:   to,
-			Compaction: kvserverpb.Compaction{
-				Bytes:            statsDelta.Total(),
-				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
-			},
-		},
-	}
-	if err := readWriter.ClearRange(storage.MakeMVCCMetadataKey(from),
-		storage.MakeMVCCMetadataKey(to)); err != nil {
+	if err := readWriter.ClearMVCCRangeAndIntents(from, to); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
@@ -146,7 +159,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := readWriter.NewIterator(storage.IterOptions{UpperBound: to})
+		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: to})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {

@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,8 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -39,7 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/stretchr/testify/require"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -61,14 +62,14 @@ func setupRouter(
 	ctx := context.Background()
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DiskMonitor: diskMonitor,
+			Settings: st,
 		},
-		EvalCtx: evalCtx,
+		EvalCtx:     evalCtx,
+		DiskMonitor: diskMonitor,
 	}
 	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.Start(ctx, wg, nil /* ctxCancel */)
+	r.Start(ctx, wg, nil /* flowCtxCancel */)
 	return r, wg
 }
 
@@ -79,7 +80,7 @@ func TestRouters(t *testing.T) {
 	const numRows = 200
 
 	rng, _ := randutil.NewPseudoRand()
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -89,7 +90,7 @@ func TestRouters(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals, types := sqlbase.RandSortingEncDatumSlices(rng, numCols, numRows/10)
+	vals, types := randgen.RandSortingEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		spec       execinfrapb.OutputRouterSpec
@@ -151,7 +152,7 @@ func TestRouters(t *testing.T) {
 			r, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, types, recvs)
 
 			for i := 0; i < numRows; i++ {
-				row := make(sqlbase.EncDatumRow, numCols)
+				row := make(rowenc.EncDatumRow, numCols)
 				for j := 0; j < numCols; j++ {
 					row[j] = vals[j][rng.Intn(len(vals[j]))]
 				}
@@ -162,7 +163,7 @@ func TestRouters(t *testing.T) {
 			r.ProducerDone()
 			wg.Wait()
 
-			rows := make([]sqlbase.EncDatumRows, len(bufs))
+			rows := make([]rowenc.EncDatumRows, len(bufs))
 			for i, b := range bufs {
 				if !b.ProducerClosed() {
 					t.Fatalf("bucket not closed: %d", i)
@@ -240,7 +241,7 @@ func TestRouters(t *testing.T) {
 			case execinfrapb.OutputRouterSpec_BY_RANGE:
 				// Verify each row is in the correct output stream.
 				enc := testRangeRouterSpec.Encodings[0]
-				var alloc sqlbase.DatumAlloc
+				var alloc rowenc.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
 						data, err := row[enc.Column].Encode(types[enc.Column], &alloc, enc.Encoding, nil)
@@ -334,7 +335,7 @@ func TestConsumerStatus(t *testing.T) {
 
 			// row0 will be a row that the router sends to the first stream, row1 to
 			// the 2nd stream.
-			var row0, row1 sqlbase.EncDatumRow
+			var row0, row1 rowenc.EncDatumRow
 			switch r := router.(type) {
 			case *hashRouter:
 				var err error
@@ -349,12 +350,12 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row0 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewPseudoRand()
-				vals := sqlbase.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
+				vals := randgen.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
 				row0 = vals[0]
 				row1 = row0
 			}
@@ -429,10 +430,10 @@ func TestConsumerStatus(t *testing.T) {
 // assumed that hr is configured for rows with one column.
 func preimageAttack(
 	colTypes []*types.T, hr *hashRouter, streamIdx int, numStreams int,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	rng, _ := randutil.NewPseudoRand()
 	for {
-		vals := sqlbase.RandEncDatumRowOfTypes(rng, colTypes)
+		vals := randgen.RandEncDatumRowOfTypes(rng, colTypes)
 		curStreamIdx, err := hr.computeDestination(vals)
 		if err != nil {
 			return nil, err
@@ -670,14 +671,14 @@ func TestRouterBlocks(t *testing.T) {
 			defer diskMonitor.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
-					Settings:    st,
-					DiskMonitor: diskMonitor,
+					Settings: st,
 				},
-				EvalCtx: &evalCtx,
+				EvalCtx:     &evalCtx,
+				DiskMonitor: diskMonitor,
 			}
 			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.Start(ctx, &wg, nil /* ctxCancel */)
+			router.Start(ctx, &wg, nil /* flowCtxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
@@ -692,7 +693,7 @@ func TestRouterBlocks(t *testing.T) {
 					case <-stop:
 						break Loop
 					default:
-						row := sqlbase.RandEncDatumRowOfTypes(rng, colTypes)
+						row := randgen.RandEncDatumRowOfTypes(rng, colTypes)
 						status := router.Push(row, nil /* meta */)
 						if status != execinfra.NeedMoreRows {
 							break Loop
@@ -751,29 +752,23 @@ func TestRouterDiskSpill(t *testing.T) {
 	const numRows = 200
 	const numCols = 1
 
-	var (
-		rowChan execinfra.RowChannel
-		rb      routerBase
-		wg      sync.WaitGroup
-	)
-
 	// Enable stats recording.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.Recordable)
-	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
+	sp.SetVerbose(true)
+	ctx := tracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 	// monitor is the custom memory monitor used in this test. The increment is
 	// set to 1 for fine-grained memory allocations and the limit is set to half
-	// the number of rows that wil eventually be added to the underlying
+	// the number of rows that will eventually be added to the underlying
 	// rowContainer. This is a bytes value that will ensure we fall back to disk
 	// but use memory for at least a couple of rows.
 	monitor := mon.NewMonitorWithLimit(
@@ -793,111 +788,153 @@ func TestRouterDiskSpill(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: diskMonitor,
 		},
+		DiskMonitor: diskMonitor,
 	}
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 
-	var spec execinfrapb.OutputRouterSpec
-	spec.Streams = make([]execinfrapb.StreamEndpointSpec, 1)
-	// Initialize the RowChannel with the minimal buffer size so as to block
-	// writes to the channel (after the first one).
-	rowChan.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
-	rb.init(ctx, &flowCtx, sqlbase.OneIntCol)
-	rb.Start(ctx, &wg, nil /* ctxCancel */)
-
-	rows := sqlbase.MakeIntRows(numRows, numCols)
-	// output is the sole router output in this test.
-	output := &rb.outputs[0]
-	errChan := make(chan error)
-
-	go func() {
-		for _, row := range rows {
-			output.mu.Lock()
-			err := output.addRowLocked(ctx, row)
-			output.mu.Unlock()
-			if err != nil {
-				errChan <- err
-			}
+	extraMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer extraMemMonitor.Stop(ctx)
+	// memErrorWhenConsumingRows indicates whether we expect an OOM error to
+	// occur when we're consuming rows from the row channel. By default, it
+	// will occur because routerOutput derives a memory monitor for the row
+	// buffer from evalCtx.Mon which has a limit, and we're going to consume
+	// rows after the spilling has occurred (meaning that evalCtx.Mon reached
+	// its limit). In order for this to not happen we will create a separate
+	// memory account.
+	for _, memErrorWhenConsumingRows := range []bool{false, true} {
+		var (
+			rowChan execinfra.RowChannel
+			rb      routerBase
+			wg      sync.WaitGroup
+			spec    execinfrapb.OutputRouterSpec
+		)
+		spec.Streams = make([]execinfrapb.StreamEndpointSpec, 1)
+		// Initialize the RowChannel with the minimal buffer size so as to block
+		// writes to the channel (after the first one).
+		rowChan.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+		rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
+		rb.init(ctx, &flowCtx, types.OneIntCol)
+		// output is the sole router output in this test.
+		output := &rb.outputs[0]
+		if !memErrorWhenConsumingRows {
+			separateAcc := extraMemMonitor.MakeBoundAccount()
+			// NOTE: we need to close the memory account that routerBase
+			// created in init for the output since we're overriding it.
+			output.rowBufToPushFromAcc.Close(ctx)
+			output.rowBufToPushFromAcc = &separateAcc
 		}
-		rb.ProducerDone()
-		wg.Wait()
-		close(errChan)
-	}()
+		rb.Start(ctx, &wg, nil /* ctxCancel */)
 
-	testutils.SucceedsSoon(t, func() error {
-		output.mu.Lock()
-		spilled := output.mu.rowContainer.Spilled()
-		output.mu.Unlock()
-		if !spilled {
-			return errors.New("did not spill to disk")
-		}
-		return nil
-	})
+		rows := randgen.MakeIntRows(numRows, numCols)
+		errChan := make(chan error)
 
-	metaSeen := false
-	for i := 0; ; i++ {
-		row, meta := rowChan.Next()
-		if meta != nil {
-			// Check that router output stats were recorded as expected.
-			if metaSeen {
-				t.Fatal("expected only one meta, encountered multiple")
-			}
-			metaSeen = true
-			if len(meta.TraceData) != 1 {
-				t.Fatalf("expected one recorded span, found %d", len(meta.TraceData))
-			}
-			span := meta.TraceData[0]
-			getIntTagValue := func(key string) int {
-				strValue, ok := span.Tags[key]
-				if !ok {
-					t.Errorf("missing tag: %s", key)
-				}
-				intValue, err := strconv.Atoi(strValue)
+		go func() {
+			for _, row := range rows {
+				output.mu.Lock()
+				err := output.addRowLocked(ctx, row)
+				output.mu.Unlock()
 				if err != nil {
-					t.Error(err)
+					errChan <- err
 				}
-				return intValue
 			}
-			rowsRouted := getIntTagValue("cockroach.stat.routeroutput.rows_routed")
-			memMax := getIntTagValue("cockroach.stat.routeroutput.mem.max")
-			diskMax := getIntTagValue("cockroach.stat.routeroutput.disk.max")
-			if rowsRouted != numRows {
-				t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
-			}
-			if memMax <= 0 {
-				t.Errorf("expected memMax > 0, got %d", memMax)
-			}
-			if diskMax <= 0 {
-				t.Errorf("expected memMax > 0, got %d", diskMax)
-			}
-			continue
-		}
-		if row == nil {
-			break
-		}
-		// Verify correct order (should be the order in which we added rows).
-		for j, c := range row {
-			if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
-				t.Fatal(err)
-			} else if cmp != 0 {
-				t.Fatalf(
-					"order violated on row %d, expected %v got %v",
-					i,
-					rows[i].String(sqlbase.OneIntCol),
-					row.String(sqlbase.OneIntCol),
-				)
-			}
-		}
-	}
-	if !metaSeen {
-		t.Error("expected trace metadata, found none")
-	}
+			rb.ProducerDone()
+			wg.Wait()
+			close(errChan)
+		}()
 
-	// Make sure the goroutine adding rows is done.
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
+		testutils.SucceedsSoon(t, func() error {
+			output.mu.Lock()
+			spilled := output.mu.rowContainer.Spilled()
+			output.mu.Unlock()
+			if !spilled {
+				return errors.New("did not spill to disk")
+			}
+			return nil
+		})
+
+		errMetaSeen := false
+		traceMetaSeen := false
+		for i := 0; ; i++ {
+			row, meta := rowChan.Next()
+			if meta != nil {
+				if memErrorWhenConsumingRows {
+					if meta.Err != nil {
+						errMetaSeen = true
+					}
+				} else {
+					// Check that router output stats were recorded as expected.
+					if traceMetaSeen {
+						t.Fatal("expected only one trace meta, encountered multiple")
+					}
+					if len(meta.TraceData) != 1 {
+						t.Fatalf("expected one recorded span, found %d", len(meta.TraceData))
+					}
+					traceMetaSeen = true
+					span := meta.TraceData[0]
+					var stats execinfrapb.ComponentStats
+					var err error
+					var unmarshalled bool
+					span.Structured(func(any *pbtypes.Any, _ time.Time) {
+						if !pbtypes.Is(any, &stats) {
+							return
+						}
+						if err = pbtypes.UnmarshalAny(any, &stats); err != nil {
+							return
+						}
+						unmarshalled = true
+					})
+					require.NoError(t, err)
+					require.True(t, unmarshalled)
+					require.True(t, stats.Inputs[0].NumTuples.HasValue())
+					require.True(t, stats.Exec.MaxAllocatedMem.HasValue())
+					require.True(t, stats.Exec.MaxAllocatedDisk.HasValue())
+					rowsRouted := stats.Inputs[0].NumTuples.Value()
+					memMax := stats.Exec.MaxAllocatedMem.Value()
+					diskMax := stats.Exec.MaxAllocatedDisk.Value()
+					if rowsRouted != numRows {
+						t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
+					}
+					if memMax == 0 {
+						t.Errorf("expected memMax > 0, got %d", memMax)
+					}
+					if diskMax == 0 {
+						t.Errorf("expected diskMax > 0, got %d", diskMax)
+					}
+				}
+				continue
+			}
+			if row == nil {
+				break
+			}
+			// Verify correct order (should be the order in which we added rows).
+			for j, c := range row {
+				if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+					t.Fatal(err)
+				} else if cmp != 0 {
+					t.Fatalf(
+						"order violated on row %d, expected %v got %v",
+						i,
+						rows[i].String(types.OneIntCol),
+						row.String(types.OneIntCol),
+					)
+				}
+			}
+		}
+		if memErrorWhenConsumingRows {
+			if !errMetaSeen {
+				t.Fatalf("expected memory error when consuming rows")
+			}
+		} else {
+			if !traceMetaSeen {
+				t.Error("expected trace metadata, found none")
+			}
+		}
+
+		// Make sure the goroutine adding rows is done.
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -963,7 +1000,7 @@ func TestRangeRouterInit(t *testing.T) {
 func BenchmarkRouter(b *testing.B) {
 	numCols := 1
 	numRows := 1 << 16
-	colTypes := sqlbase.MakeIntCols(numCols)
+	colTypes := types.MakeIntCols(numCols)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -972,7 +1009,7 @@ func BenchmarkRouter(b *testing.B) {
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(numRows, numCols))
 
 	for _, spec := range []execinfrapb.OutputRouterSpec{
 		{

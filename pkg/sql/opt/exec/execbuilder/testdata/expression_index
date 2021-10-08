@@ -1,0 +1,87 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c STRING,
+  FAMILY (k, a, b, c)
+)
+
+statement ok
+CREATE INDEX t_a_plus_b_idx ON t ((a + b))
+
+statement ok
+CREATE INDEX t_lower_c_idx ON t (lower(c))
+
+statement ok
+CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
+
+query T
+SELECT * FROM [
+  EXPLAIN SELECT * FROM t@t_a_plus_b_idx WHERE a + b = 110
+] OFFSET 2
+----
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@t_a_plus_b_idx
+      spans: [/110 - /110]
+
+query T
+SELECT * FROM [
+  EXPLAIN SELECT * FROM t@t_a_plus_b_idx WHERE (a + b) > 110
+] OFFSET 2
+----
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@t_a_plus_b_idx
+      spans: [/111 - ]
+
+query T
+SELECT * FROM [
+  EXPLAIN SELECT * FROM t@t_lower_c_idx WHERE lower(c) = 'foo'
+] OFFSET 2
+----
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@t_lower_c_idx
+      spans: [/'foo' - /'foo']
+
+query T
+SELECT * FROM [
+  EXPLAIN SELECT * FROM t@t_lower_c_idx WHERE lower(c) LIKE 'foo%'
+] OFFSET 2
+----
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@t_lower_c_idx
+      spans: [/'foo' - /'fop')
+
+query T
+SELECT * FROM [
+  EXPLAIN SELECT * FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
+] OFFSET 2
+----
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@t_lower_c_a_plus_b_idx
+      spans: [/'foo'/111 - /'foo']

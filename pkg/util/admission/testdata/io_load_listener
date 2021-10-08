@@ -1,0 +1,113 @@
+# Even though above the threshold, the first 60 ticks don't limit the tokens.
+set-state admitted=0 l0-bytes=10000 l0-added=1000 l0-files=21 l0-sublevels=21
+----
+admitted: 0, bytes: 10000, added-bytes: 1000,
+smoothed-removed: 0, smoothed-admit: 0,
+tokens: unlimited, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: unlimited
+tick: 1, setAvailableIOTokens: unlimited
+tick: 2, setAvailableIOTokens: unlimited
+tick: 3, setAvailableIOTokens: unlimited
+tick: 4, setAvailableIOTokens: unlimited
+tick: 5, setAvailableIOTokens: unlimited
+tick: 6, setAvailableIOTokens: unlimited
+tick: 7, setAvailableIOTokens: unlimited
+tick: 8, setAvailableIOTokens: unlimited
+tick: 9, setAvailableIOTokens: unlimited
+tick: 10, setAvailableIOTokens: unlimited
+tick: 11, setAvailableIOTokens: unlimited
+tick: 12, setAvailableIOTokens: unlimited
+tick: 13, setAvailableIOTokens: unlimited
+tick: 14, setAvailableIOTokens: unlimited
+
+# Delta added is 100,000. The l0-bytes are the same, so compactions removed
+# 100,000 bytes. Smoothed removed by compactions is 50,000. Each admitted is
+# expected to add 10 bytes. We want to add only 25,000 (half the smoothed
+# removed), which is 2500, but smoothing it drops it to 1250.
+set-state admitted=10000 l0-bytes=10000 l0-added=101000 l0-files=21 l0-sublevels=21
+----
+admitted: 10000, bytes: 10000, added-bytes: 101000,
+smoothed-removed: 50000, smoothed-admit: 1250,
+tokens: 1250, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: 84
+tick: 1, setAvailableIOTokens: 84
+tick: 2, setAvailableIOTokens: 84
+tick: 3, setAvailableIOTokens: 84
+tick: 4, setAvailableIOTokens: 84
+tick: 5, setAvailableIOTokens: 84
+tick: 6, setAvailableIOTokens: 84
+tick: 7, setAvailableIOTokens: 84
+tick: 8, setAvailableIOTokens: 84
+tick: 9, setAvailableIOTokens: 84
+tick: 10, setAvailableIOTokens: 84
+tick: 11, setAvailableIOTokens: 84
+tick: 12, setAvailableIOTokens: 84
+tick: 13, setAvailableIOTokens: 84
+tick: 14, setAvailableIOTokens: 74
+
+# Same delta as previous but smoothing bumps up the smoothed-admit to 2500.
+set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
+----
+admitted: 20000, bytes: 10000, added-bytes: 201000,
+smoothed-removed: 75000, smoothed-admit: 2500,
+tokens: 2500, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: 167
+tick: 1, setAvailableIOTokens: 167
+tick: 2, setAvailableIOTokens: 167
+tick: 3, setAvailableIOTokens: 167
+tick: 4, setAvailableIOTokens: 167
+tick: 5, setAvailableIOTokens: 167
+tick: 6, setAvailableIOTokens: 167
+tick: 7, setAvailableIOTokens: 167
+tick: 8, setAvailableIOTokens: 167
+tick: 9, setAvailableIOTokens: 167
+tick: 10, setAvailableIOTokens: 167
+tick: 11, setAvailableIOTokens: 167
+tick: 12, setAvailableIOTokens: 167
+tick: 13, setAvailableIOTokens: 167
+tick: 14, setAvailableIOTokens: 162
+
+# No delta. This used to trigger an overflow bug.
+set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
+----
+admitted: 20000, bytes: 10000, added-bytes: 201000,
+smoothed-removed: 37500, smoothed-admit: 10625,
+tokens: 10625, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: 709
+tick: 1, setAvailableIOTokens: 709
+tick: 2, setAvailableIOTokens: 709
+tick: 3, setAvailableIOTokens: 709
+tick: 4, setAvailableIOTokens: 709
+tick: 5, setAvailableIOTokens: 709
+tick: 6, setAvailableIOTokens: 709
+tick: 7, setAvailableIOTokens: 709
+tick: 8, setAvailableIOTokens: 709
+tick: 9, setAvailableIOTokens: 709
+tick: 10, setAvailableIOTokens: 709
+tick: 11, setAvailableIOTokens: 709
+tick: 12, setAvailableIOTokens: 709
+tick: 13, setAvailableIOTokens: 709
+tick: 14, setAvailableIOTokens: 699
+
+# l0-sublevels drops below threshold. We calculate the smoothed values, but
+# don't limit the tokens.
+set-state admitted=30000 l0-bytes=10000 l0-added=301000 l0-files=21 l0-sublevels=20
+----
+admitted: 30000, bytes: 10000, added-bytes: 301000,
+smoothed-removed: 68750, smoothed-admit: 10312,
+tokens: unlimited, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: unlimited
+tick: 1, setAvailableIOTokens: unlimited
+tick: 2, setAvailableIOTokens: unlimited
+tick: 3, setAvailableIOTokens: unlimited
+tick: 4, setAvailableIOTokens: unlimited
+tick: 5, setAvailableIOTokens: unlimited
+tick: 6, setAvailableIOTokens: unlimited
+tick: 7, setAvailableIOTokens: unlimited
+tick: 8, setAvailableIOTokens: unlimited
+tick: 9, setAvailableIOTokens: unlimited
+tick: 10, setAvailableIOTokens: unlimited
+tick: 11, setAvailableIOTokens: unlimited
+tick: 12, setAvailableIOTokens: unlimited
+tick: 13, setAvailableIOTokens: unlimited
+tick: 14, setAvailableIOTokens: unlimited

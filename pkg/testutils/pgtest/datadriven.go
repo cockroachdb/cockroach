@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // WalkWithRunningServer walks path for datadriven files and calls RunTest on them.
@@ -47,7 +47,11 @@ func WalkWithNewServer(
 //
 // "send": Sends messages to a server. Takes a newline-delimited list of
 // pgproto3.FrontendMessage types. Can fill in values by adding a space then
-// a JSON object. No output.
+// a JSON object. No output. Messages with a []byte type (like CopyData) should
+// not base64 encode the data, instead use Go-escaped strings. If the input
+// data actually has binary input or characters not allowed in JSON strings
+// (like '\n'), then a base64-encoded value should be used as the `BinaryData`
+// field.
 //
 // "until": Receives all messages from a server until messages of the given
 // types have been seen. Converts them to JSON one per line as output. Takes
@@ -85,14 +89,7 @@ func RunTest(t *testing.T, path, addr, user string) {
 				return d.Expected
 			}
 			for _, line := range strings.Split(d.Input, "\n") {
-				sp := strings.SplitN(line, " ", 2)
-				msg := toMessage(sp[0])
-				if len(sp) == 2 {
-					if err := json.Unmarshal([]byte(sp[1]), msg); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if err := p.Send(msg.(pgproto3.FrontendMessage)); err != nil {
+				if err := p.SendOneLine(line); err != nil {
 					t.Fatalf("%s: send %s: %v", d.Pos, line, err)
 				}
 			}
@@ -102,23 +99,23 @@ func RunTest(t *testing.T, path, addr, user string) {
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Receive(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		case "until":
 			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Until(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		default:
 			t.Fatalf("unknown command %s", d.Cmd)
 			return ""
@@ -129,7 +126,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 	}
 }
 
-func parseMessages(s string) []pgproto3.BackendMessage {
+// ParseMessages parses a string containing multiple pgproto3 messages separated
+// by the newline symbol. See testdata for examples ("until" or "receive"
+// commands).
+func ParseMessages(s string) []pgproto3.BackendMessage {
 	var msgs []pgproto3.BackendMessage
 	for _, typ := range strings.Split(s, "\n") {
 		msgs = append(msgs, toMessage(typ).(pgproto3.BackendMessage))
@@ -146,7 +146,10 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 	return false
 }
 
-func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
+// MsgsToJSONWithIgnore converts the pgproto3 messages to JSON format. The
+// second argument can specify how to adjust the messages (e.g. to make them
+// more deterministic) if needed, see testdata for examples.
+func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
@@ -167,6 +170,14 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				if m, ok := msg.(*pgproto3.RowDescription); ok {
 					for i := range m.Fields {
 						m.Fields[i].DataTypeOID = 0
+					}
+				}
+			}
+		case "ignore_data_type_sizes":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.RowDescription); ok {
+					for i := range m.Fields {
+						m.Fields[i].DataTypeSize = 0
 					}
 				}
 			}
@@ -192,13 +203,15 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				code = v
 			}
 			if err := enc.Encode(struct {
-				Type    string
-				Code    string
-				Message string `json:",omitempty"`
+				Type           string
+				Code           string
+				Message        string `json:",omitempty"`
+				ConstraintName string `json:",omitempty"`
 			}{
-				Type:    "ErrorResponse",
-				Code:    code,
-				Message: errmsg.Message,
+				Type:           "ErrorResponse",
+				Code:           code,
+				Message:        errmsg.Message,
+				ConstraintName: errmsg.ConstraintName,
 			}); err != nil {
 				panic(err)
 			}
@@ -217,6 +230,12 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.Close{}
 	case "CommandComplete":
 		return &pgproto3.CommandComplete{}
+	case "CopyData":
+		return &pgproto3.CopyData{}
+	case "CopyDone":
+		return &pgproto3.CopyDone{}
+	case "CopyInResponse":
+		return &pgproto3.CopyInResponse{}
 	case "DataRow":
 		return &pgproto3.DataRow{}
 	case "Describe":

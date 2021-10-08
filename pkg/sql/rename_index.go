@@ -12,22 +12,22 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 
 type renameIndexNode struct {
 	n         *tree.RenameIndex
-	tableDesc *sqlbase.MutableTableDescriptor
-	idx       *descpb.IndexDescriptor
+	tableDesc *tabledesc.Mutable
+	idx       catalog.Index
 }
 
 // RenameIndex renames the index.
@@ -35,6 +35,14 @@ type renameIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"RENAME INDEX",
+	); err != nil {
+		return nil, err
+	}
+
 	_, tableDesc, err := expandMutableIndexName(ctx, p, n.Index, !n.IfExists /* requireTable */)
 	if err != nil {
 		return nil, err
@@ -44,14 +52,14 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	idx, _, err := tableDesc.FindIndexByName(string(n.Index.Index))
+	idx, err := tableDesc.FindIndexWithName(string(n.Index.Index))
 	if err != nil {
 		if n.IfExists {
 			// Noop.
 			return newZeroNode(nil /* columns */), nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return nil, err
+		return nil, pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -73,7 +81,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	idx := n.idx
 
 	for _, tableRef := range tableDesc.DependedOnBy {
-		if tableRef.IndexID != idx.ID {
+		if tableRef.IndexID != idx.GetID() {
 			continue
 		}
 		return p.dependentViewError(
@@ -90,15 +98,13 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if _, _, err := tableDesc.FindIndexByName(string(n.n.NewName)); err == nil {
-		return fmt.Errorf("index name %q already exists", string(n.n.NewName))
+	if foundIndex, _ := tableDesc.FindIndexWithName(string(n.n.NewName)); foundIndex != nil {
+		return pgerror.Newf(pgcode.DuplicateRelation, "index name %q already exists", string(n.n.NewName))
 	}
 
-	if err := tableDesc.RenameIndexDescriptor(idx, string(n.n.NewName)); err != nil {
-		return err
-	}
+	idx.IndexDesc().Name = string(n.n.NewName)
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err
 	}
 

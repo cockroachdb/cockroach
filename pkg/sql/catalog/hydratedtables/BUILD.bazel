@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "hydratedtables",
+    srcs = ["hydratedcache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/cache",
+        "//pkg/util/metric",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "@com_github_biogo_store//llrb",
+        "@com_github_prometheus_client_model//go",
+    ],
+)
+
+go_test(
+    name = "hydratedtables_test",
+    size = "small",
+    srcs = ["hydratedcache_test.go"],
+    embed = [":hydratedtables"],
+    deps = [
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

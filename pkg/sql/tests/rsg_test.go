@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -48,9 +48,10 @@ import (
 )
 
 var (
-	flagRSGTime        = flag.Duration("rsg", 0, "random syntax generator test duration")
-	flagRSGGoRoutines  = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
+	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 2*time.Minute, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -120,10 +121,27 @@ type nonCrasher struct {
 func (c *nonCrasher) Error() string {
 	return c.err.Error()
 }
-
-func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
-	if err := verifyFormat(sql); err != nil {
-		db.verifyFormatErr = err
+func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) error {
+	return db.execWithTimeout(t, ctx, sql, *flagRSGExecTimeout)
+}
+func (db *verifyFormatDB) execWithTimeout(
+	t *testing.T, ctx context.Context, sql string, duration time.Duration,
+) error {
+	if err := func() (retErr error) {
+		defer func() {
+			if err := recover(); err != nil {
+				retErr = errors.CombineErrors(
+					errors.AssertionFailedf("panic executing %s: err %v", sql, err),
+					retErr,
+				)
+			}
+		}()
+		if err := verifyFormat(sql); err != nil {
+			db.verifyFormatErr = err
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
 
@@ -158,12 +176,12 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 			return &nonCrasher{sql: sql, err: err}
 		}
 		return nil
-	case <-time.After(*flagRSGExecTimeout):
+	case <-time.After(duration):
 		db.mu.Lock()
 		defer db.mu.Unlock()
 		b := make([]byte, 1024*1024)
 		n := runtime.Stack(b, true)
-		fmt.Printf("%s\n", b[:n])
+		t.Logf("%s\n", b[:n])
 		// Now see if we can execute a SELECT 1. This is useful because sometimes an
 		// exec timeout is because of a slow-executing statement, and other times
 		// it's because the server is completely wedged. This is an automated way
@@ -178,16 +196,19 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		}()
 		select {
 		case <-time.After(5 * time.Second):
-			fmt.Println("SELECT 1 timeout: probably a wedged server")
+			t.Log("SELECT 1 timeout: probably a wedged server")
 		case err := <-errch:
 			if err != nil {
-				fmt.Println("SELECT 1 execute error:", err)
+				t.Log("SELECT 1 execute error:", err)
 			} else {
-				fmt.Println("SELECT 1 executed successfully: probably a slow statement")
+				t.Log("SELECT 1 executed successfully: probably a slow statement")
 			}
 		}
-		fmt.Printf("timeout: %q. currently executing: %v\n", sql, db.mu.active)
-		panic("statement exec timeout")
+		return &crasher{
+			sql:    sql,
+			err:    errors.Newf("statement exec timeout"),
+			detail: fmt.Sprintf("timeout: %q. currently executing: %v", sql, db.mu.active),
+		}
 	}
 }
 
@@ -221,10 +242,10 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
-		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
+		if err := db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
 			return err
 		}
-		return db.exec(ctx, s)
+		return db.exec(t, ctx, s)
 	})
 }
 
@@ -235,7 +256,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 	const rootStmt = "target_list"
 
 	testRandomSyntax(t, false, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
+		return db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 300)
 		var where, from string
@@ -247,7 +268,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 			from = "FROM ident"
 		}
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
-		return db.exec(ctx, s)
+		return db.exec(t, ctx, s)
 	})
 }
 
@@ -271,8 +292,14 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					continue
 				}
 				switch lower {
-				case
-					"pg_sleep":
+				case "pg_sleep":
+					continue
+				case "st_frechetdistance":
+					// Calculating the Frechet distance is slow and testing it here
+					// is not worth it.
+					continue
+				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
+					// Skipped due to long execution time.
 					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
@@ -333,7 +360,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			limit = " LIMIT 100"
 		}
 		s := fmt.Sprintf("SELECT %s(%s) %s", nb.name, strings.Join(args, ", "), limit)
-		return db.exec(ctx, s)
+		return db.exec(t, ctx, s)
 	})
 }
 
@@ -346,7 +373,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 	testRandomSyntax(t, false, "defaultdb", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
-		return db.exec(ctx, s)
+		return db.exec(t, ctx, s)
 	})
 }
 
@@ -364,13 +391,13 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(ctx, `
+		return db.exec(t, ctx, `
 			CREATE DATABASE ident;
 		`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := r.Generate(roots[n], 30)
-		return db.exec(ctx, s)
+		return db.exec(t, ctx, s)
 	})
 }
 
@@ -383,14 +410,14 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(ctx, `
+		return db.exec(t, ctx, `
 			CREATE DATABASE ident;
 			CREATE TABLE ident.ident (ident decimal);
 		`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
-		return db.exec(ctx, s)
+		return db.execWithTimeout(t, ctx, s, *flagRSGExecColumnChangeTimeout)
 	})
 }
 
@@ -530,23 +557,23 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		setups := []string{"rand-tables", "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
-			if err := db.exec(ctx, randTables); err != nil {
+			if err := db.exec(t, ctx, randTables); err != nil {
 				return err
 			}
 			tableStmts = append(tableStmts, randTables)
-			fmt.Printf("%s;\n", randTables)
+			t.Logf("%s;", randTables)
 		}
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
-		err := db.exec(ctx, s)
+		err := db.exec(t, ctx, s)
 		if c := (*crasher)(nil); errors.As(err, &c) {
-			if err := db.exec(ctx, "USE defaultdb"); err != nil {
+			if err := db.exec(t, ctx, "USE defaultdb"); err != nil {
 				t.Fatalf("couldn't reconnect to db after crasher: %v", c)
 			}
-			fmt.Printf("CRASHER:\ncaused by: %s\n\nSTATEMENT:\n%s;\n\nserver stacktrace:\n%s\n\n", c.Error(), s, c.detail)
+			t.Logf("CRASHER:\ncaused by: %s\n\nSTATEMENT:\n%s;\n\nserver stacktrace:\n%s\n", c.Error(), s, c.detail)
 			return c
 		}
 		if err == nil {
@@ -558,7 +585,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			shouldLogErr = false
 		}
 		if testing.Verbose() && shouldLogErr {
-			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
+			t.Logf("ERROR: %s\ncaused by:\n%s;\n", err, s)
 		}
 		return err
 	})
@@ -566,11 +593,11 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		smither.Close()
 	}
 
-	fmt.Printf("To reproduce, use schema:\n\n")
+	t.Logf("To reproduce, use schema:\n")
 	for _, stmt := range tableStmts {
-		fmt.Printf("%s;", stmt)
+		t.Logf("%s;", stmt)
 	}
-	fmt.Printf("\n")
+	t.Log()
 }
 
 func TestRandomDatumRoundtrip(t *testing.T) {
@@ -684,7 +711,7 @@ func testRandomSyntax(
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 
-	yBytes, err := ioutil.ReadFile(filepath.Join("..", "parser", "sql.y"))
+	yBytes, err := ioutil.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -722,7 +749,7 @@ func testRandomSyntax(
 			case <-time.After(5 * time.Second):
 			}
 			countsMu.Lock()
-			fmt.Printf("%v of %v: %d executions, %d successful\n",
+			t.Logf("%v of %v: %d executions, %d successful",
 				timeutil.Since(start).Round(time.Second),
 				*flagRSGTime,
 				countsMu.total,
@@ -746,7 +773,10 @@ func testRandomSyntax(
 				countsMu.success++
 			} else {
 				if c := (*crasher)(nil); errors.As(err, &c) {
-					t.Errorf("Crash detected: \n%s\n\nStack trace:\n%s", c.sql, c.detail)
+					// NOTE: Changes to this output format must be kept in-sync
+					// with logic in CondensedMessage.RSGCrash in order for
+					// crashes to be correctly reported to Github.
+					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}
 			countsMu.Unlock()

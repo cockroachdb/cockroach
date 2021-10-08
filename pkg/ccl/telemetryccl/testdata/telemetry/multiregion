@@ -1,0 +1,469 @@
+feature-allowlist
+sql.multiregion.*
+----
+
+feature-usage
+CREATE DATABASE survive_zone PRIMARY REGION "us-east-1" SURVIVE ZONE FAILURE
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_zone_failure
+
+feature-usage
+CREATE DATABASE survive_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_region_failure
+
+feature-usage
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGION "ca-central-1"
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+SET enable_multiregion_placement_policy = true;
+----
+
+feature-usage
+CREATE DATABASE create_placement PRIMARY REGION "us-east-1" PLACEMENT RESTRICTED
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.restricted
+sql.multiregion.create_database.survival_goal.survive_default
+
+feature-usage
+CREATE DATABASE create_placement_default PRIMARY REGION "us-east-1" PLACEMENT DEFAULT
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.default
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+CREATE DATABASE to_be_restricted PRIMARY REGION "us-east-1"
+----
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT RESTRICTED
+----
+sql.multiregion.alter_database.placement.restricted
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT DEFAULT
+----
+sql.multiregion.alter_database.placement.default
+
+feature-usage
+ALTER DATABASE d DROP REGION "ca-central-1"
+----
+sql.multiregion.drop_region
+
+feature-usage
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+sql.multiregion.add_region
+
+feature-usage
+ALTER DATABASE d SET PRIMARY REGION "ap-southeast-2"
+----
+sql.multiregion.alter_database.set_primary_region.switch_primary_region
+
+feature-usage
+ALTER DATABASE d DROP REGION "us-east-1"
+----
+sql.multiregion.drop_region
+
+feature-usage
+ALTER DATABASE d DROP REGION "ap-southeast-2"
+----
+sql.multiregion.drop_primary_region
+
+feature-usage
+ALTER DATABASE d SET PRIMARY REGION "ca-central-1"
+----
+sql.multiregion.alter_database.set_primary_region.initial_multiregion
+
+feature-usage
+ALTER DATABASE d SURVIVE ZONE FAILURE
+----
+sql.multiregion.alter_database.survival_goal.survive_zone_failure
+
+exec
+USE d;
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+
+feature-usage
+CREATE TABLE t1 ()
+----
+sql.multiregion.create_table.locality.unspecified
+
+feature-usage
+CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.create_table.locality.regional_by_table
+
+feature-usage
+CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.create_table.locality.regional_by_table_in
+
+feature-usage
+CREATE TABLE t4 () LOCALITY GLOBAL
+----
+sql.multiregion.create_table.locality.global
+
+feature-usage
+CREATE TABLE t5 () LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.create_table.locality.regional_by_row
+
+feature-usage
+CREATE TABLE t6 (cr crdb_internal_region) LOCALITY REGIONAL BY ROW AS cr
+----
+sql.multiregion.create_table.locality.regional_by_row_as
+
+#
+# REGIONAL BY TABLE -> the others
+#
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row
+
+exec
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE
+----
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_table.to.global
+
+exec
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE
+----
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_table_in
+
+exec
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE;
+ALTER TABLE t1 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row_as
+
+exec
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE
+----
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_table
+
+exec
+ALTER TABLE t1 SET LOCALITY REGIONAL BY TABLE
+----
+
+#
+# REGIONAL BY TABLE IN "ap-southeast-2" -> the others
+#
+
+feature-usage
+ALTER TABLE t3 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_row
+
+exec
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+
+feature-usage
+ALTER TABLE t3 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_table_in.to.global
+
+exec
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+
+feature-usage
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_table_in
+
+exec
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+ALTER TABLE t3 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t3 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_row_as
+
+exec
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+
+feature-usage
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_table
+
+exec
+ALTER TABLE t3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+
+#
+# GLOBAL -> the others
+#
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_row
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.global.to.global
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_table_in
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL;
+ALTER TABLE t4 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_row_as
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_table
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+#
+# REGIONAL BY ROW -> the others
+#
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_row
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.global
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table_in
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW;
+ALTER TABLE t5 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_row_as
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+#
+# REGIONAL BY TABLE -> the others
+#
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_row
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.global
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_table_in
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_row_as
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_table
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+exec
+USE survive_region;
+CREATE TABLE t7 (a INT);
+INSERT INTO t7 VALUES (1),(2),(3);
+EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
+----
+
+feature-usage
+IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
+----
+sql.multiregion.import
+
+# Test for locality optimized search counter.
+feature-allowlist
+sql.plan.opt.locality-optimized-search
+----
+
+exec
+USE survive_region;
+CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+SELECT * FROM t8 WHERE a = 1
+----
+sql.plan.opt.locality-optimized-search
+
+exec
+USE survive_region;
+CREATE TABLE t9 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+feature-allowlist
+sql.multiregion.zone_configuration.override.*
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a zone configuration is modified, even if that
+# modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=5
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+# Ensure that no counters are set in the case where we're not overriding
+feature-usage
+ALTER TABLE t9 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+----
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a table's zone configuration is modified, even if
+# that modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds=5;
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d ADD REGION "us-east-1";
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.database

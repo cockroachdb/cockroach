@@ -22,14 +22,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
+
+// WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
+// origSpan is the span of keys that were assigned to be backfilled,
+// resume is the left over work from origSpan.
+func WriteResumeSpan(
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	id descpb.ID,
+	mutationID descpb.MutationID,
+	filter backfill.MutationFilter,
+	finished roachpb.Spans,
+	jobsRegistry *jobs.Registry,
+) error {
+	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
+	defer traceSpan.Finish()
+
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		resumeSpans, job, mutationIdx, error := rowexec.GetResumeSpans(
+			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
+		)
+		if error != nil {
+			return error
+		}
+
+		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
+		return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
+	})
+}
 
 func TestWriteResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -45,7 +77,7 @@ func TestWriteResumeSpan(t *testing.T) {
 				},
 			},
 			// Disable backfill migrations, we still need the jobs table migration.
-			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 				DisableBackfillMigrations: true,
 			},
 		},
@@ -78,19 +110,19 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	if err := kvDB.Put(
 		ctx,
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	mutationID := tableDesc.Mutations[0].MutationID
-	var jobID int64
+	mutationID := tableDesc.AllMutations()[0].MutationID()
+	var jobID jobspb.JobID
 
 	if len(tableDesc.MutationJobs) > 0 {
 		for _, job := range tableDesc.MutationJobs {
 			if job.MutationID == mutationID {
-				jobID = job.JobID
+				jobID = jobspb.JobID(job.JobID)
 				break
 			}
 		}
@@ -100,12 +132,17 @@ func TestWriteResumeSpan(t *testing.T) {
 		{ResumeSpans: resumeSpans}}}
 
 	job, err := registry.LoadJob(ctx, jobID)
-
 	if err != nil {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	err = job.SetDetails(ctx, details)
+	require.NoError(t, job.Update(ctx, nil, /* txn */
+		func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			ju.UpdateStatus(jobs.StatusRunning)
+			return nil
+		}))
+
+	err = job.SetDetails(ctx, nil /* txn */, details)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +181,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := rowexec.WriteResumeSpan(
+		if err := WriteResumeSpan(
 			ctx, kvDB, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
 		); err != nil {
 			t.Error(err)

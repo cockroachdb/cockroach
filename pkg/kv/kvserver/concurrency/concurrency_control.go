@@ -15,9 +15,9 @@ package concurrency
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -152,6 +152,7 @@ type Manager interface {
 	TransactionManager
 	RangeStateListener
 	MetricExporter
+	TestStateExporter
 }
 
 // RequestSequencer is concerned with the sequencing of concurrent requests. It
@@ -160,15 +161,25 @@ type RequestSequencer interface {
 	// SequenceReq acquires latches, checks for locks, and queues behind and/or
 	// pushes other transactions to resolve any conflicts. Once sequenced, the
 	// request is guaranteed sufficient isolation for the duration of its
-	// evaluation, until the returned request guard is released.
-	// NOTE: this last part will not be true until replicated locks are pulled
-	// into the concurrency manager.
+	// evaluation, until the returned request guard is released. NOTE: this last
+	// part will not be true until replicated locks are pulled into the
+	// concurrency manager. This is the normal behavior for a request marked as
+	// PessimisticEval. For OptimisticEval, it can optimize by not acquiring
+	// locks, and the request must call Guard.CheckOptimisticNoConflicts after
+	// evaluation. OptimisticEval is only permitted in the first call to
+	// SequenceReq for a Request. A failed OptimisticEval must use
+	// PessimisticAfterFailedOptimisticEval, for the immediately following
+	// SequenceReq call, if the latches are already held.
+	// TODO(sumeer): change OptimisticEval to only queue the latches and not
+	// wait for them, so PessimisticAfterFailedOptimisticEval will wait for
+	// them.
 	//
 	// An optional existing request guard can be provided to SequenceReq. This
 	// allows the request's position in lock wait-queues to be retained across
 	// sequencing attempts. If provided, the guard should not be holding latches
-	// already. The expected usage of this parameter is that it will only be
-	// provided after acquiring a Guard from a ContentionHandler method.
+	// already (for PessimisticEval). The expected usage of this parameter is
+	// that it will only be provided after acquiring a Guard from a
+	// ContentionHandler method.
 	//
 	// If the method returns a non-nil request guard then the caller must ensure
 	// that the guard is eventually released by passing it to FinishReq.
@@ -176,7 +187,7 @@ type RequestSequencer interface {
 	// Alternatively, the concurrency manager may be able to serve the request
 	// directly, in which case it will return a Response for the request. If it
 	// does so, it will not return a request guard.
-	SequenceReq(context.Context, *Guard, Request) (*Guard, Response, *Error)
+	SequenceReq(context.Context, *Guard, Request, RequestEvalKind) (*Guard, Response, *Error)
 
 	// FinishReq marks the request as complete, releasing any protection
 	// the request had against conflicting requests and allowing conflicting
@@ -285,28 +296,58 @@ type RangeStateListener interface {
 // the concurrency manager. It is one of the roles of Manager.
 type MetricExporter interface {
 	// LatchMetrics returns information about the state of the latchManager.
-	LatchMetrics() (global, local kvserverpb.LatchManagerInfo)
+	LatchMetrics() LatchMetrics
 
-	// LockTableDebug returns a debug string representing the state of the
-	// lockTable.
-	LockTableDebug() string
+	// LockTableMetrics returns information about the state of the lockTable.
+	LockTableMetrics() LockTableMetrics
 
-	// TxnWaitQueue returns the concurrency manager's txnWaitQueue.
-	// TODO(nvanbenschoten): this doesn't really fit into this interface. It
-	// would be nice if the txnWaitQueue was hidden behind the concurrency
-	// manager abstraction entirely, but tests want to access it directly.
-	TxnWaitQueue() *txnwait.Queue
-
-	// TODO(nvanbenschoten): fill out this interface to provide observability
-	// into the state of the concurrency manager.
-	// LatchMetrics()
-	// LockTableMetrics()
+	// TODO(nvanbenschoten): provide better observability into the state of the
+	// txn wait queue. Currently, all observability is provided by metrics that
+	// are passed to the txn wait queue constructor.
 	// TxnWaitQueueMetrics()
+}
+
+// TestStateExporter is concerned with providing testing hooks that expose the
+// state of the concurrency manager, to be used by unit tests outside of the
+// concurrency package. It is one of the roles of Manager.
+type TestStateExporter interface {
+	// TestingLockTableString returns a debug string representing the state of the
+	// lockTable.
+	TestingLockTableString() string
+
+	// TestingTxnWaitQueue returns the concurrency manager's txnWaitQueue.
+	TestingTxnWaitQueue() *txnwait.Queue
 }
 
 ///////////////////////////////////
 // External API Type Definitions //
 ///////////////////////////////////
+
+// RequestEvalKind informs the manager of the evaluation kind for the current
+// evaluation attempt. Optimistic evaluation is used for requests involving
+// limited scans, where the checking of locks and latches may be (partially)
+// postponed until after evaluation, once the limit has been applied and the
+// key spans have been constrained, using Guard.CheckOptimisticNoConflicts.
+// Note that intents (replicated single-key locks) will still be observed
+// during evaluation.
+//
+// The setting can change across different calls to SequenceReq. The
+// permissible sequences are:
+// - OptimisticEval: when optimistic evaluation succeeds.
+// - OptimisticEval, PessimisticAfterFailedOptimisticEval, PessimisticEval*:
+//   when optimistic evaluation failed.
+// - PessimisticEval+: when only pessimistic evaluation was attempted.
+type RequestEvalKind int
+
+const (
+	// PessimisticEval represents pessimistic locking.
+	PessimisticEval RequestEvalKind = iota
+	// OptimisticEval represents optimistic locking.
+	OptimisticEval
+	// PessimisticAfterFailedOptimisticEval represents a request sequencing
+	// attempt immediately following a failed OptimisticEval.
+	PessimisticAfterFailedOptimisticEval
+)
 
 // Request is the input to Manager.SequenceReq. The struct contains all of the
 // information necessary to sequence a KV request and determine which locks and
@@ -331,12 +372,28 @@ type Request struct {
 	// transactions.
 	WaitPolicy lock.WaitPolicy
 
+	// The maximum amount of time that the batch request will wait while
+	// attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	LockTimeout time.Duration
+
+	// The maximum length of a lock wait-queue that the request is willing
+	// to enter and wait in. Used to provide a release valve and ensure some
+	// level of quality-of-service under severe per-key contention. If set
+	// to a non-zero value and an existing lock wait-queue is already equal
+	// to or exceeding this length, the request will be rejected eagerly
+	// with a WriteIntentError instead of entering the queue and waiting.
+	MaxLockWaitQueueLength int
+
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 
 	// The maximal set of spans that the request will access. Latches
 	// will be acquired for these spans.
-	// TODO(nvanbenschoten): don't allocate these SpanSet objects.
+	//
+	// Note: ownership of the SpanSet is assumed by the Request once it is
+	// passed to SequenceReq. Only supplied to SequenceReq if the method is
+	// not also passed an exiting Guard.
 	LatchSpans *spanset.SpanSet
 
 	// The maximal set of spans within which the request expects to have
@@ -350,6 +407,10 @@ type Request struct {
 	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
 	// (Txn == nil), all reads and writes are considered to take place at
 	// Timestamp.
+	//
+	// Note: ownership of the SpanSet is assumed by the Request once it is
+	// passed to SequenceReq. Only supplied to SequenceReq if the method is
+	// not also passed an exiting Guard.
 	LockSpans *spanset.SpanSet
 }
 
@@ -358,7 +419,10 @@ type Request struct {
 type Guard struct {
 	Req Request
 	lg  latchGuard
+	lm  latchManager
 	ltg lockTableGuard
+	// The latest RequestEvalKind passed to SequenceReq.
+	EvalKind RequestEvalKind
 }
 
 // Response is a slice of responses to requests in a batch. This type is used
@@ -373,18 +437,40 @@ type Error = roachpb.Error
 // Internal Structure Interfaces //
 ///////////////////////////////////
 
-// latchManager serializes access to keys and key ranges.
+// latchManager serializes access to keys and key ranges. The
+// {AcquireOptimistic,CheckOptimisticNoConflicts,WaitUntilAcquired} methods
+// are only for use in optimistic latching.
 //
 // See additional documentation in pkg/storage/spanlatch.
 type latchManager interface {
 	// Acquires latches, providing mutual exclusion for conflicting requests.
 	Acquire(context.Context, Request) (latchGuard, *Error)
 
+	// AcquireOptimistic is like Acquire in that it inserts latches, but it does
+	// not wait for conflicting latches on overlapping spans to be released
+	// before returning. This should be followed by CheckOptimisticNoConflicts
+	// to validate that not waiting did not violate correctness.
+	AcquireOptimistic(req Request) latchGuard
+
+	// CheckOptimisticNoConflicts returns true iff the spans in the provided
+	// spanset do not conflict with existing latches.
+	CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool
+
+	// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts
+	// returned false, or some other occurrence (like conflicting locks) is
+	// causing this request to switch to pessimistic latching.
+	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
+
+	// WaitFor waits for conflicting latches on the specified spans without adding
+	// any latches itself. Fast path for operations that only require flushing out
+	// old operations without blocking any new ones.
+	WaitFor(ctx context.Context, spans *spanset.SpanSet) *Error
+
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
 
-	// Info returns information about the state of the latchManager.
-	Info() (global, local kvserverpb.LatchManagerInfo)
+	// Metrics returns information about the state of the latchManager.
+	Metrics() LatchMetrics
 }
 
 // latchGuard is a handle to a set of acquired key latches.
@@ -460,6 +546,13 @@ type lockTable interface {
 	// function.
 	ScanAndEnqueue(Request, lockTableGuard) lockTableGuard
 
+	// ScanOptimistic takes a snapshot of the lock table for later checking for
+	// conflicts, and returns a guard. It is for optimistic evaluation of
+	// requests that will typically scan a small subset of the spans mentioned
+	// in the Request. After Request evaluation, CheckOptimisticNoConflicts
+	// must be called on the guard.
+	ScanOptimistic(Request) lockTableGuard
+
 	// Dequeue removes the request from its lock wait-queues. It should be
 	// called when the request is finished, whether it evaluated or not. The
 	// guard should not be used after being dequeued.
@@ -480,7 +573,10 @@ type lockTable interface {
 	// evaluation of this request. It adds the lock and enqueues this requester
 	// in its wait-queue. It is required that request evaluation discover such
 	// locks before acquiring its own locks, since the request needs to repeat
-	// ScanAndEnqueue.
+	// ScanAndEnqueue. When consultFinalizedTxnCache=true, and the transaction
+	// holding the lock is finalized, the lock is not added to the lock table
+	// and instead tracked in the list of locks to resolve in the
+	// lockTableGuard.
 	//
 	// The lease sequence is used to detect lease changes between the when
 	// request that found the lock started evaluating and when the discovered
@@ -492,9 +588,13 @@ type lockTable interface {
 	// the span containing the discovered lock's key.
 	//
 	// The method returns a boolean indicating whether the discovered lock was
-	// added to the lockTable (true) or whether it was ignored because the
-	// lockTable is currently disabled (false).
-	AddDiscoveredLock(*roachpb.Intent, roachpb.LeaseSequence, lockTableGuard) (bool, error)
+	// properly handled either by adding it to the lockTable or storing it in
+	// the list of locks to resolve in the lockTableGuard (both cases return
+	// true) or whether it was ignored because the lockTable is currently
+	// disabled (false).
+	AddDiscoveredLock(
+		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultFinalizedTxnCache bool,
+		guard lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.
@@ -567,6 +667,15 @@ type lockTable interface {
 	//     txn.WriteTimestamp.
 	UpdateLocks(*roachpb.LockUpdate) error
 
+	// TransactionIsFinalized informs the lock table that a transaction is
+	// finalized. This is used by the lock table in a best-effort manner to avoid
+	// waiting on locks of finalized transactions and telling the caller via
+	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
+	TransactionIsFinalized(*roachpb.Transaction)
+
+	// Metrics returns information about the state of the lockTable.
+	Metrics() LockTableMetrics
+
 	// String returns a debug string representing the state of the lockTable.
 	String() string
 }
@@ -588,6 +697,22 @@ type lockTableGuard interface {
 
 	// CurState returns the latest waiting state.
 	CurState() waitingState
+
+	// ResolveBeforeScanning lists the locks to resolve before scanning again.
+	// This must be called after:
+	// - the waiting state has transitioned to doneWaiting.
+	// - if locks were discovered during evaluation, it must be called after all
+	//   the discovered locks have been added.
+	ResolveBeforeScanning() []roachpb.LockUpdate
+
+	// CheckOptimisticNoConflicts uses the SpanSet representing the spans that
+	// were actually read, to check for conflicting locks, after an optimistic
+	// evaluation. It returns true if there were no conflicts. See
+	// lockTable.ScanOptimistic for context. Note that the evaluation has
+	// already seen any intents (replicated single-key locks) that conflicted,
+	// so this checking is practically only going to find unreplicated locks
+	// that conflict.
+	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held
@@ -647,10 +772,10 @@ type lockTableWaiter interface {
 	// all replicated locks into the lockTable.
 	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
 
-	// ClearCaches wipes all caches maintained by the lockTableWaiter. This is
-	// primarily used to recover memory when a replica loses a lease. However,
-	// it is also used in tests to reset the state of the lockTableWaiter.
-	ClearCaches()
+	// ResolveDeferredIntents resolves the batch of intents if the provided
+	// error is nil. The batch of intents may be resolved more efficiently than
+	// if they were resolved individually.
+	ResolveDeferredIntents(context.Context, []roachpb.LockUpdate) *Error
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.

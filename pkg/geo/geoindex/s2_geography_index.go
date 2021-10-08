@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
@@ -60,7 +61,7 @@ func DefaultGeographyIndexConfig() *Config {
 // box of g to compute the covering.
 type geogCovererWithBBoxFallback struct {
 	rc *s2.RegionCoverer
-	g  *geo.Geography
+	g  geo.Geography
 }
 
 var _ covererInterface = geogCovererWithBBoxFallback{}
@@ -108,16 +109,25 @@ func isBadGeogCovering(cu s2.CellUnion) bool {
 }
 
 // InvertedIndexKeys implements the GeographyIndex interface.
-func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error) {
+func (i *s2GeographyIndex) InvertedIndexKeys(
+	c context.Context, g geo.Geography,
+) ([]Key, geopb.BoundingBox, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
-		return nil, err
+		return nil, geopb.BoundingBox{}, err
 	}
-	return invertedIndexKeys(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), nil
+	rect := g.BoundingRect()
+	bbox := geopb.BoundingBox{
+		LoX: rect.Lng.Lo,
+		HiX: rect.Lng.Hi,
+		LoY: rect.Lat.Lo,
+		HiY: rect.Lat.Hi,
+	}
+	return invertedIndexKeys(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), bbox, nil
 }
 
 // Covers implements the GeographyIndex interface.
-func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKeySpans, error) {
+func (i *s2GeographyIndex) Covers(c context.Context, g geo.Geography) (UnionKeySpans, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
@@ -126,7 +136,7 @@ func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKey
 }
 
 // CoveredBy implements the GeographyIndex interface.
-func (i *s2GeographyIndex) CoveredBy(c context.Context, g *geo.Geography) (RPKeyExpr, error) {
+func (i *s2GeographyIndex) CoveredBy(c context.Context, g geo.Geography) (RPKeyExpr, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
@@ -135,7 +145,7 @@ func (i *s2GeographyIndex) CoveredBy(c context.Context, g *geo.Geography) (RPKey
 }
 
 // Intersects implements the GeographyIndex interface.
-func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error) {
+func (i *s2GeographyIndex) Intersects(c context.Context, g geo.Geography) (UnionKeySpans, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
@@ -145,13 +155,13 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 
 func (i *s2GeographyIndex) DWithin(
 	_ context.Context,
-	g *geo.Geography,
+	g geo.Geography,
 	distanceMeters float64,
 	useSphereOrSpheroid geogfn.UseSphereOrSpheroid,
 ) (UnionKeySpans, error) {
-	projInfo, ok := geoprojbase.Projection(g.SRID())
-	if !ok {
-		return nil, errors.Errorf("projection not found for SRID: %d", g.SRID())
+	projInfo, err := geoprojbase.Projection(g.SRID())
+	if err != nil {
+		return nil, err
 	}
 	if projInfo.Spheroid == nil {
 		return nil, errors.Errorf("projection %d does not have spheroid", g.SRID())
@@ -195,10 +205,27 @@ func (i *s2GeographyIndex) DWithin(
 	return intersectsUsingCovering(covering), nil
 }
 
-func (i *s2GeographyIndex) TestingInnerCovering(g *geo.Geography) s2.CellUnion {
+func (i *s2GeographyIndex) TestingInnerCovering(g geo.Geography) s2.CellUnion {
 	r, _ := g.AsS2(geo.EmptyBehaviorOmit)
 	if r == nil {
 		return nil
 	}
 	return innerCovering(i.rc, r)
+}
+
+func (i *s2GeographyIndex) CoveringGeography(
+	c context.Context, g geo.Geography,
+) (geo.Geography, error) {
+	keys, _, err := i.InvertedIndexKeys(c, g)
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	t, err := makeGeomTFromKeys(keys, g.SRID(), func(p s2.Point) (float64, float64) {
+		latlng := s2.LatLngFromPoint(p)
+		return latlng.Lng.Degrees(), latlng.Lat.Degrees()
+	})
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	return geo.MakeGeographyFromGeomT(t)
 }

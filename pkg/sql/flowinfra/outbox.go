@@ -12,25 +12,26 @@ package flowinfra
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-const outboxBufRows = 16
+// OutboxBufRows is the maximum number of rows that are buffered by the Outbox
+// before flushing.
+const OutboxBufRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
 
 type flowStream interface {
@@ -40,7 +41,7 @@ type flowStream interface {
 
 // Outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
-// when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
+// when we accumulate OutboxBufRows or every outboxFlushPeriod (whichever comes
 // first).
 type Outbox struct {
 	// RowChannel implements the RowReceiver interface.
@@ -66,7 +67,16 @@ type Outbox struct {
 	err error
 
 	statsCollectionEnabled bool
-	stats                  OutboxStats
+	stats                  execinfrapb.ComponentStats
+
+	// numOutboxes is an atomic that keeps track of how many outboxes are left.
+	// When there is one outbox left, the flow-level stats are added to the last
+	// outbox's span stats unless isGatewayNode is true, in which case, the flow
+	// will do so in its Cleanup method.
+	numOutboxes *int32
+
+	// isGatewayNode specifies whether this outbox is running on the gateway node.
+	isGatewayNode bool
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -76,25 +86,17 @@ var _ Startable = &Outbox{}
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
 	nodeID roachpb.NodeID,
-	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
+	numOutboxes *int32,
+	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
-	m.encoder.SetHeaderFields(flowID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
+	m.numOutboxes = numOutboxes
+	m.isGatewayNode = isGatewayNode
+	m.stats.Component = flowCtx.StreamComponentID(streamID)
 	return m
-}
-
-// NewOutboxSyncFlowStream sets up an outbox for the special "sync flow"
-// stream. The flow context should be provided via SetFlowCtx when it is
-// available.
-func NewOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outbox {
-	return &Outbox{stream: stream}
-}
-
-// SetFlowCtx sets the flow context for the Outbox.
-func (m *Outbox) SetFlowCtx(flowCtx *execinfra.FlowCtx) {
-	m.flowCtx = flowCtx
 }
 
 // Init initializes the Outbox.
@@ -108,7 +110,7 @@ func (m *Outbox) Init(typs []*types.T) {
 	m.encoder.Init(typs)
 }
 
-// addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
+// AddRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
 // called.
 //
 // If an error is returned, the outbox's stream might or might not be usable; if
@@ -116,8 +118,8 @@ func (m *Outbox) Init(typs []*types.T) {
 // communication error, in which case the other side of the stream should get it
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
-func (m *Outbox) addRow(
-	ctx context.Context, row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+func (m *Outbox) AddRow(
+	ctx context.Context, row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
 	mustFlush := false
 	var encodingErr error
@@ -132,10 +134,13 @@ func (m *Outbox) addRow(
 			m.encoder.AddMetadata(ctx, execinfrapb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
+		if m.statsCollectionEnabled {
+			m.stats.NetTx.TuplesSent.Add(1)
+		}
 	}
 	m.numRows++
 	var flushErr error
-	if m.numRows >= outboxBufRows || mustFlush {
+	if m.numRows >= OutboxBufRows || mustFlush {
 		flushErr = m.flush(ctx)
 	}
 	if encodingErr != nil {
@@ -153,14 +158,15 @@ func (m *Outbox) flush(ctx context.Context) error {
 		return nil
 	}
 	msg := m.encoder.FormMessage(ctx)
-	if m.statsCollectionEnabled {
-		m.stats.BytesSent += int64(msg.Size())
-	}
 
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
 	}
 	sendErr := m.stream.Send(msg)
+	if m.statsCollectionEnabled {
+		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
+		m.stats.NetTx.MessagesSent.Add(1)
+	}
 	for _, rpm := range msg.Data.Metadata {
 		if metricsMeta, ok := rpm.Value.(*execinfrapb.RemoteProducerMetadata_Metrics_); ok {
 			metricsMeta.Metrics.Release()
@@ -184,7 +190,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 }
 
 // mainLoop reads from m.RowChannel and writes to the output stream through
-// addRow()/flush() until the producer doesn't have any more data to send or an
+// AddRow()/flush() until the producer doesn't have any more data to send or an
 // error happened.
 //
 // If the consumer asks the producer to drain, mainLoop() will relay this
@@ -201,20 +207,20 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	// writers could be writing to it as soon as we are started.
 	defer m.RowChannel.ConsumerClosed()
 
-	var span opentracing.Span
+	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
-	if span != nil && tracing.IsRecording(span) {
+	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
-		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
-		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
+		span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(m.flowCtx.ID.String()))
+		span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(m.streamID)))
 	}
-	// spanFinished specifies whether we called tracing.FinishSpan on the span.
-	// Some code paths (e.g. stats collection) need to prematurely call
-	// FinishSpan to get trace data.
+	// spanFinished specifies whether we've Finish()-ed the span. Some code
+	// paths (e.g. stats collection) need to prematurely call it to get trace
+	// data.
 	spanFinished := false
 	defer func() {
 		if !spanFinished {
-			tracing.FinishSpan(span)
+			span.Finish()
 		}
 	}()
 
@@ -283,14 +289,19 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-					if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
-						m.stats.BytesSent = 0
+					if !m.isGatewayNode && m.numOutboxes != nil && atomic.AddInt32(m.numOutboxes, -1) == 0 {
+						// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that are associated with streams,
+						// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
+						// complicated to attach this to a flow level span. If the row exec engine gets removed, getting
+						// maxMemUsage from streamStats should be removed as well.
+						m.stats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.EvalCtx.Mon.MaximumBytes()))
+						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
-					tracing.SetSpanStats(span, &m.stats)
-					tracing.FinishSpan(span)
+					span.RecordStructured(&m.stats)
+					span.Finish()
 					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
+						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
 						}
@@ -300,7 +311,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			}
 			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
-				err := m.addRow(ctx, msg.Row, msg.Meta)
+				err := m.AddRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
 				}
@@ -327,9 +338,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 				// RPCs that have this node as consumer to return errors.
 				m.flowCtxCancel()
 				// The consumer either doesn't care any more (it returned from the
-				// FlowStream RPC with an error if the outbox established the stream or
-				// it canceled the client context if the consumer established the
-				// stream through a RunSyncFlow RPC), or there was a communication error
+				// FlowStream RPC with an error), or there was a communication error
 				// and the stream is dead. In any case, the stream has been closed and
 				// the consumer will not consume more rows from this outbox. Make sure
 				// the stream is not used any more.
@@ -374,30 +383,23 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 	stream := m.stream
 	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		sendDrainSignal := func(drainRequested bool, err error) bool {
+		sendDrainSignal := func(drainRequested bool, err error) (shouldExit bool) {
 			select {
 			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
-				return true
+				return false
 			case <-ctx.Done():
-				// Listening for consumer signals has been canceled. This generally
-				// means that the main outbox routine is no longer listening to these
-				// signals but, in the RunSyncFlow case, it may also mean that the
-				// client (the consumer) has canceled the RPC. In that case, the main
-				// routine is still listening (and this branch of the select has been
-				// randomly selected; the other was also available), so we have to
-				// notify it. Thus, we attempt sending again.
-				select {
-				case ch <- drainSignal{drainRequested: drainRequested, err: err}:
-					return true
-				default:
-					return false
-				}
+				// Listening for consumer signals has been canceled indicating
+				// that the main outbox routine is no longer listening to these
+				// signals.
+				return true
 			}
 		}
 
 		for {
 			signal, err := stream.Recv()
 			if err == io.EOF {
+				// io.EOF indicates graceful completion of the stream, so we
+				// don't use io.EOF as an error.
 				sendDrainSignal(false, nil)
 				return
 			}
@@ -407,14 +409,11 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 			}
 			switch {
 			case signal.DrainRequest != nil:
-				if !sendDrainSignal(true, nil) {
+				if shouldExit := sendDrainSignal(true, nil); shouldExit {
 					return
 				}
-			case signal.SetupFlowRequest != nil:
-				log.Fatalf(ctx, "Unexpected SetupFlowRequest. "+
-					"This SyncFlow specific message should have been handled in RunSyncFlow.")
 			case signal.Handshake != nil:
-				log.Eventf(ctx, "Consumer sent handshake. Consuming flow scheduled: %t",
+				log.Eventf(ctx, "consumer sent handshake.\nConsuming flow scheduled: %t",
 					signal.Handshake.ConsumerScheduled)
 			}
 		}
@@ -440,7 +439,7 @@ func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Start starts the outbox.
 func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
-	if m.Types() == nil {
+	if m.OutputTypes() == nil {
 		panic("outbox not initialized")
 	}
 	if wg != nil {
@@ -453,18 +452,4 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 // Err returns the error (if any occurred) while Outbox was running.
 func (m *Outbox) Err() error {
 	return m.err
-}
-
-const outboxTagPrefix = "outbox."
-
-// Stats implements the SpanStats interface.
-func (os *OutboxStats) Stats() map[string]string {
-	statsMap := make(map[string]string)
-	statsMap[outboxTagPrefix+"bytes_sent"] = humanizeutil.IBytes(os.BytesSent)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (os *OutboxStats) StatsForQueryPlan() []string {
-	return []string{fmt.Sprintf("bytes sent: %s", humanizeutil.IBytes(os.BytesSent))}
 }

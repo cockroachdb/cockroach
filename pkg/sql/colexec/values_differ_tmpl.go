@@ -20,11 +20,21 @@
 package colexec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ = coldataext.CompareDatum
+	_ tree.AggType
 )
 
 // {{/*
@@ -43,15 +53,16 @@ const _TYPE_WIDTH = 0
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_, _, _, _, _, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}
 
 // valuesDiffer takes in two ColVecs as well as values indices to check whether
-// the values differ. This function pays attention to NULLs, and two NULL
-// values do *not* differ.
-func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int) bool {
+// the values differ. This function pays attention to NULLs.
+func valuesDiffer(
+	aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int, nullsAreDistinct bool,
+) bool {
 	switch aColVec.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -65,7 +76,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -78,7 +89,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unsupported valuesDiffer type %s", aColVec.Type()))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported valuesDiffer type %s", aColVec.Type()))
 	// This code is unreachable, but the compiler cannot infer that.
 	return false
 }

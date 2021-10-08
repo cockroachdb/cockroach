@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# Bazel calls into this script, setting `BAZEL_REAL` to the location of
+# the "actual" Bazel binary, expecting this script to call into Bazel
+# appropriately. We output a helpful error message as suggested in
+# https://github.com/bazelbuild/bazelisk#ensuring-that-your-developers-use-bazelisk-rather-than-bazel
+
+if [ -z "$BAZELISK_SKIP_WRAPPER" ] && [ -z "$SHUT_UP_ABOUT_BAZELISK" ]
+then
+    echo "You're not using Bazelisk! Your build may fail due to a mismatched" >&2
+    echo "Bazel version. Using Bazelisk is recommended." >&2
+    echo "On macOS, you can install Bazelisk with:" >&2
+    echo "    brew uninstall bazel; brew install bazelisk" >&2
+fi
+
+$BAZEL_REAL "$@"

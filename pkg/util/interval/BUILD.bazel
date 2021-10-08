@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "interval",
+    srcs = [
+        "btree_based_interval.go",
+        "bu23.go",
+        "interval.go",
+        "llrb_based_interval.go",
+        "range_group.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/interval",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/syncutil",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "interval_test",
+    size = "small",
+    srcs = [
+        "btree_based_interval_test.go",
+        "range_group_test.go",
+    ],
+    embed = [":interval"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

@@ -13,18 +13,18 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // zeroNode is a planNode with no columns and no rows and is used for nodes that
 // have no results. (e.g. a table for which the filtering condition has a
 // contradiction).
 type zeroNode struct {
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 }
 
-func newZeroNode(columns sqlbase.ResultColumns) *zeroNode {
+func newZeroNode(columns colinfo.ResultColumns) *zeroNode {
 	return &zeroNode{columns: columns}
 }
 

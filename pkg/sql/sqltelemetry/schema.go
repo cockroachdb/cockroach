@@ -53,9 +53,15 @@ var (
 	// sharded index is created.
 	HashShardedIndexCounter = telemetry.GetCounterOnce("sql.schema.hash_sharded_index")
 
-	// InvertedIndexCounter is to be incremented every time an inverted
-	// index is created.
+	// InvertedIndexCounter is to be incremented every time an inverted index is
+	// created. This includes single-column inverted indexes, geometry/geography
+	// inverted indexes, multi-column inverted indexes, and partial inverted
+	// indexes.
 	InvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.inverted_index")
+
+	// MultiColumnInvertedIndexCounter is to be incremented every time a
+	// multi-column inverted index is created.
+	MultiColumnInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.multi_column_inverted_index")
 
 	// GeographyInvertedIndexCounter is to be incremented every time a
 	// geography inverted index is created. These are a subset of the
@@ -66,6 +72,23 @@ var (
 	// geometry inverted index is created. These are a subset of the
 	// indexes counted in InvertedIndexCounter.
 	GeometryInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.geometry_inverted_index")
+
+	// PartialIndexCounter is to be incremented every time a partial index is
+	// created. This includes both regular and inverted partial indexes.
+	PartialIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_index")
+
+	// PartialInvertedIndexCounter is to be incremented every time a partial
+	// inverted index is created.
+	PartialInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_inverted_index")
+
+	// PartitionedInvertedIndexCounter is to be incremented every time a
+	// partitioned inverted index is created.
+	PartitionedInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partitioned_inverted_index")
+
+	// ExpressionIndexCounter is to be incremented every time an expression
+	// index is created. This includes both regular and inverted expression
+	// indexes.
+	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
 )
 
 var (
@@ -135,6 +158,16 @@ var SchemaChangeInExplicitTxnCounter = telemetry.GetCounterOnce("sql.schema.chan
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
 
-// CreateUnloggedTableCounter is a counter that is incremented everytime an unlogged
+// CreateUnloggedTableCounter is a counter that is incremented every time an unlogged
 // table is created.
 var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unlogged_table")
+
+// SchemaRefreshMaterializedView is to be incremented every time a materialized
+// view is refreshed.
+var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
+
+// SchemaChangeErrorCounter is to be incremented for different types
+// of errors.
+func SchemaChangeErrorCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
+}

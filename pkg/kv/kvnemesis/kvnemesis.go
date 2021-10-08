@@ -25,27 +25,25 @@ import (
 
 // RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
-//
-// Ideas for conditions to be added to KV nemesis:
-// - Transactions being abandoned by their coordinator.
-// - CPuts, and continuing after CPut errors (generally continuing after errors
-// is not allowed, but it is allowed after ConditionFailedError as a special
-// case).
 func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,
-	ct ClosedTimestampTargetInterval,
+	env *Env,
 	config GeneratorConfig,
+	numSteps int,
 	dbs ...*kv.DB,
 ) ([]error, error) {
-	const concurrency, numSteps = 5, 30
+	const concurrency = 5
+	if numSteps <= 0 {
+		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
+	}
 
 	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
 	if err != nil {
 		return nil, err
 	}
-	a := MakeApplier(dbs...)
-	w, err := Watch(ctx, dbs, ct, GeneratorDataSpan())
+	a := MakeApplier(env, dbs...)
+	w, err := Watch(ctx, env, dbs, GeneratorDataSpan())
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +55,16 @@ func RunNemesis(
 	workerFn := func(ctx context.Context, workerIdx int) error {
 		workerName := fmt.Sprintf(`%d`, workerIdx)
 		var buf strings.Builder
-		for atomic.AddInt64(&stepsStartedAtomic, 1) <= numSteps {
+		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
 			step := g.RandStep(rng)
 
-			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "txn step")
+			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(
+				ctx, tracing.NewTracer(), "txn step")
+			buf.Reset()
+			fmt.Fprintf(&buf, "step:")
+			step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE  `})
+			log.VEventf(recCtx, 2, "%v", buf.String())
 			err := a.Apply(recCtx, &step)
-			log.VEventf(recCtx, 2, "step: %v", step)
 			step.Trace = collect().String()
 			cancel()
 			if err != nil {

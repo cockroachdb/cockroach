@@ -1,0 +1,35 @@
+# This file contains telemetry tests for the iam.roles counter.
+
+feature-allowlist
+iam.roles.alter.*
+iam.roles.create.*
+----
+
+feature-usage
+CREATE ROLE testuser CREATEROLE LOGIN VALID UNTIL '2020-01-01' CONTROLJOB CONTROLCHANGEFEED CREATEDB CREATELOGIN VIEWACTIVITY CANCELQUERY MODIFYCLUSTERSETTING
+----
+iam.roles.create.cancelquery
+iam.roles.create.controlchangefeed
+iam.roles.create.controljob
+iam.roles.create.createdb
+iam.roles.create.createlogin
+iam.roles.create.createrole
+iam.roles.create.login
+iam.roles.create.modifyclustersetting
+iam.roles.create.role
+iam.roles.create.validuntil
+iam.roles.create.viewactivity
+
+feature-usage
+ALTER ROLE testuser NOCREATEROLE NOLOGIN NOCONTROLJOB NOCONTROLCHANGEFEED NOCREATEDB NOCREATELOGIN NOVIEWACTIVITY NOCANCELQUERY NOMODIFYCLUSTERSETTING
+----
+iam.roles.alter.nocancelquery
+iam.roles.alter.nocontrolchangefeed
+iam.roles.alter.nocontroljob
+iam.roles.alter.nocreatedb
+iam.roles.alter.nocreatelogin
+iam.roles.alter.nocreaterole
+iam.roles.alter.nologin
+iam.roles.alter.nomodifyclustersetting
+iam.roles.alter.noviewactivity
+iam.roles.alter.role

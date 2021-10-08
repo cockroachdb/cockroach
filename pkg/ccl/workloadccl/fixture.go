@@ -60,6 +60,10 @@ type FixtureConfig struct {
 	// storage requests. This is required to be set if using a "requestor pays"
 	// bucket.
 	BillingProject string
+
+	// If TableStats is true, CREATE STATISTICS is called on all tables before
+	// creating the fixture.
+	TableStats bool
 }
 
 func (s FixtureConfig) objectPathToURI(folder string) string {
@@ -68,9 +72,12 @@ func (s FixtureConfig) objectPathToURI(folder string) string {
 		Host:   s.GCSBucket,
 		Path:   folder,
 	}
+	q := url.Values{}
 	if s.BillingProject != `` {
-		u.RawQuery = `GOOGLE_BILLING_PROJECT=` + url.QueryEscape(s.BillingProject)
+		q.Add("GOOGLE_BILLING_PROJECT", s.BillingProject)
 	}
+	q.Add("AUTH", "implicit")
+	u.RawQuery = q.Encode()
 	return u.String()
 }
 
@@ -279,6 +286,28 @@ func MakeFixture(
 		return Fixture{}, err
 	}
 
+	if config.TableStats {
+		// Clean up any existing statistics.
+		_, err := sqlDB.Exec("DELETE FROM system.table_statistics WHERE true")
+		if err != nil {
+			return Fixture{}, errors.Wrapf(err, "while deleting table statistics")
+		}
+		g := ctxgroup.WithContext(ctx)
+		for _, t := range gen.Tables() {
+			t := t
+			g.Go(func() error {
+				log.Infof(ctx, "Creating table stats for %s", t.Name)
+				_, err := sqlDB.Exec(fmt.Sprintf(
+					`CREATE STATISTICS pre_backup FROM "%s"."%s"`, dbName, t.Name,
+				))
+				return err
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return Fixture{}, err
+		}
+	}
+
 	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		t := t
@@ -372,6 +401,19 @@ func ImportFixture(
 		pathPrefix = `workload://`
 	}
 
+	// Pre-create tables. It's required that we pre-create the tables before we
+	// parallelize the IMPORT because for multi-region setups, the create table
+	// will end up modifying the crdb_internal_region type (to install back
+	// references). If create table is done in parallel with IMPORT, some IMPORT
+	// jobs may fail because the type is being modified concurrently with the
+	// IMPORT. Removing the need to pre-create is being tracked with #70987.
+	for _, table := range tables {
+		err := createFixtureTable(sqlDB, dbName, table)
+		if err != nil {
+			return 0, errors.Wrapf(err, `creating table %s`, table.Name)
+		}
+	}
+
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
@@ -388,6 +430,16 @@ func ImportFixture(
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
+func createFixtureTable(sqlDB *gosql.DB, dbName string, table workload.Table) error {
+	qualifiedTableName := makeQualifiedTableName(dbName, &table)
+	createTable := fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s %s`,
+		qualifiedTableName,
+		table.Schema)
+	_, err := sqlDB.Exec(createTable)
+	return err
+}
+
 func importFixtureTable(
 	ctx context.Context,
 	sqlDB *gosql.DB,
@@ -400,8 +452,9 @@ func importFixtureTable(
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
+
 	qualifiedTableName := makeQualifiedTableName(dbName, &table)
-	fmt.Fprintf(&buf, `IMPORT TABLE %s %s CSV DATA (`, qualifiedTableName, table.Schema)
+	fmt.Fprintf(&buf, `IMPORT INTO %s CSV DATA (`, qualifiedTableName)
 	// Generate $1,...,$N-1, where N is the number of csv paths.
 	for _, path := range paths {
 		params = append(params, path)
@@ -423,6 +476,9 @@ func importFixtureTable(
 	}
 	defer res.Close()
 	if !res.Next() {
+		if err := res.Err(); err != nil {
+			return 0, errors.Wrap(err, "unexpected error during import")
+		}
 		return 0, gosql.ErrNoRows
 	}
 	resCols, err := res.Columns()
@@ -553,15 +609,19 @@ func RestoreFixture(
 		table := table
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
-			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
+			res, err := sqlDB.Query(restoreStmt, table.BackupURI, database)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "restore: %s", table.BackupURI)
 			}
 			defer res.Close()
 			if !res.Next() {
+				if err := res.Err(); err != nil {
+					return errors.Wrap(err, "unexpected error during restore")
+				}
 				return gosql.ErrNoRows
 			}
 			resCols, err := res.Columns()

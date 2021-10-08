@@ -1,0 +1,71 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "clusterversion",
+    srcs = [
+        "clusterversion.go",
+        "cockroach_versions.go",
+        "keyed_versions.go",
+        "setting.go",
+        "testutils.go",
+        ":gen-key-stringer",  # keep
+    ],
+    embed = [":clusterversion_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_kr_pretty//:pretty",
+    ],
+)
+
+go_test(
+    name = "clusterversion_test",
+    size = "small",
+    srcs = ["cockroach_versions_test.go"],
+    embed = [":clusterversion"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "clusterversion_proto",
+    srcs = ["cluster_version.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "clusterversion_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
+    proto = ":clusterversion_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+stringer(
+    name = "gen-key-stringer",
+    src = "cockroach_versions.go",
+    typ = "Key",
+)

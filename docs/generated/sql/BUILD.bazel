@@ -1,0 +1,13 @@
+genrule(
+    name = "sql",
+    outs = [
+        "aggregates.md",
+        "functions.md",
+        "operators.md",
+        "window_functions.md",
+    ],
+    cmd = """
+$(location //pkg/cmd/docgen) functions $(RULEDIR) --quiet
+""",
+    exec_tools = ["//pkg/cmd/docgen"],
+)

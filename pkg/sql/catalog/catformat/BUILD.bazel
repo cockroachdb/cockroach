@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "catformat",
+    srcs = ["index.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "catformat_test",
+    size = "small",
+    srcs = ["index_test.go"],
+    embed = [":catformat"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+    ],
+)

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -222,7 +223,7 @@ func (s *Server) Query(
 	}
 
 	// Start a task which is itself responsible for starting per-query worker
-	// tasks. This is needed because RunLimitedAsyncTask can block; in the
+	// tasks. This is needed because RunAsyncTaskEx can block; in the
 	// case where a single request has more queries than the semaphore limit,
 	// a deadlock would occur because queries cannot complete until
 	// they have written their result to the "output" channel, which is
@@ -232,11 +233,13 @@ func (s *Server) Query(
 			queryIdx := queryIdx
 			query := query
 
-			if err := s.stopper.RunLimitedAsyncTask(
+			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
-				"ts.Server: query",
-				s.workerSem,
-				true, /* wait */
+				stop.TaskOpts{
+					TaskName:   "ts.Server: query",
+					Sem:        s.workerSem,
+					WaitForSem: true,
+				},
 				func(ctx context.Context) {
 					// Estimated source count is either the count of requested sources
 					// *or* the estimated cluster node count if no sources are specified.
@@ -312,53 +315,131 @@ func (s *Server) Query(
 // server. Only data from the 10-second resolution is returned; rollup data is
 // not currently returned. Data is returned in the order it is read from disk,
 // and will thus not be totally organized by series.
+//
+// TODO(tbg): needs testing that restricting to individual timeseries works
+// and that the date range restrictions are respected. Should be easy enough to
+// set up a KV store and write some keys into it (`MakeDataKey`) to do so without
+// setting up a `*Server`.
 func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
-	ctx := stream.Context()
+	d := defaultDumper{stream}.Dump
+	return dumpImpl(stream.Context(), s.db.db, req, d)
+
+}
+
+// DumpRaw is like Dump, but it returns a stream of raw KV pairs.
+func (s *Server) DumpRaw(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpRawServer) error {
+	d := rawDumper{stream}.Dump
+	return dumpImpl(stream.Context(), s.db.db, req, d)
+}
+
+func dumpImpl(
+	ctx context.Context, db *kv.DB, req *tspb.DumpRequest, d func(*roachpb.KeyValue) error,
+) error {
+	names := req.Names
+	if len(names) == 0 {
+		names = catalog.AllInternalTimeseriesMetricNames()
+	}
+	resolutions := req.Resolutions
+	if len(resolutions) == 0 {
+		resolutions = []tspb.TimeSeriesResolution{tspb.TimeSeriesResolution_RESOLUTION_10S}
+	}
+	for _, seriesName := range names {
+		for _, res := range resolutions {
+			if err := dumpTimeseriesAllSources(
+				ctx,
+				db,
+				seriesName,
+				ResolutionFromProto(res),
+				req.StartNanos,
+				req.EndNanos,
+				d,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+type defaultDumper struct {
+	stream tspb.TimeSeries_DumpServer
+}
+
+func (dd defaultDumper) Dump(kv *roachpb.KeyValue) error {
+	name, source, _, _, err := DecodeDataKey(kv.Key)
+	if err != nil {
+		return err
+	}
+	var idata roachpb.InternalTimeSeriesData
+	if err := kv.Value.GetProto(&idata); err != nil {
+		return err
+	}
+
+	tsdata := &tspb.TimeSeriesData{
+		Name:       name,
+		Source:     source,
+		Datapoints: make([]tspb.TimeSeriesDatapoint, idata.SampleCount()),
+	}
+	for i := 0; i < idata.SampleCount(); i++ {
+		if idata.IsColumnar() {
+			tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Offset[i])
+			tsdata.Datapoints[i].Value = idata.Last[i]
+		} else {
+			tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Samples[i].Offset)
+			tsdata.Datapoints[i].Value = idata.Samples[i].Sum
+		}
+	}
+	return dd.stream.Send(tsdata)
+}
+
+type rawDumper struct {
+	stream tspb.TimeSeries_DumpRawServer
+}
+
+func (rd rawDumper) Dump(kv *roachpb.KeyValue) error {
+	return rd.stream.Send(kv)
+}
+
+func dumpTimeseriesAllSources(
+	ctx context.Context,
+	db *kv.DB,
+	seriesName string,
+	diskResolution Resolution,
+	startNanos, endNanos int64,
+	dump func(*roachpb.KeyValue) error,
+) error {
+	if endNanos == 0 {
+		endNanos = math.MaxInt64
+	}
+
+	if delta := diskResolution.SlabDuration() - 1; endNanos > math.MaxInt64-delta {
+		endNanos = math.MaxInt64
+	} else {
+		endNanos += delta
+	}
+
 	span := &roachpb.Span{
-		Key:    roachpb.Key(firstTSRKey),
-		EndKey: roachpb.Key(lastTSRKey),
+		Key: MakeDataKey(
+			seriesName, "" /* source */, diskResolution, startNanos,
+		),
+		EndKey: MakeDataKey(
+			seriesName, "" /* source */, diskResolution, endNanos,
+		),
 	}
 
 	for span != nil {
 		b := &kv.Batch{}
+		scan := roachpb.NewScan(span.Key, span.EndKey, false /* forUpdate */)
+		b.AddRawRequest(scan)
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
-		b.Scan(span.Key, span.EndKey)
-		err := s.db.db.Run(ctx, b)
+		err := db.Run(ctx, b)
 		if err != nil {
 			return err
 		}
-		result := b.Results[0]
-		span = result.ResumeSpan
-		for i := range result.Rows {
-			row := &result.Rows[i]
-			name, source, resolution, _, err := DecodeDataKey(row.Key)
-			if err != nil {
-				return err
-			}
-			if resolution != Resolution10s {
-				// Only return the highest resolution data.
-				continue
-			}
-			var idata roachpb.InternalTimeSeriesData
-			if err := row.ValueProto(&idata); err != nil {
-				return err
-			}
-
-			tsdata := &tspb.TimeSeriesData{
-				Name:       name,
-				Source:     source,
-				Datapoints: make([]tspb.TimeSeriesDatapoint, idata.SampleCount()),
-			}
-			for i := 0; i < idata.SampleCount(); i++ {
-				if idata.IsColumnar() {
-					tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Offset[i])
-					tsdata.Datapoints[i].Value = idata.Last[i]
-				} else {
-					tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Samples[i].Offset)
-					tsdata.Datapoints[i].Value = idata.Samples[i].Sum
-				}
-			}
-			if err := stream.Send(tsdata); err != nil {
+		resp := b.RawResponse().Responses[0].GetScan()
+		span = resp.ResumeSpan
+		for i := range resp.Rows {
+			if err := dump(&resp.Rows[i]); err != nil {
 				return err
 			}
 		}

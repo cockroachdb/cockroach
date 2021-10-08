@@ -1,0 +1,24 @@
+diff -urN a/errorspb/BUILD.bazel b/errorspb/BUILD.bazel
+--- a/errorspb/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/errorspb/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -1,4 +1,5 @@
+ load("@io_bazel_rules_go//go:def.bzl", "go_library")
++load("@rules_proto//proto:defs.bzl", "proto_library")
+ 
+ go_library(
+     name = "errorspb",
+@@ -36,3 +37,14 @@
+     actual = ":errorspb",
+     visibility = ["//visibility:public"],
+ )
++
++#keep
++proto_library(
++    name = "errorspb_proto",
++    srcs = ["errors.proto"],
++    deps = [
++        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
++        "@com_google_protobuf//:any_proto",
++    ],
++    visibility = ["//visibility:public"],
++)

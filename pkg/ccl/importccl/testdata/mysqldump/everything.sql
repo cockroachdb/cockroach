@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS `everything`;
  SET character_set_client = utf8mb4 ;
 CREATE TABLE `everything` (
   `i` int(11) NOT NULL,
+  `ex` int(11) DEFAULT 4*4+4,
   `c` char(10) NOT NULL,
   `s` varchar(100) DEFAULT 'this is s''s default value',
   `tx` text,

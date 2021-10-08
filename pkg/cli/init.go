@@ -16,6 +16,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -35,7 +36,7 @@ command on one node (passing the same --host and certificate flags
 you would use for the sql command).
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runInit),
+	RunE: clierrorplus.MaybeDecorateError(runInit),
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -51,7 +52,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Actually perform cluster initialization.
 	c := serverpb.NewInitClient(conn)
-
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 		return err
 	}

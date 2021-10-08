@@ -1,0 +1,62 @@
+# LogicTest: local
+#
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement error cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition
+CREATE TABLE partition_all_by_nothing_with_partition (
+  pk INT PRIMARY KEY,
+  a INT,
+  UNIQUE(b) PARTITION BY NOTHING,
+  b INT,
+  INDEX(b) PARTITION BY LIST(b) (PARTITION one VALUES IN (1)),
+  FAMILY (pk, a, b)
+) PARTITION ALL BY NOTHING
+
+statement ok
+CREATE TABLE partition_all_by_nothing (
+  pk INT PRIMARY KEY,
+  a INT,
+  UNIQUE(b),
+  b INT,
+  INDEX(b),
+  c INT UNIQUE,
+  FAMILY (pk, a, b, c)
+) PARTITION ALL BY NOTHING
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE partition_all_by_nothing]
+----
+CREATE TABLE public.partition_all_by_nothing (
+                            pk INT8 NOT NULL,
+                            a INT8 NULL,
+                            b INT8 NULL,
+                            c INT8 NULL,
+                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            UNIQUE INDEX partition_all_by_nothing_c_key (c ASC),
+                            UNIQUE INDEX partition_all_by_nothing_b_key (b ASC),
+                            INDEX partition_all_by_nothing_b_idx (b ASC),
+                            FAMILY fam_0_pk_a_b_c (pk, a, b, c)
+) PARTITION ALL BY NOTHING
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX idx ON partition_all_by_nothing(pk) PARTITION BY LIST(pk) (PARTITION one VALUES IN (1))
+
+statement ok
+CREATE INDEX idx ON partition_all_by_nothing(pk)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE partition_all_by_nothing]
+----
+CREATE TABLE public.partition_all_by_nothing (
+                            pk INT8 NOT NULL,
+                            a INT8 NULL,
+                            b INT8 NULL,
+                            c INT8 NULL,
+                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            UNIQUE INDEX partition_all_by_nothing_c_key (c ASC),
+                            UNIQUE INDEX partition_all_by_nothing_b_key (b ASC),
+                            INDEX partition_all_by_nothing_b_idx (b ASC),
+                            INDEX idx (pk ASC),
+                            FAMILY fam_0_pk_a_b_c (pk, a, b, c)
+) PARTITION ALL BY NOTHING

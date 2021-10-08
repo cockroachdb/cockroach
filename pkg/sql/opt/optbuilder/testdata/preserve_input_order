@@ -1,0 +1,241 @@
+# tests adapted from logictest -- preserve_input_order
+
+build preserve-input-order
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+sort
+ ├── columns: i:3  [hidden: order_column2:4]
+ ├── ordering: +4,+3
+ └── with &1 (tmp)
+      ├── columns: i:3 order_column2:4
+      ├── project
+      │    ├── columns: column2:2 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         └── generate_series:1 % 5 [as=column2:2]
+      └── with-scan &1 (tmp)
+           ├── columns: i:3 order_column2:4
+           └── mapping:
+                ├──  generate_series:1 => i:3
+                └──  column2:2 => order_column2:4
+
+build preserve-input-order
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+sort
+ ├── columns: i:3  [hidden: order_column2:4]
+ ├── ordering: +4,+3
+ └── with &1 (tmp)
+      ├── columns: i:3 order_column2:4
+      ├── project
+      │    ├── columns: column2:2 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         └── generate_series:1 % 5 [as=column2:2]
+      └── with-scan &1 (tmp)
+           ├── columns: i:3 order_column2:4
+           └── mapping:
+                ├──  generate_series:1 => i:3
+                └──  column2:2 => order_column2:4
+
+# The internal ordering column for i%5 should not be present in the output.
+build preserve-input-order
+SELECT foo FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
+----
+sort
+ ├── columns: foo:4  [hidden: generate_series:1 column3:3]
+ ├── ordering: +3,+1
+ └── project
+      ├── columns: foo:4 generate_series:1 column3:3
+      ├── project
+      │    ├── columns: "?column?":2 column3:3 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         ├── generate_series:1 % 2 [as="?column?":2]
+      │         └── generate_series:1 % 5 [as=column3:3]
+      └── projections
+           └── ((generate_series:1, "?column?":2) AS i, "?column?") [as=foo:4]
+
+# The internal ordering column for i%5 should not be present in the output.
+build preserve-input-order
+SELECT foo.* FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
+----
+sort
+ ├── columns: i:1 "?column?":2  [hidden: column3:3]
+ ├── ordering: +3,+1
+ └── project
+      ├── columns: "?column?":2 column3:3 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 10)
+      └── projections
+           ├── generate_series:1 % 2 [as="?column?":2]
+           └── generate_series:1 % 5 [as=column3:3]
+
+# The subquery ordering is propagated to the aggregation.
+build preserve-input-order
+SELECT array_agg(i) FROM (SELECT * FROM generate_series(1, 5) i ORDER BY i%2 DESC, i)
+----
+scalar-group-by
+ ├── columns: array_agg:3
+ ├── internal-ordering: -2,+1
+ ├── sort
+ │    ├── columns: generate_series:1 column2:2
+ │    ├── ordering: -2,+1
+ │    └── project
+ │         ├── columns: column2:2 generate_series:1
+ │         ├── project-set
+ │         │    ├── columns: generate_series:1
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── generate_series(1, 5)
+ │         └── projections
+ │              └── generate_series:1 % 2 [as=column2:2]
+ └── aggregations
+      └── array-agg [as=array_agg:3]
+           └── generate_series:1
+
+# The input ordering is not propagated through joins.
+build preserve-input-order
+WITH tmp AS (SELECT * FROM generate_series(1, 2) x),
+     tmp2 AS (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC)
+SELECT * FROM tmp INNER JOIN tmp2 ON True;
+----
+with &1 (tmp)
+ ├── columns: x:4 i:7  [hidden: order_column3:5 order_generate_series:6 order_column3:8]
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ └── with &2 (tmp2)
+      ├── columns: x:4 order_column3:5 order_generate_series:6 i:7 order_column3:8
+      ├── project
+      │    ├── columns: column3:3 generate_series:2
+      │    ├── project-set
+      │    │    ├── columns: generate_series:2
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(8, 12)
+      │    └── projections
+      │         └── generate_series:2 % 5 [as=column3:3]
+      └── inner-join (cross)
+           ├── columns: x:4 order_column3:5 order_generate_series:6 i:7 order_column3:8
+           ├── with-scan &1 (tmp)
+           │    ├── columns: x:4 order_column3:5 order_generate_series:6
+           │    └── mapping:
+           │         ├──  generate_series:1 => x:4
+           │         ├──  column3:3 => order_column3:5
+           │         └──  generate_series:2 => order_generate_series:6
+           ├── with-scan &2 (tmp2)
+           │    ├── columns: i:7 order_column3:8
+           │    └── mapping:
+           │         ├──  generate_series:2 => i:7
+           │         └──  column3:3 => order_column3:8
+           └── filters
+                └── true
+
+# The input ordering is not propagated through joins.
+build preserve-input-order
+SELECT *
+FROM (SELECT * FROM generate_series(1, 2) x) tmp,
+     (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC) tmp2;
+----
+inner-join (cross)
+ ├── columns: x:1 i:2  [hidden: column3:3]
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project
+ │    ├── columns: column3:3 generate_series:2
+ │    ├── project-set
+ │    │    ├── columns: generate_series:2
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── generate_series(8, 12)
+ │    └── projections
+ │         └── generate_series:2 % 5 [as=column3:3]
+ └── filters (true)
+
+# Do not preserve the subquery ordering because the parent scope has its own
+# ordering.
+build preserve-input-order
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+SELECT * FROM tmp ORDER BY i DESC;
+----
+sort
+ ├── columns: i:3
+ ├── ordering: -3
+ └── with &1 (tmp)
+      ├── columns: i:3
+      ├── project
+      │    ├── columns: column2:2 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         └── generate_series:1 % 5 [as=column2:2]
+      └── project
+           ├── columns: i:3
+           └── with-scan &1 (tmp)
+                ├── columns: i:3 order_column2:4
+                └── mapping:
+                     ├──  generate_series:1 => i:3
+                     └──  column2:2 => order_column2:4
+
+# Do not preserve the subquery ordering because the parent scope has its own
+# ordering.
+build preserve-input-order
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+SELECT * FROM tmp ORDER BY i DESC;
+----
+sort
+ ├── columns: i:3
+ ├── ordering: -3
+ └── with &1 (tmp)
+      ├── columns: i:3
+      ├── project
+      │    ├── columns: column2:2 generate_series:1
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 10)
+      │    └── projections
+      │         └── generate_series:1 % 5 [as=column2:2]
+      └── project
+           ├── columns: i:3
+           └── with-scan &1 (tmp)
+                ├── columns: i:3 order_column2:4
+                └── mapping:
+                     ├──  generate_series:1 => i:3
+                     └──  column2:2 => order_column2:4

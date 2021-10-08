@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colmem",
+    srcs = ["allocator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colmem",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/memsize",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/mon",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colmem_test",
+    size = "small",
+    srcs = ["allocator_test.go"],
+    deps = [
+        ":colmem",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colconv",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,251 @@
+# Test cases for using invertedFilterer on an inverted json or array index.
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB,
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[],
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]'),
+  (34, '{"a": 1}'),
+  (35, '[1]'),
+  (36, '[2]'),
+  (37, '[[1]]'),
+  (38, '[[2]]'),
+  (39, '["a"]'),
+  (40, '{"a": [[]]}'),
+  (41, '[[1, 2]]'),
+  (42, '[[1], [2]]'),
+  (43, '[{"a": "b", "c": "d"}]'),
+  (44, '[{"a": "b"}, {"c": "d"}]')
+
+# Filter with a scalar.
+query IT
+SELECT * FROM json_tab WHERE b @> '1' ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+14  1
+22  [1, 2, 3, 1]
+33  [1, "bar"]
+35  [1]
+
+# Same as above, with no index join required.
+query I
+SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
+----
+2
+14
+22
+33
+35
+
+# Filter with fully-specified arrays.
+query I
+SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
+----
+2
+22
+
+# Filter with a path ending in an empty object.
+query IT
+SELECT * FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
+----
+3   {"a": {"b": "c"}}
+4   {"a": {"b": [1]}}
+5   {"a": {"b": [1, [2]]}}
+6   {"a": {"b": [[2]]}}
+8   {"a": {"b": true}}
+9   {"a": {"b": false}}
+28  {"a": {}}
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query I
+SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
+----
+3
+4
+5
+6
+8
+9
+28
+31
+
+# Filter with a path ending in an empty array.
+query IT
+SELECT * FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
+----
+25  {"a": [{}]}
+30  {"a": []}
+32  {"a": [1]}
+40  {"a": [[]]}
+
+query I
+SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
+----
+25
+30
+32
+40
+
+# Filter with a nested array. This index expression is not tight.
+query I
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
+----
+41
+
+# Combine predicates with OR.
+query IT
+SELECT * FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+33  [1, "bar"]
+35  [1]
+36  [2]
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
+----
+2
+22
+33
+35
+36
+
+# Combine predicates with OR.
+query IT
+SELECT * FROM json_tab@foo_inv WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+41  [[1, 2]]
+
+# More complex combination.
+query IT
+SELECT * FROM json_tab
+WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
+ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+33  [1, "bar"]
+
+# Combined with non-JSON predicates.
+query IT
+SELECT * FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+
+# The split disjunction rule allows us to use the index for this query.
+query IT
+SELECT * FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+33  [1, "bar"]
+35  [1]
+44  [{"a": "b"}, {"c": "d"}]
+
+# We cannot use the index for this query.
+query IT
+SELECT * FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+4   {"a": {"b": [1]}}
+22  [1, 2, 3, 1]
+33  [1, "bar"]
+35  [1]
+
+statement ok
+INSERT INTO array_tab VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{2}'),
+  (4, '{1, 2}'),
+  (5, '{1, 3}'),
+  (6, '{1, 2, 3, 4}')
+
+# Array operations.
+query I
+SELECT a FROM array_tab@foo_inv WHERE b @> '{}' ORDER BY a
+----
+1
+2
+3
+4
+5
+6
+
+# Combined with non-Array predicates.
+query IT
+SELECT * FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
+----
+2  {1}
+4  {1,2}
+6  {1,2,3,4}
+
+# The split disjunction rule allows us to use the index for this query.
+query IT
+SELECT * FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
+----
+1  {}
+2  {1}
+4  {1,2}
+5  {1,3}
+6  {1,2,3,4}
+
+# We cannot use the index for this query.
+query IT
+SELECT * FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
+----
+3  {2}

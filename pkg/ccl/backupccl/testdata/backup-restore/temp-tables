@@ -1,0 +1,172 @@
+# Test that temporary tables do not show up in any backup.
+
+new-server name=s1
+----
+
+exec-sql
+SET experimental_enable_temp_tables=true;
+
+CREATE DATABASE d1;
+USE d1;
+CREATE TEMP TABLE temp_table (id int primary key);
+CREATE TEMP SEQUENCE temp_seq;
+CREATE TABLE perm_table (id int primary key)
+----
+
+query-sql
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+perm_table
+temp_seq
+temp_table
+
+query-sql
+SELECT
+  regexp_replace(schema_name, 'pg_temp.*', 'pg_temp') as name
+FROM [SHOW SCHEMAS] ORDER BY name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+pg_temp
+public
+
+exec-sql
+BACKUP TABLE temp_table TO 'nodelocal://0/temp_table_backup'
+----
+pq: failed to resolve targets specified in the BACKUP stmt: table "temp_table" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
+
+exec-sql
+BACKUP DATABASE d1 TO 'nodelocal://0/d1_backup/'
+----
+
+exec-sql
+BACKUP d1.* TO 'nodelocal://0/d1_star_backup/'
+----
+
+exec-sql
+COMMENT ON TABLE temp_table IS 'should not show up in restore';
+BACKUP TO 'nodelocal://0/full_cluster_backup/';
+----
+
+exec-sql
+USE defaultdb;
+DROP DATABASE d1;
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/';
+USE d1
+----
+
+query-sql
+SELECT
+  regexp_replace(schema_name, 'pg_temp.*', 'pg_temp') AS name
+FROM [SHOW SCHEMAS] ORDER BY name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+public
+
+query-sql
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+perm_table
+
+exec-sql
+USE defaultdb;
+DROP DATABASE d1;
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/';
+USE d1
+----
+
+query-sql
+SELECT
+  regexp_replace(schema_name, 'pg_temp.*', 'pg_temp') AS name
+FROM [SHOW SCHEMAS] ORDER BY name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+public
+
+query-sql
+USE d1;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+perm_table
+
+new-server name=s2 share-io-dir=s1 temp-cleanup-freq=5s
+----
+
+exec-sql
+USE defaultdb;
+RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+----
+
+# The pg_temp schema from the BACKUP should not show up after restoration.
+query-sql
+USE d1;
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+public
+
+
+# We should see a synthesized pg_temp schema.
+query-sql
+USE defaultdb;
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+pg_temp_0_0
+public
+
+# On full cluster restore we remap the temp tables to defaultdb so we should not
+# see them in the restored db.
+query-sql
+USE d1;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+perm_table
+
+query-sql
+USE defaultdb;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+temp_seq
+temp_table
+
+# Wait for the temp cleanup job to run.
+sleep time=5s
+----
+
+# The synthetic temp schema should have been erased.
+query-sql
+USE defaultdb;
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
+----
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+public
+
+# The temp tables should have been erased.
+query-sql
+USE defaultdb;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+
+query-sql
+USE d1;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
+----
+perm_table

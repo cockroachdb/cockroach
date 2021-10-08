@@ -1,0 +1,66 @@
+statement ok
+CREATE TABLE t1 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b),
+  INDEX c_idx (c ASC),
+  UNIQUE INDEX d_b_idx (d ASC, b ASC)
+)
+
+query TTBITTBB colnames
+SHOW INDEXES from t1
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t1          c_idx       true        1             c            ASC        false    false
+t1          c_idx       true        2             a            ASC        false    true
+t1          c_idx       true        3             b            ASC        false    true
+t1          d_b_idx     false       1             d            ASC        false    false
+t1          d_b_idx     false       2             b            ASC        false    false
+t1          d_b_idx     false       3             a            ASC        false    true
+t1          primary     false       1             a            ASC        false    false
+t1          primary     false       2             b            ASC        false    false
+t1          primary     false       3             c            N/A        true     false
+t1          primary     false       4             d            N/A        true     false
+
+statement ok
+CREATE TABLE t2 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  PRIMARY KEY (c, b, a),
+  INDEX a_e_c_idx (a ASC, e ASC, c ASC),
+  UNIQUE INDEX b_d_idx (b ASC, d ASC),
+  UNIQUE INDEX c_e_d_a_idx (c ASC, e ASC, d ASC, a ASC),
+  INDEX d_idx (d ASC)
+)
+
+query TTBITTBB colnames
+SHOW INDEXES from t2
+----
+table_name  index_name   non_unique  seq_in_index  column_name  direction  storing  implicit
+t2          a_e_c_idx    true        1             a            ASC        false    false
+t2          a_e_c_idx    true        2             e            ASC        false    false
+t2          a_e_c_idx    true        3             c            ASC        false    false
+t2          a_e_c_idx    true        4             b            ASC        false    true
+t2          b_d_idx      false       1             b            ASC        false    false
+t2          b_d_idx      false       2             d            ASC        false    false
+t2          b_d_idx      false       3             c            ASC        false    true
+t2          b_d_idx      false       4             a            ASC        false    true
+t2          c_e_d_a_idx  false       1             c            ASC        false    false
+t2          c_e_d_a_idx  false       2             e            ASC        false    false
+t2          c_e_d_a_idx  false       3             d            ASC        false    false
+t2          c_e_d_a_idx  false       4             a            ASC        false    false
+t2          c_e_d_a_idx  false       5             b            ASC        false    true
+t2          d_idx        true        1             d            ASC        false    false
+t2          d_idx        true        2             c            ASC        false    true
+t2          d_idx        true        3             b            ASC        false    true
+t2          d_idx        true        4             a            ASC        false    true
+t2          primary      false       1             c            ASC        false    false
+t2          primary      false       2             b            ASC        false    false
+t2          primary      false       3             a            ASC        false    false
+t2          primary      false       4             d            N/A        true     false
+t2          primary      false       5             e            N/A        true     false

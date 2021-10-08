@@ -1,0 +1,46 @@
+@import "../core/index.module.scss";
+
+.notification-message {
+  box-shadow: 0px 1px 0px #dbe1ea;
+  font-family: "SourceSansPro-Regular, sans-serif";
+  margin-left: 1.875rem;
+  position: relative;
+}
+
+.unread {
+  position: relative;
+}
+
+.unread::after {
+  content: "";
+  border-radius: 5px;
+  position: absolute;
+  left: -1.75rem;
+  top: 0.4375rem;
+  height: 0.625rem;
+  width: 0.625rem;
+  background-color: #0788ff;
+}
+
+.title {
+  font-size: 0.875rem;
+  font-weight: bold;
+  line-height: 1.5rem;
+  margin: 1rem 0;
+}
+
+.description {
+  font-size: 0.875rem;
+  line-height: 1.2rem;
+  margin: 1rem 0;
+}
+
+.timestamp {
+  margin: 1rem 0 0.5rem;
+}
+
+.severity {
+  position: absolute;
+  top: 2px;
+  right: 10px;
+}

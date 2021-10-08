@@ -1,0 +1,83 @@
+create-table
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j INT UNIQUE
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j INT CHECK (j > 0)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j INT REFERENCES defaultdb.foo(i)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD CONSTRAINT j CHECK (i > 0)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (i)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN i
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP CONSTRAINT foobar
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP STORED
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET NOT NULL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo RENAME COLUMN i TO j
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo RENAME CONSTRAINT foobar TO baz
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET DEFAULT 42
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo VALIDATE CONSTRAINT foobar
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo PARTITION BY NOTHING
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo INJECT STATISTICS '[]'
+----

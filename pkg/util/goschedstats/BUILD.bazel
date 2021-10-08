@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "goschedstats",
+    srcs = [
+        "runnable.go",
+        "runtime_go1.16.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "goschedstats_test",
+    srcs = ["runnable_test.go"],
+    embed = [":goschedstats"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

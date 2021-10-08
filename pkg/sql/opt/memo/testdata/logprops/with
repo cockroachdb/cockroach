@@ -6,10 +6,10 @@ build
 WITH foo AS (SELECT * FROM xy) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: x:4(int!null) y:5(int)
- ├── key: (4)
- ├── fd: (4)-->(5)
- ├── prune: (4,5)
+ ├── columns: x:5(int!null) y:6(int)
+ ├── key: (5)
+ ├── fd: (5)-->(6)
+ ├── prune: (5,6)
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
@@ -17,19 +17,19 @@ with &1 (foo)
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: xy.x:1(int!null) xy.y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── prune: (1-3)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
  │         └── interesting orderings: (+1)
  └── with-scan &1 (foo)
-      ├── columns: x:4(int!null) y:5(int)
+      ├── columns: x:5(int!null) y:6(int)
       ├── mapping:
-      │    ├──  xy.x:1(int) => x:4(int)
-      │    └──  xy.y:2(int) => y:5(int)
-      ├── key: (4)
-      ├── fd: (4)-->(5)
-      ├── prune: (4,5)
+      │    ├──  xy.x:1(int) => x:5(int)
+      │    └──  xy.y:2(int) => y:6(int)
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── prune: (5,6)
       └── cte-uses
            └── &1: count=1 used-columns=(1,2)
 
@@ -125,14 +125,14 @@ WITH foo AS (SELECT $1::INT) SELECT 1 FROM foo
 with &1 (foo)
  ├── columns: "?column?":3(int!null)
  ├── cardinality: [1 - 1]
- ├── immutable, has-placeholder
+ ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(3)
  ├── prune: (3)
  ├── project
  │    ├── columns: int8:1(int)
  │    ├── cardinality: [1 - 1]
- │    ├── immutable, has-placeholder
+ │    ├── has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── prune: (1)
@@ -141,8 +141,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── cast: INT8 [as=int8:1, type=int, immutable]
- │              └── placeholder: $1 [type=string]
+ │         └── placeholder: $1 [as=int8:1, type=int]
  └── project
       ├── columns: "?column?":3(int!null)
       ├── cardinality: [1 - 1]
@@ -163,16 +162,6 @@ with &1 (foo)
       │         └── &1: count=1 used-columns=(1)
       └── projections
            └── const: 1 [as="?column?":3, type=int]
-
-# WithScan should not have outer columns.
-build
-SELECT
-    *
-FROM
-    (VALUES (1), (2)) AS v (x),
-    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
-----
-error (0A000): CTEs may not be correlated
 
 # Regression test for #40930.
 
@@ -197,17 +186,17 @@ FROM
     t40930, with_4189
 ----
 project
- ├── columns: "?column?":9(unknown)
- ├── fd: ()-->(9)
- ├── prune: (9)
+ ├── columns: "?column?":11(unknown)
+ ├── fd: ()-->(11)
+ ├── prune: (11)
  ├── inner-join (cross)
  │    ├── scan t40930
- │    │    └── unfiltered-cols: (5-7)
- │    ├── scan tab_10102
- │    │    └── unfiltered-cols: (1-3)
+ │    │    └── unfiltered-cols: (6-9)
+ │    ├── scan t40930 [as=tab_10102]
+ │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
  └── projections
-      └── null [as="?column?":9, type=unknown]
+      └── null [as="?column?":11, type=unknown]
 
 build
 SELECT
@@ -216,4 +205,84 @@ FROM
     (VALUES (1), (2)) AS v (x),
     LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
 ----
-error (0A000): CTEs may not be correlated
+inner-join-apply
+ ├── columns: x:1(int!null) "?column?":3(int)
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── prune: (3)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ ├── with &1 (foo)
+ │    ├── columns: "?column?":3(int)
+ │    ├── outer: (1)
+ │    ├── cardinality: [1 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── prune: (3)
+ │    ├── project
+ │    │    ├── columns: "?column?":2(int)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── prune: (2)
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── projections
+ │    │         └── plus [as="?column?":2, type=int, outer=(1), immutable]
+ │    │              ├── const: 1 [type=int]
+ │    │              └── variable: column1:1 [type=int]
+ │    └── with-scan &1 (foo)
+ │         ├── columns: "?column?":3(int)
+ │         ├── mapping:
+ │         │    └──  "?column?":2(int) => "?column?":3(int)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(3)
+ │         ├── prune: (3)
+ │         └── cte-uses
+ │              └── &1: count=1 used-columns=(2)
+ └── filters (true)
+
+# Regression test for #57821: error deriving WithUses caused by MutationOps
+# that don't use a MutationPrivate.
+norm
+WITH vals AS (VALUES (1), (2)),
+     cte AS (ALTER TABLE xy SPLIT AT (VALUES (1), (2)))
+SELECT * FROM cte
+----
+with &2 (cte)
+ ├── columns: key:10(bytes) pretty:11(string) split_enforced_until:12(timestamp)
+ ├── volatile, mutations
+ ├── prune: (10-12)
+ ├── alter-table-split xy
+ │    ├── columns: key:3(bytes) pretty:4(string) split_enforced_until:5(timestamp)
+ │    ├── volatile, mutations
+ │    ├── values
+ │    │    ├── columns: column1:2(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── prune: (2)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 2 [type=int]
+ │    └── null [type=string]
+ └── with-scan &2 (cte)
+      ├── columns: key:10(bytes) pretty:11(string) split_enforced_until:12(timestamp)
+      ├── mapping:
+      │    ├──  key:3(bytes) => key:10(bytes)
+      │    ├──  pretty:4(string) => pretty:11(string)
+      │    └──  split_enforced_until:5(timestamp) => split_enforced_until:12(timestamp)
+      ├── prune: (10-12)
+      └── cte-uses
+           └── &2: count=1 used-columns=(3-5)

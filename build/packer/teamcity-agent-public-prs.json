@@ -1,0 +1,34 @@
+{
+  "variables": {
+    "image_id": "teamcity-agent-{{timestamp}}"
+  },
+
+  "builders": [{
+      "type": "googlecompute",
+      "project_id": "cockroach-teamcity-public-prs",
+      "source_image_family": "ubuntu-1804-lts",
+      "zone": "us-east1-b",
+      "machine_type": "n1-standard-32",
+      "image_name": "{{user `image_id`}}",
+      "image_description": "{{user `image_id`}}",
+      "ssh_username": "packer",
+      "disk_size": 256,
+      "disk_type": "pd-ssd",
+      "state_timeout": "15m"
+  }],
+
+  "provisioners": [{
+    "type": "shell",
+    "script": "teamcity-agent.sh",
+    "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+  },{
+    "type": "file",
+    "source": "filebeat/filebeat-agent.yml",
+    "destination": "/tmp/filebeat.yml"
+  },
+  {
+    "type": "shell",
+    "script": "setup_filebeat_on_teamcity_agent.sh",
+    "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+  }]
+}

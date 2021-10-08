@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "randutil",
+    srcs = ["rand.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/randutil",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/envutil"],
+)
+
+go_test(
+    name = "randutil_test",
+    size = "small",
+    srcs = ["rand_test.go"],
+    deps = [
+        ":randutil",
+        "//pkg/util/log",
+    ],
+)

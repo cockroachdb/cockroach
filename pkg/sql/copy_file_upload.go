@@ -15,12 +15,13 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"sync"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -39,8 +40,8 @@ var _ copyMachineInterface = &fileUploadMachine{}
 
 type fileUploadMachine struct {
 	c              *copyMachine
-	writeToFile    *io.PipeWriter
-	wg             *sync.WaitGroup
+	w              io.WriteCloser
+	cancel         func()
 	failureCleanup func()
 }
 
@@ -52,6 +53,27 @@ type noopReadSeeker struct {
 
 func (n *noopReadSeeker) Seek(int64, int) (int64, error) {
 	return 0, errors.New("illegal seek")
+}
+
+func checkIfFileExists(ctx context.Context, c *copyMachine, dest, copyTargetTable string) error {
+	if copyTargetTable == UserFileUploadTable {
+		dest = strings.TrimSuffix(dest, ".tmp")
+	}
+	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User())
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	_, err = store.ReadFile(ctx, "")
+	if err == nil {
+		// Can ignore this parse error as it would have been caught when creating a
+		// new ExternalStorage above and so we never expect it to non-nil.
+		uri, _ := url.Parse(dest)
+		return errors.Newf("destination file already exists for %s", uri.Path)
+	}
+
+	return nil
 }
 
 func newFileUploadMachine(
@@ -67,11 +89,10 @@ func newFileUploadMachine(
 	c := &copyMachine{
 		conn: conn,
 		// The planner will be prepared before use.
-		p: planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}},
+		p: planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}},
 	}
 	f = &fileUploadMachine{
-		c:  c,
-		wg: &sync.WaitGroup{},
+		c: c,
 	}
 
 	// We need a planner to do the initial planning, even if a planner
@@ -100,42 +121,39 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	pr, pw := io.Pipe()
 	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User())
 	if err != nil {
 		return nil, err
 	}
 
-	// Check that the file does not already exist
-	_, err = store.ReadFile(ctx, "")
-	if err == nil {
-		// Can ignore this parse error as it would have been caught when creating a
-		// new ExternalStorage above and so we never expect it to non-nil.
-		uri, _ := url.Parse(dest)
-		return nil, errors.Newf("destination file already exists for %s", uri.Path)
+	err = checkIfFileExists(ctx, c, dest, n.Table.Table())
+	if err != nil {
+		return nil, err
 	}
 
-	f.wg.Add(1)
-	go func() {
-		err := store.WriteFile(ctx, "", &noopReadSeeker{pr})
-		if err != nil {
-			_ = pr.CloseWithError(err)
-		}
-		f.wg.Done()
-	}()
-	f.writeToFile = pw
+	writeCtx, canecelWriteCtx := context.WithCancel(ctx)
+	f.cancel = canecelWriteCtx
+	f.w, err = store.Writer(writeCtx, "")
+	if err != nil {
+		return nil, err
+	}
+
 	f.failureCleanup = func() {
 		// Ignoring this error because deletion would only fail
 		// if the file was not created in the first place.
 		_ = store.Delete(ctx, "")
 	}
 
-	c.resultColumns = make(sqlbase.ResultColumns, 1)
-	c.resultColumns[0] = sqlbase.ResultColumn{Typ: types.Bytes}
+	c.resultColumns = make(colinfo.ResultColumns, 1)
+	c.resultColumns[0] = colinfo.ResultColumn{Typ: types.Bytes}
 	c.parsingEvalCtx = c.p.EvalContext()
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.processRows = f.writeFile
+	c.forceNotNull = true
+	c.format = tree.CopyFormatText
+	c.null = `\N`
+	c.delimiter = '\t'
 	return
 }
 
@@ -146,24 +164,27 @@ func CopyInFileStmt(destination, schema, table string) string {
 		`COPY %s.%s FROM STDIN WITH destination = %s`,
 		pq.QuoteIdentifier(schema),
 		pq.QuoteIdentifier(table),
-		lex.EscapeSQLString(destination),
+		lexbase.EscapeSQLString(destination),
 	)
 }
 
-func (f *fileUploadMachine) run(ctx context.Context) (err error) {
-	err = f.c.run(ctx)
-	_ = f.writeToFile.Close()
+func (f *fileUploadMachine) run(ctx context.Context) error {
+	err := f.c.run(ctx)
+	if err != nil && f.cancel != nil {
+		f.cancel()
+	}
+	err = errors.CombineErrors(f.w.Close(), err)
+
 	if err != nil {
 		f.failureCleanup()
 	}
-	f.wg.Wait()
-	return
+	return err
 }
 
 func (f *fileUploadMachine) writeFile(ctx context.Context) error {
 	for _, r := range f.c.rows {
 		b := []byte(*r[0].(*tree.DBytes))
-		n, err := f.writeToFile.Write(b)
+		n, err := f.w.Write(b)
 		if err != nil {
 			return err
 		}
@@ -173,7 +194,7 @@ func (f *fileUploadMachine) writeFile(ctx context.Context) error {
 	}
 
 	// Issue a final zero-byte write to ensure we observe any errors in the pipe.
-	_, err := f.writeToFile.Write(nil)
+	_, err := f.w.Write(nil)
 	if err != nil {
 		return err
 	}

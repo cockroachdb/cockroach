@@ -60,7 +60,7 @@ func TestIndexedVars(t *testing.T) {
 	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	expr := binary(Plus, v0, binary(Mult, v1, v2))
+	expr := binary(MakeBinaryOperator(Plus), v0, binary(MakeBinaryOperator(Mult), v1, v2))
 
 	// Verify the expression evaluates correctly.
 	ctx := context.Background()
@@ -78,10 +78,13 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	// Test formatting using the indexed var format interceptor.
-	f := NewFmtCtx(FmtSimple)
-	f.SetIndexedVarFormat(func(ctx *FmtCtx, idx int) {
-		ctx.Printf("customVar%d", idx)
-	})
+	f := NewFmtCtx(
+		FmtSimple,
+		FmtIndexedVarFormat(
+			func(ctx *FmtCtx, idx int) {
+				ctx.Printf("customVar%d", idx)
+			}),
+	)
 	f.FormatNode(typedExpr)
 	str = f.CloseAndGetString()
 

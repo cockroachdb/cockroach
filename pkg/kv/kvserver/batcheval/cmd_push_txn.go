@@ -30,14 +30,11 @@ func init() {
 }
 
 func declareKeysPushTransaction(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, pr.PusheeTxn.ID)})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(rs.GetRangeID(), pr.PusheeTxn.ID)})
 }
 
 // PushTxn resolves conflicts between concurrent txns (or between
@@ -96,7 +93,7 @@ func declareKeysPushTransaction(
 // Push can proceed: the pushee's transaction record is modified and
 // rewritten, based on the value of args.PushType. If args.PushType
 // is PUSH_ABORT, txn.Status is set to ABORTED. If args.PushType is
-// PUSH_TIMESTAMP, txn.Timestamp is set to just after args.PushTo.
+// PUSH_TIMESTAMP, txn.WriteTimestamp is set to just after args.PushTo.
 //
 // If the pushee is aborted, its timestamp will be forwarded to match
 // its last client activity timestamp (i.e. last heartbeat), if available.
@@ -114,25 +111,25 @@ func PushTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-	if h.Timestamp.Less(args.PushTo) {
-		// Verify that the PushTxn's timestamp is not less than the timestamp that
-		// the request intends to push the transaction to. Transactions should not
-		// be pushed into the future or their effect may not be fully reflected in
-		// a future leaseholder's timestamp cache. This is analogous to how reads
-		// should not be performed at a timestamp in the future.
-		return result.Result{}, errors.Errorf("request timestamp %s less than PushTo timestamp %s", h.Timestamp, args.PushTo)
+	if h.WriteTimestamp().Less(args.PushTo) {
+		// Verify that the PushTxn's header timestamp (the one checked against
+		// the lease) is not less than the timestamp that the request intends to
+		// push the transaction to. Transactions should not be pushed into the
+		// future past the leaseholder's lease expiration or their effect may
+		// not be fully reflected in a future leaseholder's timestamp cache.
+		return result.Result{}, errors.AssertionFailedf("request timestamp %s less than PushTo timestamp %s",
+			h.Timestamp, args.PushTo)
 	}
-	if h.Timestamp.Less(args.PusheeTxn.WriteTimestamp) {
-		// This condition must hold for the timestamp cache access/update to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
-	}
-	now := cArgs.EvalCtx.Clock().Now()
-	if now.Less(h.Timestamp) {
-		// The batch's timestamp should have been used to update the clock.
-		return result.Result{}, errors.Errorf("request timestamp %s less than current clock time %s", h.Timestamp, now)
+	if h.WriteTimestamp().Less(args.PusheeTxn.MinTimestamp) {
+		// This condition must hold for the timestamp cache access in
+		// SynthesizeTxnFromMeta and the timestamp cache update in
+		// Replica.updateTimestampCache to be safe.
+		return result.Result{}, errors.AssertionFailedf("request timestamp %s less than pushee txn MinTimestamp %s",
+			h.Timestamp, args.PusheeTxn.MinTimestamp)
 	}
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s", args.Key, args.PusheeTxn.Key)
+		return result.Result{}, errors.AssertionFailedf("request key %s should match pushee txn key %s",
+			args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -142,7 +139,7 @@ func PushTxn(
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		log.VEventf(ctx, 2, "pushee txn record not found")
+		log.VEventf(ctx, 2, "pushee txn record not found (pushee: %s)", args.PusheeTxn.Short())
 		// There are three cases in which there is no transaction record:
 		//
 		// * the pushee is still active but its transaction record has not
@@ -164,7 +161,7 @@ func PushTxn(
 		// written. If a transaction record for the transaction could be written in
 		// the future then we must be in the first case. If one could not be written
 		// then we know we're in either the second or the third case.
-		reply.PusheeTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.PusheeTxn)
+		reply.PusheeTxn = SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.PusheeTxn)
 		if reply.PusheeTxn.Status == roachpb.ABORTED {
 			// If the transaction is uncommittable, we don't even need to
 			// persist an ABORTED transaction record, we can just consider it
@@ -188,20 +185,21 @@ func PushTxn(
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
+	pushType := args.PushType
+	if pushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
 
 	// The pusher might be aware of a newer version of the pushee.
-	increasedEpochOrTimestamp := false
+	var knownHigherTimestamp, knownHigherEpoch bool
 	if reply.PusheeTxn.WriteTimestamp.Less(args.PusheeTxn.WriteTimestamp) {
 		reply.PusheeTxn.WriteTimestamp = args.PusheeTxn.WriteTimestamp
-		increasedEpochOrTimestamp = true
+		knownHigherTimestamp = true
 	}
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
-		increasedEpochOrTimestamp = true
+		knownHigherEpoch = true
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
@@ -211,17 +209,37 @@ func PushTxn(
 	// a higher epoch than the parallel commit attempt, it should not consider
 	// the pushee to be performing a parallel commit. Its commit status is not
 	// indeterminate.
-	if increasedEpochOrTimestamp && reply.PusheeTxn.Status == roachpb.STAGING {
+	if (knownHigherTimestamp || knownHigherEpoch) && reply.PusheeTxn.Status == roachpb.STAGING {
 		reply.PusheeTxn.Status = roachpb.PENDING
 		reply.PusheeTxn.InFlightWrites = nil
+		// If the pusher is aware that the pushee's currently recorded attempt
+		// at a parallel commit failed but the transaction's epoch has not yet
+		// been incremented, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs. We don't
+		// want to move the transaction back to PENDING in the same epoch, as
+		// this is not (currently) allowed by the recovery protocol. We also
+		// don't want to move the transaction to a new timestamp while retaining
+		// the STAGING status, as this could allow the transaction to enter an
+		// implicit commit state without its knowledge, leading to atomicity
+		// violations.
+		//
+		// This has no effect on pushes that fail with a TransactionPushError.
+		// Such pushes will still wait on the pushee to retry its commit and
+		// eventually commit or abort. It also has no effect on expired pushees,
+		// as they would have been aborted anyway. This only impacts pushes
+		// which would have succeeded due to priority mismatches. In these
+		// cases, the push acts the same as a short-circuited transaction
+		// recovery process, because the transaction recovery procedure always
+		// finalizes target transactions, even if initiated by a PUSH_TIMESTAMP.
+		if !knownHigherEpoch && pushType == roachpb.PUSH_TIMESTAMP {
+			pushType = roachpb.PUSH_ABORT
+		}
 	}
 
-	pushType := args.PushType
 	var pusherWins bool
 	var reason string
 
 	switch {
-	case txnwait.IsExpired(now, &reply.PusheeTxn):
+	case txnwait.IsExpired(cArgs.EvalCtx.Clock().Now(), &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
@@ -289,7 +307,7 @@ func PushTxn(
 		// timestamp beneath this timestamp.
 		reply.PusheeTxn.WriteTimestamp.Forward(args.PushTo)
 	default:
-		return result.Result{}, errors.Errorf("unexpected push type: %v", pushType)
+		return result.Result{}, errors.AssertionFailedf("unexpected push type: %v", pushType)
 	}
 
 	// If the transaction record was already present, persist the updates to it.

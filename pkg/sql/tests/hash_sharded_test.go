@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,17 +28,17 @@ import (
 // getShardColumnID fetches the id of the shard column associated with the given sharded
 // index.
 func getShardColumnID(
-	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) descpb.ColumnID {
-	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
+	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	shardCol, _, err := tableDesc.FindColumnByName(tree.Name(idx.Sharded.Name))
+	shardCol, err := tableDesc.FindColumnWithName(tree.Name(idx.GetShardColumnName()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return shardCol.ID
+	return shardCol.GetID()
 }
 
 // verifyTableDescriptorStates ensures that the given table descriptor fulfills the
@@ -47,9 +47,9 @@ func getShardColumnID(
 // 2. A hidden check constraint was created on the aforementioned shard column.
 // 3. The first column in the index set is the aforementioned shard column.
 func verifyTableDescriptorState(
-	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) {
-	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
+	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func verifyTableDescriptorState(
 	if !foundCheckConstraint {
 		t.Fatalf(`Could not find hidden check constraint for shard column`)
 	}
-	if idx.ColumnIDs[0] != shardColID {
+	if idx.GetKeyColumnID(0) != shardColID {
 		t.Fatalf(`Expected shard column to be the first column in the set of index columns`)
 	}
 }
@@ -112,13 +112,14 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		shardColID := getShardColumnID(t, tableDesc, "primary" /* shardedIndexName */)
 
 		// Ensure that secondary indexes on table `kv` have the shard column in their
-		// `ExtraColumnIDs` field so they can reconstruct the sharded primary key.
-		fooDesc, _, err := tableDesc.FindIndexByName("foo")
+		// `KeySuffixColumnIDs` field so they can reconstruct the sharded primary key.
+		foo, err := tableDesc.FindIndexWithName("foo")
 		if err != nil {
 			t.Fatal(err)
 		}
 		foundShardColumn := false
-		for _, colID := range fooDesc.ExtraColumnIDs {
+		for i := 0; i < foo.NumKeySuffixColumns(); i++ {
+			colID := foo.GetKeySuffixColumnID(i)
 			if colID == shardColID {
 				foundShardColumn = true
 				break

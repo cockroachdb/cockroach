@@ -10,29 +10,56 @@
 
 package delegate
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"fmt"
 
-func (d *delegator) delegateShowEnums() (tree.Statement, error) {
-	query := `
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
+func (d *delegator) delegateShowEnums(n *tree.ShowEnums) (tree.Statement, error) {
+	flags := cat.Flags{AvoidDescriptorCaches: true}
+	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.ObjectNamePrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	schemaClause := ""
+	if n.ExplicitSchema {
+		schema := lexbase.EscapeSQLString(name.Schema())
+		if name.Schema() == catconstants.PgTempSchemaName {
+			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData().SearchPath.GetTemporarySchemaName())
+		}
+		schemaClause = fmt.Sprintf("AND nsp.nspname = %s", schema)
+	}
+
+	// We can't query pg_enum directly as there are no rows in
+	// pg_enum if we create an empty enum (e.g. CREATE TYPE x AS ENUM()).
+	// Instead, use a CTE to aggregate enums, and use pg_type with an
+	// enum filter to LEFT JOIN against the aggregated enums to ensure
+	// we include these rows.
+	query := fmt.Sprintf(`
+WITH enums(enumtypid, values) AS (
+	SELECT
+		enums.enumtypid AS enumtypid,
+		array_agg(enums.enumlabel) WITHIN GROUP (ORDER BY (enumsortorder)) AS values
+	FROM %[1]s.pg_catalog.pg_enum AS enums
+	GROUP BY enumtypid
+)
 SELECT
-	schema, name, string_agg(label, '|') AS value
+	nsp.nspname AS schema,
+	types.typname AS name,
+	values,
+	rl.rolname AS owner
 FROM
-	(
-		SELECT
-			nsp.nspname AS schema,
-			type.typname AS name,
-			enum.enumlabel AS label
-		FROM
-			pg_catalog.pg_enum AS enum
-			JOIN pg_catalog.pg_type AS type ON (type.oid = enum.enumtypid)
-			JOIN pg_catalog.pg_namespace AS nsp ON (type.typnamespace = nsp.oid)
-		ORDER BY
-			(enumtypid, enumsortorder)
-	)
-GROUP BY
-	(schema, name)
-ORDER BY
-	(schema, name);
-`
+	%[1]s.pg_catalog.pg_type AS types
+	LEFT JOIN enums ON (types.oid = enums.enumtypid)
+	LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (types.typowner = rl.oid)
+	JOIN %[1]s.pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+WHERE types.typtype = 'e' %[2]s
+ORDER BY (nsp.nspname, types.typname)
+`, &name.CatalogName, schemaClause)
 	return parse(query)
 }

@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -181,5 +182,45 @@ func TestCommentOnColumnWhenDropColumn(t *testing.T) {
 		}
 
 		t.Fatal("comment remain")
+	}
+}
+
+func TestCommentOnAlteredColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	expectedComment := "expected comment"
+
+	if _, err := db.Exec(`
+		CREATE DATABASE d;
+		SET DATABASE = d;
+		SET enable_experimental_alter_column_type_general = true;
+		CREATE TABLE t (c INT);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`COMMENT ON COLUMN t.c IS 'first comment'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`ALTER TABLE t ALTER COLUMN c TYPE character varying;`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		fmt.Sprintf(`COMMENT ON COLUMN t.c IS '%s'`, expectedComment)); err != nil {
+		t.Fatal(err)
+	}
+	row := db.QueryRow(`SELECT comment FROM system.comments LIMIT 1`)
+	var comment string
+	if err := row.Scan(&comment); err != nil {
+		t.Fatal(err)
+	}
+
+	if expectedComment != comment {
+		t.Fatalf("expected comment %v, got %v", expectedComment, comment)
 	}
 }

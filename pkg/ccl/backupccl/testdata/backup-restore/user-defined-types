@@ -1,0 +1,206 @@
+# Test full cluster backup/restore here.
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE d.t1 (x d.greeting);
+INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+CREATE TABLE d.t2 (x d.greeting[]);
+INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+
+CREATE DATABASE d2;
+CREATE TYPE d2.farewell AS ENUM ('bye', 'cya');
+CREATE TABLE d2.t1 (x d2.farewell);
+INSERT INTO d2.t1 VALUES ('bye'), ('cya');
+CREATE TABLE d2.t2 (x d2.farewell[]);
+INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
+----
+
+exec-sql
+BACKUP TO 'nodelocal://0/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-server name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql server=s2
+RESTORE FROM 'nodelocal://0/test/'
+----
+
+# Check all of the tables have the right data.
+query-sql
+SELECT * FROM d.t1 ORDER BY x
+----
+hello
+howdy
+
+query-sql
+SELECT * FROM d.t2 ORDER BY x
+----
+{howdy}
+{hi}
+
+query-sql
+SELECT * FROM d2.t1 ORDER BY x
+----
+bye
+cya
+
+query-sql
+SELECT * FROM d2.t2 ORDER BY x
+----
+{bye}
+{cya}
+
+# We should be able to resolve each restored type. Test this by inserting
+# into each of the restored tables.
+exec-sql
+INSERT INTO d.t1 VALUES ('hi');
+INSERT INTO d.t2 VALUES (ARRAY['hello']);
+INSERT INTO d2.t1 VALUES ('cya');
+INSERT INTO d2.t2 VALUES (ARRAY['cya']);
+----
+
+# Each of the restored types should have namespace entries. Test this by
+# trying to create types that would cause namespace conflicts.
+exec-sql
+CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')
+----
+pq: type "d.public.greeting" already exists
+
+exec-sql
+CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')
+----
+pq: type "d.public._greeting" already exists
+
+exec-sql
+CREATE TYPE d2.farewell AS ENUM ('go', 'away')
+----
+pq: type "d2.public.farewell" already exists
+
+exec-sql
+CREATE TYPE d2._farewell AS ENUM ('go', 'away')
+----
+pq: type "d2.public._farewell" already exists
+
+# We shouldn't be able to drop the types since there are tables that
+# depend on them. These tests ensure that the back references from types
+# to tables that use them are handled correctly by backup and restore.
+exec-sql
+DROP TYPE d.greeting
+----
+pq: cannot drop type "greeting" because other objects ([d.public.t1 d.public.t2]) still depend on it
+
+exec-sql
+DROP TYPE d2.farewell
+----
+pq: cannot drop type "farewell" because other objects ([d2.public.t1 d2.public.t2]) still depend on it
+
+
+# Test backing up a database with user defined types.
+
+reset
+----
+
+new-server name=s
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
+CREATE TABLE d.t1 (x d.greeting);
+INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+CREATE TABLE d.t2 (x d.greeting[]);
+INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+CREATE TABLE d.expr (
+	x d.greeting,
+  y d.greeting DEFAULT 'hello',
+	z bool AS (y = 'howdy') STORED,
+  CHECK (x < 'hi'),
+	CHECK (x = ANY enum_range(y, 'hi'))
+);
+----
+
+# Backup the database now.
+exec-sql
+BACKUP DATABASE d TO 'nodelocal://0/test/'
+----
+
+exec-sql
+DROP DATABASE d;
+RESTORE DATABASE d FROM 'nodelocal://0/test/';
+----
+
+# Check the table data.
+query-sql
+SELECT * FROM d.t1 ORDER BY x
+----
+hello
+howdy
+
+query-sql
+SELECT * FROM d.t2 ORDER BY x
+----
+{howdy}
+{hi}
+
+# Insert a row into the expr table so that all of the expressions are
+# evaluated and checked.
+exec-sql
+INSERT INTO d.expr VALUES ('howdy')
+----
+
+query-sql
+SELECT * FROM d.expr
+----
+howdy hello false
+
+exec-sql
+INSERT INTO d.expr VALUES ('hi')
+----
+pq: failed to satisfy CHECK constraint (x < 'hi':::public.greeting)
+
+# We should be able to use the restored types to create new tables.
+exec-sql
+CREATE TABLE d.t3 (x d.greeting, y d.farewell)
+----
+
+# We should detect conflicts trying to overwrite existing type name.
+exec-sql
+CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')
+----
+pq: type "d.public.greeting" already exists
+
+exec-sql
+CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')
+----
+pq: type "d.public._greeting" already exists
+
+exec-sql
+CREATE TYPE d.farewell AS ENUM ('go', 'away')
+----
+pq: type "d.public.farewell" already exists
+
+exec-sql
+CREATE TYPE d._farewell AS ENUM ('go', 'away')
+----
+pq: type "d.public._farewell" already exists
+
+# We shouldn't be able to drop the types since there are tables that
+# depend on them. These tests ensure that the back references from types
+# to tables that use them are handled correctly by backup and restore.
+exec-sql
+DROP TYPE d.greeting
+----
+pq: cannot drop type "greeting" because other objects ([d.public.t1 d.public.t2 d.public.expr d.public.t3]) still depend on it
+
+exec-sql
+DROP TYPE d.farewell
+----
+pq: cannot drop type "farewell" because other objects ([d.public.t3]) still depend on it

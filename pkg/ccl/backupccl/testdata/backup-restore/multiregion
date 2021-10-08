@@ -1,0 +1,159 @@
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+exec-sql
+BACKUP DATABASE d TO 'nodelocal://1/database_backup/';
+----
+
+exec-sql
+BACKUP TO 'nodelocal://1/full_cluster_backup/';
+----
+
+# A new cluster with the same locality settings.
+new-server name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+----
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+----
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1 {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> {} <nil>
+defaultdb root <nil> {} <nil>
+postgres root <nil> {} <nil>
+system node <nil> {} <nil>
+
+# A new cluster with different localities settings.
+new-server name=s3 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
+----
+
+exec-sql
+RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+----
+pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
+HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
+
+exec-sql
+RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+----
+pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
+HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
+
+# Create a database with no regions to check default primary regions.
+exec-sql
+CREATE DATABASE no_region_db;
+CREATE TABLE no_region_db.t (x INT);
+INSERT INTO no_region_db.t VALUES (1), (2), (3);
+CREATE DATABASE no_region_db_2;
+CREATE TABLE no_region_db_2.t (x INT);
+INSERT INTO no_region_db_2.t VALUES (1), (2), (3);
+BACKUP DATABASE no_region_db TO 'nodelocal://1/no_region_database_backup/';
+BACKUP TO 'nodelocal://1/no_region_cluster_backup/';
+DROP DATABASE no_region_db;
+DROP DATABASE no_region_db_2;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
+RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
+----
+pq: region "non-existent-region" does not exist
+HINT: valid regions: eu-central-1, eu-north-1
+--
+set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CLUSTER) then using SET CLUSTER SETTING sql.defaults.primary_region = 'region'
+
+exec-sql
+SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
+RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
+----
+NOTICE: setting the PRIMARY REGION as eu-central-1 on database no_region_db
+HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
+
+query-sql
+SHOW DATABASES;
+----
+defaultdb root <nil> {} <nil>
+no_region_db root eu-central-1 {eu-central-1} zone
+postgres root <nil> {} <nil>
+system node <nil> {} <nil>
+
+query-sql
+USE no_region_db;
+SHOW TABLES;
+----
+public t table root <nil> REGIONAL BY TABLE IN PRIMARY REGION
+
+exec-sql
+CREATE DATABASE eu_central_db;
+CREATE TABLE eu_central_db.t (x INT);
+INSERT INTO eu_central_db.t VALUES (1), (2), (3);
+BACKUP DATABASE eu_central_db TO 'nodelocal://1/eu_central_database_backup/';
+----
+NOTICE: setting eu-central-1 as the PRIMARY REGION as no PRIMARY REGION was specified
+
+# New cluster for a cluster backup.
+new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
+----
+
+exec-sql
+SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
+RESTORE FROM 'nodelocal://1/no_region_cluster_backup/';
+----
+NOTICE: setting the PRIMARY REGION as eu-north-1 on database no_region_db
+HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
+NOTICE: setting the PRIMARY REGION as eu-north-1 on database no_region_db_2
+HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
+
+query-sql
+SHOW DATABASES;
+----
+defaultdb root <nil> {} <nil>
+no_region_db root eu-north-1 {eu-north-1} zone
+no_region_db_2 root eu-north-1 {eu-north-1} zone
+postgres root <nil> {} <nil>
+system node <nil> {} <nil>
+
+query-sql
+USE no_region_db;
+SHOW TABLES;
+----
+public t table root <nil> REGIONAL BY TABLE IN PRIMARY REGION
+
+# Check we can restore without triggering the default primary region.
+exec-sql
+RESTORE DATABASE eu_central_db FROM 'nodelocal://1/eu_central_database_backup/';
+----
+
+query-sql
+SHOW DATABASES;
+----
+defaultdb root <nil> {} <nil>
+eu_central_db root eu-central-1 {eu-central-1} zone
+no_region_db root eu-north-1 {eu-north-1} zone
+no_region_db_2 root eu-north-1 {eu-north-1} zone
+postgres root <nil> {} <nil>
+system node <nil> {} <nil>

@@ -14,12 +14,28 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.ConditionalPut, DefaultDeclareIsolatedKeys, ConditionalPut)
+	RegisterReadWriteCommand(roachpb.ConditionalPut, declareKeysConditionalPut, ConditionalPut)
+}
+
+func declareKeysConditionalPut(
+	rs ImmutableRangeState,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	args := req.(*roachpb.ConditionalPutRequest)
+	if args.Inline {
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+	} else {
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	}
 }
 
 // ConditionalPut sets the value for a specified key only if
@@ -31,14 +47,9 @@ func ConditionalPut(
 	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
 	h := cArgs.Header
 
-	if h.DistinctSpans {
-		if b, ok := readWriter.(storage.Batch); ok {
-			// Use the distinct batch for both blind and normal ops so that we don't
-			// accidentally flush mutations to make them visible to the distinct
-			// batch.
-			readWriter = b.Distinct()
-			defer readWriter.Close()
-		}
+	var ts hlc.Timestamp
+	if !args.Inline {
+		ts = h.Timestamp
 	}
 
 	var expVal []byte
@@ -54,9 +65,9 @@ func ConditionalPut(
 	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, expVal, handleMissing, h.Txn)
+		err = storage.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, ts, args.Value, expVal, handleMissing, h.Txn)
 	} else {
-		err = storage.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, expVal, handleMissing, h.Txn)
+		err = storage.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, ts, args.Value, expVal, handleMissing, h.Txn)
 	}
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld

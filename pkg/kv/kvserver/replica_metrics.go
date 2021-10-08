@@ -14,11 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // ReplicaMetrics contains details on the current status of the replica.
@@ -35,28 +36,31 @@ type ReplicaMetrics struct {
 	// the opposite of Quiescent.
 	Ticking bool
 
-	// Is this the replica which collects per-range metrics? This is done either
-	// on the leader or, if there is no leader, on the largest live replica ID.
+	// RangeCounter is true if the current replica is responsible for range-level
+	// metrics (generally the leaseholder, if live, otherwise the first replica in the
+	// range descriptor).
 	RangeCounter    bool
 	Unavailable     bool
 	Underreplicated bool
 	Overreplicated  bool
-	BehindCount     int64
-	LatchInfoLocal  kvserverpb.LatchManagerInfo
-	LatchInfoGlobal kvserverpb.LatchManagerInfo
 	RaftLogTooLarge bool
+	BehindCount     int64
+
+	// Latching and locking metrics.
+	LatchMetrics     concurrency.LatchMetrics
+	LockTableMetrics concurrency.LockTableMetrics
 }
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.Timestamp, livenessMap IsLiveMap, clusterNodes int,
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
-	zone := r.mu.zone
+	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
 	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.RUnlock()
@@ -65,13 +69,14 @@ func (r *Replica) Metrics(
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
 
-	latchInfoGlobal, latchInfoLocal := r.concMgr.LatchMetrics()
+	latchMetrics := r.concMgr.LatchMetrics()
+	lockTableMetrics := r.concMgr.LockTableMetrics()
 
 	return calcReplicaMetrics(
 		ctx,
-		now,
+		now.ToTimestamp(),
 		&r.store.cfg.RaftConfig,
-		zone,
+		conf,
 		livenessMap,
 		clusterNodes,
 		desc,
@@ -80,8 +85,8 @@ func (r *Replica) Metrics(
 		r.store.StoreID(),
 		quiescent,
 		ticking,
-		latchInfoLocal,
-		latchInfoGlobal,
+		latchMetrics,
+		lockTableMetrics,
 		raftLogSize,
 		raftLogSizeTrusted,
 	)
@@ -91,8 +96,8 @@ func calcReplicaMetrics(
 	_ context.Context,
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
-	zone *zonepb.ZoneConfig,
-	livenessMap IsLiveMap,
+	conf roachpb.SpanConfig,
+	livenessMap liveness.IsLiveMap,
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
@@ -100,8 +105,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	latchInfoLocal kvserverpb.LatchManagerInfo,
-	latchInfoGlobal kvserverpb.LatchManagerInfo,
+	latchMetrics concurrency.LatchMetrics,
+	lockTableMetrics concurrency.LockTableMetrics,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
@@ -109,7 +114,7 @@ func calcReplicaMetrics(
 
 	var leaseOwner bool
 	m.LeaseStatus = leaseStatus
-	if leaseStatus.State == kvserverpb.LeaseState_VALID {
+	if leaseStatus.IsValid() {
 		m.LeaseValid = true
 		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
 		m.LeaseType = leaseStatus.Lease.Type()
@@ -119,8 +124,12 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated =
-		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, clusterNodes)
+	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
+		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
+
+	const raftLogTooLargeMultiple = 4
+	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
+		raftLogSizeTrusted
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -128,58 +137,62 @@ func calcReplicaMetrics(
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
 	}
 
-	m.LatchInfoLocal = latchInfoLocal
-	m.LatchInfoGlobal = latchInfoGlobal
-
-	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
-		raftLogSizeTrusted
+	m.LatchMetrics = latchMetrics
+	m.LockTableMetrics = lockTableMetrics
 
 	return m
 }
 
-// calcRangeCounter returns whether this replica is designated as the
-// replica in the range responsible for range-level metrics, whether
-// the range doesn't have a quorum of live replicas, and whether the
-// range is currently under-replicated.
+// calcRangeCounter returns whether this replica is designated as the replica in
+// the range responsible for range-level metrics, whether the range doesn't have
+// a quorum of live voting replicas, and whether the range is currently
+// under-replicated (with regards to either the number of voting replicas or the
+// number of non-voting replicas).
 //
 // Note: we compute an estimated range count across the cluster by counting the
-// first live replica in each descriptor. Note that the first live replica is
-// an arbitrary choice. We want to select one live replica to do the counting
-// that all replicas can agree on.
-//
-// Note that this heuristic can double count. If the first live replica is on
-// a node that is partitioned from the other replicas in the range, there may
-// be multiple nodes which believe they are the first live replica. This
-// scenario seems rare as it requires the partitioned node to be alive enough
-// to be performing liveness heartbeats.
+// leaseholder of each descriptor if it's live, otherwise the first live
+// replica. This heuristic can double count, as all nodes may not agree on who
+// the leaseholder is, nor whether it is live (e.g. during a network partition).
 func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
-	livenessMap IsLiveMap,
-	numReplicas int32,
+	leaseStatus kvserverpb.LeaseStatus,
+	livenessMap liveness.IsLiveMap,
+	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	// It seems unlikely that a learner replica would be the first live one, but
-	// there's no particular reason to exclude them. Note that `All` returns the
-	// voters first.
-	for _, rd := range desc.Replicas().All() {
-		if livenessMap[rd.NodeID].IsLive {
-			rangeCounter = rd.StoreID == storeID
-			break
+	// If there is a live leaseholder (regardless of whether the lease is still
+	// valid) that leaseholder is responsible for range-level metrics.
+	if livenessMap[leaseStatus.Lease.Replica.NodeID].IsLive {
+		rangeCounter = leaseStatus.OwnedBy(storeID)
+	} else {
+		// Otherwise, use the first live replica.
+		for _, rd := range desc.Replicas().Descriptors() {
+			if livenessMap[rd.NodeID].IsLive {
+				rangeCounter = rd.StoreID == storeID
+				break
+			}
 		}
 	}
+
 	// We also compute an estimated per-range count of under-replicated and
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
-		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+		neededVoters := GetNeededVoters(numVoters, clusterNodes)
+		neededNonVoters := GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
+		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
-		})
-		needed := GetNeededReplicas(numReplicas, clusterNodes)
-		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)
-		if needed > liveVoterReplicas {
+		},
+			// neededVoters - we don't care about the under/over-replication
+			// determinations from the report because it's too magic. We'll do our own
+			// determination below.
+			0)
+		unavailable = !status.Available
+		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
+		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
+		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
 			underreplicated = true
-		} else if needed < liveVoterReplicas {
+		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
 			overreplicated = true
 		}
 	}
@@ -190,9 +203,19 @@ func calcRangeCounter(
 // replica is determined by checking its node in the provided liveness map. This
 // method is used when indicating under-replication so only voter replicas are
 // considered.
-func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
+func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), livenessMap)
+}
+
+// calcLiveNonVoterReplicas returns a count of the live non-voter replicas; a live
+// replica is determined by checking its node in the provided liveness map.
+func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), livenessMap)
+}
+
+func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap liveness.IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas().Voters() {
+	for _, rd := range repls {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}
@@ -203,10 +226,10 @@ func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap)
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap,
 ) int64 {
 	var behindCount int64
-	for _, rd := range desc.Replicas().All() {
+	for _, rd := range desc.Replicas().Descriptors() {
 		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
@@ -248,7 +271,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -267,11 +290,11 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
-// size as dictated by the zone config or a previous max size indicating that
+// size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
-	maxBytes := *r.mu.zone.RangeMaxBytes
+	maxBytes := r.mu.conf.RangeMaxBytes
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}

@@ -18,14 +18,16 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"go/build"
+	gobuild "go/build"
 	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"runtime/trace"
 	"sort"
@@ -37,35 +39,41 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // This file is home to TestLogic, a general-purpose engine for
@@ -131,6 +139,10 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
+// There is a special blocklist directive '!metamorphic' that skips the whole
+// test when TAGS=metamorphic is specified for the logic test invocation.
+// NOTE: metamorphic directive takes precedence over all other directives.
+//
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
 //
@@ -140,6 +152,8 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//  - statement notice <regexp>
+//    Like "statement ok" but expects a notice that matches the given regexp.
 //
 //  - statement count N
 //    Like "statement ok" but expect a final RowsAffected count of N.
@@ -163,7 +177,9 @@ import (
 //      - T for text; also used for various types which get converted
 //        to string (arrays, timestamps, etc.).
 //      - I for integer
-//      - R for floating point or decimal
+//      - F for floating point (matches 15 significant decimal digits,
+//        https://www.postgresql.org/docs/9.0/datatype-numeric.html)
+//      - R for decimal
 //      - B for boolean
 //      - O for oid
 //
@@ -250,10 +266,6 @@ import (
 //
 //  - traceoff
 //    Stops tracing.
-//
-//  - kv-batch-size <num>
-//    Limits the kvfetcher batch size; it can be used to trigger certain error
-//    conditions or corner cases around limited batches.
 //
 //  - subtest <testname>
 //    Defines the start of a subtest. The subtest is any number of statements
@@ -352,6 +364,7 @@ import (
 
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
@@ -417,8 +430,10 @@ var (
 
 type testClusterConfig struct {
 	// name is the name of the config (used for subtest names).
-	name                string
-	numNodes            int
+	name     string
+	numNodes int
+	// TODO(asubiotto): The fake span resolver does not currently play well with
+	// contention events and tracing (see #61438).
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
@@ -446,12 +461,75 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
+	// If set, the span configs infrastructure will be enabled. This is
+	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+	enableSpanConfigs bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
+	// localities is set if nodes should be set to a particular locality.
+	// Nodes are 1-indexed.
+	localities map[int]roachpb.Locality
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
+
+var multiregion9node3region3azsLocalities = map[int]roachpb.Locality{
+	1: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az1"},
+		},
+	},
+	2: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az2"},
+		},
+	},
+	3: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az3"},
+		},
+	},
+	4: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az1"},
+		},
+	},
+	5: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az2"},
+		},
+	},
+	6: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az3"},
+		},
+	},
+	7: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az1"},
+		},
+	},
+	8: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az2"},
+		},
+	},
+	9: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az3"},
+		},
+	},
+}
 
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
@@ -483,27 +561,12 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:              "local-vec-auto",
-		numNodes:          1,
-		overrideAutoStats: "false",
-		overrideVectorize: "201auto",
-	},
-	{
-		name:                "local-mixed-19.2-20.1",
+		name:                "local-mixed-21.1-21.2",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
-		bootstrapVersion:    roachpb.Version{Major: 19, Minor: 2},
-		binaryVersion:       roachpb.Version{Major: 20, Minor: 1},
-		disableUpgrade:      true,
-	},
-	{
-		name:                "local-mixed-20.1-20.2",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
-		bootstrapVersion:    roachpb.Version{Major: 20, Minor: 1},
-		binaryVersion:       roachpb.Version{Major: 20, Minor: 2},
+		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 1},
+		binaryVersion:       roachpb.Version{Major: 21, Minor: 2},
 		disableUpgrade:      true,
 	},
 	{
@@ -527,24 +590,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
 		overrideVectorize:   "off",
-	},
-	{
-		name:                "fakedist-vec-auto",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-	},
-	{
-		name:                "fakedist-vec-auto-disk",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
 	},
 	{
 		name:                       "fakedist-metadata",
@@ -577,22 +622,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-	},
-	{
-		name:                "5node-vec-auto",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-	},
-	{
-		name:                "5node-vec-disk-auto",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -631,6 +660,80 @@ var logicTestConfigs = []testClusterConfig{
 		useTenant:         true,
 		isCCLConfig:       true,
 	},
+	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
+	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
+	// (they're double double quoted) so we explicitly test them here to ensure that
+	// the multi-region code handles them correctly.
+
+	{
+		name:              "multiregion-invalid-locality",
+		numNodes:          3,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "invalid-region-setup", Value: "test1"},
+					{Key: "availability-zone", Value: "test1-az1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test1"},
+					{Key: "availability-zone", Value: "test1-az3"},
+				},
+			},
+		},
+	},
+	{
+		name:              "multiregion-3node-3superlongregions",
+		numNodes:          3,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion2"},
+				},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "veryveryveryveryveryveryverylongregion3"},
+				},
+			},
+		},
+	},
+	{
+		name:              "multiregion-9node-3region-3azs",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+	},
+	{
+		name:              "multiregion-9node-3region-3azs-tenant",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+		useTenant:         true,
+	},
+	{
+		name:              "multiregion-9node-3region-3azs-vec-off",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+		overrideVectorize: "off",
+	},
+	{
+		name:              "experimental-span-configs",
+		numNodes:          1,
+		enableSpanConfigs: true,
+	},
 }
 
 // An index in the above slice.
@@ -665,12 +768,9 @@ var (
 	defaultConfigNames = []string{
 		"local",
 		"local-vec-off",
-		"local-vec-auto",
 		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
-		"fakedist-vec-auto",
-		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
@@ -679,8 +779,6 @@ var (
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
-		"5node-vec-auto",
-		"5node-vec-disk-auto",
 		"5node-metadata",
 		"5node-disk",
 		"5node-spec-planning",
@@ -730,6 +828,8 @@ type logicStatement struct {
 	pos string
 	// SQL string to be sent to the database.
 	sql string
+	// expected notice, if any.
+	expectNotice string
 	// expected error, if any. "" indicates the statement should
 	// succeed.
 	expectErr string
@@ -765,6 +865,12 @@ func (ls *logicStatement) readSQL(
 		}
 		if line == "----" {
 			separator = true
+			if ls.expectNotice != "" {
+				return false, errors.Errorf(
+					"%s: invalid ---- separator after a statement expecting a notice: %s",
+					ls.pos, ls.expectNotice,
+				)
+			}
 			if ls.expectErr != "" {
 				return false, errors.Errorf(
 					"%s: invalid ---- separator after a statement or query expecting an error: %s",
@@ -992,6 +1098,9 @@ type logicQuery struct {
 	kvOpTypes        []string
 	keyPrefixFilters []string
 
+	// nodeIdx determines which node on the cluster to execute a query on for the given query.
+	nodeIdx int
+
 	// noticetrace indicates we're comparing the output of a notice trace.
 	noticetrace bool
 
@@ -1005,11 +1114,10 @@ var allowedKVOpTypes = []string{
 	"Put",
 	"InitPut",
 	"Del",
+	"DelRange",
 	"ClearRange",
 	"Get",
 	"Scan",
-	"FKScan",
-	"CascadeScan",
 }
 
 func isAllowedKVOp(op string) bool {
@@ -1032,23 +1140,37 @@ type logicTest struct {
 	subtestT *testing.T
 	rng      *rand.Rand
 	cfg      testClusterConfig
-	// the number of nodes in the cluster.
+	// cluster is the test cluster against which we are testing. This cluster
+	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
+	// sharedIODir is the ExternalIO directory that is shared between all clusters
+	// created in the same logicTest. It is populated during setup() of the logic
+	// test.
+	sharedIODir string
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
 	nodeIdx int
 	// If this test uses a SQL tenant server, this is its address. In this case,
 	// all clients are created against this tenant.
-	tenantAddr string
+	tenantAddrs []string
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
 	// client currently in use. This can change during processing
 	// of a test input file when encountering the "user" directive.
 	// see setUser() for details.
-	user         string
-	db           *gosql.DB
-	cleanupFuncs []func()
+	user string
+	db   *gosql.DB
+	// clusterCleanupFuncs contains the cleanup methods that are specific to a
+	// cluster. These will be called during cluster tear-down. Note that 1 logic
+	// test may reset its cluster throughout a test. Cleanup methods that should
+	// be stored here include PGUrl connections for the users for a cluster.
+	clusterCleanupFuncs []func()
+	// testCleanupFuncs are cleanup methods that are only called when closing a
+	// test (rather than a specific cluster). One test may reset a cluster with a
+	// new one, but keep some shared resources across the entire test. An example
+	// would be an IO directory used throughout the test.
+	testCleanupFuncs []func()
 	// progress holds the number of tests executed so far.
 	progress int
 	// failures holds the number of tests failed so far, when
@@ -1083,11 +1205,11 @@ type logicTest struct {
 	curPath   string
 	curLineNo int
 
-	// randomizedVectorizedBatchSize stores the randomized batch size for
-	// vectorized engine if it is not turned off. The batch size will randomly be
-	// set to 1 with 25% probability, {2, 3} with 25% probability or default batch
-	// size with 50% probability.
-	randomizedVectorizedBatchSize int
+	// skipOnRetry is explicitly set to true by the skip_on_retry directive.
+	// If true, serializability violations in the test when unexpected cause the
+	// entire test to be skipped and the below skippedOnRetry to be set to true.
+	skipOnRetry    bool
+	skippedOnRetry bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1146,22 +1268,12 @@ func (t *logicTest) emit(line string) {
 func (t *logicTest) close() {
 	t.traceStop()
 
-	for _, cleanup := range t.cleanupFuncs {
+	t.shutdownCluster()
+
+	for _, cleanup := range t.testCleanupFuncs {
 		cleanup()
 	}
-	t.cleanupFuncs = nil
-
-	if t.cluster != nil {
-		t.cluster.Stopper().Stop(context.TODO())
-		t.cluster = nil
-	}
-	if t.clients != nil {
-		for _, c := range t.clients {
-			c.Close()
-		}
-		t.clients = nil
-	}
-	t.db = nil
+	t.testCleanupFuncs = nil
 }
 
 // out emits a message both on stdout and the log files if
@@ -1189,28 +1301,13 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.tenantAddr
-	if addr == "" {
-		addr = t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	if len(t.tenantAddrs) > 0 {
+		addr = t.tenantAddrs[t.nodeIdx]
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
-
-	base, err := pq.NewConnector(pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
-		if notice.Detail != "" {
-			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
-		}
-		if notice.Hint != "" {
-			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
-		}
-	})
-	db := gosql.OpenDB(connector)
+	db := t.openDB(pgURL)
 
 	// The default value for extra_float_digits assumed by tests is
 	// 0. However, lib/pq by default configures this to 2 during
@@ -1226,25 +1323,49 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
-	t.cfg = cfg
-	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
-	// MySQL or Postgres instance.
+func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
+	base, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
+		if notice.Detail != "" {
+			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
+		}
+		if notice.Hint != "" {
+			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
+		}
+	})
+
+	return gosql.OpenDB(connector)
+}
+
+// newCluster creates a new cluster. It should be called after the logic tests's
+// server args are configured. That is, either during setup() when creating the
+// initial cluster to be used in a test, or when creating additional test
+// clusters, after logicTest.setup() has been called.
+func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
+	if serverArgs.maxSQLMemoryLimit == 0 {
+		// Specify a fixed memory limit (some test cases verify OOM conditions;
+		// we don't want those to take long on large machines).
+		serverArgs.maxSQLMemoryLimit = 192 * 1024 * 1024
+	}
 	var tempStorageConfig base.TempStorageConfig
 	if serverArgs.tempStorageDiskLimit == 0 {
 		tempStorageConfig = base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
 	} else {
 		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
 	}
+
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Specify a fixed memory limit (some test cases verify OOM conditions; we
-			// don't want those to take long on large machines).
-			SQLMemoryPoolSize: 192 * 1024 * 1024,
+			SQLMemoryPoolSize: serverArgs.maxSQLMemoryLimit,
 			TempStorageConfig: tempStorageConfig,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -1257,18 +1378,29 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
+					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
+				},
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					DeterministicExplain: true,
+				},
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
 				},
 			},
-			ClusterName: "testclustername",
-			UseDatabase: "test",
+			ClusterName:   "testclustername",
+			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
 
+	cfg := t.cfg
+	if cfg.enableSpanConfigs {
+		params.ServerArgs.EnableSpanConfigs = true
+	}
 	distSQLKnobs := &execinfra.TestingKnobs{
-		MetadataTestLevel: execinfra.Off, DeterministicStats: true, CheckVectorizedFlowIsClosedCorrectly: true,
+		MetadataTestLevel: execinfra.Off,
 	}
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
@@ -1276,15 +1408,12 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	if cfg.distSQLMetadataTestEnabled {
 		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
-	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
-		distSQLKnobs.EnableVectorizedInvariantsChecker = true
-	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	if cfg.bootstrapVersion != (roachpb.Version{}) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionOverride = cfg.bootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.bootstrapVersion
 	}
 	if cfg.disableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1293,22 +1422,55 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
 	}
 
-	if cfg.binaryVersion != (roachpb.Version{}) {
-		// If we want to run a specific server version, we assume that it
-		// supports at least the bootstrap version.
-		paramsPerNode := map[int]base.TestServerArgs{}
-		binaryMinSupportedVersion := cfg.binaryVersion
-		if cfg.bootstrapVersion != (roachpb.Version{}) {
-			binaryMinSupportedVersion = cfg.bootstrapVersion
+	paramsPerNode := map[int]base.TestServerArgs{}
+	require.Truef(
+		t.rootT,
+		len(cfg.localities) == 0 || len(cfg.localities) == cfg.numNodes,
+		"localities must be set for each node -- got %#v for %d nodes",
+		cfg.localities,
+		cfg.numNodes,
+	)
+	for i := 0; i < cfg.numNodes; i++ {
+		nodeParams := params.ServerArgs
+		if locality, ok := cfg.localities[i+1]; ok {
+			nodeParams.Locality = locality
+		} else {
+			require.Lenf(t.rootT, cfg.localities, 0, "node %d does not have a locality set", i+1)
 		}
-		for i := 0; i < cfg.numNodes; i++ {
-			nodeParams := params.ServerArgs
+
+		if cfg.binaryVersion != (roachpb.Version{}) {
+			binaryMinSupportedVersion := cfg.binaryVersion
+			if cfg.bootstrapVersion != (roachpb.Version{}) {
+				// If we want to run a specific server version, we assume that it
+				// supports at least the bootstrap version.
+				binaryMinSupportedVersion = cfg.bootstrapVersion
+			}
 			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-				cfg.binaryVersion, binaryMinSupportedVersion, false /* initializeVersion */)
-			paramsPerNode[i] = nodeParams
+				cfg.binaryVersion,
+				binaryMinSupportedVersion,
+				false, /* initializeVersion */
+			)
+
+			// If we're injecting fake versions, hook up logic to simulate the end
+			// version existing.
+			from := clusterversion.ClusterVersion{Version: cfg.bootstrapVersion}
+			to := clusterversion.ClusterVersion{Version: cfg.binaryVersion}
+			if len(clusterversion.ListBetween(from, to)) == 0 {
+				mm, ok := nodeParams.Knobs.MigrationManager.(*migration.TestingKnobs)
+				if !ok {
+					mm = &migration.TestingKnobs{}
+					nodeParams.Knobs.MigrationManager = mm
+				}
+				mm.ListBetweenOverride = func(
+					from, to clusterversion.ClusterVersion,
+				) []clusterversion.ClusterVersion {
+					return []clusterversion.ClusterVersion{to}
+				}
+			}
 		}
-		params.ServerArgsPerNode = paramsPerNode
+		paramsPerNode[i] = nodeParams
 	}
+	params.ServerArgsPerNode = paramsPerNode
 
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
@@ -1317,7 +1479,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartTestCluster(t.rootT, cfg.numNodes, params)
+	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
@@ -1325,15 +1487,38 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
-		var err error
-		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: true})
-		if err != nil {
-			t.rootT.Fatalf("%+v", err)
+		t.tenantAddrs = make([]string, cfg.numNodes)
+		for i := 0; i < cfg.numNodes; i++ {
+			tenantArgs := base.TestTenantArgs{
+				TenantID:                    serverutils.TestTenantID(),
+				AllowSettingClusterSettings: true,
+				TestingKnobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						DeterministicExplain: true,
+					},
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					},
+				},
+				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
+				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				Locality:          paramsPerNode[i].Locality,
+				Existing:          i > 0,
+			}
+
+			// Prevent a logging assertion that the server ID is initialized multiple times.
+			log.TestingClearServerIdentifiers()
+
+			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			if err != nil {
+				t.rootT.Fatalf("%+v", err)
+			}
+			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
-		// Open a connection to this tenant to set any cluster settings specified
+		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddr, "Tenant", url.User(security.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
 		defer cleanup()
 		if params.ServerArgs.Insecure {
 			pgURL.RawQuery = "sslmode=disable"
@@ -1344,6 +1529,12 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		}
 		defer db.Close()
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
+
+		// Increase tenant rate limits for faster tests.
+		conn := t.cluster.ServerConn(0)
+		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Set cluster settings.
@@ -1368,21 +1559,6 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			); err != nil {
 				t.Fatal(err)
 			}
-		}
-
-		// Always override the vectorize row count threshold. This runs all supported
-		// queries (relative to the mode) through the vectorized execution engine.
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := conn.Exec(
-			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
-				t.randomizedVectorizedBatchSize),
-		); err != nil {
-			t.Fatal(err)
 		}
 
 		if cfg.overrideAutoStats != "" {
@@ -1420,10 +1596,22 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 				t.Fatal(err)
 			}
 		}
+
+		if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Update the default AS OF time for querying the system.table_statistics
+		// table to create the crdb_internal.table_row_statistics table.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.overrideDistSQLMode != "" {
-		_, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
+		_, ok := sessiondatapb.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
 		if !ok {
 			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
 		}
@@ -1449,15 +1637,53 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser))
+}
 
+// shutdownCluster performs the necessary cleanup to shutdown the current test
+// cluster.
+func (t *logicTest) shutdownCluster() {
+	for _, cleanup := range t.clusterCleanupFuncs {
+		cleanup()
+	}
+	t.clusterCleanupFuncs = nil
+
+	if t.cluster != nil {
+		t.cluster.Stopper().Stop(context.TODO())
+		t.cluster = nil
+	}
+	if t.clients != nil {
+		for _, c := range t.clients {
+			c.Close()
+		}
+		t.clients = nil
+	}
+	t.db = nil
+}
+
+// setup creates the initial cluster for the logic test and populates the
+// relevant fields on logicTest. It is expected to be called only once, and
+// before processing any test files - unless a mock logicTest is created (see
+// parallelTest.processTestFile).
+func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
+	t.cfg = cfg
+	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
+	// MySQL or Postgres instance.
+	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
+	t.sharedIODir = tempExternalIODir
+	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
+
+	t.newCluster(serverArgs)
+
+	// Only create the test database on the initial cluster, since cluster restore
+	// expects an empty cluster.
 	if _, err := t.db.Exec(`
-CREATE DATABASE test;
+CREATE DATABASE test; USE test;
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", server.TestUser)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", security.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1503,8 +1729,11 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 }
 
 // processConfigs, given a list of configNames, returns the list of
-// corresponding logicTestConfigIdxs.
-func processConfigs(t *testing.T, path string, defaults configSet, configNames []string) configSet {
+// corresponding logicTestConfigIdxs as well as a boolean indicating whether
+// the test works only in non-metamorphic setting.
+func processConfigs(
+	t *testing.T, path string, defaults configSet, configNames []string,
+) (_ configSet, onlyNonMetamorphic bool) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -1518,17 +1747,20 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 
 		blockedConfig, issueNo := getBlocklistIssueNo(configName[1:])
 		if *printBlocklistIssues && issueNo != 0 {
-			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, unimplemented.MakeURL(issueNo))
+			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, build.MakeIssueURL(issueNo))
 		}
 		blocklist[blockedConfig] = issueNo
 	}
 
-	var configs configSet
+	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
+		onlyNonMetamorphic = true
+	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist)
+		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic
 	}
 
+	var configs configSet
 	for _, configName := range configNames {
 		if configName[0] == blocklistChar {
 			continue
@@ -1552,7 +1784,7 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 		}
 	}
 
-	return configs
+	return configs, onlyNonMetamorphic
 }
 
 // readTestFileConfigs reads any LogicTest directive at the beginning of a
@@ -1564,7 +1796,9 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 //   # LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
-func readTestFileConfigs(t *testing.T, path string, defaults configSet) configSet {
+func readTestFileConfigs(
+	t *testing.T, path string, defaults configSet,
+) (_ configSet, onlyNonMetamorphic bool) {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1592,7 +1826,7 @@ func readTestFileConfigs(t *testing.T, path string, defaults configSet) configSe
 		}
 	}
 	// No directive found, return the default config.
-	return defaults
+	return defaults, false
 }
 
 type subtestDetails struct {
@@ -1633,6 +1867,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 					t.Error(err)
 				}
 			})
+			t.maybeSkipOnRetry(nil)
 		}
 	}
 
@@ -1750,6 +1985,8 @@ func (t *logicTest) processSubtest(
 				)
 			}
 			repeat = count
+		case "skip_on_retry":
+			t.skipOnRetry = true
 
 		case "sleep":
 			var err error
@@ -1772,8 +2009,10 @@ func (t *logicTest) processSubtest(
 				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
-			// Parse "statement error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+			// Parse "statement (notice|error) <regexp>"
+			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectNotice = m[1]
+			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
 			}
@@ -1922,6 +2161,15 @@ func (t *logicTest) processSubtest(
 							query.noticetrace = true
 
 						default:
+							if strings.HasPrefix(opt, "nodeidx=") {
+								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
+								if err != nil {
+									return errors.Wrapf(err, "error parsing nodeidx")
+								}
+								query.nodeIdx = int(idx)
+								break
+							}
+
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
 						}
 					}
@@ -2180,22 +2428,6 @@ func (t *logicTest) processSubtest(
 			}
 			t.traceStop()
 
-		case "kv-batch-size":
-			// kv-batch-size limits the kvfetcher batch size. It can be used to
-			// trigger certain error conditions around limited batches.
-			if len(fields) != 2 {
-				return errors.Errorf(
-					"kv-batch-size needs an integer argument, found: %v",
-					fields[1:],
-				)
-			}
-			batchSize, err := strconv.Atoi(fields[1])
-			if err != nil {
-				return errors.Errorf("kv-batch-size needs an integer argument; %s", err)
-			}
-			t.outf("Setting kv batch size %d", batchSize)
-			defer row.TestingSetKVBatchSize(int64(batchSize))()
-
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.line+subtest.lineLineIndexIntoFile, cmd,
@@ -2205,22 +2437,44 @@ func (t *logicTest) processSubtest(
 	return s.Err()
 }
 
-// verifyError checks that either no error was found where none was
-// expected, or that an error was found when one was expected.
+// Some tests encounter serializability failures sometimes and indicate
+// that they want to just get skipped when that happens.
+func (t *logicTest) maybeSkipOnRetry(err error) {
+	if pqErr := (*pq.Error)(nil); t.skippedOnRetry ||
+		(t.skipOnRetry && errors.As(err, &pqErr) &&
+			pgcode.MakeCode(string(pqErr.Code)) == pgcode.SerializationFailure) {
+		t.skippedOnRetry = true
+		skip.WithIssue(t.t(), 53724)
+	}
+}
+
+// verifyError checks that either:
+// - no error was found when none was expected, or
+// - in case no error was found, a notice was found when one was expected, or
+// - an error was found when one was expected.
 // Returns a nil error to indicate the behavior was as expected.  If
 // non-nil, returns also true in the boolean flag whether it is safe
 // to continue (i.e. an error was expected, an error was obtained, and
 // the errors didn't match).
 func (t *logicTest) verifyError(
-	sql, pos, expectErr, expectErrCode string, err error,
+	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
+		t.maybeSkipOnRetry(err)
 		cont := t.unexpectedError(sql, pos, err)
 		if cont {
 			// unexpectedError() already reported via t.Errorf. no need for more.
 			err = nil
 		}
 		return cont, err
+	}
+	if expectNotice != "" {
+		foundNotice := strings.Join(t.noticeBuffer, "\n")
+		match, _ := regexp.MatchString(expectNotice, foundNotice)
+		if !match {
+			return false, errors.Errorf("%s: %s\nexpected notice pattern:\n%s\n\ngot:\n%s", pos, sql, expectNotice, foundNotice)
+		}
+		return true, nil
 	}
 	if !testutils.IsError(err, expectErr) {
 		if err == nil {
@@ -2322,10 +2576,11 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
+	execSQL, changed := randgen.ApplyString(t.rng, stmt.sql, randgen.ColumnFamilyMutator)
 	if changed {
 		log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
 		if *showSQL {
@@ -2354,7 +2609,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	cont, err := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
+	cont, err := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, err)
 	if err != nil {
 		t.finishOne("OK")
 	}
@@ -2380,7 +2635,24 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	t.noticeBuffer = nil
 
-	rows, err := t.db.Query(query.sql)
+	db := t.db
+	if query.nodeIdx != 0 {
+		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
+		if len(t.tenantAddrs) > 0 {
+			addr = t.tenantAddrs[query.nodeIdx]
+		}
+		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
+		defer cleanupFunc()
+		pgURL.Path = "test"
+
+		db = t.openDB(pgURL)
+		defer func() {
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+	rows, err := db.Query(query.sql)
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 
@@ -2397,7 +2669,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			err = rows.Err()
 		}
 	}
-	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
+	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, err); err != nil {
 		return err
 	}
 	if err != nil {
@@ -2434,82 +2706,87 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		if query.colNames {
 			actualResultsRaw = append(actualResultsRaw, cols...)
 		}
-		for rows.Next() {
-			if err := rows.Scan(vals...); err != nil {
-				return err
-			}
-			for i, v := range vals {
-				if val := *v.(*interface{}); val != nil {
-					valT := reflect.TypeOf(val).Kind()
-					colT := query.colTypes[i]
-					switch colT {
-					case 'T':
-						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-							return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
-							)
-						}
-					case 'I':
-						if valT != reflect.Int64 {
-							if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
-								t.signalIgnoredError(
-									fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
-								)
-								return nil
-							}
-							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
-							)
-						}
-					case 'R':
-						if valT != reflect.Float64 && valT != reflect.Slice {
-							if *flexTypes && (valT == reflect.Int64) {
-								t.signalIgnoredError(
-									fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql,
-								)
-								return nil
-							}
-							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
-							)
-						}
-					case 'B':
-						if valT != reflect.Bool {
-							return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
-							)
-						}
-					case 'O':
-						if valT != reflect.Slice {
-							return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
-							)
-						}
-					default:
-						return fmt.Errorf("%s: unknown type in type string: %c in %s",
-							query.pos, colT, query.colTypes,
-						)
-					}
-
-					if byteArray, ok := val.([]byte); ok {
-						// The postgres wire protocol does not distinguish between
-						// strings and byte arrays, but our tests do. In order to do
-						// The Right Thing™, we replace byte arrays which are valid
-						// UTF-8 with strings. This allows byte arrays which are not
-						// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-						// while printing valid strings naturally.
-						if str := string(byteArray); utf8.ValidString(str) {
-							val = str
-						}
-					}
-					// Empty strings are rendered as "·" (middle dot)
-					if val == "" {
-						val = "·"
-					}
-					actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
-				} else {
-					actualResultsRaw = append(actualResultsRaw, "NULL")
+		for nextResultSet := true; nextResultSet; nextResultSet = rows.NextResultSet() {
+			for rows.Next() {
+				if err := rows.Scan(vals...); err != nil {
+					return err
 				}
+				for i, v := range vals {
+					if val := *v.(*interface{}); val != nil {
+						valT := reflect.TypeOf(val).Kind()
+						colT := query.colTypes[i]
+						switch colT {
+						case 'T':
+							if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+								return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
+									query.pos, i, val, val,
+								)
+							}
+						case 'I':
+							if valT != reflect.Int64 {
+								if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+									t.signalIgnoredError(
+										fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
+									)
+									return nil
+								}
+								return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
+									query.pos, i, val, val,
+								)
+							}
+						case 'F', 'R':
+							if valT != reflect.Float64 && valT != reflect.Slice {
+								if *flexTypes && (valT == reflect.Int64) {
+									t.signalIgnoredError(
+										fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
+									)
+									return nil
+								}
+								return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
+									query.pos, i, val, val,
+								)
+							}
+						case 'B':
+							if valT != reflect.Bool {
+								return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
+									query.pos, i, val, val,
+								)
+							}
+						case 'O':
+							if valT != reflect.Slice {
+								return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
+									query.pos, i, val, val,
+								)
+							}
+						default:
+							return fmt.Errorf("%s: unknown type in type string: %c in %s",
+								query.pos, colT, query.colTypes,
+							)
+						}
+
+						if byteArray, ok := val.([]byte); ok {
+							// The postgres wire protocol does not distinguish between
+							// strings and byte arrays, but our tests do. In order to do
+							// The Right Thing™, we replace byte arrays which are valid
+							// UTF-8 with strings. This allows byte arrays which are not
+							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+							// while printing valid strings naturally.
+							if str := string(byteArray); utf8.ValidString(str) {
+								val = str
+							}
+						}
+						// Empty strings are rendered as "·" (middle dot)
+						if val == "" {
+							val = "·"
+						}
+						actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
+					} else {
+						actualResultsRaw = append(actualResultsRaw, "NULL")
+					}
+				}
+			}
+			if err := rows.Err(); err != nil {
+				return err
 			}
 		}
 		if err := rows.Err(); err != nil {
@@ -2547,8 +2824,67 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			return fmt.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
 		if query.expectedHash != hash {
-			return fmt.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
+			var suffix string
+			for _, colT := range query.colTypes {
+				if colT == 'F' {
+					suffix = "\tthis might be due to floating numbers precision deviation"
+					break
+				}
+			}
+			return fmt.Errorf("%s: expected %s, but found %s%s", query.pos, query.expectedHash, hash, suffix)
 		}
+	}
+
+	resultsMatch := func() error {
+		makeError := func() error {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
+			for _, line := range query.expectedResultsRaw {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			sortMsg := ""
+			if query.sorter != nil {
+				// We performed an order-insensitive comparison of "actual" vs "expected"
+				// rows by sorting both, but we'll display the error with the expected
+				// rows in the order in which they were put in the file, and the actual
+				// rows in the order in which the query returned them.
+				sortMsg = " -> ignore the following ordering of rows"
+			}
+			fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
+			for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			return errors.Newf("%s", buf.String())
+		}
+		if len(query.expectedResults) != len(actualResults) {
+			return makeError()
+		}
+		for i := range query.expectedResults {
+			expected, actual := query.expectedResults[i], actualResults[i]
+			resultMatches := expected == actual
+			// Results are flattened into columns for each row.
+			// To find the coltype for the given result, mod the result number
+			// by the number of coltypes.
+			colT := query.colTypes[i%len(query.colTypes)]
+			if !resultMatches {
+				var err error
+				// On s390x, check that values for both float ('F') and decimal
+				// ('R') coltypes are approximately equal to take into account
+				// platform differences in floating point calculations.
+				if runtime.GOARCH == "s390x" && (colT == 'F' || colT == 'R') {
+					resultMatches, err = floatsMatchApprox(expected, actual)
+				} else if colT == 'F' {
+					resultMatches, err = floatsMatch(expected, actual)
+				}
+				if err != nil {
+					return errors.CombineErrors(makeError(), err)
+				}
+			}
+			if !resultMatches {
+				return makeError()
+			}
+		}
+		return nil
 	}
 
 	if *rewriteResultsInTestfiles || *rewriteSQL {
@@ -2563,7 +2899,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		if query.checkResults {
 			// If the results match or we're not rewriting, emit them the way they were originally
 			// formatted/ordered in the testfile. Otherwise, emit the actual results.
-			if !*rewriteResultsInTestfiles || reflect.DeepEqual(query.expectedResults, actualResults) {
+			if !*rewriteResultsInTestfiles || resultsMatch() == nil {
 				for _, l := range query.expectedResultsRaw {
 					t.emit(l)
 				}
@@ -2577,25 +2913,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return nil
 	}
 
-	if query.checkResults && !reflect.DeepEqual(query.expectedResults, actualResults) {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
-		for _, line := range query.expectedResultsRaw {
-			fmt.Fprintf(&buf, "    %s\n", line)
+	if query.checkResults {
+		if err := resultsMatch(); err != nil {
+			return err
 		}
-		sortMsg := ""
-		if query.sorter != nil {
-			// We performed an order-insensitive comparison of "actual" vs "expected"
-			// rows by sorting both, but we'll display the error with the expected
-			// rows in the order in which they were put in the file, and the actual
-			// rows in the order in which the query returned them.
-			sortMsg = " -> ignore the following ordering of rows"
-		}
-		fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
-		for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
-			fmt.Fprintf(&buf, "    %s\n", line)
-		}
-		return errors.Newf("%s", buf.String())
 	}
 
 	if query.label != "" {
@@ -2610,6 +2931,93 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	t.finishOne("OK")
 	return nil
+}
+
+// parseExpectedAndActualFloats converts the strings expectedString and
+// actualString to float64 values.
+func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing actual")
+	}
+	return expected, actual, nil
+}
+
+// floatsMatchApprox returns whether two floating point represented as
+// strings are equal within a tolerance.
+func floatsMatchApprox(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	return floatcmp.EqualApprox(expected, actual, floatcmp.CloseFraction, floatcmp.CloseMargin), nil
+}
+
+// floatsMatch returns whether two floating point numbers represented as
+// strings have matching 15 significant decimal digits (this is the precision
+// that Postgres supports for 'double precision' type).
+func floatsMatch(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	// Check special values - NaN, +Inf, -Inf, 0.
+	if math.IsNaN(expected) || math.IsNaN(actual) {
+		return math.IsNaN(expected) == math.IsNaN(actual), nil
+	}
+	if math.IsInf(expected, 0 /* sign */) || math.IsInf(actual, 0 /* sign */) {
+		bothNegativeInf := math.IsInf(expected, -1 /* sign */) == math.IsInf(actual, -1 /* sign */)
+		bothPositiveInf := math.IsInf(expected, 1 /* sign */) == math.IsInf(actual, 1 /* sign */)
+		return bothNegativeInf || bothPositiveInf, nil
+	}
+	if expected == 0 || actual == 0 {
+		return expected == actual, nil
+	}
+	// Check that the numbers have the same sign.
+	if expected*actual < 0 {
+		return false, nil
+	}
+	expected = math.Abs(expected)
+	actual = math.Abs(actual)
+	// Check that 15 significant digits match. We do so by normalizing the
+	// numbers and then checking one digit at a time.
+	//
+	// normalize converts f to base * 10**power representation where base is in
+	// [1.0, 10.0) range.
+	normalize := func(f float64) (base float64, power int) {
+		for f >= 10 {
+			f = f / 10
+			power++
+		}
+		for f < 1 {
+			f *= 10
+			power--
+		}
+		return f, power
+	}
+	var expPower, actPower int
+	expected, expPower = normalize(expected)
+	actual, actPower = normalize(actual)
+	if expPower != actPower {
+		return false, nil
+	}
+	// TODO(yuzefovich): investigate why we can't always guarantee deterministic
+	// 15 significant digits and switch back from 14 to 15 digits comparison
+	// here. See #56446 for more details.
+	for i := 0; i < 14; i++ {
+		expDigit := int(expected)
+		actDigit := int(actual)
+		if expDigit != actDigit {
+			return false, nil
+		}
+		expected -= (expected - float64(expDigit)) * 10
+		actual -= (actual - float64(actDigit)) * 10
+	}
+	return true, nil
 }
 
 func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
@@ -2642,6 +3050,147 @@ func (t *logicTest) success(file string) {
 	}
 }
 
+func (t *logicTest) validateAfterTestCompletion() error {
+	// Close all clients other than "root"
+	for username, c := range t.clients {
+		if username == "root" {
+			continue
+		}
+		delete(t.clients, username)
+		if err := c.Close(); err != nil {
+			t.Fatalf("failed to close connection for user %s: %v", username, err)
+		}
+	}
+	t.setUser("root")
+
+	// Some cleanup to make sure the following validation queries can run
+	// successfully. First we rollback in case the logic test had an uncommitted
+	// txn and second we reset vectorize mode in case it was switched to
+	// `experimental_always`.
+	_, _ = t.db.Exec("ROLLBACK")
+	_, err := t.db.Exec("RESET vectorize")
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "could not reset vectorize mode"))
+	}
+
+	validate := func() (string, error) {
+		rows, err := t.db.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+
+		var id int64
+		var db, schema, objName, errStr string
+		invalidObjects := make([]string, 0)
+		for rows.Next() {
+			if err := rows.Scan(&id, &db, &schema, &objName, &errStr); err != nil {
+				return "", err
+			}
+			invalidObjects = append(
+				invalidObjects,
+				fmt.Sprintf("id %d, db %s, schema %s, name %s: %s", id, db, schema, objName, errStr),
+			)
+		}
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+		return strings.Join(invalidObjects, "\n"), nil
+	}
+
+	invalidObjects, err := validate()
+	if err != nil {
+		return errors.Wrap(err, "running object validation failed")
+	}
+	if invalidObjects != "" {
+		return errors.Errorf("descriptor validation failed:\n%s", invalidObjects)
+	}
+
+	// Ensure that all of the created descriptors can round-trip through json.
+	{
+		rows, err := t.db.Query(
+			`
+SELECT encode(descriptor, 'hex') AS descriptor
+  FROM system.descriptor
+ WHERE descriptor
+       != crdb_internal.json_to_pb(
+            'cockroach.sql.sqlbase.Descriptor',
+            crdb_internal.pb_to_json(
+                'cockroach.sql.sqlbase.Descriptor',
+                descriptor,
+                false -- emit_defaults
+            )
+        );
+`,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to test for descriptor JSON round-trip")
+		}
+		rowsMat, err := sqlutils.RowsToStrMatrix(rows)
+		if err != nil {
+			return errors.Wrap(err, "failed read rows from descriptor JSON round-trip")
+		}
+		if len(rowsMat) > 0 {
+			return errors.Errorf("some descriptors did not round-trip:\n%s",
+				sqlutils.MatrixToStr(rowsMat))
+		}
+	}
+
+	var dbNames pq.StringArray
+	if err := t.db.QueryRow(
+		`SELECT array_agg(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,
+	).Scan(&dbNames); err != nil {
+		return errors.Wrap(err, "error getting database names")
+	}
+
+	for _, dbName := range dbNames {
+		if err := func() (retErr error) {
+			ctx := context.Background()
+			// Open a new connection, since we want to preserve the original DB
+			// that we were originally on in t.db.
+			conn, err := t.db.Conn(ctx)
+			if err != nil {
+				return errors.Wrap(err, "error grabbing new connection")
+			}
+			defer func() {
+				retErr = errors.CombineErrors(retErr, conn.Close())
+			}()
+			if _, err := conn.ExecContext(ctx, "SET database = $1", dbName); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Ensure each database's zone configs are valid.
+			if _, err := conn.ExecContext(ctx, "SELECT crdb_internal.validate_multi_region_zone_configs()"); err != nil {
+				return errors.Wrapf(err, "error validating zone config for database %s", dbName)
+			}
+			// Drop the database.
+			dbTreeName := tree.Name(dbName)
+			dropDatabaseStmt := fmt.Sprintf(
+				"DROP DATABASE %s CASCADE",
+				dbTreeName.String(),
+			)
+			if _, err := t.db.Exec(dropDatabaseStmt); err != nil {
+				return errors.Wrapf(err, "dropping database %s failed", dbName)
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+	}
+
+	// Ensure after dropping all databases state is still valid.
+	invalidObjects, err = validate()
+	if err != nil {
+		return errors.Wrap(err, "running object validation after database drops failed")
+	}
+	if invalidObjects != "" {
+		return errors.Errorf(
+			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
+		)
+	}
+
+	return nil
+}
+
 func (t *logicTest) runFile(path string, config testClusterConfig) {
 	defer t.close()
 
@@ -2655,6 +3204,10 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := t.validateAfterTestCompletion(); err != nil {
+		t.Fatal(errors.Wrap(err, "test was successful but validation upon completion failed"))
+	}
 }
 
 var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
@@ -2664,10 +3217,17 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // TestServerArgs contains the parameters that callers of RunLogicTest might
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
+	// maxSQLMemoryLimit determines the value of --max-sql-memory startup
+	// argument for the server. If unset, then the default limit of 192MiB will
+	// be used.
+	maxSQLMemoryLimit int64
 	// tempStorageDiskLimit determines the limit for the temp storage (that is
 	// actually in-memory). If it is unset, then the default limit of 100MB
 	// will be used.
 	tempStorageDiskLimit int64
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	forceProductionBatchSizes bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -2704,9 +3264,6 @@ func RunLogicTestWithDefaultConfig(
 		globs = []string{*logictestdata}
 	}
 
-	// Set time.Local to time.UTC to circumvent pq's timetz parsing flaw.
-	time.Local = time.UTC
-
 	// A new cluster is set up for each separate file in the test.
 	var paths []string
 	for _, g := range globs {
@@ -2734,6 +3291,9 @@ func RunLogicTestWithDefaultConfig(
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
+	// nonMetamorphic mirrors configPaths and indicates whether a particular
+	// config on a particular path can only run in non-metamorphic setting.
+	nonMetamorphic := make([][]bool, len(logicTestConfigs))
 	configDefaults := defaultConfig
 	var configFilter map[string]struct{}
 	if configOverride != "" {
@@ -2753,7 +3313,7 @@ func RunLogicTestWithDefaultConfig(
 		}
 	}
 	for _, path := range paths {
-		configs := readTestFileConfigs(t, path, configDefaults)
+		configs, onlyNonMetamorphic := readTestFileConfigs(t, path, configDefaults)
 		for _, idx := range configs {
 			config := logicTestConfigs[idx]
 			configName := config.name
@@ -2767,22 +3327,8 @@ func RunLogicTestWithDefaultConfig(
 				continue
 			}
 			configPaths[idx] = append(configPaths[idx], path)
+			nonMetamorphic[idx] = append(nonMetamorphic[idx], onlyNonMetamorphic)
 		}
-	}
-
-	// Determining whether or not to randomize vectorized batch size.
-	rng, _ := randutil.NewPseudoRand()
-	randVal := rng.Float64()
-	randomizedVectorizedBatchSize := coldata.BatchSize()
-	if randVal < 0.25 {
-		randomizedVectorizedBatchSize = 1
-	} else if randVal < 0.375 {
-		randomizedVectorizedBatchSize = 2
-	} else if randVal < 0.5 {
-		randomizedVectorizedBatchSize = 3
-	}
-	if randomizedVectorizedBatchSize != coldata.BatchSize() {
-		t.Log(fmt.Sprintf("randomize batchSize to %d", randomizedVectorizedBatchSize))
 	}
 
 	// The tests below are likely to run concurrently; `log` is shared
@@ -2798,6 +3344,7 @@ func RunLogicTestWithDefaultConfig(
 	seenPaths := make(map[string]struct{})
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
+		nonMetamorphic := nonMetamorphic[idx]
 		if len(paths) == 0 {
 			continue
 		}
@@ -2812,8 +3359,9 @@ func RunLogicTestWithDefaultConfig(
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				skip.IgnoreLint(t, "config does not match env var")
 			}
-			for _, path := range paths {
+			for i, path := range paths {
 				path := path // Rebind range variable.
+				onlyNonMetamorphic := nonMetamorphic[i]
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
 					if *rewriteResultsInTestfiles {
@@ -2828,9 +3376,20 @@ func RunLogicTestWithDefaultConfig(
 					//  - we're generating testfiles, or
 					//  - we are in race mode (where we can hit a limit on alive
 					//    goroutines).
-					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled {
+					//  - we have too many nodes (this can lead to general slowness)
+					if !*showSQL &&
+						!*rewriteResultsInTestfiles &&
+						!*rewriteSQL &&
+						!util.RaceEnabled &&
+						!cfg.useTenant &&
+						cfg.numNodes <= 3 {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
+						//
+						// We also cannot parallelise tests that use tenant servers
+						// because they change shared state in the logging configuration
+						// and there is an assertion against conflicting changes.
+						//
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
 						if filepath.Base(path) != "select_index_span_ranges" {
 							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
@@ -2838,15 +3397,15 @@ func RunLogicTestWithDefaultConfig(
 					}
 					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
-						rootT:                         t,
-						verbose:                       verbose,
-						perErrorSummary:               make(map[string][]string),
-						rng:                           rng,
-						randomizedVectorizedBatchSize: randomizedVectorizedBatchSize,
+						rootT:           t,
+						verbose:         verbose,
+						perErrorSummary: make(map[string][]string),
+						rng:             rng,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
+					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
 					lt.setup(cfg, serverArgs)
 					lt.runFile(path, cfg)
 
@@ -2934,16 +3493,25 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
-	logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-	if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
-		fullPath, err := filepath.Abs(logicTestPath)
+	var logicTestPath string
+	if bazel.BuiltWithBazel() {
+		runfilesPath, err := bazel.RunfilesPath()
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Fatalf("unable to find sqllogictest repo: %s\n"+
-			"git clone https://github.com/cockroachdb/sqllogictest %s",
-			logicTestPath, fullPath)
-		return
+		logicTestPath = filepath.Join(runfilesPath, "external", "com_github_cockroachdb_sqllogictest")
+	} else {
+		logicTestPath = gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
+		if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
+			fullPath, err := filepath.Abs(logicTestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatalf("unable to find sqllogictest repo: %s\n"+
+				"git clone https://github.com/cockroachdb/sqllogictest %s",
+				logicTestPath, fullPath)
+			return
+		}
 	}
 
 	// Prefix the globs with the logicTestPath.
@@ -2952,9 +3520,10 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	// SQLLite logic tests can be very disk (with '-disk' configs) intensive,
-	// so we give them larger temp storage limit than other logic tests get.
+	// SQLLite logic tests can be very memory and disk intensive, so we give
+	// them larger limits than other logic tests get.
 	serverArgs := TestServerArgs{
+		maxSQLMemoryLimit:    512 << 20, // 512 MiB
 		tempStorageDiskLimit: 512 << 20, // 512 MiB
 	}
 	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, true /* runCCLConfigs */, prefixedGlobs...)

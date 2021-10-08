@@ -1,0 +1,5 @@
+set_session_stmt ::=
+	'SET' 'SESSION' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'SET' 'SESSION' var_name 'TO' var_value ( ( ',' var_value ) )*
+	| 'SET' var_name '=' var_value ( ( ',' var_value ) )*
+	| 'SET' var_name 'TO' var_value ( ( ',' var_value ) )*

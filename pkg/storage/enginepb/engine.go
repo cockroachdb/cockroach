@@ -10,24 +10,28 @@
 
 package enginepb
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/redact"
+)
 
 // Type implements the pflag.Value interface.
 func (e *EngineType) Type() string { return "string" }
 
 // String implements the pflag.Value interface.
-func (e *EngineType) String() string {
+func (e *EngineType) String() string { return redact.StringWithoutMarkers(e) }
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (e *EngineType) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch *e {
 	case EngineTypeDefault:
-		return "default"
-	case EngineTypeRocksDB:
-		return "rocksdb"
+		p.SafeString("default")
 	case EngineTypePebble:
-		return "pebble"
-	case EngineTypeTeePebbleRocksDB:
-		return "pebble+rocksdb"
+		p.SafeString("pebble")
+	default:
+		p.Printf("<unknown engine %d>", int32(*e))
 	}
-	return ""
 }
 
 // Set implements the pflag.Value interface.
@@ -35,12 +39,8 @@ func (e *EngineType) Set(s string) error {
 	switch s {
 	case "default":
 		*e = EngineTypeDefault
-	case "rocksdb":
-		*e = EngineTypeRocksDB
 	case "pebble":
 		*e = EngineTypePebble
-	case "pebble+rocksdb":
-		*e = EngineTypeTeePebbleRocksDB
 	default:
 		return fmt.Errorf("invalid storage engine: %s "+
 			"(possible values: rocksdb, pebble)", s)

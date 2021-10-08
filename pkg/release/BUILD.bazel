@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "release",
+    srcs = ["release.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/release",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

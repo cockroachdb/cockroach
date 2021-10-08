@@ -1,0 +1,3 @@
+show_default_privileges_stmt ::=
+	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles
+	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES'

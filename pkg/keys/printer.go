@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -69,12 +70,14 @@ var (
 
 	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
 	KeyDict = KeyComprehensionTable{
-		{Name: "/Local", start: localPrefix, end: LocalMax, Entries: []DictEntry{
-			{Name: "/Store", prefix: roachpb.Key(localStorePrefix),
+		{Name: "/Local", start: LocalPrefix, end: LocalMax, Entries: []DictEntry{
+			{Name: "/Store", prefix: roachpb.Key(LocalStorePrefix),
 				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
 			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
 				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
 			{Name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
+				PSFunc: parseUnsupported},
+			{Name: "/Lock", prefix: LocalRangeLockTablePrefix, ppFunc: localRangeLockTablePrint,
 				PSFunc: parseUnsupported},
 		}},
 		{Name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, Entries: []DictEntry{
@@ -166,8 +169,10 @@ var (
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
+		{name: "RangePriorReadSummary", suffix: LocalRangePriorReadSummarySuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
-		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
+		{name: "RangeGCThreshold", suffix: LocalRangeGCThresholdSuffix},
+		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},
 	}
 
 	rangeSuffixDict = []struct {
@@ -178,6 +183,7 @@ var (
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
+		{name: "RangeProbe", suffix: LocalRangeProbeSuffix, atEnd: true},
 	}
 )
 
@@ -188,23 +194,36 @@ var constSubKeyDict = []struct {
 	{"/storeIdent", localStoreIdentSuffix},
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
-	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
+	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
+	{"/cachedSettings", localStoreCachedSettingsSuffix},
 }
 
-func suggestedCompactionKeyPrint(key roachpb.Key) string {
-	start, end, err := DecodeStoreSuggestedCompactionKey(key)
+func nodeTombstoneKeyPrint(key roachpb.Key) string {
+	nodeID, err := DecodeNodeTombstoneKey(key)
 	if err != nil {
 		return fmt.Sprintf("<invalid: %s>", err)
 	}
-	return fmt.Sprintf("{%s-%s}", start, end)
+	return fmt.Sprint("n", nodeID)
+}
+
+func cachedSettingsKeyPrint(key roachpb.Key) string {
+	settingKey, err := DecodeStoreCachedSettingsKey(key)
+	if err != nil {
+		return fmt.Sprintf("<invalid: %s>", err)
+	}
+	return settingKey.String()
 }
 
 func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
-			if v.key.Equal(localStoreSuggestedCompactionSuffix) {
-				return v.name + "/" + suggestedCompactionKeyPrint(
-					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
+			if v.key.Equal(localStoreNodeTombstoneSuffix) {
+				return v.name + "/" + nodeTombstoneKeyPrint(
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
+				)
+			} else if v.key.Equal(localStoreCachedSettingsSuffix) {
+				return v.name + "/" + cachedSettingsKeyPrint(
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
 			}
 			return v.name
@@ -217,8 +236,12 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	for _, s := range constSubKeyDict {
 		if strings.HasPrefix(input, s.name) {
-			if s.key.Equal(localStoreSuggestedCompactionSuffix) {
-				panic(&ErrUglifyUnsupported{errors.New("cannot parse suggested compaction key")})
+			switch {
+			case
+				s.key.Equal(localStoreNodeTombstoneSuffix),
+				s.key.Equal(localStoreCachedSettingsSuffix):
+				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+			default:
 			}
 			output = MakeStoreKey(s.key, nil)
 			return
@@ -503,6 +526,27 @@ func localRangeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return buf.String()
 }
 
+// lockTablePrintLockedKey is initialized to prettyPrintInternal in init() to break an
+// initialization loop.
+var lockTablePrintLockedKey func(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string
+
+func localRangeLockTablePrint(valDirs []encoding.Direction, key roachpb.Key) string {
+	var buf bytes.Buffer
+	if !bytes.HasPrefix(key, LockTableSingleKeyInfix) {
+		fmt.Fprintf(&buf, "/\"%x\"", key)
+		return buf.String()
+	}
+	buf.WriteString("/Intent")
+	key = key[len(LockTableSingleKeyInfix):]
+	b, lockedKey, err := encoding.DecodeBytesAscending(key, nil)
+	if err != nil || len(b) != 0 {
+		fmt.Fprintf(&buf, "/\"%x\"", key)
+		return buf.String()
+	}
+	buf.WriteString(lockTablePrintLockedKey(valDirs, lockedKey, true))
+	return buf.String()
+}
+
 // ErrUglifyUnsupported is returned when UglyPrint doesn't know how to process a
 // key.
 type ErrUglifyUnsupported struct {
@@ -655,47 +699,13 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
 	roachpb.PrettyPrintRange = PrettyPrintRange
-}
-
-// MassagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:
-// - if dirs is not nil, replace all ints with their ones' complement for
-// descendingly-encoded columns.
-// - strips line numbers from error messages.
-func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) string {
-	var r string
-	colIdx := -1
-	for i := 0; i < len(span); i++ {
-		if dirs != nil {
-			var d int
-			if _, err := fmt.Sscanf(span[i:], "%d", &d); err != nil {
-				// We've managed to consume an int.
-				dir := dirs[colIdx]
-				i += len(strconv.Itoa(d)) - 1
-				x := d
-				if dir == encoding.Descending {
-					x = ^x
-				}
-				r += strconv.Itoa(x)
-				continue
-			}
-		}
-		r += string(span[i])
-		switch span[i] {
-		case '/':
-			colIdx++
-		case '-', ' ':
-			// We're switching from the start constraints to the end constraints,
-			// or starting another span.
-			colIdx = -1
-		}
-	}
-	return r
+	lockTablePrintLockedKey = prettyPrintInternal
 }
 
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
-// If the end key is empty, the outut is of the form:
+// If the end key is empty, the output is of the form:
 //    start
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
@@ -709,7 +719,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		if len(prettyStart) <= maxChars {
 			return prettyStart
 		}
-		b.WriteString(prettyStart[:maxChars-1])
+		copyEscape(&b, prettyStart[:maxChars-1])
 		b.WriteRune('…')
 		return b.String()
 	}
@@ -724,7 +734,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		if i > maxChars-1 {
 			i = maxChars - 1
 		}
-		b.WriteString(prettyStart[:i])
+		copyEscape(&b, prettyStart[:i])
 		b.WriteRune('…')
 		return b.String()
 	}
@@ -733,9 +743,9 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 
 	printTrunc := func(b *bytes.Buffer, what string, maxChars int) {
 		if len(what) <= maxChars {
-			b.WriteString(what)
+			copyEscape(b, what)
 		} else {
-			b.WriteString(what[:maxChars-1])
+			copyEscape(b, what[:maxChars-1])
 			b.WriteRune('…')
 		}
 	}
@@ -747,4 +757,33 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	b.WriteByte('}')
 
 	return b.String()
+}
+
+// copyEscape copies the string to the buffer, and avoids writing
+// invalid UTF-8 sequences and control characters.
+func copyEscape(buf *bytes.Buffer, s string) {
+	buf.Grow(len(s))
+	// k is the index in s before which characters have already
+	// been copied into buf.
+	k := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < utf8.RuneSelf && strconv.IsPrint(rune(c)) {
+			continue
+		}
+		buf.WriteString(s[k:i])
+		l, width := utf8.DecodeRuneInString(s[i:])
+		if l == utf8.RuneError || l < 0x20 {
+			const hex = "0123456789abcdef"
+			buf.WriteByte('\\')
+			buf.WriteByte('x')
+			buf.WriteByte(hex[c>>4])
+			buf.WriteByte(hex[c&0xf])
+		} else {
+			buf.WriteRune(l)
+		}
+		k = i + width
+		i += width - 1
+	}
+	buf.WriteString(s[k:])
 }

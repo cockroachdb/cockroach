@@ -17,8 +17,11 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 const sshPublicKeyFile = "${HOME}/.ssh/id_rsa.pub"
@@ -49,9 +52,9 @@ func (p *Provider) sshKeyExists(keyName string, region string) (bool, error) {
 // sshKeyImport takes the user's local, public SSH key and imports it into the ec2 region so that
 // we can create new hosts with it.
 func (p *Provider) sshKeyImport(keyName string, region string) error {
-	keyBytes, err := ioutil.ReadFile(os.ExpandEnv(sshPublicKeyFile))
+	_, err := os.Stat(os.ExpandEnv(sshPublicKeyFile))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)
 		}
 		return err
@@ -61,11 +64,25 @@ func (p *Provider) sshKeyImport(keyName string, region string) error {
 		KeyName string
 	}
 	_ = data.KeyName // silence unused warning
+
+	user, err := p.FindActiveAccount()
+	if err != nil {
+		return err
+	}
+
+	timestamp := timeutil.Now()
+	createdAt := timestamp.Format(time.RFC3339)
+
+	IAMUserNameTag := fmt.Sprintf("{Key=IAMUserName,Value=%s}", user)
+	createdAtTag := fmt.Sprintf("{Key=CreatedAt,Value=%s}", createdAt)
+	tagSpecs := fmt.Sprintf("ResourceType=key-pair,Tags=[%s, %s]", IAMUserNameTag, createdAtTag)
+
 	args := []string{
 		"ec2", "import-key-pair",
 		"--region", region,
 		"--key-name", keyName,
-		"--public-key-material", string(keyBytes),
+		"--public-key-material", fmt.Sprintf("fileb://%s", sshPublicKeyFile),
+		"--tag-specifications", tagSpecs,
 	}
 	err = p.runJSONCommand(args, &data)
 	// If two roachprod instances run at the same time with the same key, they may
@@ -85,7 +102,7 @@ func (p *Provider) sshKeyName() (string, error) {
 
 	keyBytes, err := ioutil.ReadFile(os.ExpandEnv(sshPublicKeyFile))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return "", errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)
 		}
 		return "", err

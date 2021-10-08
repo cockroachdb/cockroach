@@ -1,0 +1,33 @@
+{
+  "pgVersion": "13.3",
+  "diffSummary": {
+    "TotalTables": 60,
+    "TotalColumns": 628,
+    "MissingTables": 0,
+    "MissingColumns": 12,
+    "DatatypeMismatches": 0
+  },
+  "pgMetadata": {
+    "routines": {
+      "scope_schema": null
+    },
+    "schemata": {
+      "default_character_set_catalog": null,
+      "default_character_set_schema": null,
+      "schema_owner": null
+    },
+    "table_constraints": {
+      "enforced": null
+    },
+    "tables": {
+      "commit_action": null,
+      "is_typed": null,
+      "reference_generation": null,
+      "self_referencing_column_name": null,
+      "user_defined_type_catalog": null,
+      "user_defined_type_name": null,
+      "user_defined_type_schema": null
+    }
+  },
+  "unimplementedTypes": null
+}

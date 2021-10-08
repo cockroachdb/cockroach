@@ -20,27 +20,55 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/logtags"
 )
 
+// installSessionsFileSink configures the SESSIONS channel to have a file sink.
+func installSessionsFileSink(sc *TestLogScope, t *testing.T) func() {
+	t.Helper()
+
+	// Make a configuration with a file sink for SESSIONS, which numbers the
+	// output entries.
+	cfg := logconfig.DefaultConfig()
+	bt := true
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"sessions": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+			},
+			Channels: logconfig.SelectChannels(channel.SESSIONS)},
+	}
+
+	// Derive a full config using the same directory as the
+	// TestLogScope.
+	if err := cfg.Validate(&sc.logDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Apply the configuration.
+	TestingResetActive()
+	cleanup, err := ApplyConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cleanup
+}
+
 func TestSecondaryLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
-	setFlags()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer installSessionsFileSink(s, t)()
 
-	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
+	ctx := context.Background()
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
 	ctx = logtags.AddTag(ctx, "hello", "world")
-	l.Logf(ctx, "story time")
+	Sessions.Infof(ctx, "story time")
 	Infof(context.Background(), "test2")
 
 	// Make sure the content made it to disk.
@@ -48,62 +76,53 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	bcontents, err := ioutil.ReadFile(debugLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(contents), "test1") || !strings.Contains(string(contents), "test2") {
+	contents := string(bcontents)
+	if !strings.Contains(contents, "test1") || !strings.Contains(contents, "test2") {
 		t.Errorf("log does not contain error text\n%s", contents)
 	}
-	if strings.Contains(string(contents), "world") {
-		t.Errorf("secondary log spilled into primary\n%s", contents)
+	if strings.Contains(contents, "world") {
+		t.Errorf("secondary log spilled into debug log\n%s", contents)
 	}
 
-	contents, err = ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	l := logging.getLogger(channel.SESSIONS)
+	bcontents, err = ioutil.ReadFile(l.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(contents), "hello") ||
-		!strings.Contains(string(contents), "world") ||
-		!strings.Contains(string(contents), "story time") {
-		t.Errorf("secondary log does not contain text\n%s", contents)
+	contents = string(bcontents)
+	if !strings.Contains(contents, "hello") ||
+		!strings.Contains(contents, "world") ||
+		!strings.Contains(contents, "1  " /* entry counter */ +"story time") {
+		t.Errorf("secondary log does not contain text or counter\n%s", contents)
 	}
-	if strings.Contains(string(contents), "test1") {
+	if strings.Contains(contents, "test1") {
 		t.Errorf("primary log spilled into secondary\n%s", contents)
 	}
-
 }
 
 func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	setFlags()
-	mainLog.stderrThreshold = Severity_NONE
-
-	// Take over stderr.
-	TestingResetActive()
-	cleanup, err := SetupRedactionAndStderrRedirects()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-
-	// Now create a secondary logger in the same directory.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
+	defer installSessionsFileSink(s, t)()
 
 	// Log something on the secondary logger.
-	l.Logf(context.Background(), "test456")
+	ctx := context.Background()
+
+	Sessions.Infof(ctx, "test456")
 
 	// Send something on stderr.
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
 	// Check the stderr log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
+	stderrLog := logging.testingFd2CaptureLogger
+	contents, err := ioutil.ReadFile(stderrLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +131,8 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	}
 
 	// Check the secondary log file: we don't want our stderr text there.
-	contents2, err := ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	l := logging.getLogger(channel.SESSIONS)
+	contents2, err := ioutil.ReadFile(l.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,19 +142,15 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 }
 
 func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
-	setFlags()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
+	defer installSessionsFileSink(s, t)()
 
 	// Emit some logging and ensure the files gets created.
-	l.Logf(ctx, "story time")
+	ctx := context.Background()
+	Sessions.Infof(ctx, "story time")
 	Flush()
 
 	results, err := ListLogFiles()
@@ -142,7 +158,8 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
+	l := logging.getLogger(channel.SESSIONS)
+	expectedName := filepath.Base(l.getFileSink().mu.file.(*syncBuffer).file.Name())
 	foundExpected := false
 	for i := range results {
 		if results[i].Name == expectedName {

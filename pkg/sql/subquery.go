@@ -26,6 +26,9 @@ type subquery struct {
 	expanded bool
 	started  bool
 	plan     planMaybePhysical
+	// rowCount is the estimated number of rows that plan will output, negative
+	// if the stats weren't available to make a good estimate.
+	rowCount int64
 	result   tree.Datum
 }
 
@@ -36,7 +39,7 @@ func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err erro
 		return nil, errors.AssertionFailedf("subquery %q was not processed", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, errors.AssertionFailedf("invalid index %d for %q", expr.Idx, expr)
+		return nil, errors.AssertionFailedf("subquery eval: invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]

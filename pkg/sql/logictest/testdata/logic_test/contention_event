@@ -1,0 +1,90 @@
+# LogicTest: 5node-default-configs
+# This test fails using the fakedist configs due to a testing limitation
+# (see #61438).
+# Verify that ContentionEvents are emitted. This is mostly a sanity check - look
+# for the datadriven tests in `pkg/kv/kvserver/concurrency` for the actual events
+# that do get emitted in various contention scenarios.
+
+statement ok
+GRANT ADMIN TO testuser
+
+statement ok
+CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
+ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z')
+
+query TT
+SELECT * FROM kv
+----
+
+user testuser
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES('k', 'v')
+
+user root
+
+statement ok
+SET TRACING = on
+
+# Scan all ranges of the table (note that we have intentionally
+# split it into at least six ranges). This is better than a point
+# lookup in that it gives tracing more of a chance to get things
+# wrong due to DistSender parallelism.
+statement ok
+BEGIN;
+SET TRANSACTION PRIORITY HIGH;
+SELECT * FROM kv ORDER BY k ASC
+
+user testuser
+
+statement ok
+ROLLBACK
+
+user root
+
+# Check that there is at least 1 contention event payload in all spans in the
+# open trace.
+#
+# NB: the contention event is not in our trace span but in one of its
+# children, so it wouldn't be found if we filtered by the trace span ID.
+query B
+WITH spans AS (
+  SELECT span_id
+  FROM crdb_internal.node_inflight_trace_spans
+  WHERE trace_id = crdb_internal.trace_id()
+), payloads AS (
+  SELECT *
+  FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)
+) SELECT count(*) > 0
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+----
+true
+
+# crdb_internal.payloads_for_trace is syntactic sugar for much of the above statement.
+query B
+WITH payloads AS (
+  SELECT *
+  FROM crdb_internal.payloads_for_trace(crdb_internal.trace_id())
+) SELECT count(*) > 0
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+----
+true
+
+# Check that there is at least 1 contention event for kv table in the contention
+# virtual tables.
+query B
+SELECT count(*) > 0 FROM crdb_internal.cluster_contention_events WHERE table_id = 53
+----
+true
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.node_contention_events WHERE table_id = 53
+----
+true

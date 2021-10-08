@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -19,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,9 +34,9 @@ func runProcessorTest(
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
-	inputRows sqlbase.EncDatumRows,
+	inputRows rowenc.EncDatumRows,
 	outputTypes []*types.T,
-	expected sqlbase.EncDatumRows,
+	expected rowenc.EncDatumRows,
 	txn *kv.Txn,
 ) {
 	in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
@@ -67,7 +68,7 @@ func runProcessorTest(
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}
-	var res sqlbase.EncDatumRows
+	var res rowenc.EncDatumRows
 	for {
 		row, meta := out.Next()
 		if meta != nil && meta.Metrics == nil {
@@ -97,11 +98,13 @@ func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 type rowGeneratingSource struct {
 	types              []*types.T
 	fn                 sqlutils.GenRowFn
-	scratchEncDatumRow sqlbase.EncDatumRow
+	scratchEncDatumRow rowenc.EncDatumRow
 
 	rowIdx  int
 	maxRows int
 }
+
+var _ execinfra.RowSource = &rowGeneratingSource{}
 
 // newRowGeneratingSource creates a new rowGeneratingSource with the given fn
 // and a maximum number of rows to generate. Can be reset using Reset.
@@ -113,9 +116,9 @@ func newRowGeneratingSource(
 
 func (r *rowGeneratingSource) OutputTypes() []*types.T { return r.types }
 
-func (r *rowGeneratingSource) Start(ctx context.Context) context.Context { return ctx }
+func (r *rowGeneratingSource) Start(context.Context) {}
 
-func (r *rowGeneratingSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (r *rowGeneratingSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if r.rowIdx > r.maxRows {
 		// Done.
 		return nil, nil
@@ -123,13 +126,13 @@ func (r *rowGeneratingSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 
 	datumRow := r.fn(r.rowIdx)
 	if cap(r.scratchEncDatumRow) < len(datumRow) {
-		r.scratchEncDatumRow = make(sqlbase.EncDatumRow, len(datumRow))
+		r.scratchEncDatumRow = make(rowenc.EncDatumRow, len(datumRow))
 	} else {
 		r.scratchEncDatumRow = r.scratchEncDatumRow[:len(datumRow)]
 	}
 
 	for i := range r.scratchEncDatumRow {
-		r.scratchEncDatumRow[i] = sqlbase.DatumToEncDatum(r.types[i], datumRow[i])
+		r.scratchEncDatumRow[i] = rowenc.DatumToEncDatum(r.types[i], datumRow[i])
 	}
 	r.rowIdx++
 	return r.scratchEncDatumRow, nil
@@ -149,15 +152,19 @@ func (r *rowGeneratingSource) ConsumerClosed() {}
 type rowDisposer struct {
 	bufferedMeta    []execinfrapb.ProducerMetadata
 	numRowsDisposed int
+	logRows         bool
 }
 
 var _ execinfra.RowReceiver = &rowDisposer{}
 
-// Push is part of the distsql.RowReceiver interface.
+// Push is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if row != nil {
+		if r.logRows {
+			fmt.Printf("row #%d : %v\n", r.numRowsDisposed, row)
+		}
 		r.numRowsDisposed++
 	} else if meta != nil {
 		r.bufferedMeta = append(r.bufferedMeta, *meta)
@@ -165,13 +172,8 @@ func (r *rowDisposer) Push(
 	return execinfra.NeedMoreRows
 }
 
-// ProducerDone is part of the RowReceiver interface.
+// ProducerDone is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) ProducerDone() {}
-
-// Types is part of the RowReceiver interface.
-func (r *rowDisposer) Types() []*types.T {
-	return nil
-}
 
 func (r *rowDisposer) ResetNumRowsDisposed() {
 	r.numRowsDisposed = 0
@@ -179,8 +181,4 @@ func (r *rowDisposer) ResetNumRowsDisposed() {
 
 func (r *rowDisposer) NumRowsDisposed() int {
 	return r.numRowsDisposed
-}
-
-func (r *rowDisposer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
-	return r.bufferedMeta
 }

@@ -14,17 +14,17 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -159,8 +159,8 @@ func init() {
 //
 // If the ON CONFLICT clause contains a DO NOTHING clause, then each UNIQUE
 // index on the target table requires its own DISTINCT ON to ensure that the
-// input has no duplicates, and its own LEFT OUTER JOIN to check whether a
-// conflict exists. For example:
+// input has no duplicates, and an ANTI JOIN to check whether a conflict exists.
+// For example:
 //
 //   CREATE TABLE ab (a INT PRIMARY KEY, b INT)
 //   INSERT INTO ab (a, b) VALUES (1, 2), (1, 3) ON CONFLICT DO NOTHING
@@ -169,9 +169,9 @@ func init() {
 //
 //   SELECT x, y
 //   FROM (SELECT DISTINCT ON (x) * FROM (VALUES (1, 2), (1, 3))) AS input(x, y)
-//   LEFT OUTER JOIN ab
-//   ON input.x = ab.a
-//   WHERE ab.a IS NULL
+//   WHERE NOT EXISTS(
+//     SELECT ab.a WHERE input.x = ab.a
+//   )
 //
 // Note that an ordered input to the INSERT does not provide any guarantee about
 // the order in which mutations are applied, or the order of any returned rows
@@ -286,11 +286,11 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	// Case 2: INSERT..ON CONFLICT DO NOTHING.
 	case ins.OnConflict.DoNothing:
-		// Wrap the input in one LEFT OUTER JOIN per UNIQUE index, and filter out
-		// rows that have conflicts. See the buildInputForDoNothing comment for
-		// more details.
+		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
+		// that have conflicts. See the buildInputForDoNothing comment for more
+		// details.
 		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForDoNothing(inScope, conflictOrds)
+		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -307,8 +307,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			primaryOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
-			mb.buildInputForUpsert(inScope, primaryOrds, nil /* whereClause */)
+			primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
+			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
@@ -323,7 +323,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
 		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.Where)
+		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -345,12 +345,11 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 //
 //   1. There are no secondary indexes. Existing values are needed to delete
 //      secondary index rows when the update causes them to move.
-//   2. All non-key columns (including mutation columns) have insert and update
+//   2. There are no implicit partitioning columns in the primary index.
+//   3. All non-key columns (including mutation columns) have insert and update
 //      values specified for them.
-//   3. Each update value is the same as the corresponding insert value.
-//
-// TODO(radu): once FKs no longer require indexes, this function will have to
-// take FKs into account explicitly.
+//   4. Each update value is the same as the corresponding insert value.
+//   5. There are no inbound foreign keys containing non-key columns.
 //
 // TODO(andyk): The fast path is currently only enabled when the UPSERT alias
 // is explicitly selected by the user. It's possible to fast path some queries
@@ -359,6 +358,13 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 // this support was removed and needs to re-enabled. See #14482.
 func (mb *mutationBuilder) needExistingRows() bool {
 	if mb.tab.DeletableIndexCount() > 1 {
+		return true
+	}
+
+	// If there are any implicit partitioning columns in the primary index,
+	// these columns will need to be fetched.
+	primaryIndex := mb.tab.Index(cat.PrimaryIndex)
+	if primaryIndex.ImplicitPartitioningColumnCount() > 0 {
 		return true
 	}
 
@@ -372,8 +378,8 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.Virtual {
-			// #2: Don't consider system or virtual columns.
+		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.Inverted {
+			// #2: Don't consider system or inverted columns.
 			continue
 		}
 		insertColID := mb.insertColIDs[i]
@@ -386,6 +392,18 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			return true
 		}
 	}
+
+	// If there are inbound foreign key constraints that contain any non-key
+	// columns, we need the existing values.
+	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
+		for j, m := 0, mb.tab.InboundForeignKey(i).ColumnCount(); j < m; j++ {
+			ord := mb.tab.InboundForeignKey(i).ReferencedColumnOrdinal(mb.tab, j)
+			if !keyOrds.Contains(ord) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -520,7 +538,7 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		// Skip mutation, hidden or system columns.
 		col := mb.tab.Column(i)
-		if col.Kind() != cat.Ordinary || col.IsHidden() {
+		if col.Kind() != cat.Ordinary || col.Visibility() != cat.Visible {
 			continue
 		}
 
@@ -567,7 +585,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if tabCol := mb.tab.Column(i); !tabCol.IsHidden() && tabCol.Kind() == cat.Ordinary {
+			if tabCol := mb.tab.Column(i); tabCol.Visibility() == cat.Visible && tabCol.Kind() == cat.Ordinary {
 				desiredTypes = append(desiredTypes, tabCol.DatumType())
 			}
 		}
@@ -596,8 +614,14 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
+		// Check if the input column is created with `GENERATED ALWAYS AS IDENTITY`
+		// syntax. If yes, and user does not specify the `OVERRIDING SYSTEM VALUE`
+		// syntax in the `INSERT` statement,
+		// checkColumnIsNotGeneratedAlwaysAsIdentity will raise an error.
+		checkColumnIsNotGeneratedAlwaysAsIdentity(mb.tab.Column(ord))
+
 		// Assign name of input column.
-		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
+		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
 
 		// Record the ID of the column that contains the value to be inserted
 		// into the corresponding target table column.
@@ -614,9 +638,10 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// Start by adding non-computed columns that have not already been explicitly
 	// specified in the query. Do this before adding computed columns, since those
 	// may depend on non-computed columns.
-	mb.addSynthesizedCols(
+	mb.addSynthesizedDefaultCols(
 		mb.insertColIDs,
-		func(colOrd int) bool { return !mb.tab.Column(colOrd).IsComputed() },
+		true,  /* includeOrdinary */
+		false, /* applyOnUpdate */
 	)
 
 	// Possibly round DECIMAL-related columns containing insertion values (whether
@@ -624,10 +649,7 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
 
 	// Now add all computed columns.
-	mb.addSynthesizedCols(
-		mb.insertColIDs,
-		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
-	)
+	mb.addSynthesizedComputedCols(mb.insertColIDs, false /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
 	mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
@@ -640,42 +662,34 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols()
+	mb.addCheckConstraintCols(false /* isUpdate */)
 
-	// Add any partial index put boolean columns to the input.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	// Project partial index PUT boolean columns.
+	mb.projectPartialIndexPutCols()
+
+	mb.buildUniqueChecksForInsert()
 
 	mb.buildFKChecksForInsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructInsert(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 
 	mb.buildReturning(returning)
 }
 
-// buildInputForDoNothing wraps the input expression in LEFT OUTER JOIN
-// expressions, one for each UNIQUE index on the target table. It then adds a
-// filter that discards rows that have a conflict (by checking a not-null table
-// column to see if it was null-extended by the left join). See the comment
-// header for Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds util.FastIntSet) {
-	// DO NOTHING clause does not require ON CONFLICT columns.
-	var conflictIndex cat.Index
-	if !conflictOrds.Empty() {
-		// Check that the ON CONFLICT columns reference at most one target row by
-		// ensuring they match columns of a UNIQUE index. Using LEFT OUTER JOIN
-		// to detect conflicts relies upon this being true (otherwise result
-		// cardinality could increase). This is also a Postgres requirement.
-		conflictIndex = mb.ensureUniqueConflictCols(conflictOrds)
-	}
+// buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
+// one for each arbiter on the target table. See the comment header for
+// Builder.buildInsert for an example.
+func (mb *mutationBuilder) buildInputForDoNothing(
+	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
+) {
+	// Determine the set of arbiter indexes and constraints to use to check for
+	// conflicts.
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
 
-	insertColSet := mb.outScope.expr.Relational().OutputCols
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
 
@@ -683,187 +697,28 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
-	// Loop again over each UNIQUE index, potentially creating a left join +
-	// filter for each one.
-	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
-		index := mb.tab.Index(idx)
-		if !index.IsUnique() {
-			continue
-		}
+	// Create an anti-join for each arbiter.
+	mb.arbiters.ForEach(func(name string, conflictOrds util.FastIntSet, pred tree.Expr, canaryOrd int) {
+		mb.buildAntiJoinForDoNothingArbiter(inScope, conflictOrds, pred)
+	})
 
-		// If conflict columns were explicitly specified, then only check for a
-		// conflict on a single index. Otherwise, check on all indexes.
-		if conflictIndex != nil && conflictIndex != index {
-			continue
-		}
-
-		pred, isPartial := index.Predicate()
-		var predExpr tree.Expr
-		if isPartial {
-			var err error
-			predExpr, err = parser.ParseExpr(pred)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		// Build the right side of the left outer join. Use a new metadata instance
-		// of the mutation table so that a different set of column IDs are used for
-		// the two tables in the self-join.
-		fetchScope := mb.b.buildScan(
-			mb.b.addTable(mb.tab, &mb.alias),
-			tableOrdinals(mb.tab, columnKinds{
-				includeMutations: false,
-				includeSystem:    false,
-				includeVirtual:   false,
-			}),
-			nil, /* indexFlags */
-			noRowLocking,
-			inScope,
-		)
-
-		// If the index is a unique partial index, then rows that are not in the
-		// partial index cannot conflict with insert rows. Therefore, a Select
-		// wraps the scan on the right side of the left outer join with the
-		// partial index predicate expression as the filter.
-		if isPartial {
-			texpr := fetchScope.resolveAndRequireType(predExpr, types.Bool)
-			predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
-			fetchScope.expr = mb.b.factory.ConstructSelect(
-				fetchScope.expr,
-				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(predScalar)},
+	// Create an UpsertDistinctOn for each arbiter. This must happen after all
+	// conflicting rows are removed with the anti-joins created above, to avoid
+	// removing valid rows (see #59125).
+	mb.arbiters.ForEach(func(name string, conflictOrds util.FastIntSet, pred tree.Expr, canaryOrd int) {
+		// If the arbiter has a partial predicate, project a new column that
+		// allows the UpsertDistinctOn to only de-duplicate insert rows that
+		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
+		var partialDistinctCol *scopeColumn
+		if pred != nil {
+			partialDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, name,
 			)
 		}
 
-		// Remember the column ID of a scan column that is not null. This will be
-		// used to detect whether a conflict was detected for a row. Such a column
-		// must always exist, since the index always contains the primary key
-		// columns, either explicitly or implicitly.
-		notNullColID := fetchScope.cols[findNotNullIndexCol(index)].id
-
-		// Build the join condition by creating a conjunction of equality conditions
-		// that test each conflict column:
-		//
-		//   ON ins.x = scan.a AND ins.y = scan.b
-		//
-		var on memo.FiltersExpr
-		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
-			indexCol := index.Column(i)
-			scanColID := fetchScope.cols[indexCol.Ordinal()].id
-
-			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColIDs[indexCol.Ordinal()]),
-				mb.b.factory.ConstructVariable(scanColID),
-			)
-			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
-		}
-
-		// If the index is a unique partial index, then insert rows that do not
-		// satisfy the partial index predicate cannot conflict with existing
-		// rows in the unique partial index. Therefore, the partial index
-		// predicate expression is added to the ON filters.
-		if isPartial {
-			texpr := mb.outScope.resolveAndRequireType(predExpr, types.Bool)
-			predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
-			on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
-		}
-
-		// Construct the left join + filter.
-		// TODO(andyk): Convert this to use anti-join once we have support for
-		// lookup anti-joins.
-		mb.outScope.expr = mb.b.factory.ConstructProject(
-			mb.b.factory.ConstructSelect(
-				mb.b.factory.ConstructLeftJoin(
-					mb.outScope.expr,
-					fetchScope.expr,
-					on,
-					memo.EmptyJoinPrivate,
-				),
-				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(
-					mb.b.factory.ConstructIs(
-						mb.b.factory.ConstructVariable(notNullColID),
-						memo.NullSingleton,
-					),
-				)},
-			),
-			memo.EmptyProjectionsExpr,
-			insertColSet,
-		)
-
-		// If the index is a unique partial index, only those input rows that
-		// satisfy the partial index predicate should be de-duplicated. For
-		// example:
-		//
-		//   CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
-		//   INSERT INTO t VALUES (1, 1), (1, 2), (1, -1), (1, -10) ON CONFLICT DO NOTHING
-		//
-		// The rows (1, 1), (1, -1), and (1, -10) should be inserted. (1, -1)
-		// and (1, -10) should not be removed from the input set. Even though
-		// their values for a conflict with the other input rows, their values
-		// for b are less than 0, so they will not conflict given the unique
-		// partial index predicate.
-		//
-		// In order to avoid de-duplicating all input rows, we project a new
-		// column to group by. This column is true if the predicate is satisfied
-		// and NULL otherwise. For the example above, the projected column would
-		// be (b > 0) OR NULL. The values of the projected rows would be:
-		//
-		//   (1, 1)   -> (1, 1, true)
-		//   (1, 2)   -> (1, 2, true)
-		//   (1, -1)  -> (1, -1, NULL)
-		//   (1, -10) -> (1, -10, NULL)
-		//
-		// The set of conflictCols used for de-duplication includes a and the
-		// projected column. The UpsertDistinctOn considers NULL values as
-		// unique, so the rows remaining would be (1, 1, true), (1, -1, NULL),
-		// and (1, -10, NULL).
-		//
-		// The projected column is removed from the output columns via a
-		// projection that wraps the UpsertDistinctOn.
-		var partialIndexDistinctCol *scopeColumn
-		if isPartial {
-			projectionScope := mb.outScope.replace()
-			projectionScope.appendColumnsFromScope(insertColScope)
-
-			expr := &tree.OrExpr{
-				Left:  predExpr,
-				Right: tree.DNull,
-			}
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-
-			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
-			partialIndexDistinctCol = mb.b.addColumn(projectionScope, alias, texpr)
-			mb.b.buildScalar(texpr, mb.outScope, projectionScope, partialIndexDistinctCol, nil)
-
-			mb.b.constructProjectForScope(mb.outScope, projectionScope)
-			mb.outScope = projectionScope
-		}
-
-		// Add an UpsertDistinctOn operator to ensure there are no duplicate input
-		// rows for this unique index. Duplicate rows can trigger conflict errors
-		// at runtime, which DO NOTHING is not supposed to do. See issue #37880.
-		var conflictCols opt.ColSet
-		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
-			indexCol := index.Column(i)
-			conflictCols.Add(mb.insertColIDs[indexCol.Ordinal()])
-		}
-		if partialIndexDistinctCol != nil {
-			conflictCols.Add(partialIndexDistinctCol.id)
-		}
-
-		// Treat NULL values as distinct from one another. And if duplicates are
-		// detected, remove them rather than raising an error.
-		mb.outScope = mb.b.buildDistinctOn(
-			conflictCols, mb.outScope, true /* nullsAreDistinct */, "" /* errorOnDup */)
-
-		// Remove the partialIndexDistinctCol from the output.
-		if isPartial {
-			projectionScope := mb.outScope.replace()
-			projectionScope.appendColumnsFromScope(insertColScope)
-			mb.b.constructProjectForScope(mb.outScope, projectionScope)
-			mb.outScope = projectionScope
-		}
-	}
+		mb.buildDistinctOnForArbiter(insertColScope, conflictOrds, partialDistinctCol, "" /* errorOnDup */)
+	})
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
@@ -876,92 +731,67 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictOrds util.FastIntSet, whereClause *tree.Where,
+	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr, whereClause *tree.Where,
 ) {
-	// Check that the ON CONFLICT columns reference at most one target row.
-	// Using LEFT OUTER JOIN to detect conflicts relies upon this being true
-	// (otherwise result cardinality could increase). This is also a Postgres
-	// requirement.
-	mb.ensureUniqueConflictCols(conflictOrds)
+	// Determine the set of arbiter indexes and constraints to use to check for
+	// conflicts.
+	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
 
-	// Ensure that input is distinct on the conflict columns. Otherwise, the
-	// Upsert could affect the same row more than once, which can lead to index
-	// corruption. See issue #44466 for more context.
-	//
-	// Ignore any ordering requested by the input. Since the
-	// EnsureUpsertDistinctOn operator does not allow multiple rows in distinct
-	// groupings, the internal ordering is meaningless (and can trigger a
-	// misleading error in buildDistinctOn if present).
-	var conflictCols opt.ColSet
-	for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
-		conflictCols.Add(mb.insertColIDs[ord])
+	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
+	//  similar to buildInputForDoNothing.
+	if mb.arbiters.Len() > 1 {
+		panic(unimplemented.NewWithIssue(53170,
+			"there are multiple unique or exclusion constraints matching the ON CONFLICT specification"))
 	}
+
+	insertColScope := mb.outScope.replace()
+	insertColScope.appendColumnsFromScope(mb.outScope)
+
+	// Ignore any ordering requested by the input.
 	mb.outScope.ordering = nil
-	mb.outScope = mb.b.buildDistinctOn(
-		conflictCols, mb.outScope, true /* nullsAreDistinct */, duplicateUpsertErrText)
 
-	// Re-alias all INSERT columns so that they are accessible as if they were
-	// part of a special data source named "crdb_internal.excluded".
-	for i := range mb.outScope.cols {
-		mb.outScope.cols[i].table = excludedTableName
-	}
-
-	// Build the right side of the left outer join. Use a different instance of
-	// table metadata so that col IDs do not overlap.
-	//
-	// NOTE: Include mutation columns, but be careful to never use them for any
-	//       reason other than as "fetch columns". See buildScan comment.
-	// TODO(andyk): Why does execution engine need mutation columns for Insert?
-	fetchScope := mb.b.buildScan(
-		mb.b.addTable(mb.tab, &mb.alias),
-		tableOrdinals(mb.tab, columnKinds{
-			includeMutations: true,
-			includeSystem:    true,
-			includeVirtual:   false,
-		}),
-		nil, /* indexFlags */
-		noRowLocking,
-		inScope,
-	)
-
-	// Record a not-null "canary" column. After the left-join, this will be null
-	// if no conflict has been detected, or not null otherwise. At least one not-
-	// null column must exist, since primary key columns are not-null.
-	canaryScopeCol := &fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
-	mb.canaryColID = canaryScopeCol.id
-
-	// Set fetchColIDs to reference the columns created for the fetch values.
-	mb.setFetchColIDs(fetchScope.cols)
-
-	// Add the fetch columns to the current scope. It's OK to modify the current
-	// scope because it contains only INSERT columns that were added by the
-	// mutationBuilder, and which aren't needed for any other purpose.
-	mb.outScope.appendColumnsFromScope(fetchScope)
-
-	// Build the join condition by creating a conjunction of equality conditions
-	// that test each conflict column:
-	//
-	//   ON ins.x = scan.a AND ins.y = scan.b
-	//
-	var on memo.FiltersExpr
-	for i := range fetchScope.cols {
-		// Include fetch columns with ordinal positions in conflictOrds.
-		if conflictOrds.Contains(i) {
-			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColIDs[i]),
-				mb.b.factory.ConstructVariable(fetchScope.cols[i].id),
+	// Create an UpsertDistinctOn and a left-join for the single arbiter.
+	var canaryCol *scopeColumn
+	mb.arbiters.ForEach(func(name string, conflictOrds util.FastIntSet, pred tree.Expr, canaryOrd int) {
+		// If the arbiter has a partial predicate, project a new column that
+		// allows the UpsertDistinctOn to only de-duplicate insert rows that
+		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
+		// more details.
+		var partialDistinctCol *scopeColumn
+		if pred != nil {
+			partialDistinctCol = mb.projectPartialArbiterDistinctColumn(
+				insertColScope, pred, name,
 			)
-			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 		}
-	}
 
-	// Construct the left join.
-	mb.outScope.expr = mb.b.factory.ConstructLeftJoin(
-		mb.outScope.expr,
-		fetchScope.expr,
-		on,
-		memo.EmptyJoinPrivate,
-	)
+		// Ensure that input is distinct on the conflict columns. Otherwise, the
+		// Upsert could affect the same row more than once, which can lead to
+		// index corruption. See issue #44466 for more context.
+		//
+		// Ignore any ordering requested by the input. Since the
+		// EnsureUpsertDistinctOn operator does not allow multiple rows in
+		// distinct groupings, the internal ordering is meaningless (and can
+		// trigger a misleading error in buildDistinctOn if present).
+		mb.buildDistinctOnForArbiter(insertColScope, conflictOrds, partialDistinctCol, duplicateUpsertErrText)
+
+		// Re-alias all INSERT columns so that they are accessible as if they
+		// were part of a special data source named "crdb_internal.excluded".
+		for i := range mb.outScope.cols {
+			mb.outScope.cols[i].table = excludedTableName
+		}
+
+		// Create a left-join for the arbiter.
+		mb.buildLeftJoinForUpsertArbiter(
+			inScope, conflictOrds, pred,
+		)
+
+		// Record a not-null "canary" column. After the left-join, this will be
+		// null if no conflict has been detected, or not null otherwise. At
+		// least one not-null column must exist, since primary key columns are
+		// not-null.
+		canaryCol = &mb.fetchScope.cols[canaryOrd]
+		mb.canaryColID = canaryCol.id
+	})
 
 	// Add a filter from the WHERE clause if one exists.
 	if whereClause != nil {
@@ -969,8 +799,8 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			Type: whereClause.Type,
 			Expr: &tree.OrExpr{
 				Left: &tree.ComparisonExpr{
-					Operator: tree.IsNotDistinctFrom,
-					Left:     canaryScopeCol,
+					Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom),
+					Left:     canaryCol,
 					Right:    tree.DNull,
 				},
 				Right: whereClause.Expr,
@@ -981,9 +811,6 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
-
-	// Add any partial index del boolean columns to the input for UPSERTs.
-	mb.projectPartialIndexDelCols(fetchScope)
 }
 
 // setUpsertCols sets the list of columns to be updated in case of conflict.
@@ -1028,9 +855,11 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		}
 	}
 
-	// Never update primary key columns.
+	// Never update primary key columns. Implicit partitioning columns are not
+	// considered part of the primary key in this case.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
-	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
+	skipCols := conflictIndex.ImplicitPartitioningColumnCount()
+	for i, n := skipCols, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}
 }
@@ -1045,38 +874,35 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols()
+	mb.addCheckConstraintCols(false /* isUpdate */)
 
-	// Add any partial index put boolean columns. The variables in these partial
-	// index predicates must resolve to the new column values of the row which
-	// are either the existing values of the columns or new values provided in
-	// the upsert. Therefore, the variables must resolve to the upsert CASE
-	// expression columns, so the project must be added after the upsert columns
-	// are.
+	// Add the partial index predicate expressions to the table metadata.
+	// These expressions are used to prune fetch columns during
+	// normalization.
+	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
+
+	// Project partial index PUT and DEL boolean columns.
 	//
-	// For example, consider the table and upsert:
-	//
-	//   CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b) WHERE a > 1)
-	//   INSERT INTO t (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE a = t.a + 1
-	//
-	// An entry in the partial index should only be added when a > 1. The
-	// resulting value of a is dependent on whether or not there is a conflict.
-	// In the case of no conflict, the (1, 2) is inserted into the table, and no
-	// partial index entry should be added. But if there is a conflict, The
-	// existing row where a = 1 has a incremented to 2, and an entry should be
-	// added to the partial index.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	// In some cases existing rows may not be fetched for an UPSERT (see
+	// mutationBuilder.needExistingRows for more details). In theses cases
+	// there is no need to project partial index DEL columns and
+	// mb.fetchScope will be nil. Therefore, we only project partial index
+	// PUT columns.
+	if mb.needExistingRows() {
+		mb.projectPartialIndexPutAndDelCols()
+	} else {
+		mb.projectPartialIndexPutCols()
+	}
+
+	mb.buildUniqueChecksForUpsert()
 
 	mb.buildFKChecksForUpsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructUpsert(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 
 	mb.buildReturning(returning)
 }
@@ -1144,12 +970,11 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			mb.b.factory.ConstructVariable(updateColID),
 		)
 
-		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		name := scopeColName(col.ColName()).WithMetadataName(
+			fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName()),
+		)
 		typ := mb.md.ColumnMeta(insertColID).Type
-		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
-
-		// Assign name to synthesized column.
-		scopeCol.name = col.ColName()
+		scopeCol := mb.b.synthesizeColumn(projectionsScope, name, typ, nil /* expr */, caseExpr)
 
 		// Update the scope ordinals for the update columns that are involved in
 		// the Upsert. The new columns will be used by the Upsert operator in place
@@ -1163,32 +988,6 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
-}
-
-// ensureUniqueConflictCols tries to prove that the given set of column ordinals
-// correspond to the columns of at least one UNIQUE index on the target table.
-// If true, then ensureUniqueConflictCols returns the matching index. Otherwise,
-// it reports an error.
-func (mb *mutationBuilder) ensureUniqueConflictCols(conflictOrds util.FastIntSet) cat.Index {
-	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
-		index := mb.tab.Index(idx)
-
-		// Skip non-unique indexes. Use lax key columns, which always contain
-		// the minimum columns that ensure uniqueness. Null values are considered
-		// to be *not* equal, but that's OK because the join condition rejects
-		// nulls anyway.
-		if !index.IsUnique() || index.LaxKeyColumnCount() != conflictOrds.Len() {
-			continue
-		}
-
-		// Determine whether the conflict columns match the columns in the lax key.
-		indexOrds := getIndexLaxKeyOrdinals(index)
-		if indexOrds.Equals(conflictOrds) {
-			return index
-		}
-	}
-	panic(pgerror.Newf(pgcode.InvalidColumnReference,
-		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 
 // mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
@@ -1208,7 +1007,7 @@ func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) u
 		}
 
 		if !found {
-			panic(sqlbase.NewUndefinedColumnError(string(name)))
+			panic(colinfo.NewUndefinedColumnError(string(name)))
 		}
 	}
 	return ords

@@ -15,17 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// FromEncounteredIntents creates a Result communicating that the intents were
-// encountered and should be handled.
-func FromEncounteredIntents(intents []roachpb.Intent) Result {
-	var pd Result
-	if len(intents) == 0 {
-		return pd
-	}
-	pd.Local.EncounteredIntents = intents
-	return pd
-}
-
 // FromAcquiredLocks creates a Result communicating that the locks were
 // acquired or re-acquired by the given transaction and should be handled.
 func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {

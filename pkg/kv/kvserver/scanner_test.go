@@ -61,7 +61,8 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			LiveCount: 1,
 		}
 		repl.mu.state.Desc = desc
-		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+		repl.startKey = desc.StartKey // actually used by replicasByKey
+		if exRngItem := rs.replicasByKey.ReplaceOrInsert((*btreeReplica)(repl)); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)
 		}
 	}
@@ -76,7 +77,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		rs.Unlock()
 		defer rs.Lock()
-		return visitor(i.(*Replica))
+		return visitor((*Replica)(i.(*btreeReplica)))
 	})
 }
 
@@ -99,7 +100,7 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	if repl == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
-	return repl.(*Replica)
+	return (*Replica)(repl.(*btreeReplica))
 }
 
 // Test implementation of a range queue which adds range to an
@@ -120,7 +121,13 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.Background(), func(context.Context) {
+	done := func() {
+		tq.Lock()
+		tq.done = true
+		tq.Unlock()
+	}
+
+	if err := stopper.RunAsyncTask(context.Background(), "testqueue", func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -130,18 +137,20 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 					tq.processed++
 				}
 				tq.Unlock()
-			case <-stopper.ShouldStop():
-				tq.Lock()
-				tq.done = true
-				tq.Unlock()
+			case <-stopper.ShouldQuiesce():
+				done()
 				return
 			}
 		}
-	})
+	}); err != nil {
+		done()
+	}
 }
 
 // NB: MaybeAddAsync on a testQueue is actually synchronous.
-func (tq *testQueue) MaybeAddAsync(ctx context.Context, replI replicaInQueue, now hlc.Timestamp) {
+func (tq *testQueue) MaybeAddAsync(
+	ctx context.Context, replI replicaInQueue, now hlc.ClockTimestamp,
+) {
 	repl := replI.(*Replica)
 
 	tq.Lock()
@@ -203,10 +212,10 @@ func TestScannerAddToQueues(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q1, q2)
-	stopper := stop.NewStopper()
+	s.stopper = stop.NewStopper()
 
 	// Start scanner and verify that all ranges are added to both queues.
-	s.Start(stopper)
+	s.Start()
 	testutils.SucceedsSoon(t, func() error {
 		if q1.count() != count || q2.count() != count {
 			return errors.Errorf("q1 or q2 count != %d; got %d, %d", count, q1.count(), q2.count())
@@ -230,7 +239,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	})
 
 	// Stop scanner and verify both queues are stopped.
-	stopper.Stop(context.Background())
+	s.stopper.Stop(context.Background())
 	if !q1.isDone() || !q2.isDone() {
 		t.Errorf("expected all queues to stop; got %t, %t", q1.isDone(), q2.isDone())
 	}
@@ -256,10 +265,10 @@ func TestScannerTiming(t *testing.T) {
 			clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 			s := newReplicaScanner(makeAmbCtx(), clock, duration, 0, 0, ranges)
 			s.AddQueues(q)
-			stopper := stop.NewStopper()
-			s.Start(stopper)
+			s.stopper = stop.NewStopper()
+			s.Start()
 			time.Sleep(runTime)
-			stopper.Stop(context.Background())
+			s.stopper.Stop(context.Background())
 
 			avg := s.avgScan()
 			log.Infof(context.Background(), "%d: average scan: %s", i, avg)
@@ -340,9 +349,9 @@ func TestScannerDisabled(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	s.Start(stopper)
+	s.stopper = stop.NewStopper()
+	defer s.stopper.Stop(context.Background())
+	s.Start()
 
 	// Verify queue gets all ranges.
 	testutils.SucceedsSoon(t, func() error {
@@ -405,9 +414,9 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, 0, ranges)
 	s.AddQueues(q)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	s.Start(stopper)
+	s.stopper = stop.NewStopper()
+	defer s.stopper.Stop(context.Background())
+	s.Start()
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
 	if count := s.scanCount(); count > 1 {
 		t.Errorf("expected at most one loop, but got %d", count)

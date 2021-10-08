@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -268,7 +269,7 @@ func (c *Cluster) RPCPort(nodeIdx int) string {
 
 func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
 	baseCtx := &base.Config{
-		User:     security.NodeUser,
+		User:     security.NodeUserName(),
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(rpc.ContextOptions{
@@ -298,7 +299,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		fmt.Sprintf("--http-port=%d", cfg.HTTPPort),
 		fmt.Sprintf("--store=%s", cfg.DataDir),
 		fmt.Sprintf("--listening-url-file=%s", n.listeningURLFile()),
-		fmt.Sprintf("--cache=256MiB"),
+		"--cache=256MiB",
 	}
 
 	if n.Cfg.LogDir != "" {
@@ -667,7 +668,7 @@ func (n *Node) httpAddrFile() string {
 func readFileOrEmpty(f string) string {
 	c, err := ioutil.ReadFile(f)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			panic(err)
 		}
 		return ""

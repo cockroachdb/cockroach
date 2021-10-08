@@ -28,24 +28,19 @@ type sstIterator struct {
 	iterValid bool
 	err       error
 
-	// For allocation avoidance in NextKey.
-	nextKeyStart []byte
+	// For allocation avoidance in SeekGE and NextKey.
+	keyBuf []byte
 
-	// roachpb.Verify k/v pairs on each call to Next()
+	// roachpb.Verify k/v pairs on each call to Next.
 	verify bool
 }
 
-// NewSSTIterator returns a `SimpleIterator` for an in-memory sstable.
-// It's compatible with sstables written by `RocksDBSstFileWriter` and
-// Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
-// format.
-func NewSSTIterator(path string) (SimpleIterator, error) {
-	file, err := vfs.Default.Open(path)
-	if err != nil {
-		return nil, err
-	}
+// NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
+// assumes was written by pebble `sstable.Writer`and contains keys which use
+// Cockroach's MVCC format.
+func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
-		Comparer: MVCCComparer,
+		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err
@@ -53,13 +48,13 @@ func NewSSTIterator(path string) (SimpleIterator, error) {
 	return &sstIterator{sst: sst}, nil
 }
 
-// NewMemSSTIterator returns a `SimpleIterator` for an in-memory sstable.
+// NewMemSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
 // It's compatible with sstables written by `RocksDBSstFileWriter` and
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
-func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
+func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
-		Comparer: MVCCComparer,
+		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err
@@ -67,7 +62,7 @@ func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
 	return &sstIterator{sst: sst, verify: verify}, nil
 }
 
-// Close implements the SimpleIterator interface.
+// Close implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Close() {
 	if r.iter != nil {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
@@ -77,20 +72,21 @@ func (r *sstIterator) Close() {
 	}
 }
 
-// SeekGE implements the SimpleIterator interface.
+// SeekGE implements the SimpleMVCCIterator interface.
 func (r *sstIterator) SeekGE(key MVCCKey) {
 	if r.err != nil {
 		return
 	}
 	if r.iter == nil {
-		// Iterator creation happens on the first Seek as it involves I/O.
+		// MVCCIterator creation happens on the first Seek as it involves I/O.
 		r.iter, r.err = r.sst.NewIter(nil /* lower */, nil /* upper */)
 		if r.err != nil {
 			return
 		}
 	}
+	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	iKey, r.value = r.iter.SeekGE(EncodeKey(key))
+	iKey, r.value = r.iter.SeekGE(r.keyBuf)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
@@ -103,12 +99,12 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	}
 }
 
-// Valid implements the SimpleIterator interface.
+// Valid implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Valid() (bool, error) {
 	return r.iterValid && r.err == nil, r.err
 }
 
-// Next implements the SimpleIterator interface.
+// Next implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Next() {
 	if !r.iterValid || r.err != nil {
 		return
@@ -126,22 +122,22 @@ func (r *sstIterator) Next() {
 	}
 }
 
-// NextKey implements the SimpleIterator interface.
+// NextKey implements the SimpleMVCCIterator interface.
 func (r *sstIterator) NextKey() {
 	if !r.iterValid || r.err != nil {
 		return
 	}
-	r.nextKeyStart = append(r.nextKeyStart[:0], r.mvccKey.Key...)
-	for r.Next(); r.iterValid && r.err == nil && bytes.Equal(r.nextKeyStart, r.mvccKey.Key); r.Next() {
+	r.keyBuf = append(r.keyBuf[:0], r.mvccKey.Key...)
+	for r.Next(); r.iterValid && r.err == nil && bytes.Equal(r.keyBuf, r.mvccKey.Key); r.Next() {
 	}
 }
 
-// UnsafeKey implements the SimpleIterator interface.
+// UnsafeKey implements the SimpleMVCCIterator interface.
 func (r *sstIterator) UnsafeKey() MVCCKey {
 	return r.mvccKey
 }
 
-// UnsafeValue implements the SimpleIterator interface.
+// UnsafeValue implements the SimpleMVCCIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
 }

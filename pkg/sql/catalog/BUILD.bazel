@@ -1,0 +1,61 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "catalog",
+    srcs = [
+        "accessor.go",
+        "catalog.go",
+        "desc_getter.go",
+        "descriptor.go",
+        "descriptor_id_set.go",
+        "errors.go",
+        "schema.go",
+        "table_col_map.go",
+        "table_col_set.go",
+        "table_elements.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/server/telemetry",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "catalog_test",
+    size = "small",
+    srcs = [
+        "dep_test.go",
+        "descriptor_test.go",
+        "table_col_set_test.go",
+    ],
+    embed = [":catalog"],
+    deps = [
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils/buildutil",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

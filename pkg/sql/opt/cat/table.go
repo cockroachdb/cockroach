@@ -91,6 +91,8 @@ type Table interface {
 	StatisticCount() int
 
 	// Statistic returns the ith statistic, where i < StatisticCount.
+	// The statistics must be ordered from new to old, according to the
+	// CreatedAt() times.
 	Statistic(i int) TableStatistic
 
 	// CheckCount returns the number of check constraints present on the table.
@@ -123,6 +125,14 @@ type Table interface {
 
 	// InboundForeignKey returns the ith inbound foreign key reference.
 	InboundForeignKey(i int) ForeignKeyConstraint
+
+	// UniqueCount returns the number of unique constraints defined on this table.
+	// Includes any unique constraints implied by unique indexes.
+	UniqueCount() int
+
+	// Unique returns the ith unique constraint defined on this table, where
+	// i < UniqueCount.
+	Unique(i UniqueOrdinal) UniqueConstraint
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
@@ -237,3 +247,48 @@ type ForeignKeyConstraint interface {
 	// constraint would be violated by an update.
 	UpdateReferenceAction() tree.ReferenceAction
 }
+
+// UniqueConstraint represents a uniqueness constraint. UniqueConstraints may
+// or may not be enforced with a unique index. For example, the following
+// statement creates a unique constraint on column a without a unique index:
+//   ALTER TABLE t ADD CONSTRAINT u UNIQUE WITHOUT INDEX (a);
+// In order to enforce this uniqueness constraint, the optimizer must add
+// a uniqueness check as a postquery to any query that inserts into or updates
+// column a.
+type UniqueConstraint interface {
+	// Name of the unique constraint.
+	Name() string
+
+	// TableID returns the stable identifier of the table on which this unique
+	// constraint is defined.
+	TableID() StableID
+
+	// ColumnCount returns the number of columns in this constraint.
+	ColumnCount() int
+
+	// ColumnOrdinal returns the table column ordinal of the ith column in this
+	// constraint.
+	ColumnOrdinal(tab Table, i int) int
+
+	// Predicate returns the partial predicate expression and true if the
+	// constraint is a partial unique constraint. If it is not, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
+
+	// WithoutIndex is true if this unique constraint is not enforced by an index.
+	WithoutIndex() bool
+
+	// Validated is true if the constraint is validated (i.e. we know that the
+	// existing data satisfies the constraint). It is possible to set up a unique
+	// constraint on existing tables without validating it, in which case we
+	// cannot make any assumptions about the data. An unvalidated constraint still
+	// needs to be enforced on new mutations.
+	Validated() bool
+}
+
+// UniqueOrdinal identifies a unique constraint (in the context of a Table).
+type UniqueOrdinal = int
+
+// UniqueOrdinals identifies a list of unique constraints (in the context of
+// a Table).
+type UniqueOrdinals = []UniqueOrdinal

@@ -1,0 +1,3 @@
+alter_sequence_owner_stmt ::=
+	'ALTER' 'SEQUENCE' relation_expr 'OWNER' 'TO' role_spec
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr 'OWNER' 'TO' role_spec

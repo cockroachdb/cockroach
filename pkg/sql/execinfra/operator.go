@@ -18,3 +18,7 @@ type OpNode interface {
 	// Child returns the nth child (input) of the operator.
 	Child(nth int, verbose bool) OpNode
 }
+
+// OpChains describes a forest of OpNodes that represent a single physical plan.
+// Each entry in the slice is a root of a separate OpNode tree.
+type OpChains []OpNode

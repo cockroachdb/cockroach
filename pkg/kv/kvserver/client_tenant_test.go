@@ -32,8 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,7 @@ import (
 // TODO(ajwerner): add a test for 2).
 func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 
@@ -58,7 +60,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -78,7 +80,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		var aggregateStats enginepb.MVCCStats
 		var seen int
 		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
-			ri := replica.State()
+			ri := replica.State(ctx)
 			if ri.TenantID != tenantID.ToUint64() {
 				return true
 			}
@@ -140,11 +142,12 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 // and report the correct metrics.
 func TestTenantRateLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test utilizes manual time to make the rate-limiting calculations more
 	// obvious. This timesource is not used inside the actual database.
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	timeSource := quotapool.NewManualTime(t0)
+	timeSource := timeutil.NewManualTime(t0)
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -159,7 +162,11 @@ func TestTenantRateLimiter(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	// Set a small rate limit so the test doesn't take a long time.
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 200`)
+
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -170,38 +177,56 @@ func TestTenantRateLimiter(t *testing.T) {
 	mkKey := func() roachpb.Key {
 		return encoding.EncodeUUIDValue(tablePrefix, 1, uuid.MakeV4())
 	}
-
 	// Ensure that the qps rate limit does not affect the system tenant even for
 	// the tenant range.
 	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
-	cfg := tenantrate.LimitConfigsFromSettings(s.ClusterSettings())
-	for i := 0; i < int(cfg.Requests.Burst); i++ {
+	cfg := tenantrate.ConfigFromSettings(&s.ClusterSettings().SV)
+
+	// We don't know the exact size of the write, but we can set lower and upper
+	// bounds.
+	writeCostLower := cfg.WriteRequestUnits
+	writeCostUpper := cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
+	// burstWrites is a number of writes that don't exceed the burst limit.
+	burstWrites := int(cfg.Burst / writeCostUpper)
+	// tooManyWrites is a number of writes which definitely exceed the burst
+	// limit.
+	tooManyWrites := int(cfg.Burst/writeCostLower) + 2
+
+	// Make sure that writes to the system tenant don't block, even if we
+	// definitely exceed the burst rate.
+	for i := 0; i < tooManyWrites; i++ {
 		require.NoError(t, db.Put(ctx, mkKey(), 0))
 	}
 	// Now ensure that in the same instant the write QPS limit does affect the
-	// tenant. Issuing up to the burst limit of requests can happen without
-	// blocking.
-	for i := 0; i < int(cfg.Requests.Burst); i++ {
+	// tenant. First issue requests that can happen without blocking.
+	for i := 0; i < burstWrites; i++ {
 		require.NoError(t, db.Put(tenantCtx, mkKey(), 0))
 	}
 	// Attempt to issue another request, make sure that it gets blocked by
 	// observing a timer.
 	errCh := make(chan error, 1)
-	go func() { errCh <- db.Put(tenantCtx, mkKey(), 0) }()
-	expectedTimer := t0.Add(time.Duration(float64(1/cfg.Requests.Rate) * float64(time.Second)))
+	go func() {
+		// Issue enough requests so that one has to block.
+		for i := burstWrites; i < tooManyWrites; i++ {
+			if err := db.Put(tenantCtx, mkKey(), 0); err != nil {
+				errCh <- err
+				return
+			}
+		}
+		errCh <- nil
+	}()
+
 	testutils.SucceedsSoon(t, func() error {
 		timers := timeSource.Timers()
 		if len(timers) != 1 {
 			return errors.Errorf("seeing %d timers: %v", len(timers), timers)
 		}
-		require.EqualValues(t, expectedTimer, timers[0])
 		return nil
 	})
 
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t,
-		`SET CLUSTER SETTING server.child_metrics.enabled = true`)
+	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
 	httpClient, err := s.GetHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
@@ -213,18 +238,19 @@ func TestTenantRateLimiter(t *testing.T) {
 		return string(read)
 	}
 	makeMetricStr := func(expCount int64) string {
-		const tenantMetricStr = `kv_tenant_rate_limit_requests_admitted{store="1",tenant_id="10"}`
+		tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
 		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
 	}
-
-	// Ensure that the metric for the admitted requests is equal to the number of
-	// requests which we've admitted.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst))
 
 	// Allow the blocked request to proceed.
 	timeSource.Advance(time.Second)
 	require.NoError(t, <-errCh)
 
-	// Ensure that it is now reflected in the metrics.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst+1))
+	// Ensure that the metric for the admitted requests reflects the number of
+	// admitted requests.
+	// TODO(radu): this is fragile because a background write could sneak in and
+	// the count wouldn't match exactly.
+	m := getMetrics()
+	exp := makeMetricStr(int64(tooManyWrites))
+	require.Contains(t, m, exp, "could not find %s in metrics: \n%s\n", exp, m)
 }

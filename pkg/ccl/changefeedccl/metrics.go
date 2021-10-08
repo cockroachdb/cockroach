@@ -12,9 +12,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -34,52 +35,84 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 	return m
 }
 
+// EmitRow implements Sink interface.
 func (s *metricsSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Alloc,
 ) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitRow(ctx, table, key, value, updated)
+	err := s.wrapped.EmitRow(ctx, topic, key, value, updated, r)
 	if err == nil {
+		emitNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.EmitNanos.Inc(emitNanos)
+		s.metrics.EmitHistNanos.RecordValue(emitNanos)
 	}
 	return err
 }
 
+// EmitResolvedTimestamp implements Sink interface.
 func (s *metricsSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	start := timeutil.Now()
 	err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved)
 	if err == nil {
+		emitNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.EmittedMessages.Inc(1)
 		// TODO(dan): This wasn't correct. The wrapped sink may emit the payload
 		// any number of times.
 		// s.metrics.EmittedBytes.Inc(int64(len(payload)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.EmitNanos.Inc(emitNanos)
+		s.metrics.EmitHistNanos.RecordValue(emitNanos)
 	}
 	return err
 }
 
+// Flush implements Sink interface.
 func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
 	err := s.wrapped.Flush(ctx)
 	if err == nil {
+		flushNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.Flushes.Inc(1)
-		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.FlushNanos.Inc(flushNanos)
+		s.metrics.FlushHistNanos.RecordValue(flushNanos)
 	}
+
 	return err
 }
 
+// Close implements Sink interface.
 func (s *metricsSink) Close() error {
 	return s.wrapped.Close()
 }
+
+// Dial implements Sink interface.
+func (s *metricsSink) Dial() error {
+	return s.wrapped.Dial()
+}
+
+const (
+	changefeedCheckpointHistMaxLatency = 30 * time.Second
+	changefeedEmitHistMaxLatency       = 30 * time.Second
+	changefeedFlushHistMaxLatency      = 1 * time.Minute
+)
 
 var (
 	metaChangefeedEmittedMessages = metric.Metadata{
 		Name:        "changefeed.emitted_messages",
 		Help:        "Messages emitted by all feeds",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedForwardedResolvedMessages = metric.Metadata{
+		Name:        "changefeed.forwarded_resolved_messages",
+		Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -101,16 +134,16 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedFailures = metric.Metadata{
+		Name:        "changefeed.failures",
+		Help:        "Total number of changefeed jobs which have failed",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	metaChangefeedProcessingNanos = metric.Metadata{
 		Name:        "changefeed.processing_nanos",
 		Help:        "Time spent processing KV changes into SQL rows",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaChangefeedTableMetadataNanos = metric.Metadata{
-		Name:        "changefeed.table_metadata_nanos",
-		Help:        "Time blocked while verifying table metadata histories",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -126,6 +159,38 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaChangefeedRunning = metric.Metadata{
+		Name:        "changefeed.running",
+		Help:        "Number of currently running changefeeds, including sinkless",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaChangefeedCheckpointHistNanos = metric.Metadata{
+		Name:        "changefeed.checkpoint_hist_nanos",
+		Help:        "Time spent checkpointing changefeed progress",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// emit_hist_nanos and flush_hist_nanos duplicate information
+	// in emit_nanos, emitted_messages, and flush_nanos,
+	// flushes. While all of those could be reconstructed from
+	// information in the histogram, We've kept the older metrics
+	// to avoid breaking historical timeseries data.
+	metaChangefeedEmitHistNanos = metric.Metadata{
+		Name:        "changefeed.emit_hist_nanos",
+		Help:        "Time spent emitting messages across all changefeeds",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaChangefeedFlushHistNanos = metric.Metadata{
+		Name:        "changefeed.flush_hist_nanos",
+		Help:        "Time spent flushing messages across all changefeeds",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// TODO(dan): This was intended to be a measure of the minimum distance of
 	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
@@ -137,20 +202,39 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	metaChangefeedFrontierUpdates = metric.Metadata{
+		Name:        "changefeed.frontier_updates",
+		Help:        "Number of change frontier updates across all feeds",
+		Measurement: "Updates",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	KVFeedMetrics   kvfeed.Metrics
-	EmittedMessages *metric.Counter
-	EmittedBytes    *metric.Counter
-	Flushes         *metric.Counter
-	ErrorRetries    *metric.Counter
+	KVFeedMetrics     kvevent.Metrics
+	SchemaFeedMetrics schemafeed.Metrics
 
-	ProcessingNanos    *metric.Counter
-	TableMetadataNanos *metric.Counter
-	EmitNanos          *metric.Counter
-	FlushNanos         *metric.Counter
+	EmittedMessages  *metric.Counter
+	ResolvedMessages *metric.Counter
+	EmittedBytes     *metric.Counter
+	Flushes          *metric.Counter
+	ErrorRetries     *metric.Counter
+	Failures         *metric.Counter
+
+	ProcessingNanos *metric.Counter
+	EmitNanos       *metric.Counter
+	FlushNanos      *metric.Counter
+
+	CheckpointHistNanos *metric.Histogram
+	EmitHistNanos       *metric.Histogram
+	FlushHistNanos      *metric.Histogram
+
+	Running *metric.Gauge
+
+	FrontierUpdates *metric.Counter
+	ThrottleMetrics cdcutils.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -166,19 +250,33 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		KVFeedMetrics:   kvfeed.MakeMetrics(histogramWindow),
-		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
-		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
-		Flushes:         metric.NewCounter(metaChangefeedFlushes),
-		ErrorRetries:    metric.NewCounter(metaChangefeedErrorRetries),
+		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
+		EmittedMessages:   metric.NewCounter(metaChangefeedEmittedMessages),
+		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
+		EmittedBytes:      metric.NewCounter(metaChangefeedEmittedBytes),
+		Flushes:           metric.NewCounter(metaChangefeedFlushes),
+		ErrorRetries:      metric.NewCounter(metaChangefeedErrorRetries),
+		Failures:          metric.NewCounter(metaChangefeedFailures),
 
-		ProcessingNanos:    metric.NewCounter(metaChangefeedProcessingNanos),
-		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
-		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
-		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
+		ProcessingNanos: metric.NewCounter(metaChangefeedProcessingNanos),
+		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
+		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
+
+		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
+			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
+		EmitHistNanos: metric.NewHistogram(metaChangefeedEmitHistNanos, histogramWindow,
+			changefeedEmitHistMaxLatency.Nanoseconds(), 2),
+		FlushHistNanos: metric.NewHistogram(metaChangefeedFlushHistNanos, histogramWindow,
+			changefeedFlushHistMaxLatency.Nanoseconds(), 2),
+
+		Running:         metric.NewGauge(metaChangefeedRunning),
+		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
 	}
-	m.mu.resolved = make(map[int]hlc.Timestamp)
 
+	m.mu.resolved = make(map[int]hlc.Timestamp)
+	m.mu.id = 1 // start the first id at 1 so we can detect initialization
 	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
 		now := timeutil.Now()
 		var maxBehind time.Duration

@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "blobs",
+    srcs = [
+        "client.go",
+        "local_storage.go",
+        "service.go",
+        "stream.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/blobs/blobspb:blobspb_go_proto",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/util/fileutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "blobs_test",
+    size = "small",
+    srcs = [
+        "bench_test.go",
+        "client_test.go",
+        "local_storage_test.go",
+        "service_test.go",
+    ],
+    embed = [":blobs"],
+    deps = [
+        "//pkg/blobs/blobspb:blobspb_go_proto",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/testutils",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/netutil",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

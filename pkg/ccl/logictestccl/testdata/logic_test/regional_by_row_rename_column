@@ -1,0 +1,94 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant
+
+# This test seems to flake (#60717).
+# It seems to hit the codepath:
+#        testdata/logic_test/regional_by_row:
+#        expected success, but found
+#        (42704) type with ID 83 does not exist
+#        collection.go:1447: in getTypeByID()
+# During the change, which seems unrelated.
+#
+# This test is split out in hopes of reproducing the error, as
+# well as checking it is not because of dependent behavior when
+# with other state in regional_by_row.
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE public.regional_by_row_table (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  j JSONB NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
+  UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
+  INDEX regional_by_row_table_a_idx (a ASC),
+  UNIQUE INDEX regional_by_row_table_b_key (b ASC),
+  INVERTED INDEX regional_by_row_table_j_idx (j),
+  INDEX new_idx (a ASC, b ASC),
+  UNIQUE INDEX unique_b_a (b ASC, a ASC),
+  FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
+)
+
+statement ok
+ALTER TABLE regional_by_row_table RENAME COLUMN crdb_region TO crdb_region2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
+----
+CREATE TABLE public.regional_by_row_table (
+                                                pk INT8 NOT NULL,
+                                                pk2 INT8 NOT NULL,
+                                                a INT8 NOT NULL,
+                                                b INT8 NOT NULL,
+                                                j JSONB NULL,
+                                                crdb_region2 public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                                CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
+                                                UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
+                                                INDEX regional_by_row_table_a_idx (a ASC),
+                                                UNIQUE INDEX regional_by_row_table_b_key (b ASC),
+                                                INVERTED INDEX regional_by_row_table_j_idx (j),
+                                                INDEX new_idx (a ASC, b ASC),
+                                                UNIQUE INDEX unique_b_a (b ASC, a ASC),
+                                                FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region2)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+CREATE TABLE regional_by_row_table_as (
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col crdb_internal_region AS (
+    CASE
+      WHEN pk <= 10 THEN 'us-east-1'
+      ELSE 'ap-southeast-2'
+    END
+  ) STORED,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+# Tests renaming a referenced explicit column in REGIONAL BY ROW succeeds.
+statement ok
+ALTER TABLE regional_by_row_table_as RENAME COLUMN crdb_region_col TO cr
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_as]
+----
+CREATE TABLE public.regional_by_row_table_as (
+                                  pk INT8 NOT NULL,
+                                  a INT8 NULL,
+                                  b INT8 NULL,
+                                  cr public.crdb_internal_region NOT NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::public.crdb_internal_region ELSE 'ap-southeast-2':::public.crdb_internal_region END) STORED,
+                                  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                  INDEX regional_by_row_table_as_a_idx (a ASC),
+                                  UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
+                                  FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, cr)
+) LOCALITY REGIONAL BY ROW AS cr

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build race
+// +build crdb_test
 
 package memo
 
@@ -16,22 +16,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// CheckExpr does sanity checking on an Expr. This code is called in testrace
-// builds (which gives us test/CI coverage but elides this code in regular
-// builds).
+// CheckExpr does sanity checking on an Expr. This function is only defined in
+// crdb_test builds so that checks are run for tests while keeping the check
+// code out of non-test builds, since it can be expensive to run.
 //
 // This function does not assume that the expression has been fully normalized.
-//
-// This function is only defined in race builds, so that checks are run on every
-// PR (as part of make testrace) while keeping the check code out of non-test
-// builds, since it can be expensive to run.
 func (m *Memo) CheckExpr(e opt.Expr) {
+	if m.disableCheckExpr {
+		return
+	}
+
 	// Check properties.
 	switch t := e.(type) {
 	case RelExpr:
@@ -40,7 +39,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		// If the expression was added to an existing group, cross-check its
 		// properties against the properties of the group. Skip this check if the
 		// operator is known to not have code for building logical props.
-		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp {
+		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp && t.Op() != opt.PlaceholderScanOp {
 			var relProps props.Relational
 			// Don't build stats when verifying logical props - unintentionally
 			// building stats for non-normalized expressions could add extra colStats
@@ -76,8 +75,21 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
 			panic(errors.AssertionFailedf("NoIndexJoin and ForceIndex set"))
 		}
+		if evalCtx := m.logPropsBuilder.evalCtx; evalCtx != nil && t.Constraint != nil {
+			if expected := t.Constraint.ExactPrefix(evalCtx); expected != t.ExactPrefix {
+				panic(errors.AssertionFailedf(
+					"expected exact prefix %d but found %d", expected, t.ExactPrefix,
+				))
+			}
+		}
 
 	case *ProjectExpr:
+		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
+			panic(errors.AssertionFailedf(
+				"projection passes through columns not in input: %v",
+				t.Input.Relational().OutputCols.Difference(t.Passthrough),
+			))
+		}
 		for _, item := range t.Projections {
 			// Check that column id is set.
 			if item.Col == 0 {
@@ -100,6 +112,37 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *SelectExpr:
 		checkFilters(t.Filters)
+
+	case *UnionExpr, *UnionAllExpr, *LocalityOptimizedSearchExpr:
+		setPrivate := t.Private().(*SetPrivate)
+		outColSet := setPrivate.OutCols.ToSet()
+
+		// Check that columns on the left side of the union are not reused in
+		// the output.
+		leftColSet := setPrivate.LeftCols.ToSet()
+		if outColSet.Intersects(leftColSet) {
+			panic(errors.AssertionFailedf(
+				"union reuses columns in left input: %v",
+				outColSet.Intersection(leftColSet),
+			))
+		}
+
+		// Check that columns on the right side of the union are not reused in
+		// the output.
+		rightColSet := setPrivate.RightCols.ToSet()
+		if outColSet.Intersects(rightColSet) {
+			panic(errors.AssertionFailedf(
+				"union reuses columns in right input: %v",
+				outColSet.Intersection(rightColSet),
+			))
+		}
+
+		switch t.Op() {
+		case opt.LocalityOptimizedSearchOp:
+			if !setPrivate.Ordering.Any() {
+				panic(errors.AssertionFailedf("locality optimized search op has a non-empty ordering"))
+			}
+		}
 
 	case *AggregationsExpr:
 		var checkAggs func(scalar opt.ScalarExpr)
@@ -133,6 +176,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *DistinctOnExpr, *EnsureDistinctOnExpr, *UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates can be only FirstAgg or ConstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -146,6 +190,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *GroupByExpr, *ScalarGroupByExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates cannot be FirstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -161,14 +206,41 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *LookupJoinExpr:
-		if len(t.KeyCols) == 0 {
-			panic(errors.AssertionFailedf("lookup join with no key columns"))
+		if len(t.KeyCols) == 0 && len(t.LookupExpr) == 0 {
+			panic(errors.AssertionFailedf("lookup join with no key columns or lookup filters"))
+		}
+		if len(t.KeyCols) != 0 && len(t.LookupExpr) != 0 {
+			panic(errors.AssertionFailedf("lookup join with both key columns and lookup filters"))
 		}
 		if t.Cols.Empty() {
 			panic(errors.AssertionFailedf("lookup join with no output columns"))
 		}
 		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(errors.AssertionFailedf("lookup join with no lookup columns"))
+		}
+		var requiredCols opt.ColSet
+		requiredCols.UnionWith(t.Relational().OutputCols)
+		requiredCols.UnionWith(t.ConstFilters.OuterCols())
+		requiredCols.UnionWith(t.On.OuterCols())
+		requiredCols.UnionWith(t.KeyCols.ToSet())
+		requiredCols.UnionWith(t.LookupExpr.OuterCols())
+		idx := m.Metadata().Table(t.Table).Index(t.Index)
+		for i := range t.KeyCols {
+			requiredCols.Add(t.Table.ColumnID(idx.Column(i).Ordinal()))
+		}
+		if !t.Cols.SubsetOf(requiredCols) {
+			panic(errors.AssertionFailedf("lookup join with columns that are not required"))
+		}
+		if t.IsSecondJoinInPairedJoiner {
+			ij, ok := t.Input.(*InvertedJoinExpr)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"lookup paired-join is paired with %T instead of inverted join", t.Input))
+			}
+			if !ij.IsFirstJoinInPairedJoiner {
+				panic(errors.AssertionFailedf(
+					"lookup paired-join is paired with inverted join that thinks it is unpaired"))
+			}
 		}
 
 	case *InsertExpr:
@@ -184,8 +256,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			if (kind == cat.Ordinary || kind == cat.WriteOnly) && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
-			if (kind == cat.System || kind == cat.Virtual) && t.InsertCols[i] != 0 {
-				panic(errors.AssertionFailedf("system or virtual column found in insertion columns"))
+			if t.InsertCols[i] != 0 {
+				switch kind {
+				case cat.System:
+					panic(errors.AssertionFailedf("system column found in insertion columns"))
+				case cat.Inverted:
+					panic(errors.AssertionFailedf("inverted column found in insertion columns"))
+				}
 			}
 		}
 
@@ -224,6 +301,12 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Value == tree.DNull {
 			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
 		}
+		if t.Value == tree.DBoolTrue {
+			panic(errors.AssertionFailedf("true values should always use TrueSingleton, not ConstExpr"))
+		}
+		if t.Value == tree.DBoolFalse {
+			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
+		}
 
 	default:
 		if opt.IsJoinOp(e) {
@@ -255,7 +338,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	}
 }
 
-func (m *Memo) checkColListLen(colList opt.ColList, expectedLen int, listName string) {
+func (m *Memo) checkColListLen(colList opt.OptionalColList, expectedLen int, listName string) {
 	if len(colList) != expectedLen {
 		panic(errors.AssertionFailedf("column list %s expected length = %d, actual length = %d",
 			listName, log.Safe(expectedLen), len(colList)))
@@ -278,16 +361,29 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 
 // checkExprOrdering runs checks on orderings stored inside operators.
 func checkExprOrdering(e opt.Expr) {
-	// Verify that orderings stored in operators only refer to columns produced by
-	// their input.
-	var ordering physical.OrderingChoice
+	// Verify that orderings stored in operators only refer to output columns.
+	var ordering props.OrderingChoice
 	switch t := e.Private().(type) {
-	case *physical.OrderingChoice:
+	case *props.OrderingChoice:
 		ordering = *t
 	case *OrdinalityPrivate:
 		ordering = t.Ordering
 	case GroupingPrivate:
 		ordering = t.Ordering
+	case *SetPrivate:
+		ordering = t.Ordering
+		switch e.Op() {
+		case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp, opt.UnionOp:
+			// For these operators, the ordering must include all output columns.
+			if !ordering.Any() {
+				if outCols := e.(RelExpr).Relational().OutputCols; !outCols.SubsetOf(ordering.ColSet()) {
+					panic(errors.AssertionFailedf(
+						"ordering for streaming set ops must include all output columns %v (op: %s, outcols: %v)",
+						log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+					))
+				}
+			}
+		}
 	default:
 		return
 	}
@@ -303,10 +399,10 @@ func checkFilters(filters FiltersExpr) {
 	for _, item := range filters {
 		if item.Condition.Op() == opt.RangeOp {
 			if !item.scalar.TightConstraints {
-				panic(errors.AssertionFailedf("Range operator should always have tight constraints"))
+				panic(errors.AssertionFailedf("range operator should always have tight constraints"))
 			}
 			if item.scalar.OuterCols.Len() != 1 {
-				panic(errors.AssertionFailedf("Range operator should have exactly one outer col"))
+				panic(errors.AssertionFailedf("range operator should have exactly one outer col"))
 			}
 		}
 	}
@@ -329,6 +425,23 @@ func checkErrorOnDup(e RelExpr) {
 	}
 }
 
+func checkNullsAreDistinct(e RelExpr) {
+	// Only UpsertDistinctOn and EnsureUpsertDistinctOn should set the
+	// NullsAreDistinct field to true.
+	if e.Op() != opt.UpsertDistinctOnOp &&
+		e.Op() != opt.EnsureUpsertDistinctOnOp &&
+		e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to true", log.Safe(e.Op())))
+	}
+	if (e.Op() == opt.UpsertDistinctOnOp ||
+		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
+		!e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to false", log.Safe(e.Op())))
+	}
+}
+
 func checkOutputCols(e opt.Expr) {
 	set := opt.ColSet{}
 
@@ -338,7 +451,11 @@ func checkOutputCols(e opt.Expr) {
 			continue
 		}
 
-		// The output columns of child expressions cannot overlap.
+		// The output columns of child expressions cannot overlap. The only
+		// exception is the first child of RecursiveCTE.
+		if e.Op() == opt.RecursiveCTEOp && i == 0 {
+			continue
+		}
 		cols := rel.Relational().OutputCols
 		if set.Intersects(cols) {
 			panic(errors.AssertionFailedf(

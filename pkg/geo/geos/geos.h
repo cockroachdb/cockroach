@@ -16,6 +16,7 @@ extern "C" {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
+typedef void* CR_GEOS_PreparedInternalGeometry;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -37,6 +38,13 @@ typedef struct {
   size_t len;
 } CR_GEOS_String;
 
+// CR_GEOS_PreparedGeometry is a wrapper containing GEOS PreparedGeometry and it's source Geometry.
+// This allows us to free the memory for both at the same time.
+typedef struct {
+  CR_GEOS_Geometry g;
+  CR_GEOS_PreparedInternalGeometry p;
+} CR_GEOS_PreparedGeometry;
+
 // CR_GEOS_BufferParams are parameters that will be passed to buffer.
 typedef struct {
   int endCapStyle;
@@ -55,8 +63,7 @@ typedef struct CR_GEOS CR_GEOS;
 // Returns a string containing an error if an error was found. The loc slice
 // must be convertible to a NUL character terminated C string.
 // The CR_GEOS object will be stored in lib.
-// The error returned does not need to be freed (see comment for CR_GEOS_Slice).
-CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib);
+CR_GEOS_Status CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib);
 
 // CR_GEOS_WKTToWKB converts a given WKT into it's EWKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.
@@ -85,20 +92,48 @@ CR_GEOS_Status CR_GEOS_MakeValid(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_String* 
 
 CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
+CR_GEOS_Status CR_GEOS_Normalize(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* normalizedEWKB);
+CR_GEOS_Status CR_GEOS_LineMerge(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* ewkb);
+CR_GEOS_Status CR_GEOS_MinimumClearance(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
+CR_GEOS_Status CR_GEOS_MinimumClearanceLine(CR_GEOS* lib, CR_GEOS_Slice a,
+                                            CR_GEOS_String* clearanceEWKB);
+
+//
+// Unary predicates.
+//
+
+CR_GEOS_Status CR_GEOS_IsSimple(CR_GEOS* lib, CR_GEOS_Slice a, char* ret);
 
 //
 // Topology operators.
 //
 
+CR_GEOS_Status CR_GEOS_Boundary(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* boundaryEWKB);
 CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* centroidEWKB);
 CR_GEOS_Status CR_GEOS_ConvexHull(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* convexHullEWKB);
+CR_GEOS_Status CR_GEOS_Difference(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                  CR_GEOS_String* diffEWKB);
+CR_GEOS_Status CR_GEOS_Simplify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* simplifyEWKB,
+                                double tolerance);
+CR_GEOS_Status CR_GEOS_TopologyPreserveSimplify(CR_GEOS* lib, CR_GEOS_Slice a,
+                                                CR_GEOS_String* simplifyEWKB, double tolerance);
+CR_GEOS_Status CR_GEOS_UnaryUnion(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* unionEWKB);
 CR_GEOS_Status CR_GEOS_Union(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                              CR_GEOS_String* unionEWKB);
 CR_GEOS_Status CR_GEOS_PointOnSurface(CR_GEOS* lib, CR_GEOS_Slice a,
                                       CR_GEOS_String* pointOnSurfaceEWKB);
 CR_GEOS_Status CR_GEOS_Intersection(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                                     CR_GEOS_String* intersectionEWKB);
+CR_GEOS_Status CR_GEOS_SymDifference(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                     CR_GEOS_String* symdifferenceEWKB);
+CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                   CR_GEOS_String* ret);
+CR_GEOS_Status CR_GEOS_Node(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* ret);
 
+CR_GEOS_Status CR_GEOS_MinimumBoundingCircle(CR_GEOS* lib, CR_GEOS_Slice a, double* radius,
+                                              CR_GEOS_String* centerEWKB, CR_GEOS_String* polygonEWKB);
+
+CR_GEOS_Status CR_GEOS_MinimumRotatedRectangle(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_String* ret);
 //
 // Linear reference.
 //
@@ -110,6 +145,24 @@ CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distanc
 //
 
 CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret);
+CR_GEOS_Status CR_GEOS_FrechetDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret);
+CR_GEOS_Status CR_GEOS_FrechetDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                              double densifyFrac, double* ret);
+CR_GEOS_Status CR_GEOS_HausdorffDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                         double* ret);
+CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                                double densifyFrac, double* ret);
+CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
+                                      double tolerance, char* ret);
+
+//
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_Prepare(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry** ret);
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry* g);
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry* a, CR_GEOS_Slice b, char* ret);
 
 //
 // Binary predicates.
@@ -131,8 +184,15 @@ CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, ch
 //
 
 CR_GEOS_Status CR_GEOS_Relate(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String* ret);
+CR_GEOS_Status CR_GEOS_RelateBoundaryNodeRule(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                              int bnr, CR_GEOS_String* ret);
 CR_GEOS_Status CR_GEOS_RelatePattern(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                                      CR_GEOS_Slice pattern, char* ret);
+
+CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_Slice env,
+                                      double tolerance, int onlyEdges, CR_GEOS_String* ret);
+
+CR_GEOS_Status CR_GEOS_Snap(CR_GEOS* lib, CR_GEOS_Slice input, CR_GEOS_Slice target, double tolerance, CR_GEOS_String* ret);
 
 #ifdef __cplusplus
 }  // extern "C"

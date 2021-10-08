@@ -52,10 +52,8 @@ func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
 // NOTE: This method cannot do complete bounds checking, so it's up to the
 //       caller to ensure that this column is really in the given base table.
 func (t TableID) ColumnOrdinal(id ColumnID) int {
-	if util.RaceEnabled {
-		if id < t.firstColID() {
-			panic(errors.AssertionFailedf("ordinal cannot be negative"))
-		}
+	if util.CrdbTestBuild && id < t.firstColID() {
+		panic(errors.AssertionFailedf("ordinal cannot be negative"))
 	}
 	return int(id - t.firstColID())
 }
@@ -115,8 +113,8 @@ const maxTableAnnIDCount = 2
 
 // TableMeta stores information about one of the tables stored in the metadata.
 //
-// NOTE: Metadata.DuplicateTable must be kept in sync with changes to this
-// struct.
+// NOTE: Metadata.DuplicateTable and TableMeta.copyFrom must be kept in sync
+// with changes to this struct.
 type TableMeta struct {
 	// MetaID is the identifier for this table that is unique within the query
 	// metadata.
@@ -137,6 +135,10 @@ type TableMeta struct {
 	// the consistency of foreign keys.
 	IgnoreForeignKeys bool
 
+	// IgnoreUniqueWithoutIndexKeys is true if we should disable any rules that
+	// depend on the consistency of unique without index constraints.
+	IgnoreUniqueWithoutIndexKeys bool
+
 	// Constraints stores a *FiltersExpr containing filters that are known to
 	// evaluate to true on the table data. This list is extracted from validated
 	// check constraints; specifically, those check constraints that we can prove
@@ -156,26 +158,53 @@ type TableMeta struct {
 	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
-	// PartialIndexPredicates is a map from index ordinals on the table to
+	// partialIndexPredicates is a map from index ordinals on the table to
 	// *FiltersExprs representing the predicate on the corresponding partial
 	// index. If an index is not a partial index, it will not have an entry in
 	// the map.
-	PartialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
+	partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
 
-// clearAnnotations resets all the table annotations; used when copying a
-// Metadata.
-func (tm *TableMeta) clearAnnotations() {
-	for i := range tm.anns {
-		tm.anns[i] = nil
+// copyFrom initializes the receiver with a copy of the given TableMeta, which
+// is considered immutable.
+//
+// Annotations are not copied because they can be mutable.
+//
+// Scalar expressions are reconstructed using copyScalarFn, which returns a copy
+// of the given scalar expression.
+func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
+	*tm = TableMeta{
+		MetaID:                       from.MetaID,
+		Table:                        from.Table,
+		Alias:                        from.Alias,
+		IgnoreForeignKeys:            from.IgnoreForeignKeys,
+		IgnoreUniqueWithoutIndexKeys: from.IgnoreUniqueWithoutIndexKeys,
+		// Annotations are not copied.
+	}
+
+	if from.Constraints != nil {
+		tm.Constraints = copyScalarFn(from.Constraints).(ScalarExpr)
+	}
+
+	if from.ComputedCols != nil {
+		tm.ComputedCols = make(map[ColumnID]ScalarExpr, len(from.ComputedCols))
+		for col, e := range from.ComputedCols {
+			tm.ComputedCols[col] = copyScalarFn(e).(ScalarExpr)
+		}
+	}
+
+	if from.partialIndexPredicates != nil {
+		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(from.partialIndexPredicates))
+		for idx, e := range from.partialIndexPredicates {
+			tm.partialIndexPredicates[idx] = copyScalarFn(e).(ScalarExpr)
+		}
 	}
 }
 
-// IndexColumns returns the metadata IDs for the set of columns in the given
-// index.
+// IndexColumns returns the set of table columns in the given index.
 // TODO(justin): cache this value in the table metadata.
 func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
@@ -188,8 +217,24 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexKeyColumns returns the metadata IDs for the set of strict key columns in
-// the given index.
+// IndexColumnsMapInverted returns the set of table columns in the given index.
+// Inverted index columns are mapped to their source column.
+func (tm *TableMeta) IndexColumnsMapInverted(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
+
+	var indexCols ColSet
+	for i, n := 0, index.ColumnCount(); i < n; i++ {
+		col := index.Column(i)
+		ord := col.Ordinal()
+		if col.Kind() == cat.Inverted {
+			ord = col.InvertedSourceColumnOrdinal()
+		}
+		indexCols.Add(tm.MetaID.ColumnID(ord))
+	}
+	return indexCols
+}
+
+// IndexKeyColumns returns the set of strict key columns in the given index.
 func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
@@ -201,19 +246,17 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexKeyColumnsMapVirtual returns the metadata IDs for the set of strict key
-// columns in the given index. Inverted index columns are mapped to their source
-// column.
-func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
+// IndexKeyColumnsMapInverted returns the set of strict key columns in the given
+// index. Inverted index columns are mapped to their source column.
+func (tm *TableMeta) IndexKeyColumnsMapInverted(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
-		ord := 0
-		if i == 0 && index.IsInverted() {
-			ord = index.Column(i).InvertedSourceColumnOrdinal()
-		} else {
-			ord = index.Column(i).Ordinal()
+		col := index.Column(i)
+		ord := col.Ordinal()
+		if col.Kind() == cat.Inverted {
+			ord = col.InvertedSourceColumnOrdinal()
 		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
@@ -237,10 +280,49 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 // AddPartialIndexPredicate adds a partial index predicate to the table's
 // metadata.
 func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
-	if tm.PartialIndexPredicates == nil {
-		tm.PartialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
+	if tm.partialIndexPredicates == nil {
+		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
 	}
-	tm.PartialIndexPredicates[ord] = pred
+	tm.partialIndexPredicates[ord] = pred
+}
+
+// PartialIndexPredicate returns the given index's predicate scalar expression,
+// if the index is a partial index. Returns ok=false if the index is not a
+// partial index. Panics if the index is a partial index according to the
+// catalog, but a predicate scalar expression does not exist in the table
+// metadata.
+func (tm *TableMeta) PartialIndexPredicate(ord cat.IndexOrdinal) (pred ScalarExpr, ok bool) {
+	if _, isPartialIndex := tm.Table.Index(ord).Predicate(); !isPartialIndex {
+		return nil, false
+	}
+	pred, ok = tm.partialIndexPredicates[ord]
+	if !ok {
+		panic(errors.AssertionFailedf("partial index predicate does not exist in table metadata"))
+	}
+	return pred, true
+}
+
+// PartialIndexPredicatesUnsafe returns the partialIndexPredicates map.
+//
+// WARNING: The returned map is NOT a source-of-truth for determining if an
+// index is a partial index. It does not verify that all partial indexes in the
+// catalog are included in the returned map. This function should only be used
+// in tests or for formatting optimizer expressions. Use PartialIndexPredicate
+// in all other cases.
+func (tm *TableMeta) PartialIndexPredicatesUnsafe() map[cat.IndexOrdinal]ScalarExpr {
+	return tm.partialIndexPredicates
+}
+
+// VirtualComputedColumns returns the set of virtual computed table columns.
+func (tm *TableMeta) VirtualComputedColumns() ColSet {
+	var virtualCols ColSet
+	for col := range tm.ComputedCols {
+		ord := tm.MetaID.ColumnOrdinal(col)
+		if tm.Table.Column(ord).IsVirtualComputed() {
+			virtualCols.Add(col)
+		}
+	}
+	return virtualCols
 }
 
 // TableAnnotation returns the given annotation that is associated with the

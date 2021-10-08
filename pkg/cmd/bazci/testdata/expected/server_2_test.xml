@@ -1,0 +1,13 @@
+<testsuite errors="0" failures="0" skipped="0" tests="11" time="26.365" name="github.com/cockroachdb/cockroach/pkg/server">
+	<testcase name="TestAdminAPIUsers" time="0.410"></testcase>
+	<testcase name="TestClusterVersionMixedVersionTooOld" time="0.740"></testcase>
+	<testcase name="TestCorruptedClusterID" time="0.130"></testcase>
+	<testcase name="TestDecommissionSelf" time="2.300"></testcase>
+	<testcase name="TestDummyInitializeNodeFromBundle" time="7.330"></testcase>
+	<testcase name="TestLivenessAPI" time="2.750"></testcase>
+	<testcase name="TestMakeIdleMonitor" time="2.270"></testcase>
+	<testcase name="TestMetricsEndpoint" time="0.610"></testcase>
+	<testcase name="TestSecureHTTPRedirect" time="0.430"></testcase>
+	<testcase name="TestSettingsSetAndShow" time="0.360"></testcase>
+	<testcase name="TestStatusAPITransactions" time="8.880"></testcase>
+</testsuite>

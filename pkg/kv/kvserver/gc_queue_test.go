@@ -20,7 +20,6 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -69,7 +68,7 @@ func TestGCQueueScoreString(t *testing.T) {
 			ExpMinGCByteAgeReduction: 256 * 1024,
 			GCByteAge:                512 * 1024,
 			GCBytes:                  1024 * 3,
-			LikelyLastGC:             5 * time.Second,
+			LastGC:                   5 * time.Second,
 		},
 			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
 likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
@@ -109,7 +108,9 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
+		r := makeGCQueueScoreImpl(
+			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
+			true /* canAdvanceGCThreshold */)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -131,7 +132,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, zonepb.GCPolicy{TTLSeconds: 60}, hlc.Timestamp{})
+		}, 60*time.Second, hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
@@ -147,7 +148,6 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	ms.SysBytes += largeAbortSpanBytesThreshold
 	ms.SysCount++
 
-	gcThresh := hlc.Timestamp{WallTime: 1}
 	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
 
 	// GC triggered if abort span should all be gc'able and it's large.
@@ -155,8 +155,8 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			ms, 10000*time.Second,
+			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -170,22 +170,61 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			ms, 10000*time.Second,
+			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
 	}
 
-	// Heuristic doesn't fire if likely last GC within TxnCleanupThreshold.
+	// Heuristic doesn't fire if last GC within TxnCleanupThreshold.
 	{
 		r := makeGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
-			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			ms, 10000*time.Second,
+			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
 		)
 		require.False(t, r.ShouldQueue)
 		require.Zero(t, r.FinalScore)
+	}
+}
+
+func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const seed = 1
+	ctx := context.Background()
+	now := hlc.Timestamp{WallTime: 1e6 * 1e9}
+	gcTTL := time.Second
+
+	testcases := map[string]struct {
+		lastGC   hlc.Timestamp
+		mvccGC   bool
+		expectGC bool
+	}{
+		"never GCed":               {lastGC: hlc.Timestamp{}, expectGC: true},
+		"just GCed":                {lastGC: now.Add(-1, 0), expectGC: false},
+		"future GC":                {lastGC: now.Add(1, 0), expectGC: false},
+		"MVCC GC ignores cooldown": {lastGC: now.Add(-1, 0), mvccGC: true, expectGC: true},
+		"before GC cooldown":       {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
+		"at GC cooldown":           {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds(), 0), expectGC: true},
+		"after GC cooldown":        {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
+	}
+	for name, tc := range testcases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			ms := enginepb.MVCCStats{
+				IntentCount: 1e9,
+			}
+			if tc.mvccGC {
+				ms.ValBytes = 1e9
+			}
+
+			r := makeGCQueueScoreImpl(
+				ctx, seed, now, ms, gcTTL, tc.lastGC, true /* canAdvanceGCThreshold */)
+			require.Equal(t, tc.expectGC, r.ShouldQueue)
+		})
 	}
 }
 
@@ -236,7 +275,7 @@ func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
 func (cws *cachedWriteSimulator) multiKey(
 	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
 ) {
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 	t, ctx := cws.t, context.Background()
 
@@ -254,7 +293,7 @@ func (cws *cachedWriteSimulator) multiKey(
 func (cws *cachedWriteSimulator) singleKeySteady(
 	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
 ) {
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 	t, ctx := cws.t, context.Background()
 	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))
@@ -302,9 +341,8 @@ func (cws *cachedWriteSimulator) shouldQueue(
 ) {
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
-	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}, hlc.Timestamp{})
+	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
+		hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
@@ -409,15 +447,13 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
-		// normalized by one day at the time of writing. Note that the size of the writes
+		// normalized by one hour at the time of writing. Note that the size of the writes
 		// doesn't matter. In reality, the value-based GC score will often strike first.
 		cws.multiKey(100, valSize, txn, &ms)
 
-		cws.shouldQueue(false, 1.00, 24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 1.99, 2*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 3.99, 4*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 6.98, 7*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(true, 11.97, 12*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 0.12, 1*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 0.87, 7*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(true, 1.12, 9*time.Hour, irrelevantTTL, ms)
 	}
 }
 
@@ -432,15 +468,17 @@ func TestGCQueueProcess(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
+	const intentAgeThreshold = 2 * time.Hour
+
 	tc.manualClock.Increment(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                        // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1e9, 0)                            // GC will occur at time=25 hours
-	ts2m1 := ts2.Prev()                                           // ts2 - 1 so we have something not right at the GC time
-	ts3 := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)     // 2h old
-	ts4 := makeTS(now-(gc.IntentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1e9, 0)                                     // 1s old
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                         // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1e9, 0)                                  // 1s old
 	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("b")
 	key3 := roachpb.Key("c")
@@ -562,19 +600,19 @@ func TestGCQueueProcess(t *testing.T) {
 		desc := tc.repl.Desc()
 		defer snap.Close()
 
-		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+		conf, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
 		if err != nil {
 			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
 
 		now := tc.Clock().Now()
-		newThreshold := gc.CalculateThreshold(now, *zone.GC)
-		return gc.Run(ctx, desc, snap, now, newThreshold, *zone.GC,
-			gc.NoopGCer{},
+		newThreshold := gc.CalculateThreshold(now, conf.TTL())
+		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{IntentAgeThreshold: intentAgeThreshold},
+			conf.TTL(), gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
 			},
-			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+			func(ctx context.Context, txn *roachpb.Transaction) error {
 				return nil
 			})
 	}()
@@ -589,7 +627,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store, tc.gossip)
+	gcQ := newGCQueue(tc.store)
 	processed, err := gcQ.process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -822,7 +860,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	// Run GC.
-	gcQ := newGCQueue(tc.store, tc.gossip)
+	gcQ := newGCQueue(tc.store)
 	cfg := tc.gossip.GetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
@@ -893,9 +931,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := storage.MVCCIterate(ctx, tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
-		storage.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
+		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
-			return false, nil
+			return nil
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -907,9 +945,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
 	tc.repl.raftMu.Lock()
-	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
-	tc.repl.mu.Unlock()
+	tc.repl.mu.RLock()
+	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, batch) // check that in-mem and on-disk state were updated
+	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
 }
 
@@ -931,7 +969,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
-	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
+	intentAgeThreshold := gc.IntentAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
+	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
 	txns[0].WriteTimestamp = intentResolveTS
 	// The MinTimestamp is used by pushers that don't find a transaction record to
@@ -956,34 +995,35 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	confReader, err := tc.store.GetConfReader()
+	if err != nil {
+		t.Fatal(err)
 	}
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assert.True(t, processed, "queue not processed")
 
-	// Iterate through all values to ensure intents have been fully resolved.
+	// MVCCIterate through all values to ensure intents have been fully resolved.
 	// This must be done in a SucceedsSoon loop because intent resolution
 	// is initiated asynchronously from the GC queue.
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
-		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax,
-			func(kv storage.MVCCKeyValue) (bool, error) {
-				if !kv.Key.IsValue() {
-					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-						return false, err
-					}
-					if meta.Txn != nil {
-						return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-					}
+		// The range is specified using only global keys, since the implementation
+		// may use an intentInterleavingIter.
+		return tc.store.Engine().MVCCIterate(keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+					return err
 				}
-				return false, nil
-			})
+				if meta.Txn != nil {
+					return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+				}
+			}
+			return nil
+		})
 	})
 }
 
@@ -1016,14 +1056,14 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	confReader, err := tc.store.GetConfReader()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1121,17 +1161,17 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
-	}
-	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))
+	confReader, err := tc.store.GetConfReader()
 	if err != nil {
-		t.Fatalf("could not find zone config for range %s", err)
+		t.Fatal(err)
 	}
-	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1e9 + 1)
-	gcQ := newGCQueue(tc.store, tc.gossip)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	conf, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
+	if err != nil {
+		t.Fatalf("could not find span config for range %s", err)
+	}
+	tc.manualClock.Increment(conf.TTL().Nanoseconds() + 1)
+	gcQ := newGCQueue(tc.store)
+	processed, err := gcQ.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}

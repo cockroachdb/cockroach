@@ -12,28 +12,34 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc *dbdesc.Mutable
 	d      *dropCascadeState
 }
 
@@ -41,11 +47,15 @@ type dropDatabaseNode struct {
 // Privileges: DROP on database and DROP on all tables in the database.
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
-// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
-// (cockroach database == postgres schema). the postgres default of not
-// dropping the schema if there are dependent objects is more sensible
-// (see the RESTRICT and CASCADE options).
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"DROP DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -55,7 +65,8 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), !n.IfExists)
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+		tree.DatabaseLookupFlags{Required: !n.IfExists})
 	if err != nil {
 		return nil, err
 	}
@@ -76,15 +87,16 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		found, res, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID, schema)
+		res, err := p.Descriptors().GetSchemaByName(
+			ctx, p.txn, dbDesc, schema, tree.SchemaLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
-			log.Warningf(ctx, "could not find schema %s under database %d", schema, dbDesc.ID)
-			continue
-		}
-		if err := d.collectObjectsInSchema(ctx, p, dbDesc, &res); err != nil {
+		if err := d.collectObjectsInSchema(ctx, p, dbDesc, res); err != nil {
 			return nil, err
 		}
 	}
@@ -122,85 +134,77 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
-	if err := p.createDropDatabaseJob(
-		ctx, n.dbDesc.GetID(), n.d.getDroppedTableDetails(), n.d.typesToDelete, tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
-
 	// Drop all of the collected objects.
 	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
 		return err
 	}
 
-	// Remove the namespace entry from system.namespace.
-	err := catalogkv.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-	)
-	if err != nil {
+	var schemasIDsToDelete []descpb.ID
+	for _, schemaWithDbDesc := range n.d.schemasToDelete {
+		schemaToDelete := schemaWithDbDesc.schema
+		switch schemaToDelete.SchemaKind() {
+		case catalog.SchemaTemporary, catalog.SchemaPublic:
+			// The public schema and temporary schemas are cleaned up by just removing
+			// the existing namespace entries.
+			key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.dbDesc.GetID(), schemaToDelete.GetName())
+			if err := p.txn.Del(ctx, key); err != nil {
+				return err
+			}
+		case catalog.SchemaUserDefined:
+			// For user defined schemas, we have to do a bit more work.
+			mutDesc, ok := schemaToDelete.(*schemadesc.Mutable)
+			if !ok {
+				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete)
+			}
+			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
+				return err
+			}
+			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.GetID())
+		}
+	}
+
+	if err := p.createDropDatabaseJob(
+		ctx,
+		n.dbDesc.GetID(),
+		schemasIDsToDelete,
+		n.d.getDroppedTableDetails(),
+		n.d.typesToDelete,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
-	// Delete the database from the system.descriptor table.
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
+	n.dbDesc.AddDrainingName(descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           n.dbDesc.Name,
+	})
+	n.dbDesc.State = descpb.DescriptorState_DROP
+
 	b := &kv.Batch{}
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Del %s", descKey)
+	// Note that a job was already queued above.
+	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
+		return err
 	}
-	b.Del(descKey)
-
-	// No job was created because no tables were dropped, so zone config can be
-	// immediately removed, if applicable.
-	if len(n.d.allTableObjectsToDelete) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
-		zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.GetID()))
-		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-		}
-		// Delete the zone config entry for this database.
-		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-	}
-
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
-	for _, schemaToDelete := range n.d.schemasToDelete {
-		// Drop any schemas that only have namespace entries -- public and any
-		// temporary schemas.
-		if schemaToDelete.Kind == sqlbase.SchemaTemporary || schemaToDelete.Kind == sqlbase.SchemaPublic {
-			if err := catalogkv.RemoveSchemaNamespaceEntry(
-				ctx,
-				p.txn,
-				p.ExecCfg().Codec,
-				n.dbDesc.GetID(),
-				schemaToDelete.Name,
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	p.Descriptors().AddUncommittedDatabase(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
-
 	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
+		return err
+	}
+	if err := p.removeDbRoleSettings(ctx, n.dbDesc.GetID()); err != nil {
 		return err
 	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogDropDatabase,
-		int32(n.dbDesc.GetID()),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			DatabaseName         string
-			Statement            string
-			User                 string
-			DroppedSchemaObjects []string
-		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.d.droppedNames},
-	)
+	return p.logEvent(ctx,
+		n.dbDesc.GetID(),
+		&eventpb.DropDatabase{
+			DatabaseName:         n.n.Name.String(),
+			DroppedSchemaObjects: n.d.droppedNames,
+		})
 }
 
 func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
@@ -210,7 +214,7 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 // filterImplicitlyDeletedObjects takes a list of table descriptors and removes
 // any descriptor that will be implicitly deleted.
 func filterImplicitlyDeletedObjects(
-	tables []toDelete, implicitDeleteObjects map[descpb.ID]*MutableTableDescriptor,
+	tables []toDelete, implicitDeleteObjects map[descpb.ID]*tabledesc.Mutable,
 ) []toDelete {
 	filteredDeleteList := make([]toDelete, 0, len(tables))
 	for _, toDel := range tables {
@@ -228,8 +232,8 @@ func filterImplicitlyDeletedObjects(
 // filter on it later.
 func (p *planner) accumulateAllObjectsToDelete(
 	ctx context.Context, objects []toDelete,
-) ([]*MutableTableDescriptor, map[descpb.ID]*MutableTableDescriptor, error) {
-	implicitDeleteObjects := make(map[descpb.ID]*MutableTableDescriptor)
+) ([]*tabledesc.Mutable, map[descpb.ID]*tabledesc.Mutable, error) {
+	implicitDeleteObjects := make(map[descpb.ID]*tabledesc.Mutable)
 	for _, toDel := range objects {
 		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, toDel.desc)
 		if err != nil {
@@ -243,7 +247,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 			}
 		}
 	}
-	allObjectsToDelete := make([]*MutableTableDescriptor, 0,
+	allObjectsToDelete := make([]*tabledesc.Mutable, 0,
 		len(objects)+len(implicitDeleteObjects))
 	for _, desc := range implicitDeleteObjects {
 		allObjectsToDelete = append(allObjectsToDelete, desc)
@@ -260,9 +264,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 // of the table referenced by desc being dropped, and adds them to the
 // dependentObjects map.
 func (p *planner) accumulateOwnedSequences(
-	ctx context.Context,
-	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
@@ -271,7 +273,8 @@ func (p *planner) accumulateOwnedSequences(
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
 				// exist.
-				if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				if errors.Is(err, catalog.ErrDescriptorDropped) ||
+					pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 					log.Infof(ctx,
 						"swallowing error for owned sequence that was not found %s", err.Error())
 					continue
@@ -289,9 +292,7 @@ func (p *planner) accumulateOwnedSequences(
 // references, which means this list can't be constructed by simply scanning
 // the namespace table.
 func (p *planner) accumulateCascadingViews(
-	ctx context.Context,
-	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
@@ -314,10 +315,38 @@ func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
 		ctx,
 		"delete-db-comment",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.DatabaseCommentType,
 		dbID)
+
+	return err
+}
+
+func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) error {
+	// TODO(rafi): Remove this condition in 21.2.
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
+		return nil
+	}
+	rowsDeleted, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"delete-db-role-settings",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf(
+			`DELETE FROM %s WHERE database_id = $1`,
+			sessioninit.DatabaseRoleSettingsTableName,
+		),
+		dbID,
+	)
+	if err != nil {
+		return err
+	}
+	if rowsDeleted > 0 && sessioninit.CacheEnabled.Get(&p.ExecCfg().Settings.SV) {
+		if err := p.bumpDatabaseRoleSettingsTableVersion(ctx); err != nil {
+			return err
+		}
+	}
 
 	return err
 }

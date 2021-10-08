@@ -12,9 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -23,35 +20,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 var (
-	// DeprecatedDrainParameter the special value that must be
-	// passed in DrainRequest.DeprecatedProbeIndicator to signal the
-	// drain request is not a probe.
-	// This variable is also used in the v20.1 "quit" client
-	// to provide a valid input to the request sent to
-	// v19.1 nodes.
-	//
-	// TODO(knz): Remove this in v20.2 and whenever the "quit" command
-	// is not meant to work with 19.x servers any more, whichever comes
-	// later.
-	DeprecatedDrainParameter = []int32{0, 1}
-
-	queryWait = settings.RegisterPublicDurationSetting(
+	queryWait = settings.RegisterDurationSetting(
 		"server.shutdown.query_wait",
 		"the server will wait for at least this amount of time for active queries to finish",
 		10*time.Second,
-	)
+	).WithPublic()
 
-	drainWait = settings.RegisterPublicDurationSetting(
+	drainWait = settings.RegisterDurationSetting(
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
 			"of the shutdown process",
 		0*time.Second,
-	)
+	).WithPublic()
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -61,30 +47,26 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
 
-	doDrain := req.DoDrain
-	if len(req.DeprecatedProbeIndicator) > 0 {
-		// Pre-20.1 behavior.
-		// TODO(knz): Remove this condition in 20.2.
-		doDrain = true
-		if !reflect.DeepEqual(req.DeprecatedProbeIndicator, DeprecatedDrainParameter) {
-			return status.Errorf(codes.InvalidArgument, "Invalid drain request parameter.")
-		}
+	if len(req.Pre201Marker) > 0 {
+		return status.Errorf(codes.InvalidArgument,
+			"Drain request coming from unsupported client version older than 20.1.")
 	}
 
-	log.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
+	doDrain := req.DoDrain
+
+	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
 	if doDrain {
 		remaining, info, err := s.server.Drain(ctx)
 		if err != nil {
-			log.Errorf(ctx, "drain failed: %v", err)
+			log.Ops.Errorf(ctx, "drain failed: %v", err)
 			return err
 		}
 		res.DrainRemainingIndicator = remaining
-		res.DrainRemainingDescription = info
+		res.DrainRemainingDescription = info.StripMarkers()
 	}
 	if s.server.isDraining() {
-		res.DeprecatedDrainStatus = DeprecatedDrainParameter
 		res.IsDraining = true
 	}
 
@@ -96,7 +78,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		if doDrain {
 			// The condition "if doDrain" is because we don't need an info
 			// message for just a probe.
-			log.Infof(ctx, "drain request completed without server shutdown")
+			log.Ops.Infof(ctx, "drain request completed without server shutdown")
 		}
 		return nil
 	}
@@ -130,7 +112,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// The signal-based shutdown path uses a similar time-based escape hatch.
 		// Until we spend (potentially lots of time to) understand and fix this
 		// issue, this will serve us well.
-		os.Exit(1)
+		log.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
 }
@@ -150,10 +132,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 // TODO(knz): This method is currently exported for use by the
 // shutdown code in cli/start.go; however, this is a mis-design. The
 // start code should use the Drain() RPC like quit does.
-func (s *Server) Drain(ctx context.Context) (remaining uint64, info string, err error) {
-	reports := make(map[string]int)
+func (s *Server) Drain(
+	ctx context.Context,
+) (remaining uint64, info redact.RedactableString, err error) {
+	reports := make(map[redact.SafeString]int)
 	var mu syncutil.Mutex
-	reporter := func(howMany int, what string) {
+	reporter := func(howMany int, what redact.SafeString) {
 		if howMany > 0 {
 			mu.Lock()
 			reports[what] += howMany
@@ -163,16 +147,16 @@ func (s *Server) Drain(ctx context.Context) (remaining uint64, info string, err 
 	defer func() {
 		// Detail the counts based on the collected reports.
 		var descBuf strings.Builder
-		comma := ""
+		comma := redact.SafeString("")
 		for what, howMany := range reports {
 			remaining += uint64(howMany)
-			fmt.Fprintf(&descBuf, "%s%s: %d", comma, what, howMany)
+			redact.Fprintf(&descBuf, "%s%s: %d", comma, what, howMany)
 			comma = ", "
 		}
-		info = descBuf.String()
-		log.Infof(ctx, "drain remaining: %d", remaining)
+		info = redact.RedactableString(descBuf.String())
+		log.Ops.Infof(ctx, "drain remaining: %d", remaining)
 		if info != "" {
-			log.Infof(ctx, "drain details: %s", info)
+			log.Ops.Infof(ctx, "drain details: %s", info)
 		}
 	}()
 
@@ -183,7 +167,7 @@ func (s *Server) Drain(ctx context.Context) (remaining uint64, info string, err 
 	return
 }
 
-func (s *Server) doDrain(ctx context.Context, reporter func(int, string)) error {
+func (s *Server) doDrain(ctx context.Context, reporter func(int, redact.SafeString)) error {
 	// First drain all clients and SQL leases.
 	if err := s.drainClients(ctx, reporter); err != nil {
 		return err
@@ -200,21 +184,26 @@ func (s *Server) isDraining() bool {
 }
 
 // drainClients starts draining the SQL layer.
-func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) error {
+func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.SafeString)) error {
+	shouldDelayDraining := !s.isDraining()
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
+	s.sqlServer.acceptingClients.Set(false)
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
-	time.Sleep(drainWait.Get(&s.st.SV))
+	// Note delay only happens on first call to drain.
+	if shouldDelayDraining {
+		s.drainSleepFn(drainWait.Get(&s.st.SV))
+	}
 
 	// Disable incoming SQL clients up to the queryWait timeout.
-	drainMaxWait := queryWait.Get(&s.st.SV)
-	if err := s.sqlServer.pgServer.Drain(drainMaxWait, reporter); err != nil {
+	queryMaxWait := queryWait.Get(&s.st.SV)
+	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
-	s.sqlServer.distSQLServer.Drain(ctx, drainMaxWait, reporter)
+	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
@@ -226,7 +215,9 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) e
 
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
-func (s *Server) drainNode(ctx context.Context, reporter func(int, string)) error {
-	s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter)
+func (s *Server) drainNode(ctx context.Context, reporter func(int, redact.SafeString)) error {
+	if err := s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
+		return err
+	}
 	return s.node.SetDraining(true /* drain */, reporter)
 }

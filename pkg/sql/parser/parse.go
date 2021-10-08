@@ -21,14 +21,21 @@ package parser
 
 import (
 	"fmt"
+	"go/constant"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+func init() {
+	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
+	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
+}
 
 // Statement is the result of parsing a single statement. It contains the AST
 // node along with other information.
@@ -79,7 +86,7 @@ func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner
+	scanner    scanner.Scanner
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
@@ -88,9 +95,21 @@ type Parser struct {
 
 // INT8 is the historical interpretation of INT. This should be left
 // alone in the future, since there are many sql fragments stored
-// in various descriptors.  Any user input that was created after
+// in various descriptors. Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
+
+// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
+// of how a "naked" INT type should be parsed returns the corresponding integer
+// type.
+func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
+	switch defaultIntSize {
+	case 4, 32:
+		return types.Int4
+	default:
+		return types.Int
+	}
+}
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statements, error) {
@@ -103,8 +122,8 @@ func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statements, er
 	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
-func (p *Parser) parseOneWithDepth(depth int, sql string) (Statement, error) {
-	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType)
+func (p *Parser) parseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
+	stmts, err := p.parseWithDepth(1, sql, nakedIntType)
 	if err != nil {
 		return Statement{}, err
 	}
@@ -120,7 +139,7 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 	// Scan the first token.
 	for {
-		p.scanner.scan(&lval)
+		p.scanner.Scan(&lval)
 		if lval.id == 0 {
 			return "", nil, true
 		}
@@ -135,12 +154,12 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	tokens = append(tokens, lval)
 	for {
 		if lval.id == ERROR {
-			return p.scanner.in[startPos:], tokens, true
+			return p.scanner.In()[startPos:], tokens, true
 		}
-		posBeforeScan := p.scanner.pos
-		p.scanner.scan(&lval)
+		posBeforeScan := p.scanner.Pos()
+		p.scanner.Scan(&lval)
 		if lval.id == 0 || lval.id == ';' {
-			return p.scanner.in[startPos:posBeforeScan], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos
 		tokens = append(tokens, lval)
@@ -149,8 +168,8 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
 	stmts := Statements(p.stmtBuf[:0])
-	p.scanner.init(sql)
-	defer p.scanner.cleanup()
+	p.scanner.Init(sql)
+	defer p.scanner.Cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
@@ -216,7 +235,10 @@ func unaryNegation(e tree.Expr) tree.Expr {
 	}
 
 	// Common case.
-	return &tree.UnaryExpr{Operator: tree.UnaryMinus, Expr: e}
+	return &tree.UnaryExpr{
+		Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
+		Expr:     e,
+	}
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
@@ -229,15 +251,26 @@ func Parse(sql string) (Statements, error) {
 // single statement, and returns that Statement. ParseOne will always
 // interpret the INT and SERIAL types as 64-bit types, since this is
 // used in various internal-execution paths where we might receive
-// bits of SQL from other nodes. In general, we expect that all
+// bits of SQL from other nodes. In general,earwe expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (Statement, error) {
-	var p Parser
-	return p.parseOneWithDepth(1, sql)
+	return ParseOneWithInt(sql, defaultNakedIntType)
 }
 
-// ParseQualifiedTableName parses a SQL string of the form
-// `[ database_name . ] [ schema_name . ] table_name`.
+// ParseOneWithInt is similar to ParseOn but interprets the INT and SERIAL
+// types as the provided integer type.
+func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
+	var p Parser
+	return p.parseOneWithInt(sql, nakedIntType)
+}
+
+// ParseQualifiedTableName parses a possibly qualified table name. The
+// table name must contain one or more name parts, using the full
+// input SQL syntax: each name part containing special characters, or
+// non-lowercase characters, must be enclosed in double quote. The
+// name may not be an invalid table name (the caller is responsible
+// for guaranteeing that only valid table names are provided as
+// input).
 func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := ParseTableName(sql)
 	if err != nil {
@@ -247,7 +280,12 @@ func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return &tn, nil
 }
 
-// ParseTableName parses a table name.
+// ParseTableName parses a table name. The table name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// table name (the caller is responsible for guaranteeing that only
+// valid table names are provided as input).
 func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser
 	// can only parse full statements.
@@ -262,33 +300,9 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
-// ParseTableNameWithQualifiedNames can be used to parse an input table name that
-// might be prefixed with an unquoted qualified name. The standard ParseTableName
-// cannot do this due to limitations with our parser. In particular, the parser
-// can't parse different productions individually -- it must parse them as part
-// of a top level statement. This causes qualified names that contain keywords
-// to require quotes, which are not required in some cases due to Postgres
-// compatibility (in particular, as arguments to pg_dump). This function gets
-// around this limitation by parsing the input table name as a column name
-// with a fake non-keyword prefix, and then shifting the result down into an
-// UnresolvedObjectName.
-func ParseTableNameWithQualifiedNames(sql string) (*tree.UnresolvedObjectName, error) {
-	stmt, err := ParseOne(fmt.Sprintf("SELECT fakeprefix.%s", sql))
-	if err != nil {
-		return nil, err
-	}
-	un := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.UnresolvedName)
-	var nameParts [3]string
-	numParts := un.NumParts - 1
-	for i := 0; i < numParts; i++ {
-		nameParts[i] = un.Parts[i]
-	}
-	return tree.NewUnresolvedObjectName(numParts, nameParts, 0 /* annotationIdx */)
-}
-
-// parseExprs parses one or more sql expressions.
-func parseExprs(exprs []string) (tree.Exprs, error) {
-	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))
+// parseExprsWithInt parses one or more sql expressions.
+func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error) {
+	stmt, err := ParseOneWithInt(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), nakedIntType)
 	if err != nil {
 		return nil, err
 	}
@@ -299,17 +313,33 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	return set.Values, nil
 }
 
-// ParseExprs is a short-hand for parseExprs(sql)
+// ParseExprs parses a comma-delimited sequence of SQL scalar
+// expressions. The caller is responsible for ensuring that the input
+// is, in fact, a comma-delimited sequence of SQL scalar expressions —
+// the results are undefined if the string contains invalid SQL
+// syntax.
 func ParseExprs(sql []string) (tree.Exprs, error) {
 	if len(sql) == 0 {
 		return tree.Exprs{}, nil
 	}
-	return parseExprs(sql)
+	return parseExprsWithInt(sql, defaultNakedIntType)
 }
 
-// ParseExpr is a short-hand for parseExprs([]string{sql})
+// ParseExpr parses a SQL scalar expression. The caller is responsible
+// for ensuring that the input is, in fact, a valid SQL scalar
+// expression — the results are undefined if the string contains
+// invalid SQL syntax.
 func ParseExpr(sql string) (tree.Expr, error) {
-	exprs, err := parseExprs([]string{sql})
+	return ParseExprWithInt(sql, defaultNakedIntType)
+}
+
+// ParseExprWithInt parses a SQL scalar expression, using the given
+// type when INT is used as type name in the SQL syntax. The caller is
+// responsible for ensuring that the input is, in fact, a valid SQL
+// scalar expression — the results are undefined if the string
+// contains invalid SQL syntax.
+func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
+	exprs, err := parseExprsWithInt([]string{sql}, nakedIntType)
 	if err != nil {
 		return nil, err
 	}
@@ -319,8 +349,29 @@ func ParseExpr(sql string) (tree.Expr, error) {
 	return exprs[0], nil
 }
 
-// ParseType parses a column type.
-func ParseType(sql string) (tree.ResolvableTypeReference, error) {
+// GetTypeReferenceFromName turns a type name into a type
+// reference. This supports only “simple” (single-identifier)
+// references to built-in types, when the identifer has already been
+// parsed away from the input SQL syntax.
+func GetTypeReferenceFromName(typeName tree.Name) (tree.ResolvableTypeReference, error) {
+	expr, err := ParseExpr(fmt.Sprintf("1::%s", typeName.String()))
+	if err != nil {
+		return nil, err
+	}
+
+	cast, ok := expr.(*tree.CastExpr)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
+	}
+
+	return cast.Type, nil
+}
+
+// GetTypeFromValidSQLSyntax retrieves a type from its SQL syntax. The caller is
+// responsible for guaranteeing that the type expression is valid
+// SQL. This includes verifying that complex identifiers are enclosed
+// in double quotes, etc.
+func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
@@ -386,6 +437,10 @@ func arrayOf(
 	// If the reference is a statically known type, then return an array type,
 	// rather than an array type reference.
 	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
+		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
+		if typ.Family() == types.UnknownFamily {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
+		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err
 		}

@@ -11,11 +11,12 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -28,13 +29,14 @@ func NewTupleProjOp(
 	inputTypes []*types.T,
 	tupleContentsIdxs []int,
 	outputType *types.T,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	outputIdx int,
-) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
+) colexecop.Operator {
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
-		OneInputNode:      NewOneInputNode(input),
-		converter:         newVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
+		OneInputHelper:    colexecop.MakeOneInputHelper(input),
+		allocator:         allocator,
+		converter:         colconv.NewVecToDatumConverter(len(inputTypes), tupleContentsIdxs, true /* willRelease */),
 		tupleContentsIdxs: tupleContentsIdxs,
 		outputType:        outputType,
 		outputIdx:         outputIdx,
@@ -42,50 +44,55 @@ func NewTupleProjOp(
 }
 
 type tupleProjOp struct {
-	OneInputNode
+	colexecop.OneInputHelper
 
-	converter         *vecToDatumConverter
+	allocator         *colmem.Allocator
+	converter         *colconv.VecToDatumConverter
 	tupleContentsIdxs []int
 	outputType        *types.T
 	outputIdx         int
 }
 
-var _ colexecbase.Operator = &tupleProjOp{}
+var _ colexecop.Operator = &tupleProjOp{}
+var _ execinfra.Releasable = &tupleProjOp{}
 
-func (t *tupleProjOp) Init() {
-	t.input.Init()
-}
-
-func (t *tupleProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := t.input.Next(ctx)
+func (t *tupleProjOp) Next() coldata.Batch {
+	batch := t.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	t.converter.convertBatchAndDeselect(batch)
+	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
 	if projVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
 		// output vector.
 		projVec.Nulls().UnsetNulls()
 	}
-	projCol := projVec.Datum()
-	if sel := batch.Selection(); sel != nil {
-		for convertedIdx, i := range sel[:n] {
-			projCol.Set(i, t.createTuple(convertedIdx))
+	t.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		projCol := projVec.Datum()
+		if sel := batch.Selection(); sel != nil {
+			for convertedIdx, i := range sel[:n] {
+				projCol.Set(i, t.createTuple(convertedIdx))
+			}
+		} else {
+			for i := 0; i < n; i++ {
+				projCol.Set(i, t.createTuple(i))
+			}
 		}
-	} else {
-		for i := 0; i < n; i++ {
-			projCol.Set(i, t.createTuple(i))
-		}
-	}
+	})
 	return batch
 }
 
 func (t *tupleProjOp) createTuple(convertedIdx int) tree.Datum {
 	tuple := tree.NewDTupleWithLen(t.outputType, len(t.tupleContentsIdxs))
 	for i, columnIdx := range t.tupleContentsIdxs {
-		tuple.D[i] = t.converter.getDatumColumn(columnIdx)[convertedIdx]
+		tuple.D[i] = t.converter.GetDatumColumn(columnIdx)[convertedIdx]
 	}
 	return tuple
+}
+
+// Release is part of the execinfra.Releasable interface.
+func (t *tupleProjOp) Release() {
+	t.converter.Release()
 }

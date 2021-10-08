@@ -11,742 +11,258 @@
 package cli
 
 import (
-	"archive/zip"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net"
-	"net/url"
 	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
 
-var debugZipCmd = &cobra.Command{
-	Use:   "zip <file>",
-	Short: "gather cluster debug data into a zip file",
-	Long: `
-
-Gather cluster debug data into a zip file. Data includes cluster events, node
-liveness, node status, range status, node stack traces, node engine stats, log
-files, and SQL schema.
-
-Retrieval of per-node details (status, stack traces, range status, engine stats)
-requires the node to be live and operating properly. Retrieval of SQL data
-requires the cluster to be live.
-`,
-	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugZip),
-}
-
-// Tables containing cluster-wide info that are collected in a debug zip.
-var debugZipTablesPerCluster = []string{
-	"crdb_internal.cluster_queries",
-	"crdb_internal.cluster_sessions",
-	"crdb_internal.cluster_settings",
-	"crdb_internal.cluster_transactions",
-
-	"crdb_internal.jobs",
-	"system.jobs",       // get the raw, restorable jobs records too.
-	"system.descriptor", // descriptors also contain job-like mutation state.
-	"system.namespace",
-	"system.namespace2", // TODO(sqlexec): consider removing in 20.2 or later.
-
-	"crdb_internal.kv_node_status",
-	"crdb_internal.kv_store_status",
-
-	"crdb_internal.schema_changes",
-	"crdb_internal.partitions",
-	"crdb_internal.zones",
-}
-
-// Tables collected from each node in a debug zip.
-var debugZipTablesPerNode = []string{
-	"crdb_internal.feature_usage",
-
-	"crdb_internal.gossip_alerts",
-	"crdb_internal.gossip_liveness",
-	"crdb_internal.gossip_network",
-	"crdb_internal.gossip_nodes",
-
-	"crdb_internal.leases",
-
-	"crdb_internal.node_build_info",
-	"crdb_internal.node_metrics",
-	"crdb_internal.node_queries",
-	"crdb_internal.node_runtime_info",
-	"crdb_internal.node_sessions",
-	"crdb_internal.node_statement_statistics",
-	"crdb_internal.node_transactions",
-	"crdb_internal.node_txn_stats",
-}
-
-// Override for the default SELECT * when dumping the table.
-var customSelectClause = map[string]string{
-	"system.jobs":       "*, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress",
-	"system.descriptor": "*, to_hex(descriptor) AS hex_descriptor",
-}
-
-type zipper struct {
-	f *os.File
-	z *zip.Writer
-}
-
-func newZipper(f *os.File) *zipper {
-	return &zipper{
-		f: f,
-		z: zip.NewWriter(f),
-	}
-}
-
-func (z *zipper) close() error {
-	err1 := z.z.Close()
-	err2 := z.f.Close()
-	return errors.CombineErrors(err1, err2)
-}
-
-func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
-	fmt.Printf("writing: %s\n", name)
-	if mtime.IsZero() {
-		mtime = timeutil.Now()
-	}
-	return z.z.CreateHeader(&zip.FileHeader{
-		Name:     name,
-		Method:   zip.Deflate,
-		Modified: mtime,
-	})
-}
-
-func (z *zipper) createRaw(name string, b []byte) error {
-	w, err := z.create(name, time.Time{})
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(b)
-	return err
-}
-
-func (z *zipper) createJSON(name string, m interface{}) error {
-	if !strings.HasSuffix(name, ".json") {
-		return errors.Errorf("%s does not have .json suffix", name)
-	}
-	b, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return err
-	}
-	return z.createRaw(name, b)
-}
-
-func (z *zipper) createError(name string, e error) error {
-	w, err := z.create(name+".err.txt", time.Time{})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("  ^- resulted in %s\n", e)
-	fmt.Fprintf(w, "%s\n", e)
-	return nil
-}
-
-func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
-	if e != nil {
-		return z.createError(name, e)
-	}
-	return z.createJSON(name, m)
-}
-
-func (z *zipper) createRawOrError(name string, b []byte, e error) error {
-	if filepath.Ext(name) == "" {
-		return errors.Errorf("%s has no extension", name)
-	}
-	if e != nil {
-		return z.createError(name, e)
-	}
-	return z.createRaw(name, b)
-}
-
+// zipRequest abstracts a possible server API call to one of the API
+// endpoints.
 type zipRequest struct {
 	fn       func(ctx context.Context) (interface{}, error)
 	pathName string
 }
 
-func guessNodeURL(workingURL string, hostport string) *sqlConn {
-	u, err := url.Parse(workingURL)
-	if err != nil {
-		u = &url.URL{Host: "invalid"}
-	}
-	u.Host = hostport
-	return makeSQLConn(u.String())
+// Override for the default SELECT * FROM table when dumping one of the tables
+// in `debugZipTablesPerNode` or `debugZipTablesPerCluster`
+var customQuery = map[string]string{
+	"crdb_internal.node_inflight_trace_spans": "WITH spans AS (" +
+		"SELECT * FROM crdb_internal.node_inflight_trace_spans " +
+		"WHERE duration > INTERVAL '10' ORDER BY trace_id ASC, duration DESC" +
+		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
+	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
+	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
+	"system.settings":   "SELECT *, to_hex(value::bytes) as hex_value FROM system.settings",
 }
 
-func runZipRequestWithTimeout(
-	ctx context.Context,
-	requestName string,
-	timeout time.Duration,
-	fn func(ctx context.Context) error,
-) error {
-	fmt.Printf("%s... ", requestName)
-	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
+type debugZipContext struct {
+	z              *zipper
+	clusterPrinter *zipReporter
+	timeout        time.Duration
+	admin          serverpb.AdminClient
+	status         serverpb.StatusClient
+
+	firstNodeSQLConn clisqlclient.Conn
+
+	sem semaphore.Semaphore
 }
+
+func (zc *debugZipContext) runZipFn(
+	ctx context.Context, s *zipReporter, fn func(ctx context.Context) error,
+) error {
+	return zc.runZipFnWithTimeout(ctx, s, zc.timeout, fn)
+}
+
+func (zc *debugZipContext) runZipFnWithTimeout(
+	ctx context.Context, s *zipReporter, timeout time.Duration, fn func(ctx context.Context) error,
+) error {
+	err := contextutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
+	s.progress("received response")
+	return err
+}
+
+// runZipRequest runs a zipRequest and stores its JSON result or error
+// message in the output zip.
+func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r zipRequest) error {
+	s := zr.start("requesting data for %s", r.pathName)
+	var data interface{}
+	err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+		thisData, err := r.fn(ctx)
+		data = thisData
+		return err
+	})
+	return zc.z.createJSONOrError(s, r.pathName+".json", data, err)
+}
+
+// forAllNodes runs fn on every node, possibly concurrently.
+func (zc *debugZipContext) forAllNodes(
+	ctx context.Context,
+	nodeList []statuspb.NodeStatus,
+	fn func(ctx context.Context, node statuspb.NodeStatus) error,
+) error {
+	if zipCtx.concurrency == 1 {
+		// Sequential case. Simplify.
+		for _, node := range nodeList {
+			if err := fn(ctx, node); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Multiple nodes concurrently.
+
+	// nodeErrs collects the individual error objects.
+	nodeErrs := make(chan error, len(nodeList))
+	// The wait group to wait for all concurrent collectors.
+	var wg sync.WaitGroup
+	for _, node := range nodeList {
+		wg.Add(1)
+		go func(node statuspb.NodeStatus) {
+			defer wg.Done()
+			if err := zc.sem.Acquire(ctx, 1); err != nil {
+				nodeErrs <- err
+				return
+			}
+			defer zc.sem.Release(1)
+
+			nodeErrs <- fn(ctx, node)
+		}(node)
+	}
+	wg.Wait()
+
+	// The final error.
+	var err error
+	for range nodeList {
+		err = errors.CombineErrors(err, <-nodeErrs)
+	}
+	return err
+}
+
+type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
 func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
-	const (
-		base          = "debug"
-		eventsName    = base + "/events"
-		livenessName  = base + "/liveness"
-		nodesPrefix   = base + "/nodes"
-		rangelogName  = base + "/rangelog"
-		reportsPrefix = base + "/reports"
-		schemaPrefix  = base + "/schema"
-		settingsName  = base + "/settings"
-	)
+	if err := zipCtx.files.validate(); err != nil {
+		return err
+	}
 
-	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fmt.Printf("establishing RPC connection to %s...\n", serverCfg.AdvertiseAddr)
-	conn, _, finish, err := getClientGRPCConn(baseCtx, serverCfg)
+	zr := zipCtx.newZipReporter("cluster")
+
+	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
 	defer finish()
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
+	s.done()
 
-	fmt.Println("retrieving the node status to get the SQL address...")
-	nodeD, err := status.Details(baseCtx, &serverpb.DetailsRequest{NodeId: "local"})
+	s = zr.start("retrieving the node status to get the SQL address")
+	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
-	sqlAddr := nodeD.SQLAddress
+	s.done()
+
+	sqlAddr := firstNodeDetails.SQLAddress
 	if sqlAddr.IsEmpty() {
 		// No SQL address: either a pre-19.2 node, or same address for both
 		// SQL and RPC.
-		sqlAddr = nodeD.Address
+		sqlAddr = firstNodeDetails.Address
 	}
-	fmt.Printf("using SQL address: %s\n", sqlAddr.AddressField)
+	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
+
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
 
 	// We're going to use the SQL code, but in non-interactive mode.
 	// Override whatever terminal-driven defaults there may be out there.
-	cliCtx.isInteractive = false
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
+	cliCtx.IsInteractive = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.
-	cliCtx.tableDisplayFormat = tableDisplayTSV
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
-		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
-	}
-	defer sqlConn.Close()
-	// Note: we're not printing "connection established" because the driver we're using
-	// does late binding.
-	if sqlConn != nil {
-		fmt.Printf("using SQL connection URL: %s\n", sqlConn.url)
+		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
+	} else {
+		// Note: we're not printing "connection established" because the driver we're using
+		// does late binding.
+		defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
+		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
+		s.done()
 	}
 
 	name := args[0]
+	s = zr.start("creating output file %s", name)
 	out, err := os.Create(name)
 	if err != nil {
-		return err
+		return s.fail(err)
 	}
-	fmt.Printf("writing %s\n", name)
 
 	z := newZipper(out)
 	defer func() {
 		cErr := z.close()
 		retErr = errors.CombineErrors(retErr, cErr)
 	}()
+	s.done()
 
 	timeout := 10 * time.Second
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout
 	}
 
-	var runZipRequest = func(r zipRequest) error {
-		var data interface{}
-		err = runZipRequestWithTimeout(baseCtx, "requesting data for "+r.pathName, timeout, func(ctx context.Context) error {
-			data, err = r.fn(ctx)
-			return err
-		})
-		return z.createJSONOrError(r.pathName+".json", data, err)
+	zc := debugZipContext{
+		clusterPrinter:   zr,
+		z:                z,
+		timeout:          timeout,
+		admin:            admin,
+		status:           status,
+		firstNodeSQLConn: sqlConn,
+		sem:              semaphore.New(zipCtx.concurrency),
 	}
 
-	// NB: we intentionally omit liveness since it's already pulled manually (we
-	// act on the output to special case decommissioned nodes).
-	for _, r := range []zipRequest{
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
-			},
-			pathName: eventsName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
-			},
-			pathName: rangelogName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Settings(ctx, &serverpb.SettingsRequest{})
-			},
-			pathName: settingsName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
-			},
-			pathName: reportsPrefix + "/problemranges",
-		},
-	} {
-		if err := runZipRequest(r); err != nil {
-			return err
-		}
+	// Fetch the cluster-wide details.
+	nodeList, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
+	if err != nil {
+		return err
 	}
 
-	for _, table := range debugZipTablesPerCluster {
-		selectClause, ok := customSelectClause[table]
-		if !ok {
-			selectClause = "*"
-		}
-		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table, selectClause); err != nil {
-			return errors.Wrapf(err, "fetching %s", table)
-		}
+	// Collect the CPU profiles, before the other per-node requests
+	// below possibly influences the nodes and thus CPU profiles.
+	if err := zc.collectCPUProfiles(ctx, nodeList, livenessByNodeID); err != nil {
+		return err
 	}
 
-	{
-		var nodes *serverpb.NodesResponse
-		err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
-			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
-			return err
-		})
-		if cErr := z.createJSONOrError(base+"/nodes.json", nodes, err); cErr != nil {
-			return cErr
-		}
-
-		// In case nodes came up back empty (the Nodes() RPC failed), we
-		// still want to inspect the per-node endpoints on the head
-		// node. As per the above, we were able to connect at least to
-		// that.
-		nodeList := []statuspb.NodeStatus{{Desc: roachpb.NodeDescriptor{
-			NodeID:     nodeD.NodeID,
-			Address:    nodeD.Address,
-			SQLAddress: nodeD.SQLAddress,
-		}}}
-		if nodes != nil {
-			// If the nodes were found, use that instead.
-			nodeList = nodes.Nodes
-		}
-
-		// We'll want livenesses to decide whether a node is decommissioned.
-		var lresponse *serverpb.LivenessResponse
-		err = runZipRequestWithTimeout(baseCtx, "requesting liveness", timeout, func(ctx context.Context) error {
-			lresponse, err = admin.Liveness(ctx, &serverpb.LivenessRequest{})
-			return err
-		})
-		if cErr := z.createJSONOrError(livenessName+".json", nodes, err); cErr != nil {
-			return cErr
-		}
-		livenessByNodeID := map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{}
-		if lresponse != nil {
-			livenessByNodeID = lresponse.Statuses
-		}
-
-		// Collect CPU profiles in parallel over all nodes (this is useful since
-		// these profiles contain profiler labels, which can then be correlated
-		// across nodes). Do this first and in isolation, before other zip
-		// operations possibly influence the node.
-		if zipCtx.cpuProfDuration > 0 {
-			var wg sync.WaitGroup
-			type profData struct {
-				data []byte
-				err  error
-			}
-
-			// NB: this takes care not to produce non-deterministic log output.
-			resps := make([]profData, len(nodeList))
-			for i := range nodeList {
-				if livenessByNodeID[nodeList[i].Desc.NodeID] == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
-					continue
-				}
-				wg.Add(1)
-				go func(ctx context.Context, i int) {
-					defer wg.Done()
-
-					secs := int32(zipCtx.cpuProfDuration / time.Second)
-					if secs < 1 {
-						secs = 1
-					}
-
-					var pd profData
-					err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
-						resp, err := status.Profile(ctx, &serverpb.ProfileRequest{
-							NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
-							Type:    serverpb.ProfileRequest_CPU,
-							Seconds: secs,
-						})
-						if err != nil {
-							return err
-						}
-						pd = profData{data: resp.Data}
-						return nil
-					})
-					if err != nil {
-						resps[i] = profData{err: err}
-					} else {
-						resps[i] = pd
-					}
-				}(baseCtx, i)
-			}
-
-			fmt.Print("requesting CPU profiles... ")
-			wg.Wait()
-			fmt.Println("ok")
-
-			for i, pd := range resps {
-				if len(pd.data) == 0 && pd.err == nil {
-					continue // skipped node
-				}
-				prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeList[i].Desc.NodeID))
-				if err := z.createRawOrError(prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
-					return err
-				}
-			}
-		}
-
-		for _, node := range nodeList {
-			nodeID := node.Desc.NodeID
-
-			liveness := livenessByNodeID[nodeID]
-			if liveness == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
-				// Decommissioned + process terminated. Let's not waste time
-				// on this node.
-				//
-				// NB: we still inspect DECOMMISSIONING nodes (marked as
-				// decommissioned but the process is still alive) to get a
-				// chance to collect their log files.
-				//
-				// NB: we still inspect DEAD nodes because even though they
-				// don't heartbeat their liveness record their process might
-				// still be up and willing to deliver some log files.
-				continue
-			}
-
-			id := fmt.Sprintf("%d", nodeID)
-			prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
-
-			if !zipCtx.nodes.isIncluded(nodeID) {
-				if err := z.createRaw(prefix+".skipped",
-					[]byte(fmt.Sprintf("skipping excluded node %d\n", nodeID))); err != nil {
-					return err
-				}
-				continue
-			}
-
-			// Don't use sqlConn because that's only for is the node `debug
-			// zip` was pointed at, but here we want to connect to nodes
-			// individually to grab node- local SQL tables. Try to guess by
-			// replacing the host in the connection string; this may or may
-			// not work and if it doesn't, we let the invalid curSQLConn get
-			// used anyway so that anything that does *not* need it will
-			// still happen.
-			sqlAddr := node.Desc.CheckedSQLAddress()
-			curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
-			if err := z.createJSON(prefix+"/status.json", node); err != nil {
-				return err
-			}
-			fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
-
-			for _, table := range debugZipTablesPerNode {
-				selectClause, ok := customSelectClause[table]
-				if !ok {
-					selectClause = "*"
-				}
-				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table, selectClause); err != nil {
-					return errors.Wrapf(err, "fetching %s", table)
-				}
-			}
-
-			for _, r := range []zipRequest{
-				{
-					fn: func(ctx context.Context) (interface{}, error) {
-						return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id})
-					},
-					pathName: prefix + "/details",
-				},
-				{
-					fn: func(ctx context.Context) (interface{}, error) {
-						return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
-					},
-					pathName: prefix + "/gossip",
-				},
-				{
-					fn: func(ctx context.Context) (interface{}, error) {
-						return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
-					},
-					pathName: prefix + "/enginestats",
-				},
-			} {
-				if err := runZipRequest(r); err != nil {
-					return err
-				}
-			}
-
-			var stacksData []byte
-			err = runZipRequestWithTimeout(baseCtx, "requesting stacks for node "+id, timeout,
-				func(ctx context.Context) error {
-					stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{
-						NodeId: id,
-						Type:   serverpb.StacksType_GOROUTINE_STACKS,
-					})
-					if err == nil {
-						stacksData = stacks.Data
-					}
-					return err
-				})
-			if err := z.createRawOrError(prefix+"/stacks.txt", stacksData, err); err != nil {
-				return err
-			}
-
-			var threadData []byte
-			err = runZipRequestWithTimeout(baseCtx, "requesting threads for node "+id, timeout,
-				func(ctx context.Context) error {
-					threads, err := status.Stacks(ctx, &serverpb.StacksRequest{
-						NodeId: id,
-						Type:   serverpb.StacksType_THREAD_STACKS,
-					})
-					if err == nil {
-						threadData = threads.Data
-					}
-					return err
-				})
-			if err := z.createRawOrError(prefix+"/threads.txt", threadData, err); err != nil {
-				return err
-			}
-
-			var heapData []byte
-			err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
-				func(ctx context.Context) error {
-					heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
-						NodeId: id,
-						Type:   serverpb.ProfileRequest_HEAP,
-					})
-					if err == nil {
-						heapData = heap.Data
-					}
-					return err
-				})
-			if err := z.createRawOrError(prefix+"/heap.pprof", heapData, err); err != nil {
-				return err
-			}
-
-			var profiles *serverpb.GetFilesResponse
-			if err := runZipRequestWithTimeout(baseCtx, "requesting heap files for node "+id, timeout,
-				func(ctx context.Context) error {
-					profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
-						NodeId:   id,
-						Type:     serverpb.FileType_HEAP,
-						Patterns: []string{"*"},
-					})
-					return err
-				}); err != nil {
-				if err := z.createError(prefix+"/heapprof", err); err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("%d found\n", len(profiles.Files))
-				for _, file := range profiles.Files {
-					name := prefix + "/heapprof/" + file.Name + ".pprof"
-					if err := z.createRaw(name, file.Contents); err != nil {
-						return err
-					}
-				}
-			}
-
-			var goroutinesResp *serverpb.GetFilesResponse
-			if err := runZipRequestWithTimeout(baseCtx, "requesting goroutine files for node "+id, timeout,
-				func(ctx context.Context) error {
-					goroutinesResp, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
-						NodeId:   id,
-						Type:     serverpb.FileType_GOROUTINES,
-						Patterns: []string{"*"},
-					})
-					return err
-				}); err != nil {
-				if err := z.createError(prefix+"/goroutines", err); err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("%d found\n", len(goroutinesResp.Files))
-				for _, file := range goroutinesResp.Files {
-					// NB: the files have a .txt.gz suffix already.
-					name := prefix + "/goroutines/" + file.Name
-					if err := z.createRawOrError(name, file.Contents, err); err != nil {
-						return err
-					}
-				}
-			}
-
-			var logs *serverpb.LogFilesListResponse
-			if err := runZipRequestWithTimeout(baseCtx, "requesting log files list", timeout,
-				func(ctx context.Context) error {
-					logs, err = status.LogFilesList(
-						ctx, &serverpb.LogFilesListRequest{NodeId: id})
-					return err
-				}); err != nil {
-				if err := z.createError(prefix+"/logs", err); err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("%d found\n", len(logs.Files))
-				for _, file := range logs.Files {
-					name := prefix + "/logs/" + file.Name
-					var entries *serverpb.LogEntriesResponse
-					if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
-						func(ctx context.Context) error {
-							entries, err = status.LogFile(
-								ctx, &serverpb.LogFileRequest{
-									NodeId: id, File: file.Name, Redact: zipCtx.redactLogs, KeepRedactable: true,
-								})
-							return err
-						}); err != nil {
-						if err := z.createError(name, err); err != nil {
-							return err
-						}
-						continue
-					}
-					logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
-					if err != nil {
-						return err
-					}
-					warnRedactLeak := false
-					for _, e := range entries.Entries {
-						// If the user requests redaction, and some non-redactable
-						// data was found in the log, *despite KeepRedactable
-						// being set*, this means that this zip client is talking
-						// to a node that doesn't yet know how to redact. This
-						// also means that node may be leaking sensitive data.
-						//
-						// In that case, we do the redaction work ourselves in the
-						// most conservative way possible. (It's not great that
-						// possibly confidential data flew over the network, but
-						// at least it stops here.)
-						if zipCtx.redactLogs && !e.Redactable {
-							e.Message = "REDACTEDBYZIP"
-							// We're also going to print a warning at the end.
-							warnRedactLeak = true
-						}
-						if err := e.Format(logOut); err != nil {
-							return err
-						}
-					}
-					if warnRedactLeak {
-						// Defer the warning, so that it does not get "drowned" as
-						// part of the main zip output.
-						defer func(fileName string) {
-							fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact-logs=true)\n", fileName)
-						}(file.Name)
-					}
-				}
-			}
-
-			var ranges *serverpb.RangesResponse
-			if err := runZipRequestWithTimeout(baseCtx, "requesting ranges", timeout, func(ctx context.Context) error {
-				ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
-				return err
-			}); err != nil {
-				if err := z.createError(prefix+"/ranges", err); err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("%d found\n", len(ranges.Ranges))
-				sort.Slice(ranges.Ranges, func(i, j int) bool {
-					return ranges.Ranges[i].State.Desc.RangeID <
-						ranges.Ranges[j].State.Desc.RangeID
-				})
-				for _, r := range ranges.Ranges {
-					name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-					if err := z.createJSON(name+".json", r); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-
-	{
-		var databases *serverpb.DatabasesResponse
-		if err := runZipRequestWithTimeout(baseCtx, "requesting list of SQL databases", timeout, func(ctx context.Context) error {
-			databases, err = admin.Databases(ctx, &serverpb.DatabasesRequest{})
-			return err
-		}); err != nil {
-			if err := z.createError(schemaPrefix, err); err != nil {
-				return err
-			}
-		} else {
-			fmt.Printf("%d found\n", len(databases.Databases))
-			var dbEscaper fileNameEscaper
-			for _, dbName := range databases.Databases {
-				prefix := schemaPrefix + "/" + dbEscaper.escape(dbName)
-				var database *serverpb.DatabaseDetailsResponse
-				requestErr := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting database details for %s", dbName), timeout,
-					func(ctx context.Context) error {
-						database, err = admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
-						return err
-					})
-				if err := z.createJSONOrError(prefix+"@details.json", database, requestErr); err != nil {
-					return err
-				}
-				if requestErr != nil {
-					continue
-				}
-
-				fmt.Printf("%d tables found\n", len(database.TableNames))
-				var tbEscaper fileNameEscaper
-				for _, tableName := range database.TableNames {
-					name := prefix + "/" + tbEscaper.escape(tableName)
-					var table *serverpb.TableDetailsResponse
-					err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting table details for %s.%s", dbName, tableName), timeout,
-						func(ctx context.Context) error {
-							table, err = admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
-							return err
-						})
-					if err := z.createJSONOrError(name+".json", table, err); err != nil {
-						return err
-					}
-				}
-			}
-		}
+	// Collect the per-node data.
+	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node statuspb.NodeStatus) error {
+		return zc.collectPerNodeData(ctx, node, livenessByNodeID)
+	}); err != nil {
+		return err
 	}
 
 	// Add a little helper script to draw attention to the existence of tags in
 	// the profiles.
 	{
-		if err := z.createRaw(base+"/pprof-summary.sh", []byte(`#!/bin/sh
-find . -name cpu.pprof | xargs go tool pprof -tags
+		s := zc.clusterPrinter.start("pprof summary script")
+		if err := z.createRaw(s, debugBase+"/pprof-summary.sh", []byte(`#!/bin/sh
+find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
+`)); err != nil {
+			return err
+		}
+	}
+
+	// A script to summarize the hottest ranges.
+	{
+		s := zc.clusterPrinter.start("hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
+find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
 			return err
 		}
@@ -755,61 +271,60 @@ find . -name cpu.pprof | xargs go tool pprof -tags
 	return nil
 }
 
-type fileNameEscaper struct {
-	counters map[string]int
+// maybeAddProfileSuffix adds a file extension if this was not done
+// already on the server. This is necessary as pre-20.2 servers did
+// not use any extension for memory profiles.
+//
+// TODO(knz): Remove this in v21.1.
+func maybeAddProfileSuffix(name string) string {
+	switch {
+	case strings.HasPrefix(name, heapprofiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.HeapFileNameSuffix):
+		name += heapprofiler.HeapFileNameSuffix
+	case strings.HasPrefix(name, heapprofiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.StatsFileNameSuffix):
+		name += heapprofiler.StatsFileNameSuffix
+	case strings.HasPrefix(name, heapprofiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.JemallocFileNameSuffix):
+		name += heapprofiler.JemallocFileNameSuffix
+	}
+	return name
 }
 
-// escape ensures that f is stripped of characters that
-// may be invalid in file names. The characters are also lowercased
-// to ensure proper normalization in case-insensitive filesystems.
-func (fne *fileNameEscaper) escape(f string) string {
-	f = strings.ToLower(f)
-	var out strings.Builder
-	for _, c := range f {
-		if c < 127 && (unicode.IsLetter(c) || unicode.IsDigit(c)) {
-			out.WriteRune(c)
-		} else {
-			out.WriteByte('_')
-		}
-	}
-	objName := out.String()
-	result := objName
-
-	if fne.counters == nil {
-		fne.counters = make(map[string]int)
-	}
-	cnt := fne.counters[objName]
-	if cnt > 0 {
-		result += fmt.Sprintf("-%d", cnt)
-	}
-	cnt++
-	fne.counters[objName] = cnt
-	return result
-}
-
-func dumpTableDataForZip(
-	z *zipper, conn *sqlConn, timeout time.Duration, base, table, selectClause string,
+// dumpTableDataForZip runs the specified SQL query and stores the
+// result. Errors encountered while running the SQL query are stored
+// in an error file in the zip file, and dumpTableDataForZip() returns
+// nil in that case.
+//
+// An error is returned by this function if it is unable to write to
+// the output file or some other unrecoverable error is encountered.
+func (zc *debugZipContext) dumpTableDataForZip(
+	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
-	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT %s FROM %s`, timeout, selectClause, table)
-	baseName := base + "/" + table
+	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
+	baseName := base + "/" + sanitizeFilename(table)
 
-	fmt.Printf("retrieving SQL data for %s... ", table)
+	s := zr.start("retrieving SQL data for %s", table)
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + ".txt"
-		w, err := z.create(name, time.Time{})
-		if err != nil {
-			return err
-		}
-		// Pump the SQL rows directly into the zip writer, to avoid
-		// in-RAM buffering.
-		if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
-			if cErr := z.createError(name, err); cErr != nil {
+		s.progress("writing output: %s", name)
+		sqlErr := func() error {
+			zc.z.Lock()
+			defer zc.z.Unlock()
+
+			w, err := zc.z.createLocked(name, time.Time{})
+			if err != nil {
+				return err
+			}
+			// Pump the SQL rows directly into the zip writer, to avoid
+			// in-RAM buffering.
+			return sqlExecCtx.RunQueryAndFormatResults(conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
+		}()
+		if sqlErr != nil {
+			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
 				return cErr
 			}
 			var pqErr *pq.Error
-			if !errors.As(err, &pqErr) {
+			if !errors.As(sqlErr, &pqErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}
@@ -820,93 +335,15 @@ func dumpTableDataForZip(
 			}
 			// We've encountered a retry error. Add a suffix then loop.
 			suffix = fmt.Sprintf(".%d", numRetries)
+			s = zr.start("retrying %s", table)
 			continue
 		}
+		s.done()
 		break
 	}
 	return nil
 }
 
-type nodeSelection struct {
-	inclusive     rangeSelection
-	exclusive     rangeSelection
-	includedCache map[int]struct{}
-	excludedCache map[int]struct{}
-}
-
-func (n *nodeSelection) isIncluded(nodeID roachpb.NodeID) bool {
-	// Avoid recomputing the maps on every call.
-	if n.includedCache == nil {
-		n.includedCache = n.inclusive.items()
-	}
-	if n.excludedCache == nil {
-		n.excludedCache = n.exclusive.items()
-	}
-
-	// If the included cache is empty, then we're assuming the node is included.
-	isIncluded := true
-	if len(n.includedCache) > 0 {
-		_, isIncluded = n.includedCache[int(nodeID)]
-	}
-	// Then filter out excluded IDs.
-	if _, excluded := n.excludedCache[int(nodeID)]; excluded {
-		isIncluded = false
-	}
-	return isIncluded
-}
-
-type rangeSelection struct {
-	input  string
-	ranges []vrange
-}
-
-type vrange struct {
-	a, b int
-}
-
-func (r *rangeSelection) String() string { return r.input }
-
-func (r *rangeSelection) Type() string {
-	return "a-b,c,d-e,..."
-}
-
-func (r *rangeSelection) Set(v string) error {
-	r.input = v
-	for _, rs := range strings.Split(v, ",") {
-		var thisRange vrange
-		if strings.Contains(rs, "-") {
-			ab := strings.SplitN(rs, "-", 2)
-			a, err := strconv.Atoi(ab[0])
-			if err != nil {
-				return err
-			}
-			b, err := strconv.Atoi(ab[1])
-			if err != nil {
-				return err
-			}
-			if b < a {
-				return errors.New("invalid range")
-			}
-			thisRange = vrange{a, b}
-		} else {
-			a, err := strconv.Atoi(rs)
-			if err != nil {
-				return err
-			}
-			thisRange = vrange{a, a}
-		}
-		r.ranges = append(r.ranges, thisRange)
-	}
-	return nil
-}
-
-// items returns the values selected by the range selection
-func (r *rangeSelection) items() map[int]struct{} {
-	s := map[int]struct{}{}
-	for _, vr := range r.ranges {
-		for i := vr.a; i <= vr.b; i++ {
-			s[i] = struct{}{}
-		}
-	}
-	return s
+func sanitizeFilename(f string) string {
+	return strings.TrimPrefix(f, `"".`)
 }

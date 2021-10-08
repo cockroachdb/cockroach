@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // StateLoader contains accessor methods to read or write the
@@ -83,6 +83,9 @@ func (rsl StateLoader) Load(
 
 		ms := as.RangeStats.ToStats()
 		s.Stats = &ms
+		if as.RaftClosedTimestamp != nil {
+			s.RaftClosedTimestamp = *as.RaftClosedTimestamp
+		}
 	} else {
 		if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
 			return kvserverpb.ReplicaState{}, err
@@ -103,6 +106,14 @@ func (rsl StateLoader) Load(
 	}
 	s.TruncatedState = &truncState
 
+	version, err := rsl.LoadVersion(ctx, reader)
+	if err != nil {
+		return kvserverpb.ReplicaState{}, err
+	}
+	if (version != roachpb.Version{}) {
+		s.Version = &version
+	}
+
 	return s, nil
 }
 
@@ -113,6 +124,9 @@ type TruncatedStateType int
 const (
 	// TruncatedStateLegacyReplicated means use the legacy (replicated) key.
 	TruncatedStateLegacyReplicated TruncatedStateType = iota
+	// TruncatedStateLegacyReplicatedAndNoAppliedKey means use the legacy key
+	// and also don't use the RangeAppliedKey. This is for testing use only.
+	TruncatedStateLegacyReplicatedAndNoAppliedKey
 	// TruncatedStateUnreplicated means use the new (unreplicated) key.
 	TruncatedStateUnreplicated
 )
@@ -141,7 +155,7 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if truncStateType == TruncatedStateLegacyReplicated {
+	if truncStateType != TruncatedStateUnreplicated {
 		if err := rsl.SetLegacyRaftTruncatedState(ctx, readWriter, ms, state.TruncatedState); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -150,9 +164,14 @@ func (rsl StateLoader) Save(
 			return enginepb.MVCCStats{}, err
 		}
 	}
+	if state.Version != nil {
+		if err := rsl.SetVersion(ctx, readWriter, ms, state.Version); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	}
 	if state.UsingAppliedStateKey {
-		rai, lai := state.RaftAppliedIndex, state.LeaseAppliedIndex
-		if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, ms); err != nil {
+		rai, lai, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, &state.RaftClosedTimestamp
+		if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, ms, ct); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	} else {
@@ -278,19 +297,28 @@ func (rsl StateLoader) LoadMVCCStats(
 // The applied indices and the stats used to be stored separately in different
 // keys. We now deem those keys to be "legacy" because they have been replaced
 // by the range applied state key.
+//
+// TODO(andrei): raftClosedTimestamp is a pointer to avoid an allocation when
+// putting it in RangeAppliedState. Once RangeAppliedState.RaftClosedTimestamp
+// is made non-nullable (see comments on the field), this argument should be
+// taken by value.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	appliedIndex, leaseAppliedIndex uint64,
 	newMS *enginepb.MVCCStats,
+	raftClosedTimestamp *hlc.Timestamp,
 ) error {
 	as := enginepb.RangeAppliedState{
 		RaftAppliedIndex:  appliedIndex,
 		LeaseAppliedIndex: leaseAppliedIndex,
 		RangeStats:        newMS.ToPersistentStats(),
 	}
+	if raftClosedTimestamp != nil && !raftClosedTimestamp.IsEmpty() {
+		as.RaftClosedTimestamp = raftClosedTimestamp
+	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
-	// in C.MVCCComputeStats and ComputeStatsGo.
+	// in C.MVCCComputeStats and ComputeStatsForRange.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
@@ -400,7 +428,7 @@ func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	// enlarges the size of the struct itself. This is mostly fine - we persist
 	// MVCCStats under the RangeAppliedState key and don't account for the size of
 	// the MVCCStats struct itself when doing so (we ignore the RangeAppliedState key
-	// in ComputeStatsGo). This would not therefore not cause replica state divergence
+	// in ComputeStatsForRange). This would not therefore not cause replica state divergence
 	// in mixed version clusters (the enlarged struct does not contribute to a
 	// persisted stats difference on disk because we're not accounting for the size of
 	// the struct itself).
@@ -461,10 +489,24 @@ func (rsl StateLoader) SetMVCCStats(
 	if as, err := rsl.LoadRangeAppliedState(ctx, readWriter); err != nil {
 		return err
 	} else if as != nil {
-		return rsl.SetRangeAppliedState(ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS)
+		return rsl.SetRangeAppliedState(
+			ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS, as.RaftClosedTimestamp)
 	}
 
 	return rsl.writeLegacyMVCCStatsInternal(ctx, readWriter, newMS)
+}
+
+// SetClosedTimestamp overwrites the closed timestamp.
+func (rsl StateLoader) SetClosedTimestamp(
+	ctx context.Context, readWriter storage.ReadWriter, closedTS *hlc.Timestamp,
+) error {
+	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
+	if err != nil {
+		return err
+	}
+	return rsl.SetRangeAppliedState(
+		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex,
+		as.RangeStats.ToStatsPtr(), closedTS)
 }
 
 // SetLegacyRaftTruncatedState overwrites the truncated state.
@@ -486,7 +528,7 @@ func (rsl StateLoader) LoadGCThreshold(
 	ctx context.Context, reader storage.Reader,
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCThresholdKey(),
 		hlc.Timestamp{}, &t, storage.MVCCGetOptions{})
 	return &t, err
 }
@@ -502,7 +544,28 @@ func (rsl StateLoader) SetGCThreshold(
 		return errors.New("cannot persist nil GCThreshold")
 	}
 	return storage.MVCCPutProto(ctx, readWriter, ms,
-		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
+		rsl.RangeGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
+}
+
+// LoadVersion loads the replica version.
+func (rsl StateLoader) LoadVersion(
+	ctx context.Context, reader storage.Reader,
+) (roachpb.Version, error) {
+	var version roachpb.Version
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeVersionKey(),
+		hlc.Timestamp{}, &version, storage.MVCCGetOptions{})
+	return version, err
+}
+
+// SetVersion sets the replica version.
+func (rsl StateLoader) SetVersion(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	version *roachpb.Version,
+) error {
+	return storage.MVCCPutProto(ctx, readWriter, ms,
+		rsl.RangeVersionKey(), hlc.Timestamp{}, nil, version)
 }
 
 // The rest is not technically part of ReplicaState.
@@ -510,7 +573,8 @@ func (rsl StateLoader) SetGCThreshold(
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
 	prefix := rsl.RaftLogPrefix()
-	iter := reader.NewIterator(storage.IterOptions{LowerBound: prefix})
+	// NB: raft log has no intents.
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
 	var lastIndex uint64
@@ -574,7 +638,7 @@ func (rsl StateLoader) SetRaftTruncatedState(
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
@@ -604,7 +668,7 @@ func (rsl StateLoader) LoadHardState(
 func (rsl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
@@ -618,7 +682,7 @@ func (rsl StateLoader) SetHardState(
 
 // SynthesizeRaftState creates a Raft state which synthesizes both a HardState
 // and a lastIndex from pre-seeded data in the engine (typically created via
-// writeInitialReplicaState and, on a split, perhaps the activity of an
+// WriteInitialReplicaState and, on a split, perhaps the activity of an
 // uninitialized Raft group)
 func (rsl StateLoader) SynthesizeRaftState(
 	ctx context.Context, readWriter storage.ReadWriter,

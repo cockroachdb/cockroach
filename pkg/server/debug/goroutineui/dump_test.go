@@ -15,9 +15,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 )
+
+func init() {
+	if bazel.BuiltWithBazel() {
+		bazel.SetGoEnv()
+	}
+}
 
 func TestDumpHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()

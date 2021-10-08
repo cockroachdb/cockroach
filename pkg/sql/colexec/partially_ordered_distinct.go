@@ -12,36 +12,34 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(yuzefovich): tune.
-const partiallyOrderedDistinctNumHashBuckets = 1024
-
 // newPartiallyOrderedDistinct creates a distinct operator on the given
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
 	typs []*types.T,
-) (colexecbase.Operator, error) {
+	nullsAreDistinct bool,
+	errorOnDup string,
+) (colexecop.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, typs, orderedCols)
+	chunker, err := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
 	if err != nil {
 		return nil, err
 	}
@@ -63,13 +61,10 @@ func newPartiallyOrderedDistinct(
 			distinctUnorderedCols = append(distinctUnorderedCols, distinctCol)
 		}
 	}
-	distinct := NewUnorderedDistinct(
-		allocator, chunkerOperator, distinctUnorderedCols, typs,
-		partiallyOrderedDistinctNumHashBuckets,
-	)
+	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs, nullsAreDistinct, errorOnDup)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
-		distinct: distinct.(ResettableOperator),
+		distinct: distinct.(colexecop.ResettableOperator),
 	}, nil
 }
 
@@ -78,11 +73,13 @@ func newPartiallyOrderedDistinct(
 // the input has been fully processed and, if not, to move to the next chunk
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {
+	colexecop.InitHelper
+
 	input    *chunkerOperator
-	distinct ResettableOperator
+	distinct colexecop.ResettableOperator
 }
 
-var _ colexecbase.Operator = &partiallyOrderedDistinct{}
+var _ colexecop.Operator = &partiallyOrderedDistinct{}
 
 func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
@@ -92,25 +89,28 @@ func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-func (p *partiallyOrderedDistinct) Init() {
-	p.distinct.Init()
+func (p *partiallyOrderedDistinct) Init(ctx context.Context) {
+	if !p.InitHelper.Init(ctx) {
+		return
+	}
+	p.distinct.Init(p.Ctx)
 }
 
-func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
+func (p *partiallyOrderedDistinct) Next() coldata.Batch {
 	for {
-		batch := p.distinct.Next(ctx)
+		batch := p.distinct.Next()
 		if batch.Length() == 0 {
 			if p.input.done() {
 				// We're done, so return a zero-length batch.
 				return coldata.ZeroBatch
 			}
-			// p.distinct will reset p.input.
-			p.distinct.reset(ctx)
+			// p.distinct will reset p.Input.
+			p.distinct.Reset(p.Ctx)
 		} else {
 			return batch
 		}
@@ -135,6 +135,8 @@ func newChunkerOperator(
 // indicates the end of a chunk, but when done() returns true, it indicates
 // that the input has been fully processed).
 type chunkerOperator struct {
+	colexecop.InitHelper
+
 	input      *chunker
 	inputTypes []*types.T
 	// haveChunksToEmit indicates whether we have spooled input and still there
@@ -159,7 +161,7 @@ type chunkerOperator struct {
 	windowedBatch coldata.Batch
 }
 
-var _ ResettableOperator = &chunkerOperator{}
+var _ colexecop.ResettableOperator = &chunkerOperator{}
 
 func (c *chunkerOperator) ChildCount(bool) int {
 	return 1
@@ -169,22 +171,25 @@ func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-func (c *chunkerOperator) Init() {
-	c.input.init()
+func (c *chunkerOperator) Init(ctx context.Context) {
+	if !c.InitHelper.Init(ctx) {
+		return
+	}
+	c.input.init(c.Ctx)
 }
 
-func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
+func (c *chunkerOperator) Next() coldata.Batch {
 	if c.currentChunkFinished {
 		return coldata.ZeroBatch
 	}
 	if !c.haveChunksToEmit {
 		// We don't have any chunks to emit, so we need to spool the input.
-		c.input.spool(ctx)
+		c.input.spool()
 		c.haveChunksToEmit = true
 		c.numTuplesInChunks = c.input.getNumTuples()
 		c.newChunksCol = c.input.getPartitionsCol()
@@ -226,7 +231,7 @@ func (c *chunkerOperator) done() bool {
 	return c.input.done()
 }
 
-func (c *chunkerOperator) reset(_ context.Context) {
+func (c *chunkerOperator) Reset(_ context.Context) {
 	c.currentChunkFinished = false
 	if c.newChunksCol != nil {
 		if c.outputTupleStartIdx == c.numTuplesInChunks {

@@ -75,10 +75,10 @@ func (*txnMetricRecorder) importLeafFinalState(context.Context, *roachpb.LeafTxn
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) epochBumpedLocked() {}
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}
 
 // closeLocked is part of the txnInterceptor interface.
@@ -117,6 +117,9 @@ func (m *txnMetricRecorder) closeLocked() {
 		// We increment the Aborts metric nevertheless; not sure how these
 		// transactions should be accounted.
 		m.metrics.Aborts.Inc(1)
+		// Record failed aborts separately as in this case EndTxn never succeeded
+		// which means intents are left for subsequent cleanup by reader.
+		m.metrics.RollbacksFailed.Inc(1)
 	case roachpb.COMMITTED:
 		// Note that successful read-only txn are also counted as committed, even
 		// though they never had a txn record.

@@ -1,0 +1,82 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/components/core/index.styl'
+
+$table-cell-border = 1px solid $table-border-color
+
+$stats-table-td--fg = $body-color
+
+$stats-table-th--bg     = $colors--neutral-0
+$stats-table-tr--bg     = $colors--neutral-0
+
+$table-base
+  width 100%
+  border-collapse collapse
+  font-family SourceSansPro-Regular
+  font-weight 300
+  line-height 22px
+  font-size 14px
+  vertical-align top
+  color $stats-table-td--fg
+
+  &__row
+    &--body
+      letter-spacing .33px
+      background-color $stats-table-tr--bg
+      &:hover
+        background-color $background-color
+
+    &--header
+      padding 20px
+      font-size 12px
+      font-weight bold
+      letter-spacing 2px
+      text-transform uppercase
+      text-align left
+      white-space nowrap
+      background-color $stats-table-th--bg
+
+    &--summary
+      background-color $background-color
+      font-family SourceSansPro-SemiBold
+      font-size 14px
+      font-weight bold
+      line-height 1.71
+      letter-spacing 0.1px
+      color $popover-color
+      .bar-chart .label
+        font-family SourceSansPro-Regular
+        font-size 14px
+        font-weight bold
+        line-height 1.71
+        letter-spacing 0.1px
+        color $popover-color
+
+  &__cell
+    padding 10px 20px
+    border none
+    font-weight inherit
+
+    a
+      line-height $line-height--medium
+      color $adminui-grey-1
+      text-decoration none
+      cursor pointer
+      &:hover
+        color $colors--primary-blue-3
+        text-decoration underline
+
+    &--filler
+      width 100%
+
+    &--right-aligned-stat
+      text-align right

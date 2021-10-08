@@ -59,9 +59,14 @@ type ValueGenerator interface {
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not
 	// been called yet. It must not be called in-between restarts.
-	Close()
+	Close(ctx context.Context)
 }
 
 // GeneratorFactory is the type of constructor functions for
 // ValueGenerator objects.
 type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
+
+// GeneratorWithExprsFactory is an alternative constructor function type for
+// ValueGenerators that gives implementations the ability to see the builtin's
+// arguments before evaluation, as Exprs.
+type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)

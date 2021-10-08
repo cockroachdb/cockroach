@@ -11,9 +11,12 @@
 package cli
 
 import (
-	"os"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -21,9 +24,20 @@ import (
 // command tree.
 func WorkloadCmd(userFacing bool) *cobra.Command {
 	rootCmd := SetCmdDefaults(&cobra.Command{
-		Use:   `workload`,
-		Short: `generators for data and query loads`,
+		Use:     `workload`,
+		Short:   `generators for data and query loads`,
+		Version: "details:\n" + build.GetInfo().Long(),
 	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   `version`,
+		Short: `print version information`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := build.GetInfo()
+			fmt.Println(info.Long())
+			return nil
+		}},
+	)
+
 	for _, subCmdFn := range subCmdFns {
 		rootCmd.AddCommand(subCmdFn(userFacing))
 	}
@@ -36,17 +50,16 @@ func WorkloadCmd(userFacing bool) *cobra.Command {
 		for _, m := range workload.Registered() {
 			allowlist[m.Name] = struct{}{}
 		}
-		var addExperimental func(c *cobra.Command)
-		addExperimental = func(c *cobra.Command) {
-			c.Short = `[experimental] ` + c.Short
+		var hideNonPublic func(c *cobra.Command)
+		hideNonPublic = func(c *cobra.Command) {
 			if _, ok := allowlist[c.Name()]; !ok {
 				c.Hidden = true
 			}
 			for _, sub := range c.Commands() {
-				addExperimental(sub)
+				hideNonPublic(sub)
 			}
 		}
-		addExperimental(rootCmd)
+		hideNonPublic(rootCmd)
 	}
 	return rootCmd
 }
@@ -73,8 +86,12 @@ func HandleErrs(
 	return func(cmd *cobra.Command, args []string) {
 		err := f(cmd, args)
 		if err != nil {
+			hint := errors.FlattenHints(err)
 			cmd.Println("Error:", err.Error())
-			os.Exit(1)
+			if hint != "" {
+				cmd.Println("Hint:", hint)
+			}
+			exit.WithCode(exit.UnspecifiedError())
 		}
 	}
 }

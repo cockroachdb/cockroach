@@ -30,86 +30,93 @@ type vecToDatumTmplInfo struct {
 }
 
 type vecToDatumWidthTmplInfo struct {
-	Width     int32
-	VecMethod string
+	CanonicalTypeFamily types.Family
+	Width               int32
+	VecMethod           string
 	// ConversionTmpl is a "format string" for the conversion template. It has
 	// the same "signature" as AssignConverted, meaning that it should use
 	//   %[1]s for targetElem
-	//   %[2]s for typedCol
-	//   %[3]s for tupleIdx
-	//   %[4]s for datumAlloc.
+	//   %[2]s for sourceElem
+	//   %[3]s for datumAlloc.
 	ConversionTmpl string
 }
 
 // AssignConverted returns a string that performs a conversion of the element
-// in typedCol at position tupleIdx and assigns the result to targetElem.
-// datumAlloc is the name of *sqlbase.DatumAlloc struct that can be used to
+// sourceElem and assigns the result to the newly declared targetElem.
+// datumAlloc is the name of *rowenc.DatumAlloc struct that can be used to
 // allocate new datums.
-func (i vecToDatumWidthTmplInfo) AssignConverted(
-	targetElem, typedCol, tupleIdx, datumAlloc string,
-) string {
-	return fmt.Sprintf(i.ConversionTmpl, targetElem, typedCol, tupleIdx, datumAlloc)
+func (i vecToDatumWidthTmplInfo) AssignConverted(targetElem, sourceElem, datumAlloc string) string {
+	return fmt.Sprintf(i.ConversionTmpl, targetElem, sourceElem, datumAlloc)
 }
 
-// Remove unused warning.
+// Sliceable returns whether the vector of i.CanonicalTypeFamily can be sliced
+// (i.e. whether it is a Golang's slice).
+func (i vecToDatumWidthTmplInfo) Sliceable() bool {
+	return sliceable(i.CanonicalTypeFamily)
+}
+
+// Remove unused warnings.
 var _ = vecToDatumWidthTmplInfo{}.AssignConverted
+var _ = vecToDatumWidthTmplInfo{}.Sliceable
 
 // vecToDatumConversionTmpls maps the type families to the corresponding
 // "format" strings (see comment above for details).
 // Note that the strings are formatted this way so that generated code doesn't
 // have empty lines.
 var vecToDatumConversionTmpls = map[types.Family]string{
-	types.BoolFamily: `%[1]s = tree.MakeDBool(tree.DBool(%[2]s[%[3]s]))`,
+	types.BoolFamily: `%[1]s := tree.MakeDBool(tree.DBool(%[2]s))`,
 	// Note that currently, regardless of the integer's width, we always return
 	// INT8, so there is a single conversion template for IntFamily.
-	types.IntFamily:   `%[1]s = %[4]s.NewDInt(tree.DInt(%[2]s[%[3]s]))`,
-	types.FloatFamily: `%[1]s = %[4]s.NewDFloat(tree.DFloat(%[2]s[%[3]s]))`,
-	types.DecimalFamily: `  d := %[4]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s[%[3]s]})
+	types.IntFamily:   `%[1]s := %[3]s.NewDInt(tree.DInt(%[2]s))`,
+	types.FloatFamily: `%[1]s := %[3]s.NewDFloat(tree.DFloat(%[2]s))`,
+	types.DecimalFamily: `  %[1]s := %[3]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
-							d.Coeff = big.Int{}
-							d.Coeff.Set(&%[2]s[%[3]s].Coeff)
-							%[1]s = d`,
-	types.DateFamily: `%[1]s = %[4]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s[%[3]s])})`,
+							%[1]s.Coeff = big.Int{}
+							%[1]s.Coeff.Set(&%[2]s.Coeff)`,
+	types.DateFamily: `%[1]s := %[3]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s)})`,
 	types.BytesFamily: `// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						%[1]s = %[4]s.NewDBytes(tree.DBytes(%[2]s.Get(%[3]s)))`,
-	types.OidFamily: `%[1]s = %[4]s.NewDOid(tree.MakeDOid(tree.DInt(%[2]s[%[3]s])))`,
+						%[1]s := %[3]s.NewDBytes(tree.DBytes(%[2]s))`,
+	types.JsonFamily: `
+            // The following operation deliberately copies the input JSON
+            // bytes, since FromEncoding is lazy and keeps a handle on the bytes
+            // it is passed in.
+            _bytes, _err := json.EncodeJSON(nil, %[2]s)
+            if _err != nil {
+                colexecerror.ExpectedError(_err)
+            }
+            var _j json.JSON
+            _j, _err = json.FromEncoding(_bytes)
+            if _err != nil {
+                colexecerror.ExpectedError(_err)
+            }
+            %[1]s := %[3]s.NewDJSON(tree.DJSON{JSON: _j})`,
 	types.UuidFamily: ` // Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(%[2]s.Get(%[3]s))
+						id, err := uuid.FromBytes(%[2]s)
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						%[1]s = %[4]s.NewDUuid(tree.DUuid{UUID: id})`,
-	types.TimestampFamily:                `%[1]s = %[4]s.NewDTimestamp(tree.DTimestamp{Time: %[2]s[%[3]s]})`,
-	types.TimestampTZFamily:              `%[1]s = %[4]s.NewDTimestampTZ(tree.DTimestampTZ{Time: %[2]s[%[3]s]})`,
-	types.IntervalFamily:                 `%[1]s = %[4]s.NewDInterval(tree.DInterval{Duration: %[2]s[%[3]s]})`,
-	typeconv.DatumVecCanonicalTypeFamily: `%[1]s = %[2]s.Get(%[3]s).(*coldataext.Datum).Datum`,
+						%[1]s := %[3]s.NewDUuid(tree.DUuid{UUID: id})`,
+	types.TimestampFamily:                `%[1]s := %[3]s.NewDTimestamp(tree.DTimestamp{Time: %[2]s})`,
+	types.TimestampTZFamily:              `%[1]s := %[3]s.NewDTimestampTZ(tree.DTimestampTZ{Time: %[2]s})`,
+	types.IntervalFamily:                 `%[1]s := %[3]s.NewDInterval(tree.DInterval{Duration: %[2]s})`,
+	typeconv.DatumVecCanonicalTypeFamily: `%[1]s := %[2]s.(tree.Datum)`,
 }
 
-const vecToDatumTmpl = "pkg/sql/colexec/vec_to_datum_tmpl.go"
+const vecToDatumTmpl = "pkg/sql/colconv/vec_to_datum_tmpl.go"
 
 func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-		"_HAS_NULLS", "$.HasNulls",
-		"_HAS_SEL", "$.HasSel",
-		"_DESELECT", "$.Deselect",
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_VEC_METHOD", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 
-	setDestIdx := makeFunctionRegex("_SET_DEST_IDX", 5)
-	s = setDestIdx.ReplaceAllString(s, `{{template "setDestIdx" buildDict "HasSel" $4 "Deselect" $5}}`)
-	setSrcIdx := makeFunctionRegex("_SET_SRC_IDX", 4)
-	s = setSrcIdx.ReplaceAllString(s, `{{template "setSrcIdx" buildDict "HasSel" $4}}`)
-	vecToDatum := makeFunctionRegex("_VEC_TO_DATUM", 8)
-	s = vecToDatum.ReplaceAllString(s, `{{template "vecToDatum" buildDict "Global" . "HasNulls" $6 "HasSel" $7 "Deselect" $8}}`)
-
-	assignConvertedRe := makeFunctionRegex("_ASSIGN_CONVERTED", 4)
-	s = assignConvertedRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignConverted", 4))
+	assignConvertedRe := makeFunctionRegex("_ASSIGN_CONVERTED", 3)
+	s = assignConvertedRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignConverted", 3))
 
 	tmpl, err := template.New("vec_to_datum").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
@@ -121,7 +128,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	// the template explicitly, so it is omitted from this slice.
 	optimizedTypeFamilies := []types.Family{
 		types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
-		types.DateFamily, types.BytesFamily, types.OidFamily, types.UuidFamily,
+		types.DateFamily, types.BytesFamily, types.JsonFamily, types.UuidFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {
@@ -136,9 +143,10 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		}
 		for _, width := range widths {
 			tmplInfo.Widths = append(tmplInfo.Widths, vecToDatumWidthTmplInfo{
-				Width:          width,
-				VecMethod:      toVecMethod(canonicalTypeFamily, width),
-				ConversionTmpl: vecToDatumConversionTmpls[typeFamily],
+				CanonicalTypeFamily: canonicalTypeFamily,
+				Width:               width,
+				VecMethod:           toVecMethod(canonicalTypeFamily, width),
+				ConversionTmpl:      vecToDatumConversionTmpls[typeFamily],
 			})
 		}
 		tmplInfos = append(tmplInfos, tmplInfo)
@@ -159,9 +167,10 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		// Such structure requires that datum-vec tmpl info is added last.
 		TypeFamily: "typeconv.DatumVecCanonicalTypeFamily: default",
 		Widths: []vecToDatumWidthTmplInfo{{
-			Width:          anyWidth,
-			VecMethod:      toVecMethod(typeconv.DatumVecCanonicalTypeFamily, anyWidth),
-			ConversionTmpl: vecToDatumConversionTmpls[typeconv.DatumVecCanonicalTypeFamily],
+			CanonicalTypeFamily: typeconv.DatumVecCanonicalTypeFamily,
+			Width:               anyWidth,
+			VecMethod:           toVecMethod(typeconv.DatumVecCanonicalTypeFamily, anyWidth),
+			ConversionTmpl:      vecToDatumConversionTmpls[typeconv.DatumVecCanonicalTypeFamily],
 		}},
 	})
 

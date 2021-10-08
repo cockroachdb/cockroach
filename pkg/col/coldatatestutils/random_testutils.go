@@ -12,19 +12,20 @@ package coldatatestutils
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // maxVarLen specifies a length limit for variable length types (e.g. byte slices).
@@ -175,10 +176,19 @@ func RandomVec(args RandomVecArgs) {
 		for i := 0; i < args.N; i++ {
 			intervals[i] = duration.FromFloat64(args.Rand.Float64())
 		}
+	case types.JsonFamily:
+		j := args.Vec.JSON()
+		for i := 0; i < args.N; i++ {
+			random, err := json.Random(20, args.Rand)
+			if err != nil {
+				panic(err)
+			}
+			j.Set(i, random)
+		}
 	default:
 		datums := args.Vec.Datum()
 		for i := 0; i < args.N; i++ {
-			datums.Set(i, sqlbase.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
+			datums.Set(i, randgen.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
 		}
 	}
 	args.Vec.Nulls().UnsetNulls()
@@ -188,8 +198,23 @@ func RandomVec(args RandomVecArgs) {
 
 	for i := 0; i < args.N; i++ {
 		if args.Rand.Float64() < args.NullProbability {
-			args.Vec.Nulls().SetNull(i)
+			setNull(args.Rand, args.Vec, i)
 		}
+	}
+}
+
+// setNull sets ith element in vec to null and might set the actual value (which
+// should be ignored) to some garbage.
+func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
+	vec.Nulls().SetNull(i)
+	switch vec.CanonicalTypeFamily() {
+	case types.DecimalFamily:
+		_, err := vec.Decimal()[i].SetFloat64(rng.Float64())
+		if err != nil {
+			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+		}
+	case types.IntervalFamily:
+		vec.Interval()[i] = duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63())
 	}
 }
 
@@ -228,7 +253,7 @@ func RandomBatch(
 // less than batchSize.
 func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		colexecerror.InternalError(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		colexecerror.InternalError(errors.AssertionFailedf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]int, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -289,14 +314,15 @@ type RandomDataOpArgs struct {
 	Nulls bool
 	// BatchAccumulator, if set, will be called before returning a coldata.Batch
 	// from Next.
-	BatchAccumulator func(b coldata.Batch, typs []*types.T)
+	BatchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 }
 
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
+	ctx              context.Context
 	allocator        *colmem.Allocator
-	batchAccumulator func(b coldata.Batch, typs []*types.T)
+	batchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 	typs             []*types.T
 	rng              *rand.Rand
 	batchSize        int
@@ -306,7 +332,7 @@ type RandomDataOp struct {
 	nulls            bool
 }
 
-var _ colexecbase.Operator = &RandomDataOp{}
+var _ colexecop.Operator = &RandomDataOp{}
 
 // NewRandomDataOp creates a new RandomDataOp.
 func NewRandomDataOp(
@@ -332,7 +358,7 @@ func NewRandomDataOp(
 		// Generate at least one type.
 		typs = make([]*types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
-			typs[i] = sqlbase.RandType(rng)
+			typs[i] = randgen.RandType(rng)
 		}
 	}
 	return &RandomDataOp{
@@ -347,16 +373,18 @@ func NewRandomDataOp(
 	}
 }
 
-// Init is part of the colexec.Operator interface.
-func (o *RandomDataOp) Init() {}
+// Init is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Init(ctx context.Context) {
+	o.ctx = ctx
+}
 
-// Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(context.Context) coldata.Batch {
+// Next is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Next() coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(o.ctx, b, o.typs)
 		}
 		return b
 	}
@@ -365,25 +393,23 @@ func (o *RandomDataOp) Next(context.Context) coldata.Batch {
 		selProbability  float64
 		nullProbability float64
 	)
+	if o.selection {
+		selProbability = o.rng.Float64()
+	}
+	if o.nulls && o.rng.Float64() > 0.1 {
+		// Even if nulls are desired, in 10% of cases create a batch with no
+		// nulls at all.
+		nullProbability = o.rng.Float64()
+	}
 	for {
-		if o.selection {
-			selProbability = o.rng.Float64()
-		}
-		if o.nulls {
-			nullProbability = o.rng.Float64()
-		}
-
 		b := RandomBatchWithSel(o.allocator, o.rng, o.typs, o.batchSize, nullProbability, selProbability)
-		if !o.selection {
-			b.SetSelection(false)
-		}
 		if b.Length() == 0 {
 			// Don't return a zero-length batch until we return o.numBatches batches.
 			continue
 		}
 		o.numReturned++
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(o.ctx, b, o.typs)
 		}
 		return b
 	}
@@ -396,7 +422,7 @@ func (o *RandomDataOp) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -11,8 +11,10 @@
 package geomfn
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/stretchr/testify/require"
 )
@@ -83,4 +85,37 @@ func TestParseBufferParams(t *testing.T) {
 			require.Equal(t, tc.expectedD, d)
 		})
 	}
+}
+
+func TestBuffer(t *testing.T) {
+	t.Run("too many quadrant segements", func(t *testing.T) {
+		g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
+		params, distance, err := ParseBufferParams("quad_segs=1000000", 1000)
+		require.NoError(t, err)
+		_, err = Buffer(g, params, distance)
+		require.EqualError(
+			t,
+			err,
+			fmt.Sprintf(
+				"attempting to split buffered geometry into too many quadrant segments; requested 1000000 quadrant segments, max %d",
+				geo.MaxAllowedSplitPoints,
+			),
+		)
+	})
+
+	t.Run("too little quadrant segements", func(t *testing.T) {
+		for _, num := range []int{0, -1} {
+			t.Run(fmt.Sprintf("%d", num), func(t *testing.T) {
+				g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
+				params, distance, err := ParseBufferParams(fmt.Sprintf("quad_segs=%d", num), 1000)
+				require.NoError(t, err)
+				_, err = Buffer(g, params, distance)
+				require.EqualError(
+					t,
+					err,
+					fmt.Sprintf("must request at least 1 quadrant segment, requested %d quadrant segments", num),
+				)
+			})
+		}
+	})
 }

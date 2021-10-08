@@ -12,10 +12,12 @@ package pgdate
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func TestExtractRelative(t *testing.T) {
@@ -40,7 +42,7 @@ func TestExtractRelative(t *testing.T) {
 	now := time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC)
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			d, depOnCtx, err := ParseDate(now, ParseModeYMD, tc.s)
+			d, depOnCtx, err := ParseDate(now, DateStyle{Order: Order_YMD}, tc.s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,6 +88,10 @@ func TestExtractSentinels(t *testing.T) {
 			s:   keywordNow + " tomorrow",
 			err: true,
 		},
+		{
+			s:   "j66001",
+			err: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
@@ -104,6 +110,50 @@ func TestExtractSentinels(t *testing.T) {
 				t.Fatal("did not get expected sentinel value")
 			}
 		})
+	}
+}
+
+func TestExtractInvalidJulianDate(t *testing.T) {
+	testCases := []struct {
+		wanted   fieldSet
+		str      string
+		expError string
+	}{
+		// Expect only a time, reject a year.
+		{timeFields, "j69001", `value -4524 for field Year already present or not wanted
+Wanted: [ Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
+Already found in input: [ ]`},
+		// Expect a date, reject when the year is specified twice.
+		{dateFields, "j69001 j69002", `value -4524 for field Year already present or not wanted
+Wanted: [ Era ]
+Already found in input: [ Year Month Day ]`},
+		/// Expect a date+time, reject when the date/month/day is specified twice.
+		{dateTimeFields, "2010-10-10 j69002", `could not parse field: -10
+Wanted: [ Era Nanos Meridian ]
+Already found in input: [ Year Month Day Hour Minute Second TZHour TZMinute TZSecond ]`},
+	}
+
+	// TODO(knz): This would benefit from datadriven testing.
+
+	now := timeutil.Unix(42, 56)
+	for _, tc := range testCases {
+		fe := fieldExtract{
+			currentTime: now,
+			wanted:      tc.wanted,
+		}
+		err := fe.Extract(tc.str)
+		if err == nil {
+			t.Errorf("%+v: expected error, got no error", tc)
+			continue
+		}
+
+		msg := err.Error()
+		msg += "\n" + errors.FlattenDetails(err)
+		if msg != tc.expError {
+			t.Errorf("expected error:\n  %v\ngot:\n  %v",
+				strings.ReplaceAll(tc.expError, "\n", "\n  "),
+				strings.ReplaceAll(msg, "\n", "\n  "))
+		}
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -61,8 +62,8 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 
 // IsMeta1Leaseholder returns whether the specified stores owns
 // the meta1 lease. Returns an error if any.
-func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
-	repl, _, err := ls.GetReplicaForRangeID(1)
+func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
+	repl, _, err := ls.GetReplicaForRangeID(ctx, 1)
 	if roachpb.IsRangeNotFoundError(err) {
 		return false, nil
 	}
@@ -106,7 +107,7 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if ls.mu.biLatestTS != (hlc.Timestamp{}) {
+	if !ls.mu.biLatestTS.IsEmpty() {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
@@ -117,6 +118,22 @@ func (ls *Stores) AddStore(s *Store) {
 // RemoveStore removes the specified store from the store map.
 func (ls *Stores) RemoveStore(s *Store) {
 	ls.storeMap.Delete(int64(s.Ident.StoreID))
+}
+
+// ForwardSideTransportClosedTimestampForRange forwards the side-transport
+// closed timestamp for the local replicas of the given range.
+func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
+	ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai ctpb.LAI,
+) {
+	if err := ls.VisitStores(func(s *Store) error {
+		r := s.GetReplicaIfExists(rangeID)
+		if r != nil {
+			r.ForwardSideTransportClosedTimestamp(ctx, closedTS, lai)
+		}
+		return nil
+	}); err != nil {
+		log.Fatalf(ctx, "unexpected error: %s", err)
+	}
 }
 
 // VisitStores implements a visitor pattern over stores in the
@@ -138,21 +155,18 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // specified range. If the replica is not found on any store then
 // roachpb.RangeNotFoundError will be returned.
 func (ls *Stores) GetReplicaForRangeID(
-	rangeID roachpb.RangeID,
-) (replica *Replica, store *Store, err error) {
-	err = ls.VisitStores(func(s *Store) error {
-		r, err := s.GetReplica(rangeID)
-		if err == nil {
+	ctx context.Context, rangeID roachpb.RangeID,
+) (*Replica, *Store, error) {
+	var replica *Replica
+	var store *Store
+	if err := ls.VisitStores(func(s *Store) error {
+		r := s.GetReplicaIfExists(rangeID)
+		if r != nil {
 			replica, store = r, s
-			return nil
 		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
-	})
-	if err != nil {
-		return nil, nil, err
+		return nil
+	}); err != nil {
+		log.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(rangeID, 0)
@@ -274,24 +288,12 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	return err
 }
 
-// ReadVersionFromEngineOrZero reads the persisted cluster version from the
-// engine, falling back to the zero value.
-func ReadVersionFromEngineOrZero(
-	ctx context.Context, reader storage.Reader,
-) (clusterversion.ClusterVersion, error) {
-	var cv clusterversion.ClusterVersion
-	cv, err := ReadClusterVersion(ctx, reader)
-	if err != nil {
-		return clusterversion.ClusterVersion{}, err
-	}
-	return cv, nil
-}
-
 // WriteClusterVersionToEngines writes the given version to the given engines,
 // Returns nil on success; otherwise returns first error encountered writing to
-// the stores.
+// the stores. It makes no attempt to validate the supplied version.
 //
-// WriteClusterVersion makes no attempt to validate the supplied version.
+// At the time of writing this is used during bootstrap, initial server start
+// (to perhaps fill into additional stores), and during cluster version bumps.
 func WriteClusterVersionToEngines(
 	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
@@ -341,7 +343,7 @@ func SynthesizeClusterVersionFromEngines(
 	for _, eng := range engines {
 		eng := eng.(storage.Reader) // we're read only
 		var cv clusterversion.ClusterVersion
-		cv, err := ReadVersionFromEngineOrZero(ctx, eng)
+		cv, err := ReadClusterVersion(ctx, eng)
 		if err != nil {
 			return clusterversion.ClusterVersion{}, err
 		}

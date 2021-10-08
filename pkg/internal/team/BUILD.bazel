@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "team",
+    srcs = ["team.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/team",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/internal/reporoot",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "team_test",
+    size = "small",
+    srcs = ["team_test.go"],
+    data = [
+        "//:TEAMS.yaml",
+    ],
+    embed = [":team"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

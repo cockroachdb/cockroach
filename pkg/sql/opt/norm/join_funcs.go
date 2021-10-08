@@ -11,10 +11,10 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -122,7 +122,7 @@ func (c *CustomFuncs) canMapJoinOpEquivalenceGroup(
 	leftCols, rightCols opt.ColSet,
 	equivFD props.FuncDepSet,
 ) bool {
-	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD, false /* allowCompositeEncoding */)
 
 	// To map equality conditions, the equivalent columns must intersect
 	// both sides and must be fully bound by both sides.
@@ -201,7 +201,7 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	leftCols, rightCols opt.ColSet,
 	equivFD props.FuncDepSet,
 ) memo.FiltersExpr {
-	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD, false /* allowCompositeEncoding */)
 
 	// First remove all the equality conditions for this equivalence group.
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
@@ -289,10 +289,12 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 		return false
 	}
 
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
+
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(i, equivFD)
+		eqCols := c.GetEquivColsWithEquivType(i, equivFD, allowCompositeEncoding)
 		if !eqCols.Intersects(dstCols) {
 			return false
 		}
@@ -331,12 +333,14 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		return src.Condition
 	}
 
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
+
 	// Map each column in src to one column in dst. We choose an arbitrary column
 	// (the one with the smallest ColumnID) if there are multiple choices.
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps().OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
-		eqCols := c.GetEquivColsWithEquivType(srcCol, equivFD)
+		eqCols := c.GetEquivColsWithEquivType(srcCol, equivFD, allowCompositeEncoding)
 		eqCols.IntersectionWith(dstCols)
 		if eqCols.Contains(srcCol) {
 			colMap.Set(int(srcCol), int(srcCol))
@@ -382,10 +386,9 @@ func (c *CustomFuncs) MapJoinOpFilter(
 // equivalent columns, because operations that are valid with one type may be
 // invalid with a different type.
 //
-// In addition, if col has a composite key encoding, we cannot guarantee that
-// it will be exactly equal to other "equivalent" columns, so in that case we
-// return a set containing only col. This is a conservative measure to ensure
-// that we don't infer filters incorrectly. For example, consider this query:
+// If the column has a composite key encoding, there are extra considerations.
+// In general, replacing composite columns with "equivalent" (equal) columns
+// might change the result of an expression. For example, consider this query:
 //
 //   SELECT * FROM
 //     (VALUES (1.0)) AS t1(x),
@@ -401,17 +404,20 @@ func (c *CustomFuncs) MapJoinOpFilter(
 // But if we use the equality predicate x=y to map x to y and infer an
 // additional filter y::text = '1.0', the query would return nothing.
 //
-// TODO(rytaft): In the future, we may want to allow the mapping if the
-// filter involves a comparison operator, such as x < 5.
+// The calling code needs to decide if the remapping of this column is allowed
+// or not (depending on the actual expression). If it is allowed,
+// allowCompositeEncoding should be true. If allowComposite is false and the
+// column has composite encoding, the function returns a set containing only
+// col.
 func (c *CustomFuncs) GetEquivColsWithEquivType(
-	col opt.ColumnID, equivFD props.FuncDepSet,
+	col opt.ColumnID, equivFD props.FuncDepSet, allowCompositeEncoding bool,
 ) opt.ColSet {
 	var res opt.ColSet
 	colType := c.f.Metadata().ColumnMeta(col).Type
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
-	if sqlbase.HasCompositeKeyEncoding(colType) {
+	if !allowCompositeEncoding && colinfo.CanHaveCompositeKeyEncoding(colType) {
 		res.Add(col)
 		return res
 	}
@@ -472,8 +478,8 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 
 	// Recursively compute properties for left and right sides.
 	var leftProps, rightProps props.Shared
-	memo.BuildSharedProps(a, &leftProps)
-	memo.BuildSharedProps(b, &rightProps)
+	memo.BuildSharedProps(a, &leftProps, c.f.evalCtx)
+	memo.BuildSharedProps(b, &rightProps, c.f.evalCtx)
 
 	// Disallow cases when one side has a correlated subquery.
 	// TODO(radu): investigate relaxing this.
@@ -514,7 +520,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	a, b := eq.Left, eq.Right
 
 	var eqLeftProps props.Shared
-	memo.BuildSharedProps(eq.Left, &eqLeftProps)
+	memo.BuildSharedProps(eq.Left, &eqLeftProps, c.f.evalCtx)
 	if eqLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
 	}
@@ -547,7 +553,13 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	)
 
 	// Project away the synthesized columns.
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, leftCols.Union(rightCols))
+	outputCols := leftCols
+	if joinOp != opt.SemiJoinOp && joinOp != opt.AntiJoinOp {
+		// Semi/Anti join only produce the left side columns. All other join types
+		// produce columns from both sides.
+		outputCols = leftCols.Union(rightCols)
+	}
+	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outputCols)
 }
 
 // CommuteJoinFlags returns a join private for the commuted join (where the left
@@ -567,12 +579,29 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 		return f
 	}
 	f := p.Flags
-	f = swap(f, memo.AllowLookupJoinIntoLeft, memo.AllowLookupJoinIntoRight)
-	f = swap(f, memo.AllowHashJoinStoreLeft, memo.AllowHashJoinStoreRight)
+	f = swap(f, memo.DisallowLookupJoinIntoLeft, memo.DisallowLookupJoinIntoRight)
+	f = swap(f, memo.DisallowInvertedJoinIntoLeft, memo.DisallowInvertedJoinIntoRight)
+	f = swap(f, memo.DisallowHashJoinStoreLeft, memo.DisallowHashJoinStoreRight)
+	f = swap(f, memo.PreferLookupJoinIntoLeft, memo.PreferLookupJoinIntoRight)
 	if p.Flags == f {
 		return p
 	}
 	res := *p
 	res.Flags = f
 	return &res
+}
+
+// MakeProjectionsFromValues converts single-row values into projections, for
+// use when transforming inner joins with a values operator into a projection.
+func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.ProjectionsExpr {
+	if len(values.Rows) != 1 {
+		panic(errors.AssertionFailedf("MakeProjectionsFromValues expects 1 row, got %d",
+			len(values.Rows)))
+	}
+	projections := make(memo.ProjectionsExpr, 0, len(values.Cols))
+	elems := values.Rows[0].(*memo.TupleExpr).Elems
+	for i, col := range values.Cols {
+		projections = append(projections, c.f.ConstructProjectionsItem(elems[i], col))
+	}
+	return projections
 }

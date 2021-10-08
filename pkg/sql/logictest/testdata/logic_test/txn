@@ -112,7 +112,7 @@ a c
 statement ok
 BEGIN
 
-statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\('a'\) already exists\.
 INSERT INTO kv VALUES('unique_key', 'some value');
 INSERT INTO kv VALUES('a', 'c');
 INSERT INTO kv VALUES('unique_key2', 'some value');
@@ -704,7 +704,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
@@ -1038,3 +1038,107 @@ ROLLBACK
 # restore the default
 statement ok
 SET default_transaction_read_only = false
+
+# Transaction AS OF SYSTEM TIME clauses can be assigned a default value.
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
+
+# NOTE: run SHOW statement at different AS OF SYSTEM TIME time to avoid schema
+# resolution complications.
+query T
+BEGIN AS OF SYSTEM TIME '-1us'; SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS; COMMIT
+----
+on
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()
+
+# NOTE: run SHOW statement at different AS OF SYSTEM TIME time to avoid schema
+# resolution complications.
+query T
+BEGIN AS OF SYSTEM TIME '-1us'; SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS; COMMIT
+----
+on
+
+statement error pgcode 22023 unsupported default as of system time expression, only follower_read_timestamp\(\) allowed
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME now()
+
+statement error pgcode 22023 unsupported default as of system time expression, only follower_read_timestamp\(\) allowed
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME '-1m'
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+# Transaction deferrability can be assigned a default value.
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE
+
+# Test retry rewinds correctly.
+
+statement ok
+SET intervalstyle_enabled = on;
+SET intervalstyle = 'postgres';
+CREATE TABLE rewind_session_test (s string primary key);
+
+statement ok
+BEGIN;
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:03'::interval::string);
+SET intervalstyle = 'iso_8601';
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:04'::interval::string);
+SELECT crdb_internal.force_retry('10ms');
+COMMIT
+
+query T
+SELECT s FROM rewind_session_test ORDER BY s
+----
+1 day 01:02:03
+P1DT1H2M4S
+
+query T
+SHOW intervalstyle
+----
+iso_8601
+
+statement ok
+TRUNCATE rewind_session_test;
+SET intervalstyle = 'postgres';
+BEGIN;
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:03'::interval::string);
+SET LOCAL intervalstyle = 'iso_8601';
+INSERT INTO rewind_session_test VALUES ('1 day 01:02:04'::interval::string);
+SELECT crdb_internal.force_retry('10ms');
+COMMIT
+
+query T
+SELECT s FROM rewind_session_test ORDER BY s
+----
+1 day 01:02:03
+P1DT1H2M4S
+
+query T
+SHOW intervalstyle
+----
+postgres

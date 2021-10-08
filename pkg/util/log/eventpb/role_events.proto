@@ -1,0 +1,57 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: SQL User and Role operations
+// Channel: USER_ADMIN
+//
+// Events in this category pertain to SQL statements that modify the
+// properties of users and roles.
+//
+// They are relative to a particular SQL tenant.
+// In a multi-tenant setup, copies of DDL-related events are preserved
+// in each tenant's own `system.eventlog` table.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CreateRole is recorded when a role is created.
+message CreateRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the new user/role.
+  string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// DropRole is recorded when a role is dropped.
+message DropRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected user/role.
+  string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterRole is recorded when a role is altered.
+message AlterRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected user/role.
+  string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The options set on the user/role.
+  repeated string options = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}

@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "httputil",
+    srcs = [
+        "client.go",
+        "http.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/httputil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+    ],
+)

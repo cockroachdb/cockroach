@@ -1,0 +1,5 @@
+create_schema_stmt ::=
+	'CREATE' 'SCHEMA' ( name | name '.' name )
+	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' ( name | name '.' name )
+	| 'CREATE' 'SCHEMA' ( ( name | name '.' name ) |  ) 'AUTHORIZATION' role_spec
+	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' ( ( name | name '.' name ) |  ) 'AUTHORIZATION' role_spec

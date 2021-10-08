@@ -11,41 +11,27 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 )
 
 // bufferOp is an operator that buffers a single batch at a time from an input,
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
-	OneInputNode
-	initStatus OperatorInitStatus
+	colexecop.OneInputHelper
 
 	// read is true if someone has read the current batch already.
 	read  bool
 	batch coldata.Batch
 }
 
-var _ colexecbase.Operator = &bufferOp{}
+var _ colexecop.Operator = &bufferOp{}
 
 // NewBufferOp returns a new bufferOp, initialized to buffer batches from the
 // supplied input.
-func NewBufferOp(input colexecbase.Operator) colexecbase.Operator {
+func NewBufferOp(input colexecop.Operator) colexecop.Operator {
 	return &bufferOp{
-		OneInputNode: NewOneInputNode(input),
-	}
-}
-
-func (b *bufferOp) Init() {
-	// bufferOp can be an input to multiple operator chains, so Init on it can be
-	// called multiple times. However, we do not want to call Init many times on
-	// the input to bufferOp, so we do this check whether Init has already been
-	// performed.
-	if b.initStatus == OperatorNotInitialized {
-		b.input.Init()
-		b.initStatus = OperatorInitialized
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 	}
 }
 
@@ -58,12 +44,12 @@ func (b *bufferOp) rewind() {
 
 // advance reads the next batch from the input into the buffer, preparing itself
 // for reads.
-func (b *bufferOp) advance(ctx context.Context) {
-	b.batch = b.input.Next(ctx)
+func (b *bufferOp) advance() {
+	b.batch = b.Input.Next()
 	b.rewind()
 }
 
-func (b *bufferOp) Next(ctx context.Context) coldata.Batch {
+func (b *bufferOp) Next() coldata.Batch {
 	if b.read {
 		return coldata.ZeroBatch
 	}

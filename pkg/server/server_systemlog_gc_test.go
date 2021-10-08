@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,6 +32,8 @@ import (
 func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1 min under race")
+
 	a := assert.New(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
@@ -62,7 +65,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				kvserverpb.RangeLogEventType_add.String(),
+				kvserverpb.RangeLogEventType_add_voter.String(),
 			)
 			a.NoError(err)
 		}
@@ -198,7 +201,7 @@ func TestLogGCTrigger(t *testing.T) {
              cast(now() - interval '10s' as timestamp), -- cast from timestamptz
 						 100, 1, $1
           )`,
-		kvserverpb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add_voter.String(),
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -13,19 +13,22 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // MakeSegmentedOrdering returns an ordering choice which satisfies both
-// limitOrdering and the ordering required by a window function. Returns nil if
-// no such ordering exists. See OrderingChoice.PrefixIntersection for more
-// details.
+// limitOrdering and the ordering required by a window function. Returns
+// ok=false if no such ordering exists. See OrderingChoice.PrefixIntersection
+// for more details.
 func (c *CustomFuncs) MakeSegmentedOrdering(
 	input memo.RelExpr,
 	prefix opt.ColSet,
-	ordering physical.OrderingChoice,
-	limitOrdering physical.OrderingChoice,
-) *physical.OrderingChoice {
+	ordering props.OrderingChoice,
+	limitOrdering props.OrderingChoice,
+) (_ *props.OrderingChoice, ok bool) {
 
 	// The columns in the closure of the prefix may be included in it. It's
 	// beneficial to do so for a given column iff that column appears in the
@@ -37,9 +40,9 @@ func (c *CustomFuncs) MakeSegmentedOrdering(
 
 	oc, ok := limitOrdering.PrefixIntersection(prefix, ordering.Columns)
 	if !ok {
-		return nil
+		return nil, false
 	}
-	return &oc
+	return &oc, true
 }
 
 // AllArePrefixSafe returns whether every window function in the list satisfies
@@ -106,7 +109,7 @@ func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
 }
 
 // WindowOrdering returns the ordering used by the window function.
-func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) physical.OrderingChoice {
+func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) props.OrderingChoice {
 	return private.Ordering
 }
 
@@ -139,12 +142,61 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 	return newFilters
 }
 
-// OrderingSucceeded returns true if an OrderingChoice is not nil.
-func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
-	return result != nil
+// DerefOrderingChoice returns an OrderingChoice from a pointer.
+func (c *CustomFuncs) DerefOrderingChoice(result *props.OrderingChoice) props.OrderingChoice {
+	return *result
 }
 
-// DerefOrderingChoice returns an OrderingChoice from a pointer.
-func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
-	return *result
+// HasRangeFrameWithOffset returns true if w contains a WindowsItem Frame that
+// has a mode of RANGE and has a specific offset, such as OffsetPreceding or
+// OffsetFollowing.
+func (c *CustomFuncs) HasRangeFrameWithOffset(w memo.WindowsExpr) bool {
+	for i := range w {
+		if w[i].Frame.Mode == tree.RANGE && w[i].Frame.HasOffset() {
+			return true
+		}
+	}
+	return false
+}
+
+// MakeWindowPrivate constructs a new WindowPrivate with the given partition
+// columns and ordering choice.
+func (c *CustomFuncs) MakeWindowPrivate(
+	partition opt.ColSet, ordering props.OrderingChoice,
+) *memo.WindowPrivate {
+	return &memo.WindowPrivate{
+		Partition: partition,
+		Ordering:  ordering,
+	}
+}
+
+// MakeRowNumberWindowFunc returns a WindowsExpr with a row_number window
+// function, as well as the corresponding output ColumnID.
+func (c *CustomFuncs) MakeRowNumberWindowFunc() (fn memo.WindowsExpr, outputCol opt.ColumnID) {
+	outputCol = c.mem.Metadata().AddColumn("row_num", types.Int)
+	private := &memo.WindowsItemPrivate{
+		Frame: memo.WindowFrame{
+			Mode:           tree.RANGE,
+			StartBoundType: tree.UnboundedPreceding,
+			EndBoundType:   tree.CurrentRow,
+			FrameExclusion: tree.NoExclusion,
+		},
+		Col: outputCol,
+	}
+	return memo.WindowsExpr{c.f.ConstructWindowsItem(&memo.RowNumberExpr{}, private)}, outputCol
+}
+
+// LimitToRowNumberFilter constructs a filter corresponding to
+// 'rowNumCol <= limitValue' for TryDecorrelateLimit.
+func (c *CustomFuncs) LimitToRowNumberFilter(
+	limit tree.Datum, rowNumCol opt.ColumnID,
+) memo.FiltersExpr {
+	if _, ok := limit.(*tree.DInt); !ok {
+		panic(errors.AssertionFailedf("expected integer limit value"))
+	}
+	return memo.FiltersExpr{
+		c.f.ConstructFiltersItem(
+			c.f.ConstructLe(c.f.ConstructVariable(rowNumCol), c.f.ConstructConstVal(limit, types.Int)),
+		),
+	}
 }

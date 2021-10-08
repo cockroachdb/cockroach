@@ -13,11 +13,15 @@ package cat
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // IndexOrdinal identifies an index (in the context of a Table).
 type IndexOrdinal = int
+
+// IndexOrdinals identifies a list of indexes (in the context of a Table).
+type IndexOrdinals = []IndexOrdinal
 
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
@@ -58,11 +62,6 @@ type Index interface {
 	// implicit system columns, which are placed after all physical columns in
 	// the table.
 	ColumnCount() int
-
-	// Predicate returns the partial index predicate expression and true if the
-	// index is a partial index. If it is not a partial index, the empty string
-	// and false are returned.
-	Predicate() (string, bool)
 
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
@@ -123,9 +122,25 @@ type Index interface {
 	// columns is data-dependent, not schema-dependent.
 	LaxKeyColumnCount() int
 
+	// NonInvertedPrefixColumnCount returns the number of non-inverted columns
+	// in the inverted index. An inverted index only has non-inverted columns if
+	// it is a multi-column inverted index. Therefore, a non-zero value is only
+	// returned for multi-column inverted indexes. This function panics if the
+	// index is not an inverted index.
+	NonInvertedPrefixColumnCount() int
+
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// InvertedColumn returns the inverted IndexColumn of the index. Panics if
+	// the index is not an inverted index.
+	InvertedColumn() IndexColumn
+
+	// Predicate returns the partial index predicate expression and true if the
+	// index is a partial index. If it is not a partial index, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
 
 	// Zone returns the zone which constrains placement of the index's range
 	// replicas. If the index was not explicitly assigned to a zone, then it
@@ -140,39 +155,24 @@ type Index interface {
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
 
-	// PartitionByListPrefixes returns values that correspond to PARTITION BY LIST
-	// values. Specifically, it returns a list of tuples where each tuple contains
-	// values for a prefix of index columns (indicating a region of the index).
-	// Each tuple corresponds to a configured partition or subpartition.
+	// ImplicitPartitioningColumnCount returns the number of implicit partitioning
+	// columns at the front of the index. For example, consider the following
+	// table:
 	//
-	// Note: this function decodes and allocates datums; use sparingly.
-	//
-	// Example:
-	//
-	// CREATE INDEX idx ON t(region,subregion,val) PARTITION BY LIST (region,subregion) (
-	//     PARTITION westcoast VALUES IN (('us', 'seattle'), ('us', 'cali')),
-	//     PARTITION us VALUES IN (('us', DEFAULT)),
-	//     PARTITION eu VALUES IN (('eu', DEFAULT)),
-	//     PARTITION default VALUES IN (DEFAULT)
+	// CREATE TABLE t (
+	//   x INT,
+	//   y INT,
+	//   INDEX (y) PARTITION BY LIST (x) (
+	//     PARTITION p1 VALUES IN (1)
+	//   )
 	// );
 	//
-	// PartitionByListPrefixes() returns
-	//  ('us', 'seattle'),
-	//  ('us', 'cali'),
-	//  ('us'),
-	//  ('eu').
+	// In this case, the number of implicit partitioning columns in the index on
+	// y is 1, since x is implicitly added to the front of the index.
 	//
-	// The intended use of this function is for index skip scans. Each tuple
-	// corresponds to a region of the index that we can constrain further. In the
-	// example above: if we have a val=1 filter, instead of a full index scan we
-	// can skip most of the data under /us/cali and /us/seattle by scanning spans:
-	//   [                 - /us/cali      )
-	//   [ /us/cali/1      - /us/cali/1    ]
-	//   [ /us/cali\x00    - /us/seattle   )
-	//   [ /us/seattle/1   - /us/seattle/1 ]
-	//   [ /us/seattle\x00 -               ]
-	//
-	PartitionByListPrefixes() []tree.Datums
+	// The implicit partitioning columns are always a prefix of the full column
+	// list, and ImplicitPartitioningColumnCount < LaxKeyColumnCount.
+	ImplicitPartitioningColumnCount() int
 
 	// InterleaveAncestorCount returns the number of interleave ancestors for this
 	// index (or zero if this is not an interleaved index). Each ancestor is an
@@ -220,6 +220,17 @@ type Index interface {
 	// GeoConfig returns a geospatial index configuration. If non-nil, it
 	// describes the configuration for this geospatial inverted index.
 	GeoConfig() *geoindex.Config
+
+	// Version returns the IndexDescriptorVersion of the index.
+	Version() descpb.IndexDescriptorVersion
+
+	// PartitionCount returns the number of PARTITION BY LIST partitions defined
+	// on this index.
+	PartitionCount() int
+
+	// Partition returns the ith PARTITION BY LIST partition within the index
+	// definition, where i < PartitionCount.
+	Partition(i int) Partition
 }
 
 // IndexColumn describes a single column that is part of an index definition.
@@ -237,4 +248,62 @@ type IndexColumn struct {
 // the given ordinal position is a mutation index.
 func IsMutationIndex(table Table, ord IndexOrdinal) bool {
 	return ord >= table.IndexCount()
+}
+
+// Partition is an interface to a PARTITION BY LIST partition of an index. The
+// intended use is to support planning of scans or lookup joins that will use
+// locality optimized search. Locality optimized search can be planned when the
+// maximum number of rows returned by a scan or lookup join is known, but the
+// specific region in which the rows are located is unknown. In this case, the
+// optimizer will plan a scan or lookup join in which local nodes (i.e., nodes
+// in the gateway region) are searched for matching rows before remote nodes, in
+// the hope that the execution engine can avoid visiting remote nodes.
+type Partition interface {
+	// Name is the name of this partition.
+	Name() string
+
+	// Zone returns the zone which constrains placement of this partition's
+	// replicas. If this partition does not have an associated zone, the returned
+	// zone is empty, but non-nil.
+	Zone() Zone
+
+	// PartitionByListPrefixes returns the values of this partition. Specifically,
+	// it returns a list of tuples where each tuple contains values for a prefix
+	// of index columns (indicating the region of the index covered by this
+	// partition).
+	//
+	// Example:
+	//
+	// CREATE INDEX idx ON t(region,subregion,val) PARTITION BY LIST (region,subregion) (
+	//     PARTITION westcoast VALUES IN (('us', 'seattle'), ('us', 'cali')),
+	//     PARTITION us VALUES IN (('us', DEFAULT)),
+	//     PARTITION eu VALUES IN (('eu', DEFAULT)),
+	//     PARTITION default VALUES IN (DEFAULT)
+	// );
+	//
+	// If this is the westcoast partition, PartitionByListPrefixes() returns
+	//  ('us', 'seattle'),
+	//  ('us', 'cali')
+	//
+	// If this is the us partition, PartitionByListPrefixes() cuts off the DEFAULT
+	// value and just returns
+	//  ('us')
+	//
+	// Finally, if this is the default partition, PartitionByListPrefixes()
+	// returns an empty slice.
+	//
+	// In addition to supporting locality optimized search as described above,
+	// this function can be used to support index skip scans. To support index
+	// skip scans, we collect the PartitionByListPrefixes for all partitions in
+	// the index. Each tuple corresponds to a region of the index that we can
+	// constrain further. In the example above: if we have a val=1 filter, instead
+	// of a full index scan we can skip most of the data under /us/cali and
+	// /us/seattle by scanning spans:
+	//   [                 - /us/cali      )
+	//   [ /us/cali/1      - /us/cali/1    ]
+	//   [ /us/cali\x00    - /us/seattle   )
+	//   [ /us/seattle/1   - /us/seattle/1 ]
+	//   [ /us/seattle\x00 -               ]
+	//
+	PartitionByListPrefixes() []tree.Datums
 }

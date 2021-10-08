@@ -162,6 +162,67 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
+// TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
+func TestPingInterceptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	const (
+		blockedTargetNodeID = 5
+		blockedOriginNodeID = 123
+	)
+
+	errBoomSend := errors.Handled(errors.New("boom due to onSendPing"))
+	recvMsg := "boom due to onHandlePing"
+	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
+	opts := ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     testutils.NewNodeTestBaseContext(),
+		Clock:      hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+		Stopper:    stop.NewStopper(),
+		Settings:   cluster.MakeTestingClusterSettings(),
+		OnOutgoingPing: func(req *PingRequest) error {
+			if req.TargetNodeID == blockedTargetNodeID {
+				return errBoomSend
+			}
+			return nil
+		},
+		OnIncomingPing: func(req *PingRequest) error {
+			if req.OriginNodeID == blockedOriginNodeID {
+				return errBoomRecv
+			}
+			return nil
+		},
+	}
+	defer opts.Stopper.Stop(ctx)
+
+	rpcCtx := NewContext(opts)
+	{
+		_, err := rpcCtx.GRPCDialNode("unused:1234", 5, SystemClass).Connect(ctx)
+		require.Equal(t, errBoomSend, errors.Cause(err))
+	}
+
+	s := newTestServer(t, rpcCtx)
+	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
+	rpcCtx.NodeID.Set(ctx, blockedOriginNodeID)
+	ln, err := netutil.ListenAndServeGRPC(rpcCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+	{
+		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, SystemClass).Connect(ctx)
+		require.True(t, errors.HasType(err, errBoomRecv))
+		status, ok := status.FromError(errors.UnwrapAll(err))
+		require.True(t, ok)
+		require.Equal(t, codes.FailedPrecondition, status.Code())
+		require.Equal(t, recvMsg, status.Message())
+	}
+}
+
+var _ roachpb.InternalServer = &internalServer{}
+
 type internalServer struct{}
 
 func (*internalServer) Batch(
@@ -185,6 +246,36 @@ func (*internalServer) RangeFeed(
 func (*internalServer) GossipSubscription(
 	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) Join(
+	context.Context, *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
 	panic("unimplemented")
 }
 
@@ -260,7 +351,7 @@ func TestHeartbeatHealth(t *testing.T) {
 			}
 
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			case heartbeat.ready <- err:
 			}
@@ -531,14 +622,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 			}}
 	}()
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
-		<-stopper.ShouldStop()
+		<-stopper.ShouldQuiesce()
 		s.Stop()
 	})
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 
@@ -1110,7 +1201,6 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = conn.Close() }()
 
 	// Create the heartbeat client.
 	log.Infof(ctx, "starting heartbeat client")
@@ -1724,7 +1814,8 @@ func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testin
 	if _, err = c.Connect(ctx); err != nil {
 		require.Regexp(t, "not yet heartbeated", err)
 	}
-	require.NoError(t, c.grpcConn.Close())
+	err = c.grpcConn.Close() // nolint:grpcconnclose
+	require.NoError(t, err)
 }
 
 func BenchmarkGRPCDial(b *testing.B) {

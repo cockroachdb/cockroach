@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -25,9 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLookupNamespaceID tests the lookup namespace id falls back
-// onto system.namespace_deprecated.
-func TestLookupNamespaceIDFallback(t *testing.T) {
+// TestLookupNamespaceID tests the lookup namespace id.
+func TestLookupNamespaceID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -39,7 +38,7 @@ func TestLookupNamespaceIDFallback(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			sqlbase.NewDeprecatedTableKey(999, "bob").Key(keys.SystemSQLCodec),
+			catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 999, "bob"),
 			9999,
 		)
 	})

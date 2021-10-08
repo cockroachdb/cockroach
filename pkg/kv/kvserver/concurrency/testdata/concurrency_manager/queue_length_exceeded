@@ -1,0 +1,223 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=11,1 epoch=0
+----
+
+new-txn name=txn3 ts=12,1 epoch=0
+----
+
+new-txn name=txn4 ts=13,1 epoch=0
+----
+
+# NOTE: txn5.ts < txn2.ts so that txn5's reads don't conflict with
+# txn2's writes. This helps make the test deterministic when txn1
+# releases its lock.
+new-txn name=txn5 ts=10,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Prep: Txn 1 acquire locks at key k
+#       Txns 2, 3, and 4 begin waiting in k's wait-queue
+# -------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,0
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=11,0
+  put key=k value=v2
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence req2: pushing txn 00000001 to abort
+[2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req3 txn=txn3 ts=12,0
+  put key=k value=v3
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: waiting in lock wait-queues
+[3] sequence req3: lock wait-queue event: wait for txn 00000001 holding lock @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[3] sequence req3: pushing txn 00000001 to abort
+[3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req4 txn=txn4 ts=13,0
+  put key=k value=v4
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: waiting in lock wait-queues
+[4] sequence req4: lock wait-queue event: wait for txn 00000001 holding lock @ key "k" (queuedWriters: 3, queuedReaders: 0)
+[4] sequence req4: pushing txn 00000001 to abort
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
+   distinguished req: 2
+local: num=0
+
+# -------------------------------------------------------------
+# Read-only request runs into long lock wait-queue. Waits for
+# lock to be released, but not in queue. Proceeds as soon as
+# lock is released.
+# -------------------------------------------------------------
+
+new-request name=req5r txn=txn5 ts=10,0 max-lock-wait-queue-length=2
+  get key=k
+----
+
+sequence req=req5r
+----
+[5] sequence req5r: sequencing request
+[5] sequence req5r: acquiring latches
+[5] sequence req5r: scanning lock table for conflicting locks
+[5] sequence req5r: waiting in lock wait-queues
+[5] sequence req5r: lock wait-queue event: wait for txn 00000001 holding lock @ key "k" (queuedWriters: 3, queuedReaders: 1)
+[5] sequence req5r: pushing timestamp of txn 00000001 above 10.000000000,1
+[5] sequence req5r: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[2] sequence req2: resolving intent "k" for txn 00000001 with COMMITTED status
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+[3] sequence req3: resolving intent "k" for txn 00000001 with COMMITTED status
+[3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 running request @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[3] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[3] sequence req3: pushing txn 00000002 to detect request deadlock
+[3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+[4] sequence req4: resolving intent "k" for txn 00000001 with COMMITTED status
+[4] sequence req4: lock wait-queue event: wait for txn 00000002 running request @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[4] sequence req4: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req4: pushing txn 00000002 to detect request deadlock
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+[5] sequence req5r: resolving intent "k" for txn 00000001 with COMMITTED status
+[5] sequence req5r: lock wait-queue event: done waiting
+[5] sequence req5r: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[5] sequence req5r: acquiring latches
+[5] sequence req5r: scanning lock table for conflicting locks
+[5] sequence req5r: sequencing complete, returned guard
+
+finish req=req5r
+----
+[-] finish req5r: finishing request
+
+on-lock-acquired req=req2 key=k
+----
+[-] acquire lock: txn 00000002 @ k
+[3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[3] sequence req3: pushing txn 00000002 to abort
+[3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+[4] sequence req4: lock wait-queue event: wait for txn 00000002 holding lock @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[4] sequence req4: pushing txn 00000002 to abort
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
+   distinguished req: 3
+local: num=0
+
+# -------------------------------------------------------------
+# Read-write request runs into long lock wait-queue. Instead of
+# waiting in the queue, the request raises an error.
+# -------------------------------------------------------------
+
+new-request name=req5w txn=txn5 ts=10,0 max-lock-wait-queue-length=2
+  put key=k value=v5
+----
+
+sequence req=req5w
+----
+[6] sequence req5w: sequencing request
+[6] sequence req5w: acquiring latches
+[6] sequence req5w: scanning lock table for conflicting locks
+[6] sequence req5w: waiting in lock wait-queues
+[6] sequence req5w: lock wait-queue event: wait-queue maximum length exceeded @ key "k" with length 2
+[6] sequence req5w: sequencing complete, returned error: conflicting intents on "k" [reason=lock_wait_queue_max_length_exceeded]
+
+# -------------------------------------------------------------
+# Cleanup.
+# -------------------------------------------------------------
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req3: resolving intent "k" for txn 00000002 with ABORTED status
+[3] sequence req3: lock wait-queue event: done waiting
+[3] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+[4] sequence req4: resolving intent "k" for txn 00000002 with ABORTED status
+[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req4: pushing txn 00000003 to detect request deadlock
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+finish req=req3
+----
+[-] finish req3: finishing request
+[4] sequence req4: lock wait-queue event: done waiting
+[4] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+reset
+----

@@ -1,0 +1,37 @@
+statement ok
+CREATE TABLE a (k STRING PRIMARY KEY, v STRING)
+
+query TTT
+SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablename = 'a'
+----
+public  a  root
+
+user testuser
+
+query TTT
+SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablename = 'a'
+----
+
+query TTT
+SELECT table_catalog, table_schema, table_name FROM information_schema.tables WHERE table_name = 'a'
+----
+
+# Granting CONNECT privilege on database test to testuser should
+# allow testuser to see table a in pg_catalog / information_schema.
+
+user root
+
+statement ok
+GRANT CONNECT ON DATABASE test TO testuser
+
+user testuser
+
+query TTT
+SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablename = 'a'
+----
+public  a  root
+
+query TTT
+SELECT table_catalog, table_schema, table_name FROM information_schema.tables WHERE table_name = 'a'
+----
+test  public  a

@@ -563,7 +563,7 @@ var mathBuiltins = map[string]builtinDefinition{
 				thresholds := tree.MustBeDArray(args[1])
 
 				if !operand.ResolvedType().Equivalent(thresholds.ParamTyp) {
-					return tree.NewDInt(0), errors.New("Operand and thresholds must be of the same type")
+					return tree.NewDInt(0), errors.New("operand and thresholds must be of the same type")
 				}
 
 				for i, v := range thresholds.Array {

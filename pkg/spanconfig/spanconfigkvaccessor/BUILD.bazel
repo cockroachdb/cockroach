@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigkvaccessor",
+    srcs = [
+        "disabled.go",
+        "kvaccessor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfigkvaccessor_test",
+    srcs = [
+        "kvaccessor_test.go",
+        "main_test.go",
+        "validation_test.go",
+    ],
+    embed = [":spanconfigkvaccessor"],
+    deps = [
+        "//pkg/base",
+        "//pkg/config/zonepb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/sqlutil",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "rand",
+    srcs = ["rand.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/rand",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_lib_pq//oid",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,14 +127,14 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		return tc, args, tdb, tablePrefix, unblockSplit, waitForBlockedRange
 	}
 
-	waitForZoneConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
+	waitForSpanConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
 		testutils.SucceedsSoon(t, func() error {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				_, zone := r.DescAndZone()
-				if *zone.RangeMaxBytes != exp {
-					return fmt.Errorf("expected %d, got %d", exp, *zone.RangeMaxBytes)
+				conf := r.SpanConfig()
+				if conf.RangeMaxBytes != exp {
+					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}
 			}
 			return nil
@@ -142,16 +142,22 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	}
 
 	moveTableToNewStore := func(t *testing.T, tc *testcluster.TestCluster, args base.TestClusterArgs, tablePrefix roachpb.Key) {
-		tc.AddServer(t, args.ServerArgs)
+		tc.AddAndStartServer(t, args.ServerArgs)
 		testutils.SucceedsSoon(t, func() error {
 			desc, err := tc.LookupRange(tablePrefix)
 			require.NoError(t, err)
-			voters := desc.Replicas().Voters()
+			// Temporarily turn off queues as we're about to make a manual
+			// replication change. We don't want to turn it off throughout
+			// these tests as sometimes we change zone configs and expect
+			// replicas to move according to them.
+			tc.ToggleReplicateQueues(false)
+			defer tc.ToggleReplicateQueues(true)
+			voters := desc.Replicas().VoterDescriptors()
 			if len(voters) == 1 && voters[0].NodeID == tc.Server(1).NodeID() {
 				return nil
 			}
 			if len(voters) == 1 {
-				desc, err = tc.AddReplicas(tablePrefix, tc.Target(1))
+				desc, err = tc.AddVoters(tablePrefix, tc.Target(1))
 				if err != nil {
 					return err
 				}
@@ -159,7 +165,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			if err = tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
 				return err
 			}
-			_, err = tc.RemoveReplicas(tablePrefix, tc.Target(0))
+			_, err = tc.RemoveVoters(tablePrefix, tc.Target(0))
 			return err
 		})
 	}
@@ -171,7 +177,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Don't observe backpressure.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
@@ -191,7 +197,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
@@ -221,7 +227,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Don't observe backpressure because we remember the previous max size on
 		// this node.
@@ -257,35 +263,38 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
 		s.SetReplicateQueueActive(false)
-		require.Len(t, repl.Desc().Replicas().All(), 1)
+		require.Len(t, repl.Desc().Replicas().Descriptors(), 1)
 		// We really need to make sure that the split queue has hit this range,
 		// otherwise we'll fail to backpressure.
-		go func() { _ = s.ForceSplitScanAndProcess() }()
+		_ = tc.Stopper().RunAsyncTask(ctx, "force-split", func(context.Context) {
+			_ = s.ForceSplitScanAndProcess()
+		})
+
 		waitForBlocked(repl.RangeID)
 
 		// Observe backpressure now that the range is just over the limit.
 		// Use pgx so that cancellation does something reasonable.
 		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
 		defer cleanup()
-		conf, err := pgx.ParseConnectionString(url.String())
+		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)
-		c, err := pgx.Connect(conf)
+		c, err := pgx.ConnectConfig(ctx, conf)
 		require.NoError(t, err)
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		upsertErrCh := make(chan error)
-		go func() {
-			_, err := c.ExecEx(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
-				nil /* options */, rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
+		_ = tc.Stopper().RunAsyncTask(ctx, "upsert", func(ctx context.Context) {
+			_, err := c.Exec(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
+				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 			upsertErrCh <- err
-		}()
+		})
 
 		select {
 		case <-time.After(10 * time.Millisecond):
@@ -293,6 +302,9 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		case err := <-upsertErrCh:
 			t.Fatalf("expected no error because the request should hang, got %v", err)
 		}
-		require.Equal(t, context.Canceled, <-upsertErrCh)
+		// Unfortunately we can't match on the error (context canceled) here since we can also
+		// get random other errors such as:
+		// "write failed: write tcp 127.0.0.1:37720->127.0.0.1:44313: i/o timeout"
+		require.Error(t, <-upsertErrCh)
 	})
 }

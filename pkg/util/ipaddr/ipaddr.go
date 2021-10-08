@@ -67,7 +67,7 @@ const IPv6size = net.IPv6len + 2
 const IPv4mappedIPv6prefix = uint64(0xFFFF) << 32
 
 // IPv4mask is used to select only the lower 32 bits of uint128.
-// IPv4 addresses may not have the the upper 96 bits of Addr set to 0.
+// IPv4 addresses may not have the upper 96 bits of Addr set to 0.
 // IPv4 addresses mapped to IPv6 have prefix bits that should not change.
 const IPv4mask = uint64(0xFFFFFFFF)
 
@@ -187,7 +187,7 @@ func ParseINet(s string, dest *IPAddr) error {
 		} else {
 			maskSize = 128
 		}
-		ip := net.ParseIP(addr)
+		ip := ParseIP(addr)
 		if ip == nil {
 			return pgerror.WithCandidateCode(
 				errors.Errorf("could not parse %q as inet. invalid IP", s),
@@ -236,7 +236,7 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	}
 
-	ip := net.ParseIP(addr)
+	ip := ParseIP(addr)
 	if ip == nil {
 		return pgerror.WithCandidateCode(
 			errors.Errorf("could not parse %q as inet. invalid IP", s),

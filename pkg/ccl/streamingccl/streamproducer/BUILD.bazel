@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "streamproducer",
+    srcs = ["replication_stream_planning.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/ccl/changefeedccl/changefeeddist",
+        "//pkg/ccl/utilccl",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server/telemetry",
+        "//pkg/sql",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "streamproducer_test",
+    srcs = [
+        "main_test.go",
+        "replication_stream_test.go",
+    ],
+    embed = [":streamproducer"],
+    deps = [
+        "//pkg/ccl/changefeedccl",
+        "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/storageccl",
+        "//pkg/ccl/streamingccl",
+        "//pkg/ccl/streamingccl/streamingtest",
+        "//pkg/ccl/utilccl",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog/catalogkv",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_stretchr_testify//require",
+    ],
+)

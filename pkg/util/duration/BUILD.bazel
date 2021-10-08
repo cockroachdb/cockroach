@@ -1,0 +1,44 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "duration",
+    srcs = ["duration.go"],
+    embed = [":duration_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/duration",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/arith",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "duration_test",
+    size = "small",
+    srcs = ["duration_test.go"],
+    embed = [":duration"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "duration_proto",
+    srcs = ["duration.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "duration_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/duration",
+    proto = ":duration_proto",
+    visibility = ["//visibility:public"],
+)

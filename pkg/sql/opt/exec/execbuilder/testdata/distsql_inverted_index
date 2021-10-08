@@ -1,0 +1,212 @@
+# LogicTest: 5node
+
+# TODO(rytaft): When zigzag joins are supported with multicolumn inverted
+# indexes, change this test to use a multicolumn inverted index and split
+# the index.
+
+subtest json
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB,
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]')
+
+statement ok
+ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
+
+statement ok
+ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE json_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /10      {1}       1
+/10        /20      {2}       2
+/20        NULL     {3}       3
+
+# Filter with a fully-specified array. This should use a zigzag join.
+query T
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[1, 2]'
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk1v1DAQhu_8itFcCsLSxtmbT6E0iK1CUpJKfJSocpMhctl6gu0gYJX_jpJIhQW66h5n3jzvPIq8Q_91iwrT9xfZi00OT8821WX1NnsGVZqlLy9Bw6uyeAO3nu110Dfw7nVapnADyachitYEJ1dSQFyfQFGepSWcfgCNAi23lOs78qiuUGItsHfckPfsptVu_mDTfkcVCTS2H8K0rgU27AjVDoMJW0KFH033U3fnbCy5VYQCWwrabOfeyrQEkbp3Sz4zXxv7DcUSyf9GxRAUJBLrUSAP4fdpH3RHqOQoHq83iZWkW3IruS93f7l35k67HygwY_4y9HDLxgLbWUJgkUOy_udvKqXOqyI_fYRvfIxvxS6QW8X7rol8_mD9-pj6knzP1tNe_UPN0VgLpLaj5UV4HlxDF46b-cwyFjM3L1ryYUnlMmzsEk2Cf8LyIBwfhuOD8PovuB6f_AoAAP__JdwK_Q==
+
+# Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
+# This should use a zigzag join.
+query T
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> '[1]') AND (b @> '[2]')
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v00AQfOdXrPalqTgpPuftntwSI1IFu9iV-ChWdY2X6Ep6a-7OCIj835FtVGpEo-ZxZ25mZ1a3R_9thwrTD5frs1UGs-WqvCrfrU-hTNfpqyvQ8LrI38KdZ3sT9C28f5MWKcxuIfncRtGC4ORaViencJYtp2jco3mxTAs4_wgaBVquKdP35FFdo8RKYON4Q96z66H98GBV_0AVCTS2aUMPVwI37AjVHoMJO0KFn8z2l95esLHk5hEKrClosxt8S1MTROohcPKF-cbY7yhGSv6XytugIJFYdQK5DX9X-6C3hEp24vnx-mAF6ZrcXE7DPWxunLnX7icKXDN_bRu4Y2OB7RBCYJ7BLFlMT6yUuijz7PzPqSd0_Ih-Rpv4mDYlu0BuHk-bJPLlk_aLY-wL8g1bTxP7p5yjrhJI9ZbG_-K5dRu6dLwZ1oxjPugGoCYfRlaOw8qOVB_wsVgeFMeHxfFB8eIfcdW9-B0AAP__VW0XbA==
+
+# Filter with a nested array. This index expression is not tight.
+# This should use a zigzag join.
+query T
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[[1, 2]]'
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk1v1DAQhu_8itFcCsLSxtmbT6E0iK1CUpJKfCxR5SZD5LL1BNtBwCr_HSWRCovaVXucefO88yjyHv33HSpMP15krzY5PD_bVJfV--wFVGmWvr4EDW_K4h3ceLZXQV_Dh7dpmcI1JF-GKFoTnGy3UkBc1ydQlGdpCaefQKNAyy3l-pY8qi1KrAX2jhvynt202s8fbNqfqCKBxvZDmNa1wIYdodpjMGFHqPCz6X7r7pyNJbeKUGBLQZvd3FuZliBSd3bJV-YrY3-gWCJ5b1QMQUEisR4F8hD-nvZBd4RKjuLxepNYSbolt5KHcneXe2dutfuFAjPmb0MPN2wssJ0lBBY5JOt7_qdS6rwq8tNHGMdPMa7YBXKr-NA2kS8frF8_pb4k37P1dFD_UHM01gKp7Wh5E54H19CF42Y-s4zFzM2LlnxYUrkMG7tEk-C_sDwKx8fh-Ci8_g-ux2d_AgAA__-nIAxt
+
+subtest array
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[],
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+statement ok
+INSERT INTO array_tab VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{1, 2}'),
+  (4, '{1, 3}'),
+  (5, '{1, 2, 3, 4}')
+
+statement ok
+ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
+
+statement ok
+ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3), (ARRAY[3], 5)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE array_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /3       {1}       1
+/3         NULL     {3}       3
+
+# This should use a zigzag join.
+query T
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: array_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> ARRAY[1,2]
+    │
+    └── • zigzag join
+          left table: array_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: array_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFv0zAUhd_5FVf3ZSAsNU5fkJ9SWBBBpRlOJRgjmrzmUhk632A7iFHlv6MkiFFg1fbme4_POZ8s7zF83aHC_P3ZclGs4PFpUa2rt8snUOXL_MUaDLzU5Rsw3puby2iusk_Ml9Z9g3evcp3DFWQfuySZE5zspYC0P4FSn-Yanp-DQYGOG1qZawqoLlBiLbD1vKEQ2A-r_XihaL6jSgRa13ZxWNcCN-wJ1R6jjTtChR_s9ofZvmbryM8SFNhQNHY35la2IUjUv5AoJk3-Xyu7qCCTWPcCuYu35SGaLaGSvbg_4ICmyTTkZ_IQ77a69fba-BsUuGT-0rXwma0DdiOFwHIF2fz3gy60XpxfSKVUsVo_E-mvQ30P8PQh4BX7SH6WHkJn8umd8fOHxGsKLbtAB_F3JSd9LZCaLU2fI3DnN3TmeTPWTGM5-sZFQyFOqpyGwk3SAPinWR41p8fN6VHz_C9z3T_6GQAA__-B9BKK

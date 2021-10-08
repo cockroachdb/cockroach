@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,16 +23,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -40,11 +48,7 @@ import (
 // TODO(pbardea): Add more testing around the timer calculations.
 func TestSchemaChangeGCJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	defer func(oldAdoptInterval, oldGCInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-	}(jobs.DefaultAdoptInterval, gcjob.MaxSQLGCInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	skip.WithIssue(t, 60664, "flaky test")
 
 	type DropItem int
 	const (
@@ -62,7 +66,16 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	for _, dropItem := range []DropItem{INDEX, TABLE, DATABASE} {
 		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
-			s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			blockGC := make(chan struct{}, 1)
+			params := base.TestServerArgs{}
+			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+			params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+				RunBeforePerformGC: func(_ jobspb.JobID) error {
+					<-blockGC
+					return nil
+				},
+			}
+			s, db, kvDB := serverutils.StartServer(t, params)
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(db)
@@ -81,22 +94,15 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			myTableID := descpb.ID(keys.MinUserDescID + 3)
 			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
 
-			var myTableDesc *sqlbase.MutableTableDescriptor
-			var myOtherTableDesc *sqlbase.MutableTableDescriptor
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+			var myTableDesc *tabledesc.Mutable
+			var myOtherTableDesc *tabledesc.Mutable
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*sqlbase.MutableTableDescriptor)
-				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
-				if err != nil {
-					return err
-				}
-				myOtherTableDesc = myOtherDesc.(*sqlbase.MutableTableDescriptor)
-				return nil
+				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
+				return err
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -107,6 +113,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				dropTime = 1
 			}
 			var details jobspb.SchemaChangeGCDetails
+			var expectedRunningStatus string
 			switch dropItem {
 			case INDEX:
 				details = jobspb.SchemaChangeGCDetails{
@@ -118,10 +125,11 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myTableID,
 				}
-				myTableDesc.Indexes = myTableDesc.Indexes[:0]
+				myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
 				myTableDesc.GCMutations = append(myTableDesc.GCMutations, descpb.TableDescriptor_GCDescriptorMutation{
 					IndexID: descpb.IndexID(2),
 				})
+				expectedRunningStatus = "performing garbage collection on index 2"
 			case TABLE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -131,8 +139,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 						},
 					},
 				}
-				myTableDesc.State = descpb.TableDescriptor_DROP
+				myTableDesc.State = descpb.DescriptorState_DROP
 				myTableDesc.DropTime = dropTime
+				expectedRunningStatus = fmt.Sprintf("performing garbage collection on table %d", myTableID)
 			case DATABASE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -147,18 +156,19 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myDBID,
 				}
-				myTableDesc.State = descpb.TableDescriptor_DROP
+				myTableDesc.State = descpb.DescriptorState_DROP
 				myTableDesc.DropTime = dropTime
-				myOtherTableDesc.State = descpb.TableDescriptor_DROP
+				myOtherTableDesc.State = descpb.DescriptorState_DROP
 				myOtherTableDesc.DropTime = dropTime
+				expectedRunningStatus = fmt.Sprintf("performing garbage collection on tables %d, %d", myTableID, myOtherTableID)
 			}
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
+				descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
 				descDesc := myTableDesc.DescriptorProto()
 				b.Put(descKey, descDesc)
-				descKey2 := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
+				descKey2 := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
 				descDesc2 := myOtherTableDesc.DescriptorProto()
 				b.Put(descKey2, descDesc2)
 				return txn.Run(ctx, b)
@@ -167,33 +177,42 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			jobRecord := jobs.Record{
-				Description:   fmt.Sprintf("GC test"),
-				Username:      "user",
+				Description:   "GC test",
+				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
+				RunningStatus: sql.RunningStatusWaitingGC,
 				NonCancelable: true,
 			}
 
 			// The job record that will be used to lookup this job.
 			lookupJR := jobs.Record{
-				Description:   fmt.Sprintf("GC test"),
-				Username:      "user",
+				Description:   "GC test",
+				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 			}
 
-			resultsCh := make(chan tree.Datums)
-			job, _, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
+			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Check that the job started.
-			jobIDStr := strconv.Itoa(int(*job.ID()))
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, lookupJR); err != nil {
+			jobIDStr := strconv.Itoa(int(job.ID()))
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
+
+			if ttlTime != FUTURE {
+				// Check that the job eventually blocks right before performing GC, due to the testing knob.
+				sqlDB.CheckQueryResultsRetry(
+					t,
+					fmt.Sprintf("SELECT status, running_status FROM [SHOW JOBS] WHERE job_id = %s", jobIDStr),
+					[][]string{{"running", expectedRunningStatus}})
+			}
+			blockGC <- struct{}{}
 
 			if ttlTime == FUTURE {
 				time.Sleep(500 * time.Millisecond)
@@ -204,9 +223,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 			}
 
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
@@ -215,19 +233,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*sqlbase.MutableTableDescriptor)
-				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
-				if err != nil {
-					return err
-				}
-				myOtherTableDesc = myOtherDesc.(*sqlbase.MutableTableDescriptor)
-				return nil
+				return err
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -253,14 +265,11 @@ func TestSchemaChangeGCJob(t *testing.T) {
 func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defer func(oldAdoptInterval, oldGCInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-	}(jobs.DefaultAdoptInterval, gcjob.MaxSQLGCInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 
 	// We're going to drop a table then manually delete it, then update the
 	// database zone config and ensure the job finishes successfully.
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, args)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -281,22 +290,24 @@ SELECT parent_id, table_id
 	sqlDB.Exec(t, "DROP TABLE db.foo")
 
 	// Now we should be able to find our GC job
-	var jobID int64
+	var jobID jobspb.JobID
 	var status jobs.Status
+	var runningStatus jobs.RunningStatus
 	sqlDB.QueryRow(t, `
-SELECT job_id, status
+SELECT job_id, status, running_status
   FROM crdb_internal.jobs
  WHERE description LIKE 'GC for DROP TABLE db.public.foo';
-`).Scan(&jobID, &status)
+`).Scan(&jobID, &status, &runningStatus)
 	require.Equal(t, jobs.StatusRunning, status)
+	require.Equal(t, sql.RunningStatusWaitingGC, runningStatus)
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		nameKey := sqlbase.MakeNameMetadataKey(keys.SystemSQLCodec, dbID, keys.PublicSchemaID, "foo")
+		nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, dbID, "foo")
 		if err := txn.Del(ctx, nameKey); err != nil {
 			return err
 		}
-		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
 		return txn.Del(ctx, descKey)
 	}))
 	// Update the GC TTL to tickle the job to refresh the status and discover that
@@ -313,4 +324,141 @@ SELECT job_id, status
 		}
 		return nil
 	})
+}
+
+// TestGCTenant is lightweight test that tests the branching logic in Resume
+// depending if the job is GC for tenant or tables/indexes and also the GC
+// logic for GC-ing tenant.
+func TestGCResumer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+	gcjob.SetSmallMaxGCIntervalForTest()
+
+	ctx := context.Background()
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	jobRegistry := execCfg.JobRegistry
+	defer srv.Stopper().Stop(ctx)
+
+	t.Run("tenant GC job past", func(t *testing.T) {
+		const tenID = 10
+		record := jobs.Record{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+					ID:       tenID,
+					DropTime: 1, // guarantees the tenant will expire immediately.
+				},
+			},
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		require.NoError(t, err)
+		require.NoError(t, sj.AwaitCompletion(ctx))
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
+		require.NoError(t, err)
+		st, err := job.CurrentStatus(ctx, nil /* txn */)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, st)
+		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		require.EqualError(t, err, `tenant "10" does not exist`)
+		progress := job.Progress()
+		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+	})
+
+	t.Run("tenant GC job soon", func(t *testing.T) {
+		const tenID = 10
+		record := jobs.Record{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+					ID:       tenID,
+					DropTime: timeutil.Now().UnixNano(),
+				},
+			},
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		require.NoError(t, err)
+
+		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		require.NoError(t, err)
+		require.NoError(t, sj.AwaitCompletion(ctx))
+
+		job, err := jobRegistry.LoadJob(ctx, sj.ID())
+		require.NoError(t, err)
+		st, err := job.CurrentStatus(ctx, nil /* txn */)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, st)
+		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		require.EqualError(t, err, `tenant "10" does not exist`)
+		progress := job.Progress()
+		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+	})
+
+	t.Run("no tenant and tables in same GC job", func(t *testing.T) {
+		gcDetails := jobspb.SchemaChangeGCDetails{
+			Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
+				ID:       10,
+				DropTime: 1, // guarantees the tenant will expire immediately.
+			},
+		}
+		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       100,
+			DropTime: 1,
+		})
+		record := jobs.Record{
+			Details:  gcDetails,
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		require.NoError(t, err)
+		require.Error(t, sj.AwaitCompletion(ctx))
+	})
+}
+
+func TestGCJobRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	var failed atomic.Value
+	failed.Store(false)
+	params := base.TestServerArgs{}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			_, ok := request.GetArg(roachpb.ClearRange)
+			if !ok {
+				return nil
+			}
+			if failed.Load().(bool) {
+				return nil
+			}
+			failed.Store(true)
+			return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+				Timestamp: hlc.Timestamp{},
+				Threshold: hlc.Timestamp{},
+			})
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+	tdb.Exec(t, "DROP TABLE foo CASCADE;")
+	var jobID int64
+	tdb.QueryRow(t, `
+SELECT job_id
+  FROM [SHOW JOBS]
+ WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
+	).Scan(&jobID)
+	var status jobs.Status
+	tdb.QueryRow(t,
+		"SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID,
+	).Scan(&status)
+	require.Equal(t, jobs.StatusSucceeded, status)
 }

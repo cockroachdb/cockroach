@@ -1,0 +1,211 @@
+statement ok
+CREATE ROLE test_set_role;
+CREATE DATABASE test_set_db
+
+query OTT
+SELECT database_id, role_name, settings FROM system.database_role_settings
+----
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'a';
+ALTER ROLE test_set_role IN DATABASE test_set_db SET application_name = 'b';
+ALTER ROLE ALL IN DATABASE test_set_db SET application_name = 'c';
+ALTER ROLE ALL SET application_name = 'd'
+
+# Verify that the defaults were stored.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            ·              {application_name=d}
+0            test_set_role  {application_name=a}
+53           ·              {application_name=c}
+53           test_set_role  {application_name=b}
+
+# Defaults should be in pg_catalog too.
+query OOTTT colnames
+SELECT setdatabase, setrole, d.datname, r.rolname, setconfig
+FROM pg_catalog.pg_db_role_setting
+LEFT JOIN pg_catalog.pg_database d ON setdatabase = d.oid
+LEFT JOIN pg_catalog.pg_roles r ON setrole = r.oid
+ORDER BY 1, 2
+----
+setdatabase  setrole    datname      rolname        setconfig
+0            0          NULL         NULL           {application_name=d}
+0            265380634  NULL         test_set_role  {application_name=a}
+53           0          test_set_db  NULL           {application_name=c}
+53           265380634  test_set_db  test_set_role  {application_name=b}
+
+statement ok
+ALTER ROLE test_set_role SET backslash_quote = 'safe_encoding'
+
+# Verify that a new setting was added in the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{application_name=a,backslash_quote=safe_encoding}
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'f'
+
+# Verify that the existing setting was updated in the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{backslash_quote=safe_encoding,application_name=f}
+
+statement ok
+ALTER ROLE test_set_role SET serial_normalization = 'sql_sequence';
+ALTER ROLE test_set_role RESET application_name
+
+# Verify that the existing setting was removed from the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+
+# Resetting something that isn't there anymore is fine.
+statement ok
+ALTER ROLE test_set_role RESET application_name
+
+# Setting for a role that does not exist should error
+statement error fake_role does not exist
+ALTER ROLE fake_role SET application_name = 'e';
+
+# Setting for a role that does not exist works with IF EXISTS,
+statement ok
+ALTER ROLE IF EXISTS fake_role SET application_name = 'e';
+
+# Setting for a database that does not exist should error.
+statement error database "fake_database" does not exist
+ALTER ROLE IF EXISTS fake_role IN DATABASE fake_database SET application_name = 'e';
+
+# Test setting a variable that does not exist.
+statement error unrecognized configuration parameter "potato"
+ALTER ROLE test_set_role SET potato = 'potato'
+
+# Test *resetting* a variable that does not exist; it should work
+statement ok
+ALTER ROLE test_set_role RESET potato;
+ALTER ROLE test_set_role SET potato TO DEFAULT;
+
+# Test setting a variable to an invalid value.
+statement error invalid value for parameter "serial_normalization": "potato"
+ALTER ROLE test_set_role SET serial_normalization = 'potato'
+
+# Test setting a compat-only variable to an invalid value.
+statement error invalid value for parameter "backslash_quote": "off"
+ALTER ROLE test_set_role SET backslash_quote = 'off'
+
+# Test a setting that does not have a `Set` function defined.
+statement error parameter "integer_datetimes" cannot be changed
+ALTER ROLE test_set_role SET integer_datetimes = 'on'
+
+# Test a setting that does not have a `Set` function defined, but does have
+# `RuntimeSet` defined.
+statement error parameter "transaction_isolation" cannot be changed
+ALTER ROLE test_set_role SET transaction_isolation = 'serializable'
+
+# Verify that the `database` and `role` variables cannot be set.
+statement error parameter "database" cannot be changed
+ALTER ROLE test_set_role SET database = 'd'
+
+statement error parameter "role" cannot be changed
+ALTER ROLE test_set_role SET role = 'd'
+
+# Test setting with a name of "".
+statement error invalid variable name: ""
+ALTER ROLE test_set_role SET "" = 'foo'
+
+query T
+SELECT current_user()
+----
+root
+
+# Verify that the admin role can't be edited, even as root.
+statement error cannot edit admin role
+ALTER ROLE admin SET application_name = 'g'
+
+# Verify that the root user can't be edited, even as root.
+statement error cannot edit root user
+ALTER ROLE root SET application_name = 'g'
+
+# Verify that the public role can't be edited.
+statement error cannot edit public role
+ALTER ROLE public SET application_name = 'g'
+
+# Verify that the "" role can't be edited.
+statement error no username specified
+ALTER ROLE "" SET application_name = 'g'
+
+# Verify that root is allowed to edit some other role that has ADMIN.
+statement ok
+CREATE ROLE other_admin;
+GRANT admin TO other_admin;
+ALTER ROLE other_admin SET application_name = 'g';
+ALTER ROLE other_admin RESET application_name
+
+user testuser
+
+# Verify that testuser can't edit their own defaults.
+statement error user testuser does not have CREATEROLE privilege
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+ALTER ROLE testuser WITH CREATEROLE
+
+user testuser
+
+# Now that testuser has CREATEROLE, it can edit itself.
+statement ok
+ALTER ROLE testuser RESET application_name
+
+# Now that testuser has CREATEROLE, it can also edit test_set_role.
+statement ok
+ALTER ROLE test_set_role RESET application_name
+
+# However, even with CREATEROLE, testuser cannot do RESET ALL.
+statement error only users with the admin role are allowed to ALTER ROLE ALL
+ALTER ROLE ALL IN DATABASE test_set_db RESET application_name
+
+# Verify that testuser can't edit an ADMIN, even after getting CREATEROLE.
+statement error only users with the admin role are allowed to ALTER ROLE admin
+ALTER ROLE other_admin SET application_name = 'abc'
+
+user root
+
+statement ok
+ALTER ROLE ALL RESET ALL
+
+# Verify that defaults were removed for (db_id=0, role_name="") but nothing else.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            test_set_role  {backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+53           ·              {application_name=c}
+53           test_set_role  {application_name=b}
+
+statement ok
+DROP DATABASE test_set_db
+
+# Verify that the defaults were removed for the dropped database.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            test_set_role  {backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+
+statement ok
+DROP ROLE test_set_role
+
+# Verify that the defaults were removed for the dropped role.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name  settings

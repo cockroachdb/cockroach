@@ -1,0 +1,115 @@
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE test TO testuser
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
+NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
+
+query TTT
+SHOW GRANTS ON DATABASE test
+----
+test  admin  ALL
+test  root   ALL
+
+statement ok
+REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test FROM testuser
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  types  public  USAGE
+
+query TTT
+SHOW GRANTS ON DATABASE test
+----
+test  admin  ALL
+test  root   ALL
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE test, test2 TO testuser
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
+NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
+
+statement ok
+use test2;
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
+NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
+
+statement ok
+REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test, test2 FROM testuser
+
+statement ok
+use test
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  types  public  USAGE
+
+statement ok
+use test2
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  types  public  USAGE
+
+# Revoke should remove default privileges granted through alter default privileges.
+statement ok
+use test
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO testuser
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  testuser  DELETE
+NULL  true  tables  testuser  INSERT
+NULL  true  tables  testuser  SELECT
+NULL  true  tables  testuser  UPDATE
+NULL  true  types   public    USAGE
+
+statement ok
+REVOKE SELECT, INSERT, UPDATE, DELETE ON DATABASE test FROM testuser
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  types  public  USAGE
+
+# Ensure roles with special characters can be the target of a GRANT that is
+# converted to ALTER DEFAULT PRIVILEGES.
+statement ok
+CREATE USER "test-user"
+
+statement ok
+GRANT SELECT ON DATABASE test TO "test-user"
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  test-user  SELECT
+NULL  true  types   public     USAGE

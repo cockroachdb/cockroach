@@ -51,6 +51,8 @@ Tags for scalar operators:
  - `ConstValue`: used for operators that represent a constant value.
  - `Aggregate`: used for operators that represent an aggregation function.
  - `Window`: used for operators that represent a window function.
+ - `CompositeInsensitive`: used for operators that only depend on the logical
+   value of composite value inputs (see memo.CanBeCompositeSensitive).
 
 Tags for relational operators:
  - `Join`: used for logical variations of join, including apply joins (but not

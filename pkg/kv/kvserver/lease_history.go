@@ -58,7 +58,7 @@ func (lh *leaseHistory) get() []roachpb.Lease {
 	if len(lh.history) < leaseHistoryMaxEntries || lh.index == 0 {
 		result := make([]roachpb.Lease, len(lh.history))
 		copy(result, lh.history)
-		return lh.history
+		return result
 	}
 	first := lh.history[lh.index:]
 	second := lh.history[:lh.index]

@@ -11,14 +11,16 @@
 package stats
 
 import (
+	"context"
 	fmt "fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // JSONStatistic is a struct used for JSON marshaling and unmarshaling statistics.
@@ -33,9 +35,10 @@ type JSONStatistic struct {
 	NullCount     uint64   `json:"null_count"`
 	// HistogramColumnType is the string representation of the column type for the
 	// histogram (or unset if there is no histogram). Parsable with
-	// tree.ParseType.
+	// tree.GetTypeFromValidSQLSyntax.
 	HistogramColumnType string            `json:"histo_col_type"`
 	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitempty"`
+	HistogramVersion    HistogramVersion  `json:"histo_version,omitempty"`
 }
 
 // JSONHistoBucket is a struct used for JSON marshaling and unmarshaling of
@@ -54,16 +57,23 @@ type JSONHistoBucket struct {
 // SetHistogram fills in the HistogramColumnType and HistogramBuckets fields.
 func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	typ := h.ColumnType
+	if typ == nil {
+		return fmt.Errorf("histogram type is unset")
+	}
 	js.HistogramColumnType = typ.SQLString()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
-	var a sqlbase.DatumAlloc
+	js.HistogramVersion = h.Version
+	var a rowenc.DatumAlloc
 	for i := range h.Buckets {
 		b := &h.Buckets[i]
 		js.HistogramBuckets[i].NumEq = b.NumEq
 		js.HistogramBuckets[i].NumRange = b.NumRange
 		js.HistogramBuckets[i].DistinctRange = b.DistinctRange
 
-		datum, _, err := sqlbase.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
+		if b.UpperBound == nil {
+			return fmt.Errorf("histogram bucket upper bound is unset")
+		}
+		datum, _, err := rowenc.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
 		if err != nil {
 			return err
 		}
@@ -79,17 +89,36 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 }
 
 // DecodeAndSetHistogram decodes a histogram marshaled as a Bytes datum and
-// fills in the HistogramColumnType and HistogramBuckets fields.
-func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
+// fills in the JSONStatistic histogram fields.
+func (js *JSONStatistic) DecodeAndSetHistogram(
+	ctx context.Context, semaCtx *tree.SemaContext, datum tree.Datum,
+) error {
 	if datum == tree.DNull {
 		return nil
 	}
 	if datum.ResolvedType().Family() != types.BytesFamily {
 		return fmt.Errorf("histogram datum type should be Bytes")
 	}
+	if len(*datum.(*tree.DBytes)) == 0 {
+		// This can happen if every value in the column is null.
+		return nil
+	}
 	h := &HistogramData{}
 	if err := protoutil.Unmarshal([]byte(*datum.(*tree.DBytes)), h); err != nil {
 		return err
+	}
+	// If the serialized column type is user defined, then it needs to be
+	// hydrated before use.
+	if h.ColumnType.UserDefined() {
+		resolver := semaCtx.GetTypeResolver()
+		if resolver == nil {
+			return errors.AssertionFailedf("attempt to resolve user defined type with nil TypeResolver")
+		}
+		typ, err := resolver.ResolveTypeByOID(ctx, h.ColumnType.Oid())
+		if err != nil {
+			return err
+		}
+		h.ColumnType = typ
 	}
 	return js.SetHistogram(h)
 }
@@ -102,7 +131,7 @@ func (js *JSONStatistic) GetHistogram(
 		return nil, nil
 	}
 	h := &HistogramData{}
-	colTypeRef, err := parser.ParseType(js.HistogramColumnType)
+	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(js.HistogramColumnType)
 	if err != nil {
 		return nil, err
 	}
@@ -111,17 +140,18 @@ func (js *JSONStatistic) GetHistogram(
 		return nil, err
 	}
 	h.ColumnType = colType
+	h.Version = js.HistogramVersion
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := sqlbase.ParseDatumStringAs(colType, hb.UpperBound, evalCtx)
+		upperVal, err := rowenc.ParseDatumStringAs(colType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}
 		h.Buckets[i].NumEq = hb.NumEq
 		h.Buckets[i].NumRange = hb.NumRange
 		h.Buckets[i].DistinctRange = hb.DistinctRange
-		h.Buckets[i].UpperBound, err = sqlbase.EncodeTableKey(nil, upperVal, encoding.Ascending)
+		h.Buckets[i].UpperBound, err = rowenc.EncodeTableKey(nil, upperVal, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}

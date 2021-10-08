@@ -1,0 +1,69 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timeutil",
+    srcs = [
+        "manual_time.go",
+        "now_unix.go",
+        "now_windows.go",
+        "stopwatch.go",
+        "time.go",
+        "time_source.go",
+        "time_zone_util.go",
+        "timer.go",
+        "timeutil.go",
+        "zoneinfo.go",
+        ":gen-lowercase-timezones",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "timeutil_test",
+    size = "medium",
+    srcs = [
+        "main_test.go",
+        "manual_time_test.go",
+        "now_test.go",
+        "stopwatch_test.go",
+        "time_test.go",
+        "time_zone_util_test.go",
+        "timer_test.go",
+    ],
+    embed = [":timeutil"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-lowercase-timezones",
+    srcs = [
+        "@go_sdk//:lib/time/zoneinfo.zip",
+    ],
+    outs = ["lowercase_timezones_generated.go"],
+    cmd = """
+    $(location //pkg/util/timeutil/gen) \
+      --filename=$(location lowercase_timezones_generated.go) \
+      --zoneinfo=$(location @go_sdk//:lib/time/zoneinfo.zip) \
+      --crlfmt=$(location @com_github_cockroachdb_crlfmt//:crlfmt)
+       """,
+    exec_tools = [
+        "//pkg/util/timeutil/gen",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
+)

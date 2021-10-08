@@ -298,15 +298,15 @@ type JoinOrderBuilder struct {
 // graph is reset, so a JoinOrderBuilder can be reused. Callback functions are
 // not reset.
 func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
-	jb.f = f
-	jb.evalCtx = evalCtx
-
-	jb.vertexes = []memo.RelExpr{}
-	jb.edges = []edge{}
-	jb.nonInnerEdges = edgeSet{}
-	jb.innerEdges = edgeSet{}
-	jb.plans = map[vertexSet]memo.RelExpr{}
-	jb.joinCount = 0
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*jb = JoinOrderBuilder{
+		f:             f,
+		evalCtx:       evalCtx,
+		plans:         make(map[vertexSet]memo.RelExpr),
+		onReorderFunc: jb.onReorderFunc,
+		onAddJoinFunc: jb.onAddJoinFunc,
+	}
 }
 
 // Reorder adds all valid orderings of the given join to the memo.
@@ -357,7 +357,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 		jb.joinCount++
 
 		flags := t.Private().(*memo.JoinPrivate).Flags
-		if !flags.Empty() || jb.joinCount > jb.evalCtx.SessionData.ReorderJoinsLimit {
+		if !flags.Empty() || jb.joinCount > int(jb.evalCtx.SessionData().ReorderJoinsLimit) {
 			// If the join has flags or the join limit has been reached, we can't
 			// reorder. Simply treat the join as a base relation.
 			jb.addBaseRelation(t)
@@ -486,6 +486,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
 	var addInnerJoin bool
+	var joinIsRedundant bool
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
 		e := &jb.edges[i]
 
@@ -495,6 +496,11 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			if areFiltersRedundant(&fds, e.filters) {
 				// Avoid adding redundant filters.
 				continue
+			}
+			if !joinIsRedundant {
+				// If this edge was originally part of a join between relation sets s1 and
+				// s2, any other edges that apply will also be part of that original join.
+				joinIsRedundant = e.joinIsRedundant(s1, s2)
 			}
 			getEquivFDs(&fds, e.filters)
 			innerJoinFilters = append(innerJoinFilters, e.filters...)
@@ -513,7 +519,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// Construct a non-inner join. If any inner join filters also apply to the
 			// pair of relationSets, construct a select on top of the join with the
 			// inner join filters.
-			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters)
+			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters, e.joinIsRedundant(s1, s2))
 			return
 		}
 		if e.checkNonInnerJoin(s2, s1) {
@@ -539,7 +545,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// 010 on the right. 101 is larger than 111 / 2, so we will not enumerate
 			// this plan unless we consider a join with s2 on the left and s1 on the
 			// right.
-			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters)
+			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters, e.joinIsRedundant(s2, s1))
 			return
 		}
 	}
@@ -549,7 +555,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		// already been constructed, because doing so can lead to a case where a
 		// non-inner join operator 'disappears' because an inner join has replaced
 		// it.
-		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinFilters, nil /* selectFilters */)
+		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinFilters, nil /* selectFilters */, joinIsRedundant)
 	}
 }
 
@@ -628,7 +634,7 @@ func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e 
 
 // getFreeVars returns the set of columns referenced by the given predicate.
 func (jb *JoinOrderBuilder) getFreeVars(predicate memo.FiltersExpr) opt.ColSet {
-	return predicate.OuterCols(jb.f.Memo())
+	return predicate.OuterCols()
 }
 
 // hasEqEdge returns true if the inner edges include a direct equality between
@@ -648,9 +654,13 @@ func (jb *JoinOrderBuilder) hasEqEdge(leftCol, rightCol opt.ColumnID) bool {
 // the given set of edges. If the group containing joins between this set of
 // relations is already contained in the plans field, the new join is added to
 // the memo group. Otherwise, the join is memoized (possibly constructing a new
-// group).
+// group). If the join being considered existed in the originally matched join
+// tree, no join is added (though its commuted version may be).
 func (jb *JoinOrderBuilder) addJoin(
-	op opt.Operator, s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr,
+	op opt.Operator,
+	s1, s2 vertexSet,
+	joinFilters, selectFilters memo.FiltersExpr,
+	joinIsRedundant bool,
 ) {
 	if s1.intersects(s2) {
 		panic(errors.AssertionFailedf("sets are not disjoint"))
@@ -663,14 +673,22 @@ func (jb *JoinOrderBuilder) addJoin(
 	left := jb.plans[s1]
 	right := jb.plans[s2]
 	union := s1.union(s2)
-	if jb.plans[union] != nil {
-		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
-	} else {
-		jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+	if !joinIsRedundant {
+		if jb.plans[union] != nil {
+			jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
+		} else {
+			jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+		}
 	}
 
 	if commute(op) {
-		// Also add the commuted version of the join to the memo.
+		// Also add the commuted version of the join to the memo. Note that if the
+		// join is redundant (a join between base relation sets s1 and s2 existed in
+		// the matched join tree) then jb.plans[union] will already have the
+		// original join group.
+		if jb.plans[union] == nil {
+			panic(errors.AssertionFailedf("expected existing join plan"))
+		}
 		jb.addToGroup(op, right, left, joinFilters, selectFilters, jb.plans[union])
 
 		if jb.onAddJoinFunc != nil {
@@ -721,13 +739,17 @@ func (jb *JoinOrderBuilder) addToGroup(
 		jb.f.Memo().AddSelectToGroup(selectExpr, grp)
 		return
 	}
+
+	// Set SkipReorderJoins to true in order to avoid duplicate reordering on this
+	// join.
+	newJoinPrivate := memo.JoinPrivate{SkipReorderJoins: true}
 	switch op {
 	case opt.InnerJoinOp:
 		newJoin := &memo.InnerJoinExpr{
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
 
@@ -736,7 +758,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
 
@@ -745,7 +767,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
 
@@ -754,7 +776,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
 
@@ -763,7 +785,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddFullJoinToGroup(newJoin, grp)
 
@@ -779,21 +801,25 @@ func (jb *JoinOrderBuilder) memoize(
 	op opt.Operator, left, right memo.RelExpr, on, selectFilters memo.FiltersExpr,
 ) memo.RelExpr {
 	var join memo.RelExpr
+
+	// Set SkipReorderJoins to true in order to avoid duplicate reordering on this
+	// join.
+	newJoinPrivate := &memo.JoinPrivate{SkipReorderJoins: true}
 	switch op {
 	case opt.InnerJoinOp:
-		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, newJoinPrivate)
 
 	case opt.SemiJoinOp:
-		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, newJoinPrivate)
 
 	case opt.AntiJoinOp:
-		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, newJoinPrivate)
 
 	case opt.LeftJoinOp:
-		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, newJoinPrivate)
 
 	case opt.FullJoinOp:
-		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeFullJoin(left, right, on, newJoinPrivate)
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator: %v", op))
@@ -1268,6 +1294,13 @@ func (e *edge) checkRules(s1, s2 vertexSet) bool {
 		}
 	}
 	return true
+}
+
+// joinIsRedundant returns true if a join between the two sets of base relations
+// was already present in the original join tree. If so, enumerating this join
+// would be redundant, so it should be skipped.
+func (e *edge) joinIsRedundant(s1, s2 vertexSet) bool {
+	return e.op.leftVertexes == s1 && e.op.rightVertexes == s2
 }
 
 // commute returns true if the given join operator type is commutable.

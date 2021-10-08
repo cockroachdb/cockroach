@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -32,14 +33,47 @@ type Validator interface {
 	Failures() []string
 }
 
+// StreamValidator wraps a Validator and exposes additional methods for
+// introspection.
+type StreamValidator interface {
+	Validator
+	// GetValuesForKeyBelowTimestamp returns the streamed KV updates for `key`
+	// with a ts less than equal to timestamp`.
+	GetValuesForKeyBelowTimestamp(key string, timestamp hlc.Timestamp) ([]roachpb.KeyValue, error)
+}
+
+type timestampValue struct {
+	ts    hlc.Timestamp
+	value string
+}
+
 type orderValidator struct {
-	topic           string
-	partitionForKey map[string]string
-	keyTimestamps   map[string][]hlc.Timestamp
-	resolved        map[string]hlc.Timestamp
+	topic                 string
+	partitionForKey       map[string]string
+	keyTimestampAndValues map[string][]timestampValue
+	resolved              map[string]hlc.Timestamp
 
 	failures []string
 }
+
+// NoOpValidator is a validator that does nothing. Useful for
+// composition.
+var NoOpValidator = &noOpValidator{}
+
+var _ Validator = &orderValidator{}
+var _ Validator = &noOpValidator{}
+var _ StreamValidator = &orderValidator{}
+
+type noOpValidator struct{}
+
+// NoteRow accepts a changed row entry.
+func (v *noOpValidator) NoteRow(string, string, string, hlc.Timestamp) error { return nil }
+
+// NoteResolved accepts a resolved timestamp entry.
+func (v *noOpValidator) NoteResolved(string, hlc.Timestamp) error { return nil }
+
+// Failures returns any violations seen so far.
+func (v *noOpValidator) Failures() []string { return nil }
 
 // NewOrderValidator returns a Validator that checks the row and resolved
 // timestamp ordering guarantees. It also asserts that keys have an affinity to
@@ -52,17 +86,49 @@ type orderValidator struct {
 // lower update timestamp will be emitted on that partition.
 func NewOrderValidator(topic string) Validator {
 	return &orderValidator{
-		topic:           topic,
-		partitionForKey: make(map[string]string),
-		keyTimestamps:   make(map[string][]hlc.Timestamp),
-		resolved:        make(map[string]hlc.Timestamp),
+		topic:                 topic,
+		partitionForKey:       make(map[string]string),
+		keyTimestampAndValues: make(map[string][]timestampValue),
+		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
 
+// NewStreamOrderValidator wraps an orderValidator as described above, and
+// exposes additional methods for introspection.
+func NewStreamOrderValidator() StreamValidator {
+	return &orderValidator{
+		topic:                 "unused",
+		partitionForKey:       make(map[string]string),
+		keyTimestampAndValues: make(map[string][]timestampValue),
+		resolved:              make(map[string]hlc.Timestamp),
+	}
+}
+
+// GetValuesForKeyBelowTimestamp implements the StreamValidator interface.
+func (v *orderValidator) GetValuesForKeyBelowTimestamp(
+	key string, timestamp hlc.Timestamp,
+) ([]roachpb.KeyValue, error) {
+	timestampValueTuples := v.keyTimestampAndValues[key]
+	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
+		return timestamp.Less(timestampValueTuples[i].ts)
+	})
+	var kv []roachpb.KeyValue
+	for _, tsValue := range timestampValueTuples[:timestampsIdx] {
+		byteRep := []byte(key)
+		kv = append(kv, roachpb.KeyValue{
+			Key: byteRep,
+			Value: roachpb.Value{
+				RawBytes:  []byte(tsValue.value),
+				Timestamp: tsValue.ts,
+			},
+		})
+	}
+
+	return kv, nil
+}
+
 // NoteRow implements the Validator interface.
-func (v *orderValidator) NoteRow(
-	partition string, key, ignoredValue string, updated hlc.Timestamp,
-) error {
+func (v *orderValidator) NoteRow(partition string, key, value string, updated hlc.Timestamp) error {
 	if prev, ok := v.partitionForKey[key]; ok && prev != partition {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`key [%s] received on two partitions: %s and %s`, key, prev, partition,
@@ -71,17 +137,20 @@ func (v *orderValidator) NoteRow(
 	}
 	v.partitionForKey[key] = partition
 
-	timestamps := v.keyTimestamps[key]
-	timestampsIdx := sort.Search(len(timestamps), func(i int) bool {
-		return updated.LessEq(timestamps[i])
+	timestampValueTuples := v.keyTimestampAndValues[key]
+	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
+		return updated.LessEq(timestampValueTuples[i].ts)
 	})
-	seen := timestampsIdx < len(timestamps) && timestamps[timestampsIdx] == updated
+	seen := timestampsIdx < len(timestampValueTuples) &&
+		timestampValueTuples[timestampsIdx].ts == updated
 
-	if !seen && len(timestamps) > 0 && updated.Less(timestamps[len(timestamps)-1]) {
+	if !seen && len(timestampValueTuples) > 0 &&
+		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
 			v.topic, partition,
-			updated.AsOfSystemTime(), timestamps[len(timestamps)-1].AsOfSystemTime(),
+			updated.AsOfSystemTime(),
+			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
 		))
 	}
 	if !seen && updated.Less(v.resolved[partition]) {
@@ -92,8 +161,12 @@ func (v *orderValidator) NoteRow(
 	}
 
 	if !seen {
-		v.keyTimestamps[key] = append(
-			append(timestamps[:timestampsIdx], updated), timestamps[timestampsIdx:]...)
+		v.keyTimestampAndValues[key] = append(
+			append(timestampValueTuples[:timestampsIdx], timestampValue{
+				ts:    updated,
+				value: value,
+			}),
+			timestampValueTuples[timestampsIdx:]...)
 	}
 	return nil
 }
@@ -311,7 +384,7 @@ func NewFingerprintValidator(
 			}
 			fmt.Fprintf(&addColumnStmt, `ADD COLUMN test%d STRING`, i)
 		}
-		if _, err := sqlDB.Query(addColumnStmt.String()); err != nil {
+		if _, err := sqlDB.Exec(addColumnStmt.String()); err != nil {
 			return nil, err
 		}
 	}
@@ -467,7 +540,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		// we fingerprint at `updated.Prev()` since we want to catch cases where one or
 		// more row updates are missed. For example: If k1 was written at t1, t2, t3 and
 		// the update for t2 was missed.
-		if v.previousRowUpdateTs != (hlc.Timestamp{}) && v.previousRowUpdateTs.Less(row.updated) {
+		if !v.previousRowUpdateTs.IsEmpty() && v.previousRowUpdateTs.Less(row.updated) {
 			if err := v.fingerprint(row.updated.Prev()); err != nil {
 				return err
 			}
@@ -650,6 +723,9 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 			return nil, err
 		}
 		primaryKeyCols = append(primaryKeyCols, primaryKeyCol)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	if len(primaryKeyCols) == 0 {
 		return nil, errors.Errorf("no primary key information found for %s", tableStr)

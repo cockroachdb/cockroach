@@ -27,10 +27,7 @@ func init() {
 }
 
 func declareKeysQueryTransaction(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	qr := req.(*roachpb.QueryTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
@@ -53,26 +50,31 @@ func QueryTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-	if h.Timestamp.Less(args.Txn.WriteTimestamp) {
-		// This condition must hold for the timestamp cache access to be safe.
-		return result.Result{}, errors.Errorf("QueryTxn request timestamp %s less than txn timestamp %s",
-			h.Timestamp, args.Txn.WriteTimestamp)
+	if h.WriteTimestamp().Less(args.Txn.MinTimestamp) {
+		// This condition must hold for the timestamp cache access in
+		// SynthesizeTxnFromMeta to be safe.
+		return result.Result{}, errors.AssertionFailedf("QueryTxn request timestamp %s less than txn MinTimestamp %s",
+			h.Timestamp, args.Txn.MinTimestamp)
 	}
 	if !args.Key.Equal(args.Txn.Key) {
-		return result.Result{}, errors.Errorf("QueryTxn request key %s does not match txn key %s",
+		return result.Result{}, errors.AssertionFailedf("QueryTxn request key %s does not match txn key %s",
 			args.Key, args.Txn.Key)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
-	if ok, err := storage.MVCCGetProto(
+	ok, err := storage.MVCCGetProto(
 		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
-	); err != nil {
+	)
+	if err != nil {
 		return result.Result{}, err
-	} else if !ok {
+	}
+	if ok {
+		reply.TxnRecordExists = true
+	} else {
 		// The transaction hasn't written a transaction record yet.
 		// Attempt to synthesize it from the provided TxnMeta.
-		reply.QueriedTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.Txn)
+		reply.QueriedTxn = SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.Txn)
 	}
 
 	// Get the list of txns waiting on this txn.

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 func TestBlobServiceList(t *testing.T) {
@@ -87,7 +88,7 @@ func TestBlobServiceDelete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(filepath.Join(tmpDir, filename)); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(tmpDir, filename)); !oserror.IsNotExist(err) {
 			t.Fatalf("expected not exists err, got: %s", err)
 		}
 	})

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euxo pipefail
+set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
@@ -9,21 +9,34 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 build/builder.sh make .buildinfo/tag
 build_name="${TAG_NAME:-$(cat .buildinfo/tag)}"
-release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+")"
+
+# On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
+is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET-cockroach-builds}"
-  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
-  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+  # Used for docker login for gcloud
+  gcr_hostname="us-docker.pkg.dev"
 else
   bucket="${BUCKET:-cockroach-builds-test}"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   build_name="${build_name}.dryrun"
+  gcr_hostname="us.gcr.io"
 fi
 
-# Used for docker login for gcloud
-gcr_hostname="us.gcr.io"
+cat << EOF
+
+  build_name:      $build_name
+  release_branch:  $release_branch
+  is_custom_build: $is_custom_build
+  bucket:          $bucket
+  gcr_repository:  $gcr_repository
+
+EOF
 tc_end_block "Variable Setup"
 
 
@@ -55,6 +68,7 @@ docker_login_with_google
 # curl unhappy, so passing `i` will cause it to read to the end.
 curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
+cp -r licenses build/deploy/
 
 docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
@@ -64,7 +78,7 @@ tc_end_block "Make and push docker image"
 tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 configure_git_ssh_key
-push_to_git ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
+git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
 tc_end_block "Push release tag to github.com/cockroachdb/cockroach"
 
 
@@ -82,7 +96,14 @@ tc_end_block "Tag docker image as latest-build"
 cat << EOF
 
 
-Git Tag: ${build_name}
+Build ID: ${build_name}
 
 
 EOF
+
+
+if [[ -n "${is_custom_build}" ]] ; then
+  tc_start_block "Delete custombuild tag"
+  git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
+  tc_end_block "Delete custombuild tag"
+fi

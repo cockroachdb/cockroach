@@ -1,0 +1,69 @@
+# This file contains error checks for session migration.
+
+exec
+SELECT crdb_internal.deserialize_session('invalid proto')
+----
+pq: crdb_internal.deserialize_session(): error deserializing session: unexpected EOF
+
+exec
+SET experimental_enable_temp_tables = true;
+CREATE TEMP TABLE temp_tbl()
+----
+
+query
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize session with temporary schemas
+
+reset
+----
+
+exec
+BEGIN
+----
+
+query
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize a session which is inside a transaction
+
+reset
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+exec
+BEGIN
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+pq: crdb_internal.deserialize_session(): cannot deserialize a session whilst inside a transaction
+
+reset
+----
+
+# We cannot deserialize a different session_user.
+exec
+SELECT crdb_internal.deserialize_session(
+  decode(
+    '0a4a0a0964656661756c74646212102420636f636b726f6163682064656d6f1a04757365722204100222002802380842035554434a0524757365724a067075626c69635a0060808080207a00122b10904e3002380840026001680170017801880101d80101e00101f00101f80101900201b002808001c80201',
+    'hex'
+  )
+)
+----
+pq: crdb_internal.deserialize_session(): can only deserialize matching session users
+
+# We cannot deserialize a different session_user, even if current_user matches.
+exec
+SELECT crdb_internal.deserialize_session(
+  decode(
+    '0a450a046d6f767212102420636f636b726f6163682064656d6f1a04726f6f742204100222002802380842035554434a0524757365724a067075626c69635a0060808080207a00123310904e3002380840026001680170017801880101d80101e00101f00101f80101900201b002808001c80201f20205626f626279',
+    'hex'
+  )
+)
+----
+pq: crdb_internal.deserialize_session(): can only deserialize matching session users

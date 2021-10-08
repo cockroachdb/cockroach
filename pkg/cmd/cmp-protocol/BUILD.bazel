@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cmp-protocol_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/cmp-protocol/pgconnect",
+        "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "cmp-protocol",
+    embed = [":cmp-protocol_lib"],
+    visibility = ["//visibility:public"],
+)

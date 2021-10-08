@@ -19,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestPlaceholderTypesEquals(t *testing.T) {
+func TestPlaceholderTypesIdentical(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
-		a, b  PlaceholderTypes
-		equal bool
+		a, b      PlaceholderTypes
+		identical bool
 	}{
 		{ // 0
 			PlaceholderTypes{},
@@ -61,14 +61,29 @@ func TestPlaceholderTypesEquals(t *testing.T) {
 			PlaceholderTypes{types.Int, nil},
 			false,
 		},
+		{ // 7
+			PlaceholderTypes{types.Int, nil},
+			PlaceholderTypes{types.Int4, nil},
+			false,
+		},
+		{ // 8
+			PlaceholderTypes{types.Int},
+			PlaceholderTypes{types.Int4},
+			false,
+		},
+		{ // 9
+			PlaceholderTypes{types.Int4},
+			PlaceholderTypes{types.Int4},
+			true,
+		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			res := tc.a.Equals(tc.b)
-			if res != tc.equal {
-				t.Errorf("%v vs %v: expected %t, got %t", tc.a, tc.b, tc.equal, res)
+			res := tc.a.Identical(tc.b)
+			if res != tc.identical {
+				t.Errorf("%v vs %v: expected %t, got %t", tc.a, tc.b, tc.identical, res)
 			}
-			res2 := tc.b.Equals(tc.a)
+			res2 := tc.b.Identical(tc.a)
 			if res != res2 {
 				t.Errorf("%v vs %v: not commutative", tc.a, tc.b)
 			}

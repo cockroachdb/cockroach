@@ -17,11 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -455,11 +457,11 @@ func (buf *StmtBuf) translatePosLocked(pos CmdPos) (int, error) {
 	return int(pos - buf.mu.startPos), nil
 }
 
-// ltrim iterates over the buffer forward and removes all commands up to
+// Ltrim iterates over the buffer forward and removes all commands up to
 // (not including) the command at pos.
 //
-// It's illegal to ltrim to a position higher than the current cursor.
-func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
+// It's illegal to Ltrim to a position higher than the current cursor.
+func (buf *StmtBuf) Ltrim(ctx context.Context, pos CmdPos) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {
@@ -590,7 +592,8 @@ type ClientComm interface {
 		descOpt RowDescOpt,
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
-		conv sessiondata.DataConversionConfig,
+		conv sessiondatapb.DataConversionConfig,
+		location *time.Location,
 		limit int,
 		portalName string,
 		implicitTxn bool,
@@ -688,19 +691,19 @@ type CommandResultClose interface {
 type RestrictedCommandResult interface {
 	CommandResultErrBase
 
-	// AppendParamStatusUpdate appends a parameter status update to the result.
+	// BufferParamStatusUpdate buffers a parameter status update to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendParamStatusUpdate(string, string)
+	BufferParamStatusUpdate(string, string)
 
-	// AppendNotice appends a notice to the result.
+	// BufferNotice appends a notice to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendNotice(noticeErr error)
+	BufferNotice(notice pgnotice.Notice)
 
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
 	// This needs to be called (once) before AddRow.
-	SetColumns(context.Context, sqlbase.ResultColumns)
+	SetColumns(context.Context, colinfo.ResultColumns)
 
 	// ResetStmtType allows a client to change the statement type of the current
 	// result, from the original one set when the result was created trough
@@ -713,9 +716,21 @@ type RestrictedCommandResult interface {
 	// shallow copy if it needs to.
 	AddRow(ctx context.Context, row tree.Datums) error
 
+	// AddBatch accumulates a result batch.
+	//
+	// The implementation cannot hold on to the contents of the batch without
+	// deeply copying them. The memory in the input batch is safe to modify as
+	// soon as AddBatch returns.
+	AddBatch(ctx context.Context, batch coldata.Batch) error
+
+	// SupportsAddBatch returns whether this command result supports AddBatch
+	// method of adding the data. If false is returned, then the behavior of
+	// AddBatch is undefined.
+	SupportsAddBatch() bool
+
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
-	IncrementRowsAffected(n int)
+	IncrementRowsAffected(ctx context.Context, n int)
 
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
@@ -735,15 +750,15 @@ type DescribeResult interface {
 
 	// SetInferredTypes tells the client about the inferred placeholder types.
 	SetInferredTypes([]oid.Oid)
-	// SetNoDataDescription is used to tell the client that the prepared statement
-	// or portal produces no rows.
+	// SetNoDataRowDescription is used to tell the client that the prepared
+	// statement or portal produces no rows.
 	SetNoDataRowDescription()
 	// SetPrepStmtOutput tells the client about the results schema of a prepared
 	// statement.
-	SetPrepStmtOutput(context.Context, sqlbase.ResultColumns)
+	SetPrepStmtOutput(context.Context, colinfo.ResultColumns)
 	// SetPortalOutput tells the client about the results schema and formatting of
 	// a portal.
-	SetPortalOutput(context.Context, sqlbase.ResultColumns, []pgwirebase.FormatCode)
+	SetPortalOutput(context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode)
 }
 
 // ParseResult represents the result of a Parse command.
@@ -856,108 +871,129 @@ type resCloseType bool
 const closed resCloseType = true
 const discarded resCloseType = false
 
-// bufferedCommandResult is a CommandResult that buffers rows and can call a
-// provided callback when closed.
-type bufferedCommandResult struct {
-	err          error
-	rows         []tree.Datums
-	rowsAffected int
-	cols         sqlbase.ResultColumns
+// streamingCommandResult is a CommandResult that streams rows on the channel
+// and can call a provided callback when closed.
+type streamingCommandResult struct {
+	// All the data (the rows and the metadata) are written into w. The
+	// goroutine writing into this streamingCommandResult might block depending
+	// on the synchronization strategy.
+	w ieResultWriter
 
-	// errOnly, if set, makes AddRow() panic. This can be used when the execution
-	// of the query is not expected to produce any results.
-	errOnly bool
+	err          error
+	rowsAffected int
 
 	// closeCallback, if set, is called when Close()/Discard() is called.
-	closeCallback func(*bufferedCommandResult, resCloseType, error)
+	closeCallback func(*streamingCommandResult, resCloseType)
 }
 
-var _ RestrictedCommandResult = &bufferedCommandResult{}
-var _ CommandResultClose = &bufferedCommandResult{}
+var _ RestrictedCommandResult = &streamingCommandResult{}
+var _ CommandResultClose = &streamingCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.ResultColumns) {
-	if r.errOnly {
-		panic("SetColumns() called when errOnly is set")
+func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+	// The interface allows for cols to be nil, yet the iterator result expects
+	// non-nil value to indicate that it was the column metadata.
+	if cols == nil {
+		cols = colinfo.ResultColumns{}
 	}
-	r.cols = cols
+	_ = r.w.addResult(ctx, ieIteratorResult{cols: cols})
 }
 
-// AppendParamStatusUpdate is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) {
+// BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string) {
 	panic("unimplemented")
 }
 
-// AppendNotice is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
+// BufferNotice is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 	panic("unimplemented")
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) ResetStmtType(stmt tree.Statement) {
+func (r *streamingCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	if r.errOnly {
-		panic("AddRow() called when errOnly is set")
-	}
+func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	// AddRow() and IncrementRowsAffected() are never called on the same command
+	// result, so we will not double count the affected rows by an increment
+	// here.
+	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	r.rows = append(r.rows, rowCopy)
-	return nil
+	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
 }
 
-func (r *bufferedCommandResult) DisableBuffering() {
+// AddBatch is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) AddBatch(context.Context, coldata.Batch) error {
+	// TODO(yuzefovich): implement this.
+	panic("unimplemented")
+}
+
+// SupportsAddBatch is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SupportsAddBatch() bool {
+	return false
+}
+
+func (r *streamingCommandResult) DisableBuffering() {
 	panic("cannot disable buffering here")
 }
 
 // SetError is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) SetError(err error) {
+func (r *streamingCommandResult) SetError(err error) {
 	r.err = err
+	// Note that we intentionally do not send the error on the channel (when it
+	// is present) since we might replace the error with another one later which
+	// is allowed by the interface. An example of this is queryDone() closure
+	// in execStmtInOpenState().
 }
 
 // Err is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) Err() error {
+func (r *streamingCommandResult) Err() error {
 	return r.err
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) IncrementRowsAffected(n int) {
+func (r *streamingCommandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.rowsAffected += n
+	// streamingCommandResult might be used outside of the internal executor
+	// (i.e. not by rowsIterator) in which case the channel is not set.
+	if r.w != nil {
+		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffectedIncrement: &n})
+	}
 }
 
 // RowsAffected is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) RowsAffected() int {
+func (r *streamingCommandResult) RowsAffected() int {
 	return r.rowsAffected
 }
 
 // Close is part of the CommandResultClose interface.
-func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
+func (r *streamingCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
-		r.closeCallback(r, closed, nil /* err */)
+		r.closeCallback(r, closed)
 	}
 }
 
 // Discard is part of the CommandResult interface.
-func (r *bufferedCommandResult) Discard() {
+func (r *streamingCommandResult) Discard() {
 	if r.closeCallback != nil {
-		r.closeCallback(r, discarded, nil /* err */)
+		r.closeCallback(r, discarded)
 	}
 }
 
 // SetInferredTypes is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetInferredTypes([]oid.Oid) {}
+func (r *streamingCommandResult) SetInferredTypes([]oid.Oid) {}
 
 // SetNoDataRowDescription is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetNoDataRowDescription() {}
+func (r *streamingCommandResult) SetNoDataRowDescription() {}
 
 // SetPrepStmtOutput is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetPrepStmtOutput(context.Context, sqlbase.ResultColumns) {}
+func (r *streamingCommandResult) SetPrepStmtOutput(context.Context, colinfo.ResultColumns) {}
 
 // SetPortalOutput is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetPortalOutput(
-	context.Context, sqlbase.ResultColumns, []pgwirebase.FormatCode,
+func (r *streamingCommandResult) SetPortalOutput(
+	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
 }

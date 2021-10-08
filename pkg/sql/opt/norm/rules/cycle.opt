@@ -1,0 +1,16 @@
+# =============================================================================
+# cycle.opt contains normalization rules for the NormCycleTestRel expression.
+# =============================================================================
+
+# The following two rules create a normalization rule cycle for the
+# NormCycleTestRel expression. This rule cycle is used to test that the cycle
+# can be detected and a stack overflow does not occur. See the cycle test file.
+[NormCycleTestRelTrueToFalse, Normalize]
+(NormCycleTestRel (True))
+=>
+(NormCycleTestRel (False))
+
+[NormCycleTestRelFalseToTrue, Normalize]
+(NormCycleTestRel (False))
+=>
+(NormCycleTestRel (True))

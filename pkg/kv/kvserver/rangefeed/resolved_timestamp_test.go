@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -562,4 +563,44 @@ func TestResolvedTimestampTxnAborted(t *testing.T) {
 	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 25}, rts.Get())
+}
+
+// Test that things go well when the closed timestamp has non-zero logical part.
+func TestClosedTimestampLogicalPart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rts := makeResolvedTimestamp()
+	rts.Init()
+
+	// Set a new closed timestamp. Resolved timestamp advances.
+	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 10, Logical: 2})
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
+
+	// Add an intent for a new transaction.
+	txn1 := uuid.MakeV4()
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 10, Logical: 4}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
+
+	// Set a new closed timestamp. Resolved timestamp doesn't advance, since it
+	// could only theoretically advance up to 10.4, and it doesn't do logical
+	// parts.
+	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 11, Logical: 6})
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
+
+	// Abort txn1. Resolved timestamp advances.
+	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 11, Logical: 0}, rts.Get())
+
+	// Create an intent one tick above the closed ts. Resolved timestamp doesn't
+	// advance. This tests the case where the closed timestamp has a logical part,
+	// and an intent is in the next wall tick; this used to cause an issue because
+	// of the rounding logic.
+	txn2 := uuid.MakeV4()
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn2, hlc.Timestamp{WallTime: 12, Logical: 7}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 11, Logical: 0}, rts.Get())
 }

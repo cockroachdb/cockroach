@@ -14,41 +14,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
-
-// RunOverAllColumns applies its argument fn to each of the column IDs in desc.
-// If there is an error, that error is returned immediately.
-func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error {
-	for _, colID := range desc.ColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	for _, colID := range desc.ExtraColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	for _, colID := range desc.StoreColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// GetEncodingType returns the encoding type of this index. For backward
-// compatibility reasons, this might not match what is stored in
-// desc.EncodingType. The primary index's ID must be passed so we can check if
-// this index is primary or secondary.
-func (desc *IndexDescriptor) GetEncodingType(primaryIndexID IndexID) IndexDescriptorEncodingType {
-	if desc.ID == primaryIndexID {
-		// Primary indexes always use the PrimaryIndexEncoding, regardless of what
-		// desc.EncodingType indicates.
-		return PrimaryIndexEncoding
-	}
-	return desc.EncodingType
-}
 
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
@@ -65,36 +32,31 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
-// ColNamesFormat writes a string describing the column names and directions
-// in this index to the given buffer.
-func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	start := 0
+// ExplicitColumnStartIdx returns the start index of any explicit columns.
+func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
+	start := int(desc.Partitioning.NumImplicitColumns)
+	// We do not currently handle implicit columns along with hash sharded indexes.
+	// Thus, safe to override this to 1.
 	if desc.IsSharded() {
 		start = 1
 	}
-	for i := start; i < len(desc.ColumnNames); i++ {
-		if i > start {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNameP(&desc.ColumnNames[i])
-		if desc.Type != IndexDescriptor_INVERTED {
-			ctx.WriteByte(' ')
-			ctx.WriteString(desc.ColumnDirections[i].String())
-		}
-	}
+	return start
 }
 
 // FillColumns sets the column names and directions in desc.
 func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
-	desc.ColumnNames = make([]string, 0, len(elems))
-	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
+	desc.KeyColumnNames = make([]string, 0, len(elems))
+	desc.KeyColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
-		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
+		if c.Expr != nil {
+			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
+		}
+		desc.KeyColumnNames = append(desc.KeyColumnNames, string(c.Column))
 		switch c.Direction {
 		case tree.Ascending, tree.DefaultDirection:
-			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_ASC)
+			desc.KeyColumnDirections = append(desc.KeyColumnDirections, IndexDescriptor_ASC)
 		case tree.Descending:
-			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
+			desc.KeyColumnDirections = append(desc.KeyColumnDirections, IndexDescriptor_DESC)
 		default:
 			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
 		}
@@ -102,71 +64,42 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	return nil
 }
 
-type returnTrue struct{}
-
-func (returnTrue) Error() string { panic("unimplemented") }
-
-var returnTruePseudoError error = returnTrue{}
-
-// ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs, the extra column IDs, or the
-// stored column IDs.
-func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
-	return desc.RunOverAllColumns(func(id ColumnID) error {
-		if id == colID {
-			return returnTruePseudoError
-		}
-		return nil
-	}) != nil
-}
-
-// FullColumnIDs returns the index column IDs including any extra (implicit or
-// stored (old STORING encoding)) column IDs for non-unique indexes. It also
-// returns the direction with which each column was encoded.
-func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Direction) {
-	if desc.Unique {
-		return desc.ColumnIDs, desc.ColumnDirections
-	}
-	// Non-unique indexes have some of the primary-key columns appended to
-	// their key.
-	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
-	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
-	dirs := append([]IndexDescriptor_Direction(nil), desc.ColumnDirections...)
-	for range desc.ExtraColumnIDs {
-		// Extra columns are encoded in ascending order.
-		dirs = append(dirs, IndexDescriptor_ASC)
-	}
-	return columnIDs, dirs
-}
-
-// TODO (tyler): Issue #39771 This method needs more thorough testing, probably
-// in structured_test.go. Or possibly replace it with a format method taking
-// a format context as argument.
-
-// ColNamesString returns a string describing the column names and directions
-// in this index.
-func (desc *IndexDescriptor) ColNamesString() string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	desc.ColNamesFormat(f)
-	return f.CloseAndGetString()
-}
-
-// TODO (tyler): Issue #39771 Same comment as ColNamesString above.
-
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
-	return ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
+	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasPrefix(originColIDs)
 }
 
-// IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
+// IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
+// It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
-func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
-	return desc.Unique && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
+	return desc.Unique &&
+		!desc.IsPartial() &&
+		ColumnIDs(desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]).PermutationOf(referencedColIDs)
 }
 
-// HasOldStoredColumns returns whether the index has stored columns in the old
-// format (data encoded the same way as if they were in an implicit column).
-func (desc *IndexDescriptor) HasOldStoredColumns() bool {
-	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
+// GetName is part of the UniqueConstraint interface.
+func (desc *IndexDescriptor) GetName() string {
+	return desc.Name
+}
+
+// InvertedColumnID returns the ColumnID of the inverted column of the inverted
+// index. This is always the last column in ColumnIDs. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.KeyColumnIDs[len(desc.KeyColumnIDs)-1]
+}
+
+// InvertedColumnName returns the name of the inverted column of the inverted
+// index. This is always the last column in KeyColumnNames. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnName() string {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
 }

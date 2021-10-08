@@ -1,25 +1,17 @@
 statement ok
 CREATE DATABASE a
 
-query TTTT colnames
+query TTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-database_name  schema_name         grantee  privilege_type
-a              crdb_internal       admin    ALL
-a              crdb_internal       root     ALL
-a              information_schema  admin    ALL
-a              information_schema  root     ALL
-a              pg_catalog          admin    ALL
-a              pg_catalog          root     ALL
-a              pg_extension        admin    ALL
-a              pg_extension        root     ALL
-a              public              admin    ALL
-a              public              root     ALL
+database_name  grantee  privilege_type
+a              admin    ALL
+a              root     ALL
 
-statement error user root must have exactly ALL privileges on system object with ID=.*
+statement error user root must have exactly ALL privileges on database "a"
 REVOKE SELECT ON DATABASE a FROM root
 
-statement error user admin must have exactly ALL privileges on system object with ID=.*
+statement error user admin must have exactly ALL privileges on database "a"
 REVOKE SELECT ON DATABASE a FROM admin
 
 statement ok
@@ -32,7 +24,7 @@ statement ok
 INSERT INTO system.users VALUES('test-user','');
 
 statement ok
-GRANT ALL ON DATABASE a TO readwrite, "test-user"
+GRANT ALL PRIVILEGES ON DATABASE a TO readwrite, "test-user"
 
 statement error syntax error
 GRANT SELECT,ALL ON DATABASE a TO readwrite
@@ -40,29 +32,13 @@ GRANT SELECT,ALL ON DATABASE a TO readwrite
 statement error syntax error
 REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  ALL
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  ALL
-a  information_schema  admin      ALL
-a  information_schema  readwrite  ALL
-a  information_schema  root       ALL
-a  information_schema  test-user  ALL
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  ALL
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  ALL
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  ALL
-a  pg_extension        root       ALL
-a  pg_extension        test-user  ALL
-a  public              admin      ALL
-a  public              readwrite  ALL
-a  public              root       ALL
-a  public              test-user  ALL
+a  admin      ALL
+a  readwrite  ALL
+a  root       ALL
+a  test-user  ALL
 
 # Create table to inherit DB permissions.
 statement ok
@@ -77,288 +53,99 @@ a              public       t           readwrite  ALL
 a              public       t           root       ALL
 a              public       t           test-user  ALL
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  ALL
-a  crdb_internal       test-user  ALL
-a  information_schema  readwrite  ALL
-a  information_schema  test-user  ALL
-a  pg_catalog          readwrite  ALL
-a  pg_catalog          test-user  ALL
-a  pg_extension        readwrite  ALL
-a  pg_extension        test-user  ALL
-a  public              readwrite  ALL
-a  public              test-user  ALL
+a  readwrite  ALL
+a  test-user  ALL
 
 statement ok
 REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
-a  crdb_internal       readwrite  ZONECONFIG
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
-a  crdb_internal       test-user  GRANT
-a  crdb_internal       test-user  SELECT
-a  crdb_internal       test-user  ZONECONFIG
-a  information_schema  admin      ALL
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
-a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
-a  information_schema  readwrite  ZONECONFIG
-a  information_schema  root       ALL
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
-a  information_schema  test-user  GRANT
-a  information_schema  test-user  SELECT
-a  information_schema  test-user  ZONECONFIG
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  ZONECONFIG
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
-a  pg_catalog          test-user  GRANT
-a  pg_catalog          test-user  SELECT
-a  pg_catalog          test-user  ZONECONFIG
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  DELETE
-a  pg_extension        readwrite  DROP
-a  pg_extension        readwrite  GRANT
-a  pg_extension        readwrite  SELECT
-a  pg_extension        readwrite  ZONECONFIG
-a  pg_extension        root       ALL
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  DELETE
-a  pg_extension        test-user  DROP
-a  pg_extension        test-user  GRANT
-a  pg_extension        test-user  SELECT
-a  pg_extension        test-user  ZONECONFIG
-a  public              admin      ALL
-a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
-a  public              readwrite  GRANT
-a  public              readwrite  SELECT
-a  public              readwrite  ZONECONFIG
-a  public              root       ALL
-a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
-a  public              test-user  GRANT
-a  public              test-user  SELECT
-a  public              test-user  ZONECONFIG
+a  admin      ALL
+a  readwrite  CONNECT
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  readwrite  ZONECONFIG
+a  root       ALL
+a  test-user  CONNECT
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+a  test-user  SELECT
+a  test-user  ZONECONFIG
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
-a  crdb_internal       readwrite  ZONECONFIG
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
-a  crdb_internal       test-user  GRANT
-a  crdb_internal       test-user  SELECT
-a  crdb_internal       test-user  ZONECONFIG
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
-a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
-a  information_schema  readwrite  ZONECONFIG
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
-a  information_schema  test-user  GRANT
-a  information_schema  test-user  SELECT
-a  information_schema  test-user  ZONECONFIG
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  ZONECONFIG
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
-a  pg_catalog          test-user  GRANT
-a  pg_catalog          test-user  SELECT
-a  pg_catalog          test-user  ZONECONFIG
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  DELETE
-a  pg_extension        readwrite  DROP
-a  pg_extension        readwrite  GRANT
-a  pg_extension        readwrite  SELECT
-a  pg_extension        readwrite  ZONECONFIG
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  DELETE
-a  pg_extension        test-user  DROP
-a  pg_extension        test-user  GRANT
-a  pg_extension        test-user  SELECT
-a  pg_extension        test-user  ZONECONFIG
-a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
-a  public              readwrite  GRANT
-a  public              readwrite  SELECT
-a  public              readwrite  ZONECONFIG
-a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
-a  public              test-user  GRANT
-a  public              test-user  SELECT
-a  public              test-user  ZONECONFIG
+a  readwrite  CONNECT
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  readwrite  ZONECONFIG
+a  test-user  CONNECT
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+a  test-user  SELECT
+a  test-user  ZONECONFIG
 
 statement ok
 REVOKE SELECT ON DATABASE a FROM "test-user"
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
-a  crdb_internal       readwrite  ZONECONFIG
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
-a  crdb_internal       test-user  GRANT
-a  crdb_internal       test-user  ZONECONFIG
-a  information_schema  admin      ALL
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
-a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
-a  information_schema  readwrite  ZONECONFIG
-a  information_schema  root       ALL
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
-a  information_schema  test-user  GRANT
-a  information_schema  test-user  ZONECONFIG
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  ZONECONFIG
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
-a  pg_catalog          test-user  GRANT
-a  pg_catalog          test-user  ZONECONFIG
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  DELETE
-a  pg_extension        readwrite  DROP
-a  pg_extension        readwrite  GRANT
-a  pg_extension        readwrite  SELECT
-a  pg_extension        readwrite  ZONECONFIG
-a  pg_extension        root       ALL
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  DELETE
-a  pg_extension        test-user  DROP
-a  pg_extension        test-user  GRANT
-a  pg_extension        test-user  ZONECONFIG
-a  public              admin      ALL
-a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
-a  public              readwrite  GRANT
-a  public              readwrite  SELECT
-a  public              readwrite  ZONECONFIG
-a  public              root       ALL
-a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
-a  public              test-user  GRANT
-a  public              test-user  ZONECONFIG
+a  admin      ALL
+a  readwrite  CONNECT
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  readwrite  ZONECONFIG
+a  root       ALL
+a  test-user  CONNECT
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+a  test-user  ZONECONFIG
 
 statement ok
-REVOKE ALL ON DATABASE a FROM "test-user"
+REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
-a  crdb_internal       readwrite  ZONECONFIG
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
-a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
-a  information_schema  readwrite  ZONECONFIG
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  ZONECONFIG
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  DELETE
-a  pg_extension        readwrite  DROP
-a  pg_extension        readwrite  GRANT
-a  pg_extension        readwrite  SELECT
-a  pg_extension        readwrite  ZONECONFIG
-a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
-a  public              readwrite  GRANT
-a  public              readwrite  SELECT
-a  public              readwrite  ZONECONFIG
+a  readwrite  CONNECT
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  readwrite  ZONECONFIG
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin  ALL
-a  crdb_internal       root   ALL
-a  information_schema  admin  ALL
-a  information_schema  root   ALL
-a  pg_catalog          admin  ALL
-a  pg_catalog          root   ALL
-a  pg_extension        admin  ALL
-a  pg_extension        root   ALL
-a  public              admin  ALL
-a  public              root   ALL
+a  admin  ALL
+a  root   ALL
 
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 
@@ -376,3 +163,29 @@ a              public       t           test-user  ALL
 
 statement error pq: invalid privilege type USAGE for database
 GRANT USAGE ON DATABASE a TO testuser
+
+statement ok
+CREATE DATABASE b
+
+statement ok
+GRANT CREATE, CONNECT ON DATABASE b TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE b.t()
+
+# CONNECT privilege should not be inherited from DB when creating a table.
+
+query TTTTT colnames
+SHOW GRANTS ON b.t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+b              public       t           admin     ALL
+b              public       t           root      ALL
+b              public       t           testuser  ALL
+
+# Calling SHOW GRANTS on an invalid user should error out.
+
+statement error role/user "invaliduser" does not exist
+SHOW GRANTS FOR invaliduser

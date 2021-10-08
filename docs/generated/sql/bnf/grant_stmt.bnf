@@ -1,4 +1,6 @@
 grant_stmt ::=
-	'GRANT' ( 'ALL' | ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) ) 'ON' ( ( ( table_name ) ( ( ',' table_name ) )* ) | 'TABLE' ( ( table_name ) ( ( ',' table_name ) )* ) | 'DATABASE' ( ( name ) ( ( ',' name ) )* ) ) 'TO' ( ( name ) ( ( ',' name ) )* )
-	| 'GRANT' ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* )
-	| 'GRANT' ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* ) 'WITH' 'ADMIN' 'OPTION'
+	'GRANT' 'ALL' 'PRIVILEGES' 'ON' targets 'TO' name_list
+	| 'GRANT' 'ALL'  'ON' targets 'TO' name_list
+	| 'GRANT' privilege_list 'ON' targets 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'

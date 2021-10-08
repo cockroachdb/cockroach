@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tpch",
+    srcs = [
+        "expected_rows.go",
+        "generate.go",
+        "queries.go",
+        "random.go",
+        "tpch.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/tpch",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/workload",
+        "//pkg/workload/faker",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
+    ],
+)

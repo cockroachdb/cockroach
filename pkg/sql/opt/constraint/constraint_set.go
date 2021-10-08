@@ -290,7 +290,7 @@ func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 }
 
 // ExtractValueForConstCol extracts the value for a constant column returned
-// by ExtractConstCols.
+// by ExtractConstCols. If the given column is not constant, nil is returned.
 func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnID) tree.Datum {
 	if s == Unconstrained || s == Contradiction {
 		return nil
@@ -304,28 +304,33 @@ func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnI
 				break
 			}
 		}
-		// The column must be part of the constraint's "exact prefix".
-		if colOrd != -1 && c.ExactPrefix(evalCtx) > colOrd {
+		if colOrd != -1 && s.ExtractConstCols(evalCtx).Contains(col) {
 			return c.Spans.Get(0).StartKey().Value(colOrd)
 		}
 	}
 	return nil
 }
 
-// IsSingleColumnConstValue returns true if the Set contains a single constraint
-// on a single column which allows for a single constant value. On success,
-// returns the column and the constant value.
-func (s *Set) IsSingleColumnConstValue(
+// HasSingleColumnConstValues returns true if the Set contains a single
+// constraint on a single column which allows for one or more non-ranging
+// constant values. On success, returns the column and the constant value.
+func (s *Set) HasSingleColumnConstValues(
 	evalCtx *tree.EvalContext,
-) (col opt.ColumnID, constValue tree.Datum, ok bool) {
+) (col opt.ColumnID, constValues tree.Datums, ok bool) {
 	if s.Length() != 1 {
 		return 0, nil, false
 	}
 	c := s.Constraint(0)
-	if c.Columns.Count() != 1 || c.ExactPrefix(evalCtx) != 1 {
+	if c.Columns.Count() != 1 || c.Prefix(evalCtx) != 1 {
 		return 0, nil, false
 	}
-	return c.Columns.Get(0).ID(), c.Spans.Get(0).StartKey().Value(0), true
+	numSpans := c.Spans.Count()
+	constValues = make(tree.Datums, numSpans)
+	for i := range constValues {
+		val := c.Spans.Get(i).StartKey().Value(0)
+		constValues[i] = val
+	}
+	return c.Columns.Get(0).ID(), constValues, true
 }
 
 // allocConstraint allocates space for a new constraint in the set and returns

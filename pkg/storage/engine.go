@@ -11,12 +11,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"path/filepath"
+	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -34,13 +37,13 @@ import (
 var DefaultStorageEngine enginepb.EngineType
 
 func init() {
-	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "default"))
+	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "pebble"))
 }
 
-// SimpleIterator is an interface for iterating over key/value pairs in an
-// engine. SimpleIterator implementations are thread safe unless otherwise
-// noted. SimpleIterator is a subset of the functionality offered by Iterator.
-type SimpleIterator interface {
+// SimpleMVCCIterator is an interface for iterating over key/value pairs in an
+// engine. SimpleMVCCIterator implementations are thread safe unless otherwise
+// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
+type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// SeekGE advances the iterator to the first key in the engine which
@@ -61,7 +64,8 @@ type SimpleIterator interface {
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
-	// for a key.
+	// for a key. NextKey must not be used to switch iteration direction from
+	// reverse iteration to forward iteration.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
@@ -71,17 +75,44 @@ type SimpleIterator interface {
 	UnsafeValue() []byte
 }
 
-// IteratorStats is returned from (Iterator).Stats.
+// IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
 type IteratorStats struct {
+	// TODO(sumeer): populate this stat that was inherited from RocksDB, which
+	// counts the number of deletes or single deletes skipped over during
+	// iteration. It may be better to replace this with the number of Pebble
+	// key-values encountered, which would encompass Pebble versions that were
+	// explicitly deleted and those that were obsoleted due to newer Pebble
+	// versions.
 	InternalDeleteSkippedCount int
 	TimeBoundNumSSTs           int
+
+	// Iteration stats. We directly expose pebble.IteratorStats. Callers
+	// may want to aggregate and interpret these in the following manner:
+	// - Aggregate {Forward,Reverse}SeekCount, {Forward,Reverse}StepCount.
+	// - Interpret the four aggregated stats as follows:
+	//   - {SeekCount,StepCount}[InterfaceCall]: We can refer to these simply as
+	//     {SeekCount,StepCount} in logs/metrics/traces. These represents
+	//     explicit calls by the implementation of MVCCIterator, in response to
+	//     the caller of MVCCIterator. A high count relative to the unique MVCC
+	//     keys returned suggests there are many versions for the same key.
+	//   - {SeekCount,StepCount}[InternalIterCall]: We can refer to these simply
+	//     as {InternalSeekCount,InternalStepCount}. If these are significantly
+	//     larger than the ones in the preceding bullet, it suggests that there
+	//     are lots of uncompacted deletes or stale Pebble-versions (not to be
+	//     confused with MVCC versions) that need to be compacted away. This
+	//     should be very rare, but has been observed.
+	Stats pebble.IteratorStats
 }
 
-// Iterator is an interface for iterating over key/value pairs in an
-// engine. Iterator implementations are thread safe unless otherwise
-// noted.
-type Iterator interface {
-	SimpleIterator
+// MVCCIterator is an interface for iterating over key/value pairs in an
+// engine. It is used for iterating over the key space that can have multiple
+// versions, and if often also used (due to historical reasons) for iterating
+// over the key space that never has multiple versions (i.e.,
+// MVCCKey.Timestamp.IsEmpty()).
+//
+// MVCCIterator implementations are thread safe unless otherwise noted.
+type MVCCIterator interface {
+	SimpleMVCCIterator
 
 	// SeekLT advances the iterator to the first key in the engine which
 	// is < the provided key.
@@ -90,13 +121,44 @@ type Iterator interface {
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
+
+	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
+	// the caller expects to find an intent, and additionally has the txnUUID
+	// for the intent it is looking for. When running with separated intents,
+	// this can optimize the behavior of the underlying Engine for write heavy
+	// keys by avoiding the need to iterate over many deleted intents.
+	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
+
 	// Key returns the current key.
 	Key() MVCCKey
+	// UnsafeRawKey returns the current raw key which could be an encoded
+	// MVCCKey, or the more general EngineKey (for a lock table key).
+	// This is a low-level and dangerous method since it will expose the
+	// raw key of the lock table, i.e., the intentInterleavingIter will not
+	// hide the difference between interleaved and separated intents.
+	// Callers should be very careful when using this. This is currently
+	// only used by callers who are iterating and deleting all data in a
+	// range.
+	UnsafeRawKey() []byte
+	// UnsafeRawMVCCKey returns a serialized MVCCKey. The memory is invalidated
+	// on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}. If the
+	// iterator is currently positioned at a separated intent (when
+	// intentInterleavingIter is used), it makes that intent look like an
+	// interleaved intent key, i.e., an MVCCKey with an empty timestamp. This is
+	// currently used by callers who pass around key information as a []byte --
+	// this seems avoidable, and we should consider cleaning up the callers.
+	UnsafeRawMVCCKey() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
+	// When Key() is positioned on an intent, returns true iff this intent
+	// (represented by MVCCMetadata) is a separated lock/intent. This is a
+	// low-level method that should not be called from outside the storage
+	// package. It is part of the exported interface because there are structs
+	// outside the package that wrap and implement Iterator.
+	IsCurIntentSeparated() bool
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
@@ -110,7 +172,7 @@ type Iterator interface {
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
 	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
+	// DO NOT CALL directly (except in wrapper MVCCIterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
@@ -118,47 +180,116 @@ type Iterator interface {
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
 	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
-	// SetUpperBound installs a new upper bound for this iterator.
+	// SetUpperBound installs a new upper bound for this iterator. The caller
+	// can modify the parameter after this function returns. This must not be a
+	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
+	// iterator.
+	//
+	// Due to the rare use, we are limiting this method to not switch an
+	// iterator from a global key upper-bound to a local key upper-bound (it
+	// simplifies some code in intentInterleavingIter) or vice versa. Iterator
+	// reuse already happens under-the-covers for most Reader implementations
+	// when constructing a new iterator, and that is a much cleaner solution.
+	//
+	// TODO(sumeer): this method is rarely used and is a source of complexity
+	// since intentInterleavingIter needs to fiddle with the bounds of its
+	// underlying iterators when this is called. Currently only used by
+	// pebbleBatch.ClearIterRange to modify the upper bound of the iterator it
+	// is given: this use is unprincipled and there is a comment in that code
+	// about it. The caller is already usually setting the bounds accurately,
+	// and in some cases the callee is tightening the upper bound. Remove that
+	// use case and remove this from the interface.
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
-	// SupportsPrev returns true if Iterator implementation supports reverse
+	// SupportsPrev returns true if MVCCIterator implementation supports reverse
 	// iteration with Prev() or SeekLT().
 	SupportsPrev() bool
 }
 
-// MVCCIterator is an interface that extends Iterator and provides concrete
-// implementations for MVCCGet and MVCCScan operations. It is used by instances
-// of the interface backed by RocksDB iterators to avoid cgo hops.
-type MVCCIterator interface {
-	Iterator
-	// MVCCOpsSpecialized returns whether the iterator has a specialized
-	// implementation of MVCCGet and MVCCScan. This is exposed as a method
-	// so that wrapper types can defer to their wrapped iterators.
-	MVCCOpsSpecialized() bool
-	// MVCCGet is the internal implementation of the family of package-level
-	// MVCCGet functions.
-	MVCCGet(
-		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-	) (*roachpb.Value, *roachpb.Intent, error)
-	// MVCCScan is the internal implementation of the family of package-level
-	// MVCCScan functions. The notable difference is that key/value pairs are
-	// returned raw, as a series of buffers of length-prefixed slices,
-	// alternating from key to value, where numKVs specifies the number of pairs
-	// in the buffer.
-	MVCCScan(
-		start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
-	) (MVCCScanResult, error)
+// EngineIterator is an iterator over key-value pairs where the key is
+// an EngineKey.
+type EngineIterator interface {
+	// Close frees up resources held by the iterator.
+	Close()
+	// SeekEngineKeyGE advances the iterator to the first key in the engine
+	// which is >= the provided key.
+	SeekEngineKeyGE(key EngineKey) (valid bool, err error)
+	// SeekEngineKeyLT advances the iterator to the first key in the engine
+	// which is < the provided key.
+	SeekEngineKeyLT(key EngineKey) (valid bool, err error)
+	// NextEngineKey advances the iterator to the next key/value in the
+	// iteration. After this call, valid will be true if the iterator was not
+	// originally positioned at the last key. Note that unlike
+	// MVCCIterator.NextKey, this method does not skip other versions with the
+	// same EngineKey.Key.
+	// TODO(sumeer): change MVCCIterator.Next() to match the
+	// return values, change all its callers, and rename this
+	// to Next().
+	NextEngineKey() (valid bool, err error)
+	// PrevEngineKey moves the iterator backward to the previous key/value in
+	// the iteration. After this call, valid will be true if the iterator was
+	// not originally positioned at the first key.
+	PrevEngineKey() (valid bool, err error)
+	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// REQUIRES: latest positioning function returned valid=true.
+	UnsafeEngineKey() (EngineKey, error)
+	// EngineKey returns the current key.
+	// REQUIRES: latest positioning function returned valid=true.
+	EngineKey() (EngineKey, error)
+	// UnsafeRawEngineKey returns the current raw (encoded) key corresponding to
+	// EngineKey. This is a low-level method and callers should avoid using
+	// it. This is currently only used by intentInterleavingIter to implement
+	// UnsafeRawKey.
+	UnsafeRawEngineKey() []byte
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// REQUIRES: latest positioning function returned valid=true.
+	UnsafeValue() []byte
+	// Value returns the current value as a byte slice.
+	// REQUIRES: latest positioning function returned valid=true.
+	Value() []byte
+	// SetUpperBound installs a new upper bound for this iterator. When
+	// Reader.ConsistentIterators is true, prefer creating a new iterator.
+	// TODO(sumeer): remove this method.
+	SetUpperBound(roachpb.Key)
+	// GetRawIter is a low-level method only for use in the storage package,
+	// that returns the underlying pebble Iterator.
+	GetRawIter() *pebble.Iterator
+	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyGEWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// SeekEngineKeyLTWithLimit is similar to SeekEngineKeyLT, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyLTWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// NextEngineKeyWithLimit is similar to NextEngineKey, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	NextEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// PrevEngineKeyWithLimit is similar to PrevEngineKey, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
 }
 
-// IterOptions contains options used to create an Iterator.
+// IterOptions contains options used to create an {MVCC,Engine}Iterator.
 //
-// For performance, every Iterator must specify either Prefix or UpperBound.
+// For performance, every {MVCC,Engine}Iterator must specify either Prefix or
+// UpperBound.
 type IterOptions struct {
-	// If Prefix is true, Seek will use the user-key prefix of
-	// the supplied MVCC key to restrict which sstables are searched,
-	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped).
+	// If Prefix is true, Seek will use the user-key prefix of the supplied
+	// {MVCC,Engine}Key (the Key field) to restrict which sstables are searched,
+	// but iteration (using Next) over keys without the same user-key prefix
+	// will not work correctly (keys may be skipped).
 	Prefix bool
 	// LowerBound gives this iterator an inclusive lower bound. Attempts to
 	// SeekReverse or Prev to a key that is strictly less than the bound will
@@ -169,7 +300,7 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// If WithStats is true, the iterator accumulates RocksDB performance
+	// If WithStats is true, the iterator accumulates performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
 	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
@@ -182,10 +313,105 @@ type IterOptions struct {
 	// iterators with time bounds hints will frequently return keys outside of the
 	// [start, end] time range. If you must guarantee that you never see a key
 	// outside of the time bounds, perform your own filtering.
+	//
+	// These fields are only relevant for MVCCIterators. Additionally, an
+	// MVCCIterator with timestamp hints will not see separated intents, and may
+	// not see some interleaved intents. Currently, the only way to correctly
+	// use such an iterator is to use it in concert with an iterator without
+	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
-// Reader is the read interface to an engine's data.
+// MVCCIterKind is used to inform Reader about the kind of iteration desired
+// by the caller.
+type MVCCIterKind int
+
+// "Intent" refers to non-inline meta, that can be interleaved or separated.
+const (
+	// MVCCKeyAndIntentsIterKind specifies that intents must be seen, and appear
+	// interleaved with keys, even if they are in a separated lock table.
+	// Iterators of this kind are not allowed to span from local to global keys,
+	// since the physical layout has the separated lock table in-between the
+	// local and global keys. These iterators do strict error checking and panic
+	// if the caller seems that to be trying to violate this constraint.
+	// Specifically:
+	// - If both bounds are set they must not span from local to global.
+	// - Any bound (lower or upper), constrains the iterator for its lifetime to
+	//   one of local or global keys. The iterator will not tolerate a seek or
+	//   SetUpperBound call that violates this constraint.
+	// We could, with significant code complexity, not constrain an iterator for
+	// its lifetime, and allow a seek that specifies a global (local) key to
+	// change the constraint to global (local). This would allow reuse of the
+	// same iterator with a large global upper-bound. But a Next call on the
+	// highest local key (Prev on the lowest global key) would still not be able
+	// to transparently skip over the intermediate lock table. We deem that
+	// behavior to be more surprising and bug-prone (for the caller), than being
+	// strict.
+	MVCCKeyAndIntentsIterKind MVCCIterKind = iota
+	// MVCCKeyIterKind specifies that the caller does not need to see intents.
+	// Any interleaved intents may be seen, but no correctness properties are
+	// derivable from such partial knowledge of intents. NB: this is a performance
+	// optimization when iterating over (a) MVCC keys where the caller does
+	// not need to see intents, (b) a key space that is known to not have multiple
+	// versions (and therefore will never have intents), like the raft log.
+	MVCCKeyIterKind
+)
+
+// ExportOptions contains options provided to export operation.
+type ExportOptions struct {
+	// StartKey determines start of the exported interval (inclusive).
+	// StartKey.Timestamp is either empty which represent starting from a potential
+	// intent and continuing to versions or non-empty, which represents starting
+	// from a particular version.
+	StartKey MVCCKey
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine exported time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
+	// If ExportAllRevisions is true export every revision of a key for the interval,
+	// otherwise only the latest value within the interval is exported.
+	ExportAllRevisions bool
+	// If TargetSize is positive, it indicates that the export should produce SSTs
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
+	TargetSize uint64
+	// If MaxSize is positive, it is an absolute maximum on byte size for the
+	// returned sst. If it is the case that the versions of the last key will lead
+	// to an SST that exceeds maxSize, an error will be returned. This parameter
+	// exists to prevent creating SSTs which are too large to be used.
+	MaxSize uint64
+	// If StopMidKey is false, once function reaches targetSize it would continue
+	// adding all versions until it reaches next key or end of range. If true, it
+	// would stop immediately when targetSize is reached and return the next versions
+	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
+	StopMidKey bool
+	// ResourceLimiter limits how long iterator could run until it exhausts allocated
+	// resources. Expot queries limiter in its iteration loop to break out once
+	// resources are exhausted.
+	ResourceLimiter ResourceLimiter
+	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
+	// time-bound iterator along with its regular iterator. The TBI will be used
+	// as an optimization to skip over swaths of uninteresting keys i.e. keys
+	// outside our time bounds, while locating the KVs to export.
+	UseTBI bool
+}
+
+// Reader is the read interface to an engine's data. Certain implementations
+// of Reader guarantee consistency of the underlying engine state across the
+// different iterators created by NewMVCCIterator, NewEngineIterator:
+// - pebbleSnapshot, because it uses an engine snapshot.
+// - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
+//   timestamp hint (see IterOptions). Note that currently the engine state
+//   visible here is not as of the time of the Reader creation. It is the time
+//   when the first iterator is created, or earlier if
+//   PinEngineStateForIterators is called.
+// The ConsistentIterators method returns true when this consistency is
+// guaranteed by the Reader.
+// TODO(sumeer): this partial consistency can be a source of bugs if future
+// code starts relying on it, but rarely uses a Reader that does not guarantee
+// it. Can we enumerate the current cases where KV uses Engine as a Reader?
 type Reader interface {
 	// Close closes the reader, freeing up any outstanding resources. Note that
 	// various implementations have slightly different behaviors. In particular,
@@ -197,51 +423,103 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportToSst exports changes to the keyrange [startKey, endKey) over the
-	// interval (startTS, endTS]. Passing exportAllRevisions exports
-	// every revision of a key for the interval, otherwise only the latest value
-	// within the interval is exported. Deletions are included if all revisions are
-	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
-	// SSTable containing the exported keys, the size of exported data, or an error.
+	// ExportMVCCToSst exports changes to the keyrange [StartKey, EndKey) over the
+	// interval (StartTS, EndTS].
+	// Deletions are included if all revisions are requested or if the StartTS
+	// is non-zero.
+	// This function looks at MVCC versions and intents, and returns an error if an
+	// intent is found.
+	// exportOptions determine ranges as well as additional export options. See
+	// struct definition for details.
 	//
-	// If targetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will return an SST such that
-	// the last key is responsible for meeting or exceeding the targetSize. If the
-	// resumeKey is non-nil then the data size of the returned sst will be greater
-	// than or equal to the targetSize.
+	// Data is written to dest as it is collected. If error is returned content of
+	// dest is undefined.
 	//
-	// If maxSize is positive, it is an absolute maximum on byte size for the
-	// returned sst. If it is the case that the versions of the last key will lead
-	// to an SST that exceeds maxSize, an error will be returned. This parameter
-	// exists to prevent creating SSTs which are too large to be used.
-	ExportToSst(
-		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64,
-		io IterOptions,
-	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
-	// Get returns the value for the given key, nil otherwise.
+	// Returns summary containing number of exported bytes, resumeKey and resumeTS
+	// that allow resuming export if it was cut short because it reached limits or
+	// an error if export failed for some reason.
+	ExportMVCCToSst(
+		ctx context.Context, exportOptions ExportOptions, dest io.Writer,
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
+	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
+	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
-	// Deprecated: use MVCCGet instead.
-	Get(key MVCCKey) ([]byte, error)
-	// GetProto fetches the value at the specified key and unmarshals it
+	// Deprecated: use storage.MVCCGet instead.
+	MVCCGet(key MVCCKey) ([]byte, error)
+	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
-	// key and the value.
+	// key and the value. Semantically, it behaves as if an iterator with
+	// MVCCKeyAndIntentsIterKind was used.
 	//
-	// Deprecated: use Iterator.ValueProto instead.
-	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from the start key to the end key (exclusive), invoking the
+	// Deprecated: use MVCCIterator.ValueProto instead.
+	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops and returns a nil
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error)) error
-	// NewIterator returns a new instance of an Iterator over this
-	// engine. The caller must invoke Iterator.Close() when finished
+	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
+	// NewMVCCIterator returns a new instance of an MVCCIterator over this
+	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
-	NewIterator(opts IterOptions) Iterator
+	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
+	// NewEngineIterator returns a new instance of an EngineIterator over this
+	// engine. The caller must invoke EngineIterator.Close() when finished
+	// with the iterator to free resources. The caller can change IterOptions
+	// after this function returns.
+	NewEngineIterator(opts IterOptions) EngineIterator
+	// ConsistentIterators returns true if the Reader implementation guarantees
+	// that the different iterators constructed by this Reader will see the same
+	// underlying Engine state. NB: this only applies to iterators without
+	// timestamp hints (see IterOptions), i.e., even if this returns true, those
+	// iterators can be "inconsistent" in terms of seeing a different engine
+	// state. The only exception to this is a Reader created using NewSnapshot.
+	ConsistentIterators() bool
+
+	// PinEngineStateForIterators ensures that the state seen by iterators
+	// without timestamp hints (see IterOptions) is pinned and will not see
+	// future mutations. It can be called multiple times on a Reader in which
+	// case the state seen will be either:
+	// - As of the first call.
+	// - For a Reader returned by Engine.NewSnapshot, the pinned state is as of
+	//   the time the snapshot was taken.
+	// So the semantics that are true for all Readers is that the pinned state
+	// is somewhere in the time interval between the creation of the Reader and
+	// the first call to PinEngineStateForIterators.
+	// REQUIRES: ConsistentIterators returns true.
+	PinEngineStateForIterators() error
+}
+
+// PrecedingIntentState is information needed when writing or clearing an
+// intent for a transaction. It specifies the state of the intent that was
+// there before this write (for the specified transaction).
+type PrecedingIntentState int
+
+const (
+	// ExistingIntentInterleaved specifies that there is an existing intent and
+	// that it is interleaved.
+	ExistingIntentInterleaved PrecedingIntentState = iota
+	// ExistingIntentSeparated specifies that there is an existing intent and
+	// that it is separated (in the lock table key space).
+	ExistingIntentSeparated
+	// NoExistingIntent specifies that there isn't an existing intent.
+	NoExistingIntent
+)
+
+func (is PrecedingIntentState) String() string {
+	switch is {
+	case ExistingIntentInterleaved:
+		return "ExistingIntentInterleaved"
+	case ExistingIntentSeparated:
+		return "ExistingIntentSeparated"
+	case NoExistingIntent:
+		return "NoExistingIntent"
+	default:
+		return fmt.Sprintf("PrecedingIntentState(%d)", is)
+	}
 }
 
 // Writer is the write interface to an engine's data.
@@ -255,50 +533,99 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after ApplyBatchRepr
 	// returns.
 	ApplyBatchRepr(repr []byte, sync bool) error
-	// Clear removes the item from the db with the given key. Note that clear
-	// actually removes entries from the storage engine, rather than inserting
-	// tombstones.
+
+	// ClearMVCC removes the item from the db with the given MVCCKey. It
+	// requires that the timestamp is non-empty (see
+	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
+	// clear actually removes entries from the storage engine, rather than
+	// inserting MVCC tombstones.
 	//
-	// It is safe to modify the contents of the arguments after Clear returns.
-	Clear(key MVCCKey) error
-	// SingleClear removes the most recent write to the item from the db with
-	// the given key. Whether older version of the item will come back to life
-	// if not also removed with SingleClear is undefined. See the following:
-	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
-	// for details on the SingleDelete operation that this method invokes. Note
-	// that clear actually removes entries from the storage engine, rather than
-	// inserting tombstones.
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCC(key MVCCKey) error
+	// ClearUnversioned removes an unversioned item from the db. It is for use
+	// with inline metadata (not intents) and other unversioned keys (like
+	// Range-ID local keys).
 	//
-	// It is safe to modify the contents of the arguments after SingleClear
-	// returns.
-	SingleClear(key MVCCKey) error
-	// ClearRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear, this method actually removes entries from
-	// the storage engine.
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearUnversioned(key roachpb.Key) error
+	// ClearIntent removes an intent from the db. Unlike
+	// {ClearMVCC,ClearUnversioned} this is a higher-level method that may make
+	// changes in parts of the key space that are not only a function of the
+	// input, and may choose to use a single-clear under the covers.
+	// txnDidNotUpdateMeta allows for performance optimization when set to true,
+	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
+	// be conservatively set to false).
+	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	//
+	// TODO(sumeer): after the full transition to separated locks, measure the
+	// cost of a PutIntent implementation, where there is an existing intent,
+	// that does a <single-clear, put> pair. If there isn't a performance
+	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
+	// ClearIntent by always doing single-clear.
+	ClearIntent(
+		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	) (separatedIntentCountDelta int, _ error)
+	// ClearEngineKey removes the item from the db with the given EngineKey.
+	// Note that clear actually removes entries from the storage engine. This is
+	// a general-purpose and low-level method that should be used sparingly,
+	// only when the other Clear* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearEngineKey(key EngineKey) error
+
+	// ClearRawRange removes a set of entries, from start (inclusive) to end
+	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
+	// more general EngineKeys -- it simply uses the roachpb.Key parameters as
+	// the Key field of an EngineKey. Similar to the other Clear* methods,
+	// this method actually removes entries from the storage engine.
 	//
 	// Note that when used on batches, subsequent reads may not reflect the result
-	// of the ClearRange.
+	// of the ClearRawRange.
 	//
-	// It is safe to modify the contents of the arguments after ClearRange
-	// returns.
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearRawRange(start, end roachpb.Key) error
+	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
+	// to end (exclusive). This is a higher-level method that handles both
+	// interleaved and separated intents. Similar to the other Clear* methods,
+	// this method actually removes entries from the storage engine.
 	//
-	// TODO(peter): Most callers want to pass roachpb.Key, except for
-	// MVCCClearTimeRange. That function actually does what to clear records
-	// between specific versions.
-	ClearRange(start, end MVCCKey) error
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearMVCCRangeAndIntents.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
+	// ClearMVCCRange removes MVCC keys from start (inclusive) to end
+	// (exclusive). It should not be expected to clear intents, though may clear
+	// interleaved intents that it encounters. It is meant for efficiently
+	// clearing a subset of versions of a key, since the parameters are MVCCKeys
+	// and not roachpb.Keys. Similar to the other Clear* methods, this method
+	// actually removes entries from the storage engine.
+	//
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearMVCCRange.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCCRange(start, end MVCCKey) error
+
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear and ClearRange, this method actually removes
-	// entries from the storage engine. Unlike ClearRange, the entries to remove
-	// are determined by iterating over iter and per-key tombstones are
-	// generated.
+	// (exclusive). Similar to Clear and ClearRange, this method actually
+	// removes entries from the storage engine. Unlike ClearRange, the entries
+	// to remove are determined by iterating over iter and per-key storage
+	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
+	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
+	// will also be cleared.
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	ClearIterRange(iter Iterator, start, end roachpb.Key) error
+	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
-	// value which is computed from the original merged values.
+	// value which is computed from the original merged values. We only
+	// support Merge for keys with no version.
 	//
 	// Merge currently provides specialized behavior for three data types:
 	// integers, byte slices, and time series observations. Merged integers are
@@ -307,15 +634,41 @@ type Writer interface {
 	// (stored as byte slices with a special tag on the roachpb.Value) are
 	// combined with specialized logic beyond that of simple byte slices.
 	//
-	// The logic for merges is written in db.cc in order to be compatible with
-	// RocksDB.
 	//
 	// It is safe to modify the contents of the arguments after Merge returns.
 	Merge(key MVCCKey, value []byte) error
-	// Put sets the given key to the value provided.
+
+	// PutMVCC sets the given key to the value provided. It requires that the
+	// timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
+	// is empty).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	Put(key MVCCKey, value []byte) error
+	PutMVCC(key MVCCKey, value []byte) error
+	// PutUnversioned sets the given key to the value provided. It is for use
+	// with inline metadata (not intents) and other unversioned keys (like
+	// Range-ID local keys).
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutUnversioned(key roachpb.Key, value []byte) error
+	// PutIntent puts an intent at the given key to the value provided. This is
+	// a higher-level method that may make changes in parts of the key space
+	// that are not only a function of the input key, and may explicitly clear
+	// the preceding intent. txnDidNotUpdateMeta defines what happened prior to
+	// this put, and allows for performance optimization when set to true, and
+	// has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can be
+	// conservatively set to false).
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutIntent(
+		ctx context.Context, key roachpb.Key, value []byte, state PrecedingIntentState,
+		txnDidNotUpdateMeta bool, txnUUID uuid.UUID) (separatedIntentCountDelta int, _ error)
+	// PutEngineKey sets the given key to the value provided. This is a
+	// general-purpose and low-level method that should be used sparingly,
+	// only when the other Put* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutEngineKey(key EngineKey, value []byte) error
+
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
 	//
@@ -325,6 +678,46 @@ type Writer interface {
 	// details to the writer, if it has logical op logging enabled. For most
 	// Writer implementations, this is a no-op.
 	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
+
+	// SingleClearEngineKey removes the most recent write to the item from the db
+	// with the given key. Whether older writes of the item will come back
+	// to life if not also removed with SingleClear is undefined. See the
+	// following:
+	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
+	// for details on the SingleDelete operation that this method invokes. Note
+	// that clear actually removes entries from the storage engine, rather than
+	// inserting MVCC tombstones. This is a low-level interface that must not be
+	// called from outside the storage package. It is part of the interface
+	// because there are structs that wrap Writer and implement the Writer
+	// interface, that are not part of the storage package.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	SingleClearEngineKey(key EngineKey) error
+
+	// OverrideTxnDidNotUpdateMetaToFalse is a temporary method that will be removed
+	// for 22.1.
+	//
+	// See #69891 for details on the bug related to usage of SingleDelete in
+	// separated intent resolution. The following is needed for correctly
+	// migrating from 21.1 to 21.2.
+	//
+	// We have fixed the intent resolution code path in 21.2-beta to use
+	// SingleDelete more conservatively. The 21.2-GA will also likely include
+	// Pebble changes to make the old buggy usage of SingleDelete correct.
+	// However, there is a problem if someone upgrades from 21.1 to
+	// 21.2-beta/21.2-GA:
+	// 21.1 nodes will not write separated intents while they are the
+	// leaseholder for a range. However they can become the leaseholder for a
+	// range after a separated intent was written (in a mixed version cluster).
+	// Hence they can resolve separated intents. The logic in 21.1 for using
+	// SingleDelete when resolving intents is similarly buggy, and the Pebble
+	// code included in 21.1 will not make this buggy usage correct. The
+	// solution is for 21.2 nodes to never set txnDidNotUpdateMeta=true when
+	// writing separated intents, until the cluster version is at the version
+	// when the buggy code was fixed in 21.2. So 21.1 code will never use
+	// SingleDelete when resolving these separated intents (since the only
+	// separated intents being written are by 21.2 nodes).
+	OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -345,13 +738,8 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// GetSSTables retrieves metadata about this engine's live sstables.
-	GetSSTables() SSTableInfos
-	// GetCompactionStats returns the internal RocksDB compaction stats. See
-	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
-	GetCompactionStats() string
-	// GetStats retrieves stats from the engine.
-	GetStats() (*Stats, error)
+	// GetMetrics retrieves metrics from the engine.
+	GetMetrics() Metrics
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
 	GetEncryptionRegistries() (*EncryptionRegistries, error)
@@ -372,31 +760,28 @@ type Engine interface {
 	// operations) are executed on it and caches iterators to avoid the overhead
 	// of creating multiple iterators for batched reads.
 	//
-	// All iterators created from a read-only engine with the same "Prefix"
-	// option are guaranteed to provide a consistent snapshot of the underlying
-	// engine. For instance, two prefix iterators created from a read-only
-	// engine will provide a consistent snapshot. Similarly, two non-prefix
-	// iterators created from a read-only engine will provide a consistent
-	// snapshot. However, a prefix iterator and a non-prefix iterator created
-	// from a read-only engine are not guaranteed to provide a consistent view
-	// of the underlying engine.
-	//
-	// TODO(nvanbenschoten): remove this complexity when we're fully on Pebble
-	// and can guarantee that all iterators created from a read-only engine are
-	// consistent. To do this, we will want to add an Iterator.Clone method.
+	// All iterators created from a read-only engine are guaranteed to provide a
+	// consistent snapshot of the underlying engine. See the comment on the
+	// Reader interface and the Reader.ConsistentIterators method.
 	NewReadOnly() ReadWriter
-	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
-	// this engine. A write-only batch accumulates all mutations and applies them
-	// atomically on a call to Commit(). Read operations return an error.
+	// NewUnindexedBatch returns a new instance of a batched engine which wraps
+	// this engine. It is unindexed, in that writes to the batch are not
+	// visible to reads until after it commits. The batch accumulates all
+	// mutations and applies them atomically on a call to Commit(). Read
+	// operations return an error, unless writeOnly is set to false.
 	//
-	// Note that a distinct write-only batch allows reads. Distinct batches are a
-	// means of indicating that the user does not need to read its own writes.
+	// When writeOnly is false, reads will be satisfied by reading from the
+	// underlying engine, i.e., the caller does not see its own writes. This
+	// setting should be used only when the caller is certain that this
+	// optimization is correct, and beneficial. There are subtleties here -- see
+	// the discussion on https://github.com/cockroachdb/cockroach/pull/57661 for
+	// more details.
 	//
-	// TODO(peter): This should return a WriteBatch interface, but there are mild
-	// complications in both defining that interface and implementing it. In
-	// particular, Batch.Close would no longer come from Reader and we'd need to
-	// refactor a bunch of code in rocksDBBatch.
-	NewWriteOnlyBatch() Batch
+	// TODO(sumeer): We should separate the writeOnly=true case into a
+	// separate method, that returns a WriteBatch interface. Even better would
+	// be not having an option to pass writeOnly=false, and have the caller
+	// explicitly work with a separate WriteBatch and Reader.
+	NewUnindexedBatch(writeOnly bool) Batch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
@@ -437,37 +822,40 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
+
+	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
+	// that know that this enabled setting is not changing and need the value to
+	// adjust their expectations.
+	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
+
+	// SetMinVersion is used to signal to the engine the current minimum
+	// version that it must maintain compatibility with.
+	SetMinVersion(version roachpb.Version) error
+
+	// UsingRecordsEncryptionRegistry returns whether the engine is using the
+	// Records version incremental encryption-at-rest registry.
+	UsingRecordsEncryptionRegistry() (bool, error)
+
+	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
+	// storage min version is at least the target version.
+	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 }
 
 // Batch is the interface for batch specific operations.
 type Batch interface {
+	// Iterators created on a batch can see some mutations performed after the
+	// iterator creation. To guarantee that they see all the mutations, the
+	// iterator has to be repositioned using a seek operation, after the
+	// mutations were done.
 	ReadWriter
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
-	// Distinct returns a view of the existing batch which only sees writes that
-	// were performed before the Distinct batch was created. That is, the
-	// returned batch will not read its own writes, but it will read writes to
-	// the parent batch performed before the call to Distinct(), except if the
-	// parent batch is a WriteOnlyBatch, in which case the Distinct() batch will
-	// read from the underlying engine.
-	//
-	// The returned
-	// batch needs to be closed before using the parent batch again. This is used
-	// as an optimization to avoid flushing mutations buffered by the batch in
-	// situations where we know all of the batched operations are for distinct
-	// keys.
-	//
-	// TODO(tbg): it seems insane that you cannot read from a WriteOnlyBatch but
-	// you can read from a Distinct on top of a WriteOnlyBatch but randomly don't
-	// see the batch at all. I was personally just bitten by this.
-	//
-	// TODO(itsbilal): Improve comments around how/why distinct batches are an
-	// optimization in the rocksdb write path.
-	Distinct() ReadWriter
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
+	// Count returns the number of memtable-modifying operations in the batch.
+	Count() uint32
 	// Len returns the size of the underlying representation of the batch.
 	// Because of the batch header, the size of the batch is never 0 and should
 	// not be used interchangeably with Empty. The method avoids the memory copy
@@ -478,35 +866,53 @@ type Batch interface {
 	Repr() []byte
 }
 
-// Stats is a set of Engine stats. Most are described in RocksDB.
-// Some stats (eg, `IngestedBytes`) are only exposed by Pebble.
-//
-// Currently, we collect stats from the following sources:
-// 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
-//    rocksdb/statistics.h
-// 2. DBEventListener, which implements RocksDB's EventListener interface.
-// 3. rocksdb::DB::GetProperty().
-//
-// This is a good resource describing RocksDB's memory-related stats:
-// https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-type Stats struct {
-	BlockCacheHits                 int64
-	BlockCacheMisses               int64
-	BlockCacheUsage                int64
-	BlockCachePinnedUsage          int64
-	BloomFilterPrefixChecked       int64
-	BloomFilterPrefixUseful        int64
-	MemtableTotalSize              int64
-	Flushes                        int64
-	FlushedBytes                   int64
-	Compactions                    int64
-	IngestedBytes                  int64 // Pebble only
-	CompactedBytesRead             int64
-	CompactedBytesWritten          int64
-	TableReadersMemEstimate        int64
-	PendingCompactionBytesEstimate int64
-	L0FileCount                    int64
-	L0SublevelCount                int64
+// Metrics is a set of Engine metrics. Most are contained in the embedded
+// *pebble.Metrics struct, which has its own documentation.
+type Metrics struct {
+	*pebble.Metrics
+	// WriteStallCount counts the number of times Pebble intentionally delayed
+	// incoming writes. Currently, the only two reasons for this to happen are:
+	// - "memtable count limit reached"
+	// - "L0 file count limit exceeded"
+	//
+	// We do not split this metric across these two reasons, but they can be
+	// distinguished in the pebble logs.
+	WriteStallCount int64
+	// DiskSlowCount counts the number of times Pebble records disk slowness.
+	DiskSlowCount int64
+	// DiskStallCount counts the number of times Pebble observes slow writes
+	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
+	DiskStallCount int64
+}
+
+// NumSSTables returns the total number of SSTables in the LSM, aggregated
+// across levels.
+func (m *Metrics) NumSSTables() int64 {
+	var num int64
+	for _, lm := range m.Metrics.Levels {
+		num += lm.NumFiles
+	}
+	return num
+}
+
+// IngestedBytes returns the sum of all ingested tables, aggregated across all
+// levels of the LSM.
+func (m *Metrics) IngestedBytes() uint64 {
+	var ingestedBytes uint64
+	for _, lm := range m.Metrics.Levels {
+		ingestedBytes += lm.BytesIngested
+	}
+	return ingestedBytes
+}
+
+// CompactedBytes returns the sum of bytes read and written during
+// compactions across all levels of the LSM.
+func (m *Metrics) CompactedBytes() (read, written uint64) {
+	for _, lm := range m.Metrics.Levels {
+		read += lm.BytesRead
+		written += lm.BytesCompacted
+	}
+	return read, written
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -537,96 +943,87 @@ type EncryptionRegistries struct {
 	KeyRegistry []byte
 }
 
-// NewEngine creates a new storage engine.
-func NewEngine(
-	engine enginepb.EngineType, cacheSize int64, storageConfig base.StorageConfig,
-) (Engine, error) {
-	switch engine {
-	case enginepb.EngineTypeTeePebbleRocksDB:
-		pebbleConfig := PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          DefaultPebbleOptions(),
-		}
-		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-		defer pebbleConfig.Opts.Cache.Unref()
-
-		pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
-		cache := NewRocksDBCache(cacheSize)
-		defer cache.Release()
-
-		ctx := context.Background()
-		pebbleDB, err := NewPebble(ctx, pebbleConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		rocksDBConfig := RocksDBConfig{StorageConfig: storageConfig}
-		rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
-		rocksDB, err := NewRocksDB(rocksDBConfig, cache)
-		if err != nil {
-			return nil, err
-		}
-
-		return NewTee(ctx, rocksDB, pebbleDB), nil
-	case enginepb.EngineTypeDefault, enginepb.EngineTypePebble:
-		pebbleConfig := PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          DefaultPebbleOptions(),
-		}
-		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-		defer pebbleConfig.Opts.Cache.Unref()
-
-		return NewPebble(context.Background(), pebbleConfig)
-	case enginepb.EngineTypeRocksDB:
-		cache := NewRocksDBCache(cacheSize)
-		defer cache.Release()
-
-		return NewRocksDB(
-			RocksDBConfig{StorageConfig: storageConfig},
-			cache)
-	}
-	panic(fmt.Sprintf("unknown engine type: %d", engine))
-}
-
-// NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
-// The caller must call the engine's Close method when the engine is no longer needed.
-func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	return NewEngine(DefaultStorageEngine, cacheSize, storageConfig)
-}
-
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp. Returns the length in bytes of
-// key and the value.
+// of msg. Returns the length in bytes of key and the value.
 //
 // Deprecated: use MVCCPutProto instead.
 func PutProto(
-	writer Writer, key MVCCKey, msg protoutil.Message,
+	writer Writer, key roachpb.Key, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if err := writer.Put(key, bytes); err != nil {
+	if err := writer.PutUnversioned(key, bytes); err != nil {
 		return 0, 0, err
 	}
 
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	return int64(MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
-// Scan returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive).
-// Specify max=0 for unbounded scans.
+// Scan returns up to max key/value objects starting from start (inclusive)
+// and ending at end (non-inclusive). Specify max=0 for unbounded scans. Since
+// this code may use an intentInterleavingIter, the caller should not attempt
+// a single scan to span local and global keys. See the comment in the
+// declaration of intentInterleavingIter for details.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
-			return true, nil
+			return iterutil.StopIteration()
 		}
 		kvs = append(kvs, kv)
-		return false, nil
+		return nil
 	})
 	return kvs, err
+}
+
+// ScanSeparatedIntents scans intents using only the separated intents lock
+// table. It does not take interleaved intents into account at all.
+//
+// TODO(erikgrinaker): When we are fully migrated to separated intents, this
+// should be renamed ScanIntents.
+func ScanSeparatedIntents(
+	reader Reader, start, end roachpb.Key, max int64, targetBytes int64,
+) ([]roachpb.Intent, error) {
+	if bytes.Compare(start, end) >= 0 {
+		return []roachpb.Intent{}, nil
+	}
+
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	ltEnd, _ := keys.LockTableSingleKey(end, nil)
+	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	defer iter.Close()
+
+	var (
+		intents     = []roachpb.Intent{}
+		intentBytes int64
+		meta        enginepb.MVCCMetadata
+	)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltStart})
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if max != 0 && int64(len(intents)) >= max {
+			break
+		}
+		key, err := iter.EngineKey()
+		if err != nil {
+			return nil, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		if (max > 0 && int64(len(intents)) >= max) || (targetBytes > 0 && intentBytes >= targetBytes) {
+			break
+		}
+	}
+	return intents, err
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
@@ -645,10 +1042,11 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
-// (exclusive). Depending on the number of keys, it will either use ClearRange
-// or ClearIterRange.
+// (exclusive). Depending on the number of keys, it will either use ClearRawRange
+// or clear individual keys. It works with EngineKeys, so don't expect it to
+// find and clear separated intents if [start, end) refers to MVCC key space.
 func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
-	iter := reader.NewIterator(IterOptions{UpperBound: end})
+	iter := reader.NewEngineIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -656,42 +1054,45 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	// sstable is accessed. So we avoid using range deletion unless there is some
 	// minimum number of keys. The value here was pulled out of thin air. It might
 	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix RocksDB to handle large numbers of tombstones in an
-	// sstable better.
+	// perhaps we should fix Pebble to handle large numbers of tombstones in an
+	// sstable better. Note that we are referring to storage-level tombstones here,
+	// and not MVCC tombstones.
 	const clearRangeMinKeys = 64
 	// Peek into the range to see whether it's large enough to justify
-	// ClearRange. Note that the work done here is bounded by
+	// ClearRawRange. Note that the work done here is bounded by
 	// clearRangeMinKeys, so it will be fairly cheap even for large
 	// ranges.
 	//
-	// TODO(bdarnell): Move this into ClearIterRange so we don't have
-	// to do this scan twice.
+	// TODO(sumeer): Could add the iterated keys to the batch, so we don't have
+	// to do the scan again. If there are too many keys, this will mean a mix of
+	// point tombstones and range tombstone.
 	count := 0
-	iter.SeekGE(MakeMVCCMetadataKey(start))
-	for {
-		valid, err := iter.Valid()
-		if err != nil {
-			return err
-		}
-		if !valid {
-			break
-		}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: start})
+	for valid {
 		count++
 		if count > clearRangeMinKeys {
 			break
 		}
-		iter.Next()
-	}
-	var err error
-	if count > clearRangeMinKeys {
-		err = writer.ClearRange(MakeMVCCMetadataKey(start), MakeMVCCMetadataKey(end))
-	} else {
-		err = writer.ClearIterRange(iter, start, end)
+		valid, err = iter.NextEngineKey()
 	}
 	if err != nil {
 		return err
 	}
-	return nil
+	if count > clearRangeMinKeys {
+		return writer.ClearRawRange(start, end)
+	}
+	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
+	for valid {
+		var k EngineKey
+		if k, err = iter.UnsafeEngineKey(); err != nil {
+			break
+		}
+		if err = writer.ClearEngineKey(k); err != nil {
+			break
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	return err
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
@@ -719,17 +1120,14 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if settings == nil {
 		return
 	}
-	stats, err := eng.GetStats()
-	if err != nil {
-		log.Warningf(ctx, "failed to read stats: %+v", err)
-		return
-	}
-	targetDelay := calculatePreIngestDelay(settings, stats)
+	metrics := eng.GetMetrics()
+	targetDelay := calculatePreIngestDelay(settings, metrics.Metrics)
 
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, stats.L0FileCount, stats.L0SublevelCount)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
+		targetDelay, metrics.Levels[0].NumFiles, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -737,15 +1135,16 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	}
 }
 
-func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Duration {
+func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := stats.L0FileCount
-	if stats.L0SublevelCount >= 0 {
-		l0ReadAmp = stats.L0SublevelCount
+	l0ReadAmp := metrics.Levels[0].NumFiles
+	if metrics.Levels[0].Sublevels >= 0 {
+		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}
+
 	if l0ReadAmp > l0ReadAmpLimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
 		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile
@@ -757,18 +1156,18 @@ func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Dura
 	return 0
 }
 
-// Helper function to implement Reader.Iterate().
+// Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
-	reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
+	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
 ) error {
 	if reader.Closed() {
-		return errors.New("cannot call Iterate on a closed batch")
+		return errors.New("cannot call MVCCIterate on a closed batch")
 	}
 	if start.Compare(end) >= 0 {
 		return nil
 	}
 
-	it := reader.NewIterator(IterOptions{UpperBound: end})
+	it := reader.NewMVCCIterator(iterKind, IterOptions{UpperBound: end})
 	defer it.Close()
 
 	it.SeekGE(MakeMVCCMetadataKey(start))
@@ -779,7 +1178,10 @@ func iterateOnReader(
 		} else if !ok {
 			break
 		}
-		if done, err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); done || err != nil {
+		if err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
 			return err
 		}
 	}

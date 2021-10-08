@@ -15,9 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +46,7 @@ type projectSetProcessor struct {
 	inputRowReady bool
 
 	// RowBuffer will contain the current row of results.
-	rowBuffer sqlbase.EncDatumRow
+	rowBuffer rowenc.EncDatumRow
 
 	// gens contains the current "active" ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
@@ -56,7 +57,7 @@ type projectSetProcessor struct {
 	// thus also whether NULLs should be emitted instead.
 	done []bool
 
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
@@ -79,7 +80,7 @@ func newProjectSetProcessor(
 		spec:        spec,
 		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
-		rowBuffer:   make(sqlbase.EncDatumRow, len(outputTypes)),
+		rowBuffer:   make(rowenc.EncDatumRow, len(outputTypes)),
 		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
 		done:        make([]bool, len(spec.Exprs)),
 	}
@@ -91,7 +92,13 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{ps.input}},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{ps.input},
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				ps.close()
+				return nil
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -114,17 +121,16 @@ func newProjectSetProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
-	ctx = ps.input.Start(ctx)
+func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
-	ps.cancelChecker = sqlbase.NewCancelChecker(ctx)
-	return ctx
+	ps.input.Start(ctx)
+	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
 // initializes the value generators for that row.
 func (ps *projectSetProcessor) nextInputRow() (
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 	error,
 ) {
@@ -222,7 +228,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 }
 
 // Next is part of the RowSource interface.
-func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ps *projectSetProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ps.State == execinfra.StateRunning {
 		if err := ps.cancelChecker.Check(); err != nil {
 			ps.MoveToDraining(err)
@@ -272,16 +278,25 @@ func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 	return nil, ps.DrainHelper()
 }
 
-func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncDatum {
+func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDatum {
 	generatedColIdx := colIdx - len(ps.input.OutputTypes())
 	ctyp := ps.spec.GeneratedColumns[generatedColIdx]
-	return sqlbase.DatumToEncDatum(ctyp, d)
+	return rowenc.DatumToEncDatum(ctyp, d)
+}
+
+func (ps *projectSetProcessor) close() {
+	if ps.InternalClose() {
+		for _, gen := range ps.gens {
+			if gen != nil {
+				gen.Close(ps.Ctx)
+			}
+		}
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (ps *projectSetProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	ps.InternalClose()
+	ps.close()
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

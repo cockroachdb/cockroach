@@ -34,10 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 type modelTimeSeriesDataStore struct {
@@ -101,19 +101,27 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	model := &modelTimeSeriesDataStore{t: t}
+	manual := hlc.NewHybridManualClock()
 
-	manual := hlc.NewManualClock(1)
-	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	cfg.TimeSeriesDataStore = model
-	cfg.TestingKnobs.DisableScanner = true
-	cfg.TestingKnobs.DisableSplitQueue = true
-	cfg.TestingKnobs.DisableMergeQueue = true
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, cfg)
+	ctx := context.Background()
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manual.UnixNano,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				DisableScanner:      true,
+				DisableMergeQueue:   true,
+				DisableSplitQueue:   true,
+				TimeSeriesDataStore: model,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
 
 	// Generate several splits. The "c"-"zz" range is not going to be considered
 	// as containing timeseries.

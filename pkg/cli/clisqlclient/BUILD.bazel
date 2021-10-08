@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clisqlclient",
+    srcs = [
+        "api.go",
+        "conn.go",
+        "context.go",
+        "doc.go",
+        "init_conn_error.go",
+        "make_query.go",
+        "parse_bool.go",
+        "rows.go",
+        "string_to_duration.go",
+        "txn_shim.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli/clicfg",
+        "//pkg/cli/clierror",
+        "//pkg/security/pprompt",
+        "//pkg/sql/scanner",
+        "//pkg/util/version",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_lib_pq_auth_kerberos//:kerberos",
+    ],
+)
+
+go_test(
+    name = "clisqlclient_test",
+    srcs = [
+        "conn_test.go",
+        "main_test.go",
+        "parse_bool_test.go",
+        "string_to_duration_test.go",
+    ],
+    embed = [":clisqlclient"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

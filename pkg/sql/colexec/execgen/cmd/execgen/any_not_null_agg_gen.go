@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const anyNotNullAggTmpl = "pkg/sql/colexec/any_not_null_agg_tmpl.go"
+const anyNotNullAggTmpl = "pkg/sql/colexec/colexecagg/any_not_null_agg_tmpl.go"
 
 func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
@@ -31,8 +31,8 @@ func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 5)
-	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $5}}`)
+	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 6)
+	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $5 "HasSel" $6}}`)
 
 	s = replaceManipulationFuncs(s)
 
@@ -45,5 +45,6 @@ func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerAggGenerator(genAnyNotNullAgg, "any_not_null_agg.eg.go", anyNotNullAggTmpl)
+	registerAggGenerator(
+		genAnyNotNullAgg, "any_not_null_agg.eg.go", anyNotNullAggTmpl, false /* genWindowVariant */)
 }

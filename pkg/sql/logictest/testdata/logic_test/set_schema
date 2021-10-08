@@ -1,7 +1,4 @@
 statement ok
-SET experimental_enable_user_defined_schemas = true
-
-statement ok
 CREATE SCHEMA s1
 
 statement ok
@@ -19,7 +16,7 @@ statement ok
 ALTER TABLE t SET SCHEMA public
 
 # Cannot set schema to one that does not exist.
-statement error pq: schema does_not_exist does not exist
+statement error pq: unknown schema "does_not_exist"
 ALTER TABLE t SET SCHEMA does_not_exist
 
 # Ensure we cannot set schema if there is already a table with the same name
@@ -276,9 +273,6 @@ ALTER TABLE t5 SET SCHEMA s1
 user root
 
 statement ok
-SET experimental_enable_enums = true
-
-statement ok
 CREATE TYPE typ AS ENUM ('hello')
 
 # Ensure setting the type to the same schema is valid.
@@ -286,7 +280,7 @@ statement ok
 ALTER TYPE typ SET SCHEMA public
 
 # Cannot set schema to one that does not exist.
-statement error pq: schema does_not_exist does not exist
+statement error pq: unknown schema "does_not_exist"
 ALTER TYPE typ SET SCHEMA does_not_exist
 
 # Ensure we cannot set schema if there is already a type with the same name
@@ -443,9 +437,6 @@ GRANT CREATE ON DATABASE test TO testuser
 # The user must have create privilege on the target schema to set the schema.
 
 user testuser
-
-statement ok
-SET experimental_enable_enums = true
 
 statement ok
 CREATE TYPE typ5 AS ENUM ()

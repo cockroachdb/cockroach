@@ -128,11 +128,11 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		rangeID := roachpb.RangeID(i)
 		replicaID := roachpb.ReplicaID(1)
 
-		memEngine := storage.NewDefaultInMem()
+		memEngine := storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(memEngine)
 
 		cfg := TestStoreConfig(clock)
-		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+		cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 
 		store := NewStore(ctx, cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Fake-set an ident. This is usually read from the engine on store.Start()
@@ -165,7 +165,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	// Test the case where the replica we're looking for exists.
 	rangeID1 := roachpb.RangeID(5)
-	replica1, _, err1 := ls.GetReplicaForRangeID(rangeID1)
+	replica1, _, err1 := ls.GetReplicaForRangeID(ctx, rangeID1)
 	if replica1 == nil {
 		t.Fatal("expected replica to be found; was nil")
 	}
@@ -178,7 +178,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	// Test the case where the replica we're looking for doesn't exist.
 	rangeID2 := roachpb.RangeID(1000)
-	replica2, _, err2 := ls.GetReplicaForRangeID(rangeID2)
+	replica2, _, err2 := ls.GetReplicaForRangeID(ctx, rangeID2)
 	if replica2 != nil {
 		t.Fatalf("expected replica to be nil; was %v", replica2)
 	}
@@ -223,8 +223,8 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
-		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-		eng := storage.NewDefaultInMem()
+		cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+		eng := storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(eng)
 		s := NewStore(context.Background(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
@@ -375,8 +375,8 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 
 	ls0.AddStore(stores[0])
 
-	versionA := roachpb.Version{Major: 1, Minor: 0, Unstable: 1} // 1.0-1
-	versionB := roachpb.Version{Major: 1, Minor: 0, Unstable: 2} // 1.0-2
+	versionA := roachpb.Version{Major: 1, Minor: 0, Internal: 1} // 1.0-1
+	versionB := roachpb.Version{Major: 1, Minor: 0, Internal: 2} // 1.0-2
 
 	// Verify that the initial read of an empty store synthesizes v1.0-0. This
 	// is the code path that runs after starting the 1.1 binary for the first
@@ -477,7 +477,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 
 	ctx := context.Background()
 
-	vOneDashOne := roachpb.Version{Major: 1, Unstable: 1}
+	vOneDashOne := roachpb.Version{Major: 1, Internal: 1}
 	vOne := roachpb.Version{Major: 1}
 
 	type testCase struct {
@@ -513,7 +513,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			engs := []storage.Engine{storage.NewDefaultInMem()}
+			engs := []storage.Engine{storage.NewDefaultInMemForTesting()}
 			defer engs[0].Close()
 			// Configure versions and write.
 			cv := clusterversion.ClusterVersion{Version: tc.engV}

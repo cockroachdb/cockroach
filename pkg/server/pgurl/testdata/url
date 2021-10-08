@@ -1,0 +1,270 @@
+url
+postgres://somehost
+----
+pq URL: postgresql://somehost/
+DSN:    host=somehost
+JDBC:   jdbc:postgresql://somehost/
+--defaults filled--
+pq URL: postgresql://defaultuser@somehost:26257/defaultdb
+DSN:    database=defaultdb user=defaultuser host=somehost port=26257
+JDBC:   jdbc:postgresql://somehost:26257/defaultdb?user=defaultuser
+
+# Empty host.
+url
+postgres:///somedb
+----
+pq URL: postgresql:///somedb
+DSN:    database=somedb
+JDBC:   jdbc:postgresql:///somedb
+--defaults filled--
+pq URL: postgresql://defaultuser@defaulthost:26257/somedb
+DSN:    database=somedb user=defaultuser host=defaulthost port=26257
+JDBC:   jdbc:postgresql://defaulthost:26257/somedb?user=defaultuser
+
+# Empty everything.
+url
+postgres:///
+----
+pq URL: postgresql:///
+DSN:    
+JDBC:   jdbc:postgresql:///
+--defaults filled--
+pq URL: postgresql://defaultuser@defaulthost:26257/defaultdb
+DSN:    database=defaultdb user=defaultuser host=defaulthost port=26257
+JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?user=defaultuser
+
+url
+postgres://somehost:123/
+----
+pq URL: postgresql://somehost:123/
+DSN:    host=somehost port=123
+JDBC:   jdbc:postgresql://somehost:123/
+--defaults filled--
+pq URL: postgresql://defaultuser@somehost:123/defaultdb
+DSN:    database=defaultdb user=defaultuser host=somehost port=123
+JDBC:   jdbc:postgresql://somehost:123/defaultdb?user=defaultuser
+
+url
+postgres://somehost/somedb
+----
+pq URL: postgresql://somehost/somedb
+DSN:    database=somedb host=somehost
+JDBC:   jdbc:postgresql://somehost/somedb
+--defaults filled--
+pq URL: postgresql://defaultuser@somehost:26257/somedb
+DSN:    database=somedb user=defaultuser host=somehost port=26257
+JDBC:   jdbc:postgresql://somehost:26257/somedb?user=defaultuser
+
+url
+postgres://someuser@somehost/somedb
+----
+pq URL: postgresql://someuser@somehost/somedb
+DSN:    database=somedb user=someuser host=somehost
+JDBC:   jdbc:postgresql://somehost/somedb?user=someuser
+--defaults filled--
+pq URL: postgresql://someuser@somehost:26257/somedb
+DSN:    database=somedb user=someuser host=somehost port=26257
+JDBC:   jdbc:postgresql://somehost:26257/somedb?user=someuser
+
+url
+postgres://someuser:somepass@somehost/somedb
+----
+pq URL: postgresql://someuser:somepass@somehost/somedb
+DSN:    database=somedb user=someuser host=somehost password=somepass
+JDBC:   jdbc:postgresql://somehost/somedb?password=somepass&user=someuser
+--defaults filled--
+pq URL: postgresql://someuser:somepass@somehost:26257/somedb
+DSN:    database=somedb user=someuser host=somehost port=26257 password=somepass
+JDBC:   jdbc:postgresql://somehost:26257/somedb?password=somepass&user=someuser
+
+url
+postgres://someuser:somepass@somehost/somedb?application_name=myapp
+----
+pq URL: postgresql://someuser:somepass@somehost/somedb?application_name=myapp
+DSN:    database=somedb user=someuser host=somehost password=somepass application_name=myapp
+JDBC:   jdbc:postgresql://somehost/somedb?application_name=myapp&password=somepass&user=someuser
+--defaults filled--
+pq URL: postgresql://someuser:somepass@somehost:26257/somedb?application_name=myapp
+DSN:    database=somedb user=someuser host=somehost port=26257 password=somepass application_name=myapp
+JDBC:   jdbc:postgresql://somehost:26257/somedb?application_name=myapp&password=somepass&user=someuser
+
+insecure
+----
+pq URL: postgresql://root@/?sslmode=disable
+DSN:    user=root sslmode=disable
+JDBC:   jdbc:postgresql:///?sslmode=disable&user=root
+--defaults filled--
+pq URL: postgresql://root@defaulthost:26257/defaultdb?sslmode=disable
+DSN:    database=defaultdb user=root host=defaulthost port=26257 sslmode=disable
+JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?sslmode=disable&user=root
+
+subtest redundant
+
+url
+postgres://user1@host/?user=user2
+----
+pq URL: postgresql://user2@host/
+DSN:    user=user2 host=host
+JDBC:   jdbc:postgresql://host/?user=user2
+--defaults filled--
+pq URL: postgresql://user2@host:26257/defaultdb
+DSN:    database=defaultdb user=user2 host=host port=26257
+JDBC:   jdbc:postgresql://host:26257/defaultdb?user=user2
+
+url
+postgres://user1@host/?user=user2&user=user3
+----
+pq URL: postgresql://user3@host/
+DSN:    user=user3 host=host
+JDBC:   jdbc:postgresql://host/?user=user3
+--defaults filled--
+pq URL: postgresql://user3@host:26257/defaultdb
+DSN:    database=defaultdb user=user3 host=host port=26257
+JDBC:   jdbc:postgresql://host:26257/defaultdb?user=user3
+
+url
+postgres://user1:pw1@host/?password=pw2
+----
+pq URL: postgresql://user1:pw2@host/
+DSN:    user=user1 host=host password=pw2
+JDBC:   jdbc:postgresql://host/?password=pw2&user=user1
+--defaults filled--
+pq URL: postgresql://user1:pw2@host:26257/defaultdb
+DSN:    database=defaultdb user=user1 host=host port=26257 password=pw2
+JDBC:   jdbc:postgresql://host:26257/defaultdb?password=pw2&user=user1
+
+url
+postgres://host1/?host=host2
+----
+pq URL: postgresql://host2/
+DSN:    host=host2
+JDBC:   jdbc:postgresql://host2/
+--defaults filled--
+pq URL: postgresql://defaultuser@host2:26257/defaultdb
+DSN:    database=defaultdb user=defaultuser host=host2 port=26257
+JDBC:   jdbc:postgresql://host2:26257/defaultdb?user=defaultuser
+
+subtest end
+
+subtest repeated_kwargs
+
+url
+postgres://host/?k=v1&k=v2&k=v3
+----
+pq URL: postgresql://host/?k=v1&k=v2&k=v3
+DSN:    host=host k=v1 k=v2 k=v3
+JDBC:   jdbc:postgresql://host/?k=v1&k=v2&k=v3
+--defaults filled--
+pq URL: postgresql://defaultuser@host:26257/defaultdb?k=v1&k=v2&k=v3
+DSN:    database=defaultdb user=defaultuser host=host port=26257 k=v1 k=v2 k=v3
+JDBC:   jdbc:postgresql://host:26257/defaultdb?k=v1&k=v2&k=v3&user=defaultuser
+
+subtest end
+
+subtest special_cases
+
+# Empty password.
+url
+postgres://user:@foo
+----
+pq URL: postgresql://user:@foo/
+DSN:    user=user host=foo password=
+JDBC:   jdbc:postgresql://foo/?password=&user=user
+--defaults filled--
+pq URL: postgresql://user:@foo:26257/defaultdb
+DSN:    database=defaultdb user=user host=foo port=26257 password=
+JDBC:   jdbc:postgresql://foo:26257/defaultdb?password=&user=user
+
+# Password with special characters.
+url
+postgres://user:pw%5ca'b@foo
+----
+pq URL: postgresql://user:pw%5Ca%27b@foo/
+DSN:    user=user host=foo password=pw\\a\'b
+JDBC:   jdbc:postgresql://foo/?password=pw%5Ca%27b&user=user
+--defaults filled--
+pq URL: postgresql://user:pw%5Ca%27b@foo:26257/defaultdb
+DSN:    database=defaultdb user=user host=foo port=26257 password=pw\\a\'b
+JDBC:   jdbc:postgresql://foo:26257/defaultdb?password=pw%5Ca%27b&user=user
+
+# DB with special characters.
+url
+postgres://foo/bar%5c-'baz
+----
+pq URL: postgresql://foo/bar%5C-%27baz
+DSN:    database=bar\\-\'baz host=foo
+JDBC:   jdbc:postgresql://foo/bar%5C-%27baz
+--defaults filled--
+pq URL: postgresql://defaultuser@foo:26257/bar%5C-%27baz
+DSN:    database=bar\\-\'baz user=defaultuser host=foo port=26257
+JDBC:   jdbc:postgresql://foo:26257/bar%5C-%27baz?user=defaultuser
+
+
+# kwarg with special characters.
+url
+postgres://foo/bar?baz=a'-%5ce
+----
+pq URL: postgresql://foo/bar?baz=a%27-%5Ce
+DSN:    database=bar host=foo baz=a\'-\\e
+JDBC:   jdbc:postgresql://foo/bar?baz=a%27-%5Ce
+--defaults filled--
+pq URL: postgresql://defaultuser@foo:26257/bar?baz=a%27-%5Ce
+DSN:    database=bar user=defaultuser host=foo port=26257 baz=a\'-\\e
+JDBC:   jdbc:postgresql://foo:26257/bar?baz=a%27-%5Ce&user=defaultuser
+
+subtest end
+
+subtest errors
+
+url
+http://foo
+----
+parse error: unrecognized URL scheme: http
+
+url
+postgres://:pwd@host
+----
+URL validation error: user
+Details:
+Username cannot be empty when a password is provided.
+----
+pq URL: postgresql://:pwd@host/
+DSN:    host=host password=pwd
+JDBC:   jdbc:postgresql://host/?password=pwd
+--defaults filled--
+pq URL: postgresql://defaultuser:pwd@host:26257/defaultdb
+DSN:    database=defaultdb user=defaultuser host=host port=26257 password=pwd
+JDBC:   jdbc:postgresql://host:26257/defaultdb?password=pwd&user=defaultuser
+
+url
+postgres:///somedb?host=/tmp&sslmode=require
+----
+URL validation error: sslmode
+Details:
+Cannot specify TLS settings when using unix sockets.
+----
+pq URL: postgresql:///somedb?host=%2Ftmp&sslmode=require
+DSN:    database=somedb host=/tmp sslmode=require
+JDBC:   jdbc:postgresql:///somedb?host=%2Ftmp&sslmode=require
+--defaults filled--
+pq URL: postgresql://defaultuser@/somedb?host=%2Ftmp&port=26257&sslmode=require
+DSN:    database=somedb user=defaultuser host=/tmp port=26257 sslmode=require
+JDBC:   jdbc:postgresql:///somedb?host=%2Ftmp&port=26257&sslmode=require&user=defaultuser
+
+url
+postgres:///somedb?sslmode=disable&sslcert=/a/b/c
+----
+URL validation error: sslmode, sslkey
+Details:
+Cannot use TLS client certificate authentication without a TLS transport.
+Client key missing.
+----
+pq URL: postgresql:///somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
+DSN:    database=somedb sslcert=/a/b/c sslkey= sslmode=disable
+JDBC:   jdbc:postgresql:///somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
+--defaults filled--
+pq URL: postgresql://defaultuser@defaulthost:26257/somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
+DSN:    database=somedb user=defaultuser host=defaulthost port=26257 sslcert=/a/b/c sslkey= sslmode=disable
+JDBC:   jdbc:postgresql://defaulthost:26257/somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable&user=defaultuser
+
+subtest end

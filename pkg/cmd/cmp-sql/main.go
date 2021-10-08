@@ -36,8 +36,8 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 var (
@@ -53,12 +53,12 @@ func main() {
 	ctx := context.Background()
 
 	// Save the confs so we can print out the used ports later.
-	var confs []pgx.ConnConfig
+	var confs []*pgx.ConnConfig
 	for addr, user := range map[string]string{
 		*pgAddr: *pgUser,
 		*crAddr: *crUser,
 	} {
-		conf, err := pgx.ParseURI(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, addr))
+		conf, err := pgx.ParseConfig(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, addr))
 		if err != nil {
 			panic(err)
 		}
@@ -66,7 +66,7 @@ func main() {
 	}
 	dbs := make([]*pgx.Conn, len(confs))
 	for i, conf := range confs {
-		db, err := pgx.Connect(conf)
+		db, err := pgx.ConnectConfig(ctx, conf)
 		if err != nil {
 			panic(err)
 		}
@@ -92,7 +92,7 @@ func main() {
 			sql, args, repro := input.Generate()
 			for i, db := range dbs {
 				var res, full string
-				if rows, err := db.Query(sql, args...); err != nil {
+				if rows, err := db.Query(ctx, sql, args...); err != nil {
 					res = sawErr(err)
 					full = err.Error()
 				} else {

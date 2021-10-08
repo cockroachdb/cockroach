@@ -1,0 +1,163 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: SQL Session events
+// Channel: SESSIONS
+//
+// Events in this category report SQL client connections
+// and sessions.
+//
+// They are relative to a particular SQL tenant.
+// In a multi-tenant setup, copies of these miscellaneous events are
+// preserved in each tenant's own `system.eventlog` table.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CommonConnectionDetails are payload fields common to all
+// connection/session events.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_connections.enabled` is set.
+message CommonConnectionDetails {
+  // The instance ID (not tenant ID) of the SQL server where the event was originated.
+  int32 instance_id = 1 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
+  // The network protocol for this connection: tcp4, tcp6, unix, etc.
+  string network = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The remote address of the SQL client. Note that when using a
+  // proxy or other intermediate server, this field will contain the
+  // address of the intermediate server.
+  string remote_address = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CommonConnectionDetails are payload fields common to all
+// session events.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_connections.enabled` is set.
+message CommonSessionDetails {
+  // The connection type after transport negotiation.
+  string transport = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The username the session is for. This is the username passed by
+  // the client, after case-folding and Unicode normalization.
+  string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// ClientConnectionStart is reported when a client connection
+// is established. This is reported even when authentication
+// fails, and even for simple cancellation messages.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_connections.enabled` is set.
+message ClientConnectionStart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// ClientConnectionEnd is reported when a client connection
+// is closed. This is reported even when authentication
+// fails, and even for simple cancellation messages.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_connections.enabled` is set.
+message ClientConnectionEnd {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The duration of the connection in nanoseconds.
+  int64 duration = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// ClientSessionEnd is reported when a client session
+// is completed.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_sessions.enabled` is set.
+message ClientSessionEnd {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The duration of the connection in nanoseconds.
+  int64 duration = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AuthFailReason is the inventory of possible reasons for an
+// authentication failure.
+enum AuthFailReason {
+  // UNKNOWN is reported when the reason is unknown.
+  UNKNOWN = 0;
+  // USER_RETRIEVAL_ERROR occurs when there was an internal error accessing the principals.
+  USER_RETRIEVAL_ERROR = 1;
+  // USER_NOT_FOUND occurs when the principal is unknown.
+  USER_NOT_FOUND = 2;
+  // LOGIN_DISABLED occurs when the user does not have LOGIN privileges.
+  LOGIN_DISABLED = 3;
+  // METHOD_NOT_FOUND occurs when no HBA rule matches or the method does not exist.
+  METHOD_NOT_FOUND = 4;
+  // PRE_HOOK_ERROR occurs when the authentication handshake encountered a protocol error.
+  PRE_HOOK_ERROR = 5;
+  // CREDENTIALS_INVALID occurs when the client-provided credentials were invalid.
+  CREDENTIALS_INVALID = 6;
+  // CREDENTIALS_EXPIRED occur when the credentials provided by the client are expired.
+  CREDENTIALS_EXPIRED = 7;
+}
+
+// ClientAuthenticationFailed is reported when a client session
+// did not authenticate successfully.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_sessions.enabled` is set.
+message ClientAuthenticationFailed {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The reason for the authentication failure.
+  AuthFailReason reason = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The detailed error for the authentication failure.
+  string detail = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // The authentication method used.
+  string method = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// ClientAuthenticationOk is reported when a client session
+// was authenticated successfully.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_sessions.enabled` is set.
+message ClientAuthenticationOk {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The authentication method used.
+  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// ClientAuthenticationInfo is reported for intermediate
+// steps during the authentication process.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_sessions.enabled` is set.
+message ClientAuthenticationInfo {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The authentication method used, once known.
+  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The authentication progress message.
+  string info = 5 [(gogoproto.jsontag) = ",omitempty"];
+}

@@ -11,21 +11,30 @@ package colexec
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ = coldataext.CompareDatum
+	_ tree.AggType
 )
 
 // valuesDiffer takes in two ColVecs as well as values indices to check whether
-// the values differ. This function pays attention to NULLs, and two NULL
-// values do *not* differ.
-func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int) bool {
+// the values differ. This function pays attention to NULLs.
+func valuesDiffer(
+	aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int, nullsAreDistinct bool,
+) bool {
 	switch aColVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
 		switch aColVec.Type().Width() {
@@ -38,7 +47,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -73,7 +82,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -100,7 +109,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -126,7 +135,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -160,7 +169,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -195,7 +204,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -233,7 +242,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -279,7 +288,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -313,7 +322,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -324,6 +333,39 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			{
 				var cmpResult int
 				cmpResult = arg1.Compare(arg2)
+				unique = cmpResult != 0
+			}
+
+			return unique
+		}
+	case types.JsonFamily:
+		switch aColVec.Type().Width() {
+		case -1:
+		default:
+			aCol := aColVec.JSON()
+			bCol := bColVec.JSON()
+			aNulls := aColVec.Nulls()
+			bNulls := bColVec.Nulls()
+			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
+			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
+			if aNull && bNull {
+				return nullsAreDistinct
+			} else if aNull || bNull {
+				return true
+			}
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
+			var unique bool
+
+			{
+				var cmpResult int
+
+				var err error
+				cmpResult, err = arg1.Compare(arg2)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+
 				unique = cmpResult != 0
 			}
 
@@ -340,7 +382,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -351,7 +393,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			{
 				var cmpResult int
 
-				cmpResult = arg1.(*coldataext.Datum).CompareDatum(aCol, arg2)
+				cmpResult = coldataext.CompareDatum(arg1, aCol, arg2)
 
 				unique = cmpResult != 0
 			}
@@ -359,7 +401,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			return unique
 		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unsupported valuesDiffer type %s", aColVec.Type()))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported valuesDiffer type %s", aColVec.Type()))
 	// This code is unreachable, but the compiler cannot infer that.
 	return false
 }

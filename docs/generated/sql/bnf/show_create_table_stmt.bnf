@@ -1,2 +1,0 @@
-show_create_table_stmt ::=
-	'SHOW' 'CREATE' 'TABLE' table_name

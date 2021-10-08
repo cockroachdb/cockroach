@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clierror",
+    srcs = [
+        "check.go",
+        "cli_error.go",
+        "doc.go",
+        "formatted_error.go",
+        "syntax_error.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clierror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/log/logpb",
+        "//pkg/util/log/severity",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "clierror_test",
+    srcs = [
+        "check_test.go",
+        "error_test.go",
+        "main_test.go",
+        "syntax_error_test.go",
+    ],
+    embed = [":clierror"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli",
+        "//pkg/cli/clisqlclient",
+        "//pkg/cli/exit",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/channel",
+        "//pkg/util/log/severity",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

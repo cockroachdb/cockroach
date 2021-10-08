@@ -1,0 +1,17 @@
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE db1;
+CREATE DATABASE db2;
+CREATE TABLE db1.t (a INT);
+BACKUP DATABASE db1 TO 'nodelocal://1/backup';
+BACKUP DATABASE db1,db2 TO 'nodelocal://1/backup';
+----
+pq: previous backup does not contain the complete database "db2"
+
+exec-sql
+BACKUP db1.t TO 'nodelocal://1/backup_2';
+BACKUP DATABASE db1 TO 'nodelocal://1/backup_2';
+----
+pq: previous backup does not contain the complete database "db1"

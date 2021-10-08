@@ -24,12 +24,20 @@ import (
 )
 
 func TestMakeFileName(t *testing.T) {
-	ts := time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC)
-
 	store := dumpstore.NewStore("mydir", nil, nil)
-	joy := newProfileStore(store, heapFileNamePrefix, nil)
+	joy := newProfileStore(store, HeapFileNamePrefix, ".test", nil)
+
+	ts := time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC)
 	assert.Equal(t,
-		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.543.123456"),
+		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.543.123456.test"),
+		joy.makeNewFileName(ts, 123456))
+
+	// Also check when the millisecond part is zero. This verifies that
+	// the .999 format is not used, which would cause the millisecond
+	// part to be (erronously) omitted.
+	ts = time.Date(2020, 6, 15, 13, 19, 19, 00000000, time.UTC)
+	assert.Equal(t,
+		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.000.123456.test"),
 		joy.makeNewFileName(ts, 123456))
 }
 
@@ -50,9 +58,13 @@ func TestParseFileName(t *testing.T) {
 
 		// New format.
 		{"memprof.2020-06-15T13_19_19.543.123456", time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC), 123456, false},
+		// v20.2 transition formats.
+		// TODO(knz): Remove in v21.1.
+		{"memprof.2020-06-15T13_19_19.54.123456", time.Date(2020, 6, 15, 13, 19, 19, 540000000, time.UTC), 123456, false},
+		{"memprof.2020-06-15T13_19_19.5.123456", time.Date(2020, 6, 15, 13, 19, 19, 500000000, time.UTC), 123456, false},
 	}
 
-	s := profileStore{prefix: heapFileNamePrefix}
+	s := profileStore{prefix: HeapFileNamePrefix}
 	for _, tc := range testData {
 		ok, ts, heapUsage := s.parseFileName(context.Background(), tc.f)
 		if ok != !tc.expError {
@@ -182,7 +194,7 @@ func TestCleanupLastRampup(t *testing.T) {
 		},
 	}
 
-	s := profileStore{prefix: heapFileNamePrefix}
+	s := profileStore{prefix: HeapFileNamePrefix}
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			path, err := ioutil.TempDir("", "cleanup")

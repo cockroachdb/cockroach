@@ -56,3 +56,9 @@ func (n *TableRef) String() string { return AsString(n) }
 
 // tableExpr implements the TableExpr interface.
 func (n *TableRef) tableExpr() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ID) SafeValue() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ColumnID) SafeValue() {}

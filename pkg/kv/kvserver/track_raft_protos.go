@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -40,9 +39,6 @@ func TrackRaftProtos() func() []reflect.Type {
 		// Some raft operations trigger gossip, but we don't require
 		// strict consistency there.
 		funcName((*gossip.Gossip).AddInfoProto),
-		// Compactions are suggested below Raft, but they are local to a store and
-		// thus not subject to Raft consistency requirements.
-		funcName((*compactor.Compactor).Suggest),
 		// Range merges destroy replicas beneath Raft and write replica tombstones,
 		// but tombstones are unreplicated and thus not subject to the strict
 		// consistency requirements.

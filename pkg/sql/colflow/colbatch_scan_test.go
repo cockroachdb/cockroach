@@ -23,16 +23,86 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// TestColBatchScanMeta makes sure that the ColBatchScan propagates the leaf
+// txn final state metadata which is necessary to notify the kvCoordSender
+// about the spans that have been read.
+func TestColBatchScanMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+		Txn:    leafTxn,
+		Local:  true,
+		NodeID: evalCtx.NodeID,
+	}
+	spec := execinfrapb.ProcessorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{
+			TableReader: &execinfrapb.TableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{
+					{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				},
+				NeededColumns: []uint32{0},
+				Table:         *td.TableDesc(),
+			}},
+		ResultTypes: types.OneIntCol,
+	}
+
+	args := &colexecargs.NewColOperatorArgs{
+		Spec:                &spec,
+		StreamingMemAccount: testMemAcc,
+	}
+	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.TestCleanupNoError(t)
+	tr := res.Root
+	tr.Init(ctx)
+	meta := res.MetadataSources[0].DrainMeta()
+	var txnFinalStateSeen bool
+	for _, m := range meta {
+		if m.LeafTxnFinalState != nil {
+			txnFinalStateSeen = true
+			break
+		}
+	}
+	if !txnFinalStateSeen {
+		t.Fatal("missing txn final state")
+	}
+}
 
 func BenchmarkColBatchScan(b *testing.B) {
 	defer leaktest.AfterTest(b)()
@@ -61,11 +131,9 @@ func BenchmarkColBatchScan(b *testing.B) {
 						Spans: []execinfrapb.TableReaderSpan{
 							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 						},
+						NeededColumns: []uint32{0, 1},
 					}},
-				Post: execinfrapb.PostProcessSpec{
-					Projection:    true,
-					OutputColumns: []uint32{0, 1},
-				},
+				ResultTypes: types.TwoIntCols,
 			}
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
@@ -81,25 +149,25 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
-				args := &colexec.NewColOperatorArgs{
+				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
 				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
 					b.Fatal(err)
 				}
-				tr := res.Op
-				tr.Init()
+				tr := res.Root
 				b.StartTimer()
+				tr.Init(ctx)
 				for {
-					bat := tr.Next(ctx)
+					bat := tr.Next()
 					if bat.Length() == 0 {
 						break
 					}
 				}
+				b.StopTimer()
+				res.TestCleanupNoError(b)
 			}
 		})
 	}

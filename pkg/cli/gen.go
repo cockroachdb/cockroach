@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -18,10 +19,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -39,7 +43,7 @@ example, to install man pages globally on many Unix-like systems,
 use "--path=/usr/local/share/man/man1".
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenManCmd),
+	RunE: clierrorplus.MaybeDecorateError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
@@ -55,7 +59,7 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(manPath); err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			if err := os.MkdirAll(manPath, 0755); err != nil {
 				return err
 			}
@@ -84,7 +88,8 @@ var genAutocompleteCmd = &cobra.Command{
 	Long: `Generate autocompletion script for CockroachDB.
 
 If no arguments are passed, or if 'bash' is passed, a bash completion file is
-written to ./cockroach.bash. If 'zsh' is passed, a zsh completion file is written
+written to ./cockroach.bash. If 'fish' is passed, a fish completion file
+is written to ./cockroach.fish. If 'zsh' is passed, a zsh completion file is written
 to ./_cockroach. Use "--out=/path/to/file" to override the output file location.
 
 Note that for the generated file to work on OS X with bash, you'll need to install
@@ -92,8 +97,8 @@ Homebrew's bash-completion package (or an equivalent) and follow the post-instal
 instructions.
 `,
 	Args:      cobra.OnlyValidArgs,
-	ValidArgs: []string{"bash", "zsh"},
-	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
+	ValidArgs: []string{"bash", "zsh", "fish"},
+	RunE:      clierrorplus.MaybeDecorateError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
@@ -111,6 +116,11 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 			autoCompletePath = "cockroach.bash"
 		}
 		err = cmd.Root().GenBashCompletionFile(autoCompletePath)
+	case "fish":
+		if autoCompletePath == "" {
+			autoCompletePath = "cockroach.fish"
+		}
+		err = cmd.Root().GenFishCompletionFile(autoCompletePath, true /* include description */)
 	case "zsh":
 		if autoCompletePath == "" {
 			autoCompletePath = "_cockroach"
@@ -179,15 +189,18 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 	},
 }
 
+var includeReservedSettings bool
+var excludeSystemSettings bool
+
 var genSettingsListCmd = &cobra.Command{
-	Use:   "settings-list <output-dir>",
+	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
 	Long: `
 Output the list of cluster settings known to this binary.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wrapCode := func(s string) string {
-			if cliCtx.tableDisplayFormat == tableDisplayHTML {
+			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
 				return fmt.Sprintf("<code>%s</code>", s)
 			}
 			return s
@@ -195,7 +208,7 @@ Output the list of cluster settings known to this binary.
 
 		// Fill a Values struct with the defaults.
 		s := cluster.MakeTestingClusterSettings()
-		settings.NewUpdater(&s.SV).ResetRemaining()
+		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
 		for _, name := range settings.Keys() {
@@ -203,6 +216,11 @@ Output the list of cluster settings known to this binary.
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
+
+			if excludeSystemSettings && setting.SystemOnly() {
+				continue
+			}
+
 			if setting.Visibility() != settings.Public {
 				// We don't document non-public settings at this time.
 				continue
@@ -213,11 +231,11 @@ Output the list of cluster settings known to this binary.
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
 			var defaultVal string
-			if sm, ok := setting.(*settings.StateMachineSetting); ok {
+			if sm, ok := setting.(*settings.VersionSetting); ok {
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
-				if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+				if override, ok := startupmigrations.SettingsDefaultOverrides[name]; ok {
 					defaultVal = override
 				}
 			}
@@ -225,20 +243,9 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		reporter, cleanup, err := makeReporter(os.Stdout)
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
-		if hr, ok := reporter.(*htmlReporter); ok {
-			hr.escape = false
-			hr.rowStats = false
-		}
+		sliceIter := clisqlexec.NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return render(reporter, os.Stdout,
-			cols, newRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
+		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
 	},
 }
 
@@ -270,6 +277,10 @@ func init() {
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
 		"Overwrite key if it exists")
+	genSettingsListCmd.PersistentFlags().BoolVar(&includeReservedSettings, "include-reserved", false,
+		"include undocumented 'reserved' settings")
+	genSettingsListCmd.PersistentFlags().BoolVar(&excludeSystemSettings, "without-system-only", false,
+		"do not list settings only applicable to system tenant")
 
 	genCmd.AddCommand(genCmds...)
 }

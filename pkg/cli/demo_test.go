@@ -11,81 +11,94 @@
 package cli
 
 import (
-	"fmt"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestTestServerArgsForTransientCluster(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+func Example_demo() {
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
 
-	testCases := []struct {
-		nodeID            roachpb.NodeID
-		joinAddr          string
-		sqlPoolMemorySize int64
-		cacheSize         int64
+	defer democluster.TestingForceRandomizeDemoPorts()()
 
-		expected base.TestServerArgs
-	}{
-		{
-			nodeID:            roachpb.NodeID(1),
-			joinAddr:          "127.0.0.1",
-			sqlPoolMemorySize: 2 << 10,
-			cacheSize:         1 << 10,
-			expected: base.TestServerArgs{
-				PartOfCluster:           true,
-				JoinAddr:                "127.0.0.1",
-				DisableTLSForHTTP:       true,
-				SQLMemoryPoolSize:       2 << 10,
-				CacheSize:               1 << 10,
-				NoAutoInitializeCluster: true,
-				TenantAddr:              new(string),
-			},
-		},
-		{
-			nodeID:            roachpb.NodeID(3),
-			joinAddr:          "127.0.0.1",
-			sqlPoolMemorySize: 4 << 10,
-			cacheSize:         4 << 10,
-			expected: base.TestServerArgs{
-				PartOfCluster:           true,
-				JoinAddr:                "127.0.0.1",
-				DisableTLSForHTTP:       true,
-				SQLMemoryPoolSize:       4 << 10,
-				CacheSize:               4 << 10,
-				NoAutoInitializeCluster: true,
-				TenantAddr:              new(string),
-			},
-		},
+	testData := [][]string{
+		{`demo`, `-e`, `show database`},
+		{`demo`, `-e`, `show database`, `--no-example-database`},
+		{`demo`, `-e`, `show application_name`},
+		{`demo`, `--format=table`, `-e`, `show database`},
+		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
+		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
+		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
+		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`},
+		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`, `--format=table`},
+		// Test that if we start with --insecure we cannot perform
+		// commands that require a secure cluster.
+		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `--insecure`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `--geo-partitioned-replicas`, `--disable-demo-license`},
+	}
+	setCLIDefaultsForTests()
+	// We must reset the security asset loader here, otherwise the dummy
+	// asset loader that is set by default in tests will not be able to
+	// find the certs that demo sets up.
+	security.ResetAssetLoader()
+	for _, cmd := range testData {
+		// `demo` sets up a server and log file redirection, which asserts
+		// that the logging subsystem has not been initialized yet. Fake
+		// this to be true.
+		log.TestingResetActive()
+		c.RunWithArgs(cmd)
 	}
 
-	for _, tc := range testCases {
-		demoCtxTemp := demoCtx
-		demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
-		demoCtx.cacheSize = tc.cacheSize
-
-		actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "")
-
-		assert.Len(t, actual.StoreSpecs, 1)
-		assert.Equal(
-			t,
-			fmt.Sprintf("demo-node%d", tc.nodeID),
-			actual.StoreSpecs[0].StickyInMemoryEngineID,
-		)
-
-		// We cannot compare these.
-		actual.Stopper = nil
-		actual.StoreSpecs = nil
-
-		assert.Equal(t, tc.expected, actual)
-
-		// Restore demoCtx state after each test.
-		demoCtx = demoCtxTemp
-	}
+	// Output:
+	// demo -e show database
+	// database
+	// movr
+	// demo -e show database --no-example-database
+	// database
+	// defaultdb
+	// demo -e show application_name
+	// application_name
+	// $ cockroach demo
+	// demo --format=table -e show database
+	//   database
+	// ------------
+	//   movr
+	// (1 row)
+	// demo -e select 1 as "1" -e select 3 as "3"
+	// 1
+	// 1
+	// 3
+	// 3
+	// demo --echo-sql -e select 1 as "1"
+	// > select 1 as "1"
+	// 1
+	// 1
+	// demo --set=errexit=0 -e select nonexistent -e select 123 as "123"
+	// ERROR: column "nonexistent" does not exist
+	// SQLSTATE: 42703
+	// 123
+	// 123
+	// demo startrek -e SELECT database_name, owner FROM [show databases]
+	// database_name	owner
+	// defaultdb	root
+	// postgres	root
+	// startrek	demo
+	// system	node
+	// demo startrek -e SELECT database_name, owner FROM [show databases] --format=table
+	//   database_name | owner
+	// ----------------+--------
+	//   defaultdb     | root
+	//   postgres      | root
+	//   startrek      | demo
+	//   system        | node
+	// (4 rows)
+	// demo -e CREATE USER test WITH PASSWORD 'testpass'
+	// CREATE ROLE
+	// demo --insecure -e CREATE USER test WITH PASSWORD 'testpass'
+	// ERROR: setting or updating a password is not supported in insecure mode
+	// SQLSTATE: 28P01
+	// demo --geo-partitioned-replicas --disable-demo-license
+	// ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)
 }

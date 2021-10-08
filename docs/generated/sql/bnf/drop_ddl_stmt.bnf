@@ -1,0 +1,8 @@
+drop_ddl_stmt ::=
+	drop_database_stmt
+	| drop_index_stmt
+	| drop_table_stmt
+	| drop_view_stmt
+	| drop_sequence_stmt
+	| drop_schema_stmt
+	| drop_type_stmt

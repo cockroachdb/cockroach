@@ -1,0 +1,114 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "xform",
+    srcs = [
+        "coster.go",
+        "explorer.go",
+        "general_funcs.go",
+        "groupby_funcs.go",
+        "index_scan_builder.go",
+        "join_funcs.go",
+        "join_order_builder.go",
+        "limit_funcs.go",
+        "memo_format.go",
+        "optimizer.go",
+        "physical_props.go",
+        "placeholder_fast_path.go",
+        "scan_funcs.go",
+        "scan_index_iter.go",
+        "select_funcs.go",
+        "set_funcs.go",
+        ":gen-explorer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/xform",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/inverted",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/idxconstraint",
+        "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/opt/invertedidx",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/ordering",
+        "//pkg/sql/opt/partialidx",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/rowinfra",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/errorutil",
+        "//pkg/util/log",
+        "//pkg/util/treeprinter",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//container/intsets",
+    ],
+)
+
+go_test(
+    name = "xform_test",
+    size = "small",
+    srcs = [
+        "coster_test.go",
+        "general_funcs_test.go",
+        "join_funcs_export_test.go",
+        "join_funcs_test.go",
+        "join_order_builder_test.go",
+        "main_test.go",
+        "optimizer_test.go",
+        "physical_props_test.go",
+    ],
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
+    ],
+    embed = [":xform"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/testutils",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+# Define a filegroup for all xform rules.
+rules = filegroup(
+    name = "rules",
+    srcs = glob(["rules/*.opt"]),
+    visibility = ["//visibility:public"],
+)
+
+# Define a generator for expression tree exploration rules.
+genrule(
+    name = "gen-explorer",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        ":rules",
+    ],
+    outs = ["explorer.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ explorer $(locations //pkg/sql/opt:ops) $(locations :rules)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

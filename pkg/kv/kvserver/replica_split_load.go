@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,25 +20,18 @@ import (
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
-var SplitByLoadEnabled = settings.RegisterPublicBoolSetting(
+var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
-)
+).WithPublic()
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
-var SplitByLoadQPSThreshold = settings.RegisterPublicIntSetting(
+var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting",
 	2500, // 2500 req/s
-)
-
-// SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
-var SplitByLoadMergeDelay = settings.RegisterNonNegativeDurationSetting(
-	"kv.range_split.by_load_merge_delay",
-	"the delay that range splits created due to load will wait before considering being merged away",
-	5*time.Minute,
-)
+).WithPublic()
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
 func (r *Replica) SplitByLoadQPSThreshold() float64 {
@@ -66,6 +58,6 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 		return spans.BoundarySpan(spanset.SpanGlobal)
 	})
 	if shouldInitSplit {
-		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 }

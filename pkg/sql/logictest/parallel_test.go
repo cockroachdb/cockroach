@@ -33,7 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -147,7 +148,7 @@ func (t *parallelTest) run(dir string) {
 		log.Infof(t.ctx, "spec: %+v", spec)
 	}
 
-	t.setup(&spec)
+	t.setup(context.Background(), &spec)
 	defer t.close()
 
 	for runListIdx, runList := range spec.Run {
@@ -174,7 +175,7 @@ func (t *parallelTest) run(dir string) {
 	}
 }
 
-func (t *parallelTest) setup(spec *parTestSpec) {
+func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	if spec.ClusterSize == 0 {
 		spec.ClusterSize = 1
 	}
@@ -183,14 +184,16 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		log.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
 	}
 
-	t.cluster = serverutils.StartTestCluster(t, spec.ClusterSize, base.TestClusterArgs{})
+	t.cluster = serverutils.StartNewTestCluster(t, spec.ClusterSize, base.TestClusterArgs{})
 
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		server := t.cluster.Server(i)
-		mode := sessiondata.DistSQLOff
+		mode := sessiondatapb.DistSQLOff
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		sql.DistSQLClusterExecMode.Override(&st.SV, int64(mode))
+		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
+		// Disable automatic stats - they can interfere with the test shutdown.
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	}
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)
@@ -230,6 +233,13 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "takes >1 min under race")
+	// Note: there is special code in teamcity-trigger/main.go to run this package
+	// with less concurrency in the nightly stress runs. If you see problems
+	// please make adjustments there.
+	// As of 6/4/2019, the logic tests never complete under race.
+	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
 	glob := *paralleltestdata
 	paths, err := filepath.Glob(glob)

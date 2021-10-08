@@ -20,20 +20,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
+func init() {
+	RegisterReadOnlyCommand(roachpb.RangeStats, declareKeysRangeStats, RangeStats)
+}
+
 func declareKeysRangeStats(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+	DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
 	// The request will return the descriptor and lease.
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-}
-
-func init() {
-	RegisterReadOnlyCommand(roachpb.RangeStats, declareKeysRangeStats, RangeStats)
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
 }
 
 // RangeStats returns the MVCC statistics for a range.
@@ -42,8 +42,14 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
-	reply.QueriesPerSecond = cArgs.EvalCtx.GetSplitQPS()
-	desc, lease := cArgs.EvalCtx.GetDescAndLease(ctx)
-	reply.RangeInfo = &roachpb.RangeInfo{Desc: desc, Lease: lease}
+	reply.DeprecatedLastQueriesPerSecond = cArgs.EvalCtx.GetLastSplitQPS()
+	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(); ok {
+		reply.MaxQueriesPerSecond = qps
+	} else {
+		// See comment on MaxQueriesPerSecond. -1 means !ok.
+		reply.MaxQueriesPerSecond = -1
+	}
+	reply.MaxQueriesPerSecondSet = true
+	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil
 }

@@ -196,7 +196,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 			}
 			args := fn.Types.String()
 
-			retType := fn.FixedReturnType()
+			retType := fn.InferReturnTypeFromInputArgTypes(fn.Types.Types())
 			ret := retType.String()
 
 			cat := props.Category
@@ -268,12 +268,14 @@ func linkTypeName(s string) string {
 	switch s {
 	case "timestamptz":
 		s = "timestamp"
+	case "collatedstring":
+		s = "collate"
 	}
 	s = strings.TrimSuffix(s, "[]")
 	s = strings.TrimSuffix(s, "*")
 	switch s {
 	case "int", "decimal", "float", "bool", "date", "timestamp", "interval", "string", "bytes",
-		"inet", "uuid", "collatedstring", "time":
+		"inet", "uuid", "collate", "time":
 		s = fmt.Sprintf("<a href=\"%s.html\">%s</a>", s, name)
 	}
 	return s

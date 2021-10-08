@@ -21,11 +21,11 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,11 +47,11 @@ func authGSS(
 	c pgwire.AuthConn,
 	tlsState tls.ConnectionState,
 	_ pgwire.PasswordRetrievalFn,
-	_ pgwire.PasswordValidUntilFn,
+	_ *tree.DTimestamp,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(requestedUser string, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
 		var (
 			majStat, minStat, lminS, gflags C.OM_uint32
 			gbuf                            C.gss_buffer_desc
@@ -153,7 +153,8 @@ func authGSS(
 			return connClose, errors.New("GSSAPI did not return realm but realm matching was requested")
 		}
 
-		if !strings.EqualFold(gssUser, requestedUser) {
+		gssUsername, _ := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
+		if gssUsername != requestedUser {
 			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
 		}
 
@@ -206,5 +207,5 @@ func checkEntry(entry hba.Entry) error {
 }
 
 func init() {
-	pgwire.RegisterAuthMethod("gss", authGSS, clusterversion.Version19_1, hba.ConnHostSSL, checkEntry)
+	pgwire.RegisterAuthMethod("gss", authGSS, hba.ConnHostSSL, checkEntry)
 }

@@ -1,0 +1,57 @@
+
+# usage: paginate <limit:uint> <offset:uint>
+#        <input:comma-separated slice of ints>
+
+# Simple two cases
+
+paginate 5 0
+1,2,3,4,5,6,7,8,9,10
+----
+result=[1 2 3 4 5]
+next=5
+
+paginate 5 5
+1,2,3,4,5,6,7,8,9,10
+----
+result=[6 7 8 9 10]
+next=0
+
+# Case where end index is greater than len.
+
+paginate 5 5
+1,2,3,4,5,6,7,8
+----
+result=[6 7 8]
+next=0
+
+# Offset beyond the end returns an empty slice.
+
+paginate 15 15
+1,2,3,4,5,6,7,8
+----
+result=[]
+next=0
+
+# Limits of 0 translate to returning the entire object
+# (i.e. pagination disabled)
+
+paginate 0 0
+1,2,3,4,5,6,7,8,9,10
+----
+result=[1 2 3 4 5 6 7 8 9 10]
+next=0
+
+# Negative offsets silently translate to 0.
+
+paginate 5 -1
+1,2,3,4,5,6,7,8,9,10
+----
+result=[1 2 3 4 5]
+next=5
+
+# Non-slice input always returns a nil output
+
+paginate 5 5
+----
+result=<nil>
+next=0

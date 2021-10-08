@@ -1,0 +1,48 @@
+# Verify that the crdb_internal.node_inflight_trace_spans vtable populates
+# correctly.
+
+statement ok
+GRANT ADMIN TO testuser
+
+statement ok
+CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
+
+query TT
+SELECT * FROM kv
+----
+
+user testuser
+
+statement ok
+BEGIN
+
+statement ok
+SET TRACING = on
+
+let $curr_trace_id
+SELECT * FROM crdb_internal.trace_id()
+
+# Save all rows representing spans of current trace in view.
+statement ok
+CREATE VIEW current_trace_spans(span_id, trace_id)
+  AS SELECT span_id, trace_id
+  FROM crdb_internal.node_inflight_trace_spans
+  WHERE trace_id = $curr_trace_id
+
+# Confirm that there is at least 1 trace with current trace ID.
+query B
+SELECT count(*) > 0
+  FROM current_trace_spans
+----
+true
+
+statement ok
+INSERT INTO kv VALUES('k', 'v');
+COMMIT
+
+# Confirm that the trace and its associated spans are no longer tracked.
+query B
+SELECT count(*) = 0
+  FROM current_trace_spans
+----
+true

@@ -1,0 +1,73 @@
+# LogicTest: local !metamorphic
+
+# Regression test for #25726.
+# UPSERT over tables with column families, on the fast path, use the
+# INSERT logic. This has special casing for column families of 1
+# column, and another special casing for column families of 2+
+# columns. The special casing is only for families that do not include
+# the primary key. So we need a table with 3 families: 1 for the PK, 1
+# with just 1 col, and 1 with 2+ cols.
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Put /Table/53/1/1/0 -> /TUPLE/
+Del /Table/53/1/1/1/1
+Del /Table/53/1/1/2/1
+fast path completed
+rows affected: 1
+
+# KV operations.
+statement ok
+CREATE DATABASE t; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
+
+statement ok
+CREATE UNIQUE INDEX woo ON t.kv(v)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/55/1/2/0
+batch flow coordinator  CPut /Table/55/1/2/0 -> /TUPLE/2:2:Int/3
+batch flow coordinator  InitPut /Table/55/2/3/0 -> /BYTES/0x8a
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/55/1/1/0
+batch flow coordinator  CPut /Table/55/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/55/2/2/0 -> /BYTES/0x89
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+statement error duplicate key value
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/55/1/2/0
+colbatchscan            fetched: /kv/primary/2/v -> /3
+batch flow coordinator  Put /Table/55/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  Del /Table/55/2/3/0
+batch flow coordinator  CPut /Table/55/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "woo"

@@ -15,7 +15,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -60,7 +60,7 @@ type BufferingAdder struct {
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
 
-	onFlush func()
+	onFlush func(summary roachpb.BulkOpSummary)
 }
 
 var _ kvserverbase.BulkAdder = &BufferingAdder{}
@@ -72,7 +72,7 @@ var _ kvserverbase.BulkAdder = &BufferingAdder{}
 func MakeBulkAdder(
 	ctx context.Context,
 	db SSTSender,
-	rangeCache *kvcoord.RangeDescriptorCache,
+	rangeCache *rangecache.RangeCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
 	opts kvserverbase.BulkAdderOptions,
@@ -94,6 +94,8 @@ func MakeBulkAdder(
 		// splitting _before_ hitting max reduces chance of auto-splitting after the
 		// range is full and is more expensive to split/move.
 		opts.SplitAndScatterAfter = func() int64 { return 48 << 20 }
+	} else if opts.SplitAndScatterAfter() == kvserverbase.DisableExplicitSplits {
+		opts.SplitAndScatterAfter = nil
 	}
 
 	b := &BufferingAdder{
@@ -106,6 +108,7 @@ func MakeBulkAdder(
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
 			splitAfter:        opts.SplitAndScatterAfter,
+			batchTS:           opts.BatchTimestamp,
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
@@ -128,14 +131,16 @@ func MakeBulkAdder(
 	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
 	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
-		return nil, errors.Wrap(err, "Not enough memory available to create a BulkAdder. Try setting a higher --max-sql-memory.")
+		return nil, errors.WithHint(
+			errors.Wrap(err, "not enough memory available to create a BulkAdder"),
+			"Try setting a higher --max-sql-memory.")
 	}
 
 	return b, nil
 }
 
 // SetOnFlush sets a callback to run after the buffering adder flushes.
-func (b *BufferingAdder) SetOnFlush(fn func()) {
+func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 	b.onFlush = fn
 }
 
@@ -203,7 +208,7 @@ func (b *BufferingAdder) IsEmpty() bool {
 func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if b.curBuf.Len() == 0 {
 		if b.onFlush != nil {
-			b.onFlush()
+			b.onFlush(b.sink.GetBatchSummary())
 		}
 		return nil
 	}
@@ -261,7 +266,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 		)
 	}
 	if b.onFlush != nil {
-		b.onFlush()
+		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
 	return nil

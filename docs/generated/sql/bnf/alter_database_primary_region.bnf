@@ -1,0 +1,5 @@
+alter_database_primary_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'PRIMARY' 'REGION' '=' region_name
+	| 'ALTER' 'DATABASE' database_name 'PRIMARY' 'REGION'  region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'PRIMARY' 'REGION' '=' region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'PRIMARY' 'REGION'  region_name

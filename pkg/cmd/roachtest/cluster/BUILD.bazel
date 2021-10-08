@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cluster",
+    srcs = [
+        "cluster_interface.go",
+        "err_command_details.go",
+        "monitor_interface.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

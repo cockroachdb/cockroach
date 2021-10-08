@@ -1,0 +1,100 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecbase",
+    srcs = [
+        "distinct.go",
+        "fn_op.go",
+        "ordinality.go",
+        "simple_project.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",  # keep
+        "//pkg/sql/lex",  # keep
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowenc",  # keep
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/types",
+        "//pkg/util",  # keep
+        "//pkg/util/duration",  # keep
+        "//pkg/util/json",  # keep
+        "//pkg/util/log",
+        "//pkg/util/uuid",  # keep
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
+    ],
+)
+
+go_test(
+    name = "colexecbase_test",
+    srcs = [
+        "cast_test.go",
+        "const_test.go",
+        "dep_test.go",
+        "inject_setup_test.go",
+        "main_test.go",
+        "ordinality_test.go",
+        "simple_project_test.go",
+    ],
+    deps = [
+        ":colexecbase",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colconv",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/faketreeeval",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Export the template because it is used by another target in colexec package.
+exports_files(["distinct_tmpl.go"])
+
+# Map between target name and relevant template.
+targets = [
+    ("cast.eg.go", "cast_tmpl.go"),
+    ("const.eg.go", "const_tmpl.go"),
+    ("distinct.eg.go", "distinct_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

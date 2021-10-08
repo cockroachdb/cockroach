@@ -18,12 +18,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func verifyHash(b []byte, expectedSum uint64) error {
@@ -63,26 +62,30 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
-			m.Txn = nil // never populated below Raft
+			m.Txn = nil                 // never populated below Raft
+			m.Timestamp.Synthetic = nil // never populated below Raft
+			if m.MergeTimestamp != nil {
+				m.MergeTimestamp.Synthetic = nil // never populated below Raft
+			}
+			m.TxnDidNotUpdateMeta = nil // never populated below Raft
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 12720006657210437557,
+		populatedSum: 6784975417727259950,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
 		emptySum:     615555020845646359,
-		populatedSum: 10390885694280604642,
+		populatedSum: 17354515720541950025,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term             uint64
-				Vote             uint64
-				Commit           uint64
-				XXX_unrecognized []byte
+				Term   uint64
+				Vote   uint64
+				Commit uint64
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -90,10 +93,9 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 
 			n := r.Uint64()
 			return &raftpb.HardState{
-				Term:             n % 3,
-				Vote:             n % 7,
-				Commit:           n % 11,
-				XXX_unrecognized: nil,
+				Term:   n % 3,
+				Vote:   n % 7,
+				Commit: n % 11,
 			}
 		},
 		emptySum:     13621293256077144893,
@@ -110,31 +112,27 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     5531676819244041709,
 		populatedSum: 14781226418259198098,
 	},
-}
-
-func init() {
-	if storage.DefaultStorageEngine != enginepb.EngineTypeRocksDB {
-		// These are marshaled below Raft by the Pebble merge operator. The Pebble
-		// merge operator can be called below Raft whenever a Pebble Iterator is
-		// used. Note that we only see these protos marshaled below Raft when the
-		// engine type is not RocksDB. If the engine type is RocksDB the marshaling
-		// occurs in C++ which is invisible to the tracking mechanism.
-		belowRaftGoldenProtos[reflect.TypeOf(&roachpb.InternalTimeSeriesData{})] = fixture{
-			populatedConstructor: func(r *rand.Rand) protoutil.Message {
-				return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
-			},
-			emptySum:     5531676819244041709,
-			populatedSum: 8911200268508796945,
-		}
-		belowRaftGoldenProtos[reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{})] =
-			fixture{
-				populatedConstructor: func(r *rand.Rand) protoutil.Message {
-					return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
-				},
-				emptySum:     14695981039346656037,
-				populatedSum: 7432412240713840291,
+	// These are marshaled below Raft by the Pebble merge operator. The Pebble
+	// merge operator can be called below Raft whenever a Pebble MVCCIterator is
+	// used.
+	reflect.TypeOf(&roachpb.InternalTimeSeriesData{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
+		},
+		emptySum:     5531676819244041709,
+		populatedSum: 17471291891947207032,
+	},
+	reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			m := enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
+			if m.MergeTimestamp != nil {
+				m.MergeTimestamp.Synthetic = nil // never populated below Raft
 			}
-	}
+			return m
+		},
+		emptySum:     14695981039346656037,
+		populatedSum: 1187861800212570275,
+	},
 }
 
 func TestBelowRaftProtos(t *testing.T) {

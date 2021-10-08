@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ycsb",
+    srcs = [
+        "acknowledged_counter.go",
+        "skewed_latest_generator.go",
+        "uniform_generator.go",
+        "ycsb.go",
+        "zipfgenerator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/ycsb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
+    ],
+)
+
+go_test(
+    name = "ycsb_test",
+    size = "medium",
+    srcs = [
+        "main_test.go",
+        "zipfgenerator_test.go",
+    ],
+    embed = [":ycsb"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "@org_golang_x_exp//rand",
+    ],
+)

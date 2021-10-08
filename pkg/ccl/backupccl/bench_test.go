@@ -23,7 +23,7 @@ func BenchmarkDatabaseBackup(b *testing.B) {
 	// but this is not a pattern to cargo-cult.
 
 	_, _, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitNone)
+		0 /* numAccounts */, backupccl.InitManualReplication)
 	defer cleanupFn()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
@@ -57,7 +57,7 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 	// but this is not a pattern to cargo-cult.
 
 	_, _, sqlDB, dir, cleanup := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts*/, backupccl.InitNone)
+		0 /* numAccounts*/, backupccl.InitManualReplication)
 	defer cleanup()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
@@ -75,7 +75,7 @@ func BenchmarkEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
 	_, _, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitNone)
+		0 /* numAccounts */, backupccl.InitManualReplication)
 	defer cleanupFn()
 
 	restoreURI := backupccl.LocalFoo + "/restore"
@@ -114,7 +114,7 @@ func BenchmarkDatabaseFullBackup(b *testing.B) {
 	const numStatements = 100000
 
 	_, _, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitNone)
+		0 /* numAccounts */, backupccl.InitManualReplication)
 	defer cleanupFn()
 
 	restoreURI := backupccl.LocalFoo + "/restore"

@@ -8,53 +8,77 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package sql_test
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkSequenceIncrement(b *testing.B) {
-	cluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
-	defer cluster.Stopper().Stop(context.Background())
+	runSubBenchMark := func(b *testing.B, cacheSize int, parallelism int) {
+		subBenchMark := func(b *testing.B) {
+			cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
+			defer cluster.Stopper().Stop(context.Background())
 
-	sqlDB := cluster.ServerConn(0)
+			sqlDB := cluster.ServerConn(0)
+			if _, err := sqlDB.Exec(fmt.Sprintf(`
+				CREATE SEQUENCE seq CACHE %d;
+				CREATE TABLE tbl (
+					id INT PRIMARY KEY DEFAULT nextval('seq'),
+					foo text
+				);
+			`, cacheSize)); err != nil {
+				b.Fatal(err)
+			}
 
-	if _, err := sqlDB.Exec(`
-		CREATE DATABASE test;
-		USE test;
-		CREATE SEQUENCE seq;
-		CREATE TABLE tbl (
-			id INT PRIMARY KEY DEFAULT nextval('seq'),
-			foo text
-		);
-	`); err != nil {
-		b.Fatal(err)
+			b.SetParallelism(parallelism)
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				session, err := sqlDB.Conn(context.Background())
+				if err != nil {
+					b.Fatal(err)
+				}
+				conn := sqlutils.MakeSQLRunner(session)
+				for pb.Next() {
+					conn.Exec(b, "INSERT INTO tbl (foo) VALUES ('foo')")
+				}
+				if err = session.Close(); err != nil {
+					b.Fatal(err)
+				}
+			})
+		}
+		b.Run(fmt.Sprintf("Cache-%d-P-%d", cacheSize, parallelism), subBenchMark)
 	}
 
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		if _, err := sqlDB.Exec("INSERT INTO tbl (foo) VALUES ('foo')"); err != nil {
-			b.Fatal(err)
+	cacheSizes := []int{1, 32, 64, 128, 256, 512}
+	parallelism := []int{1, 2, 4, 8}
+
+	for _, cacheSize := range cacheSizes {
+		for _, p := range parallelism {
+			runSubBenchMark(b, cacheSize, p)
 		}
 	}
-	b.StopTimer()
 }
 
 func BenchmarkUniqueRowID(b *testing.B) {
-	cluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
+	cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	sqlDB := cluster.ServerConn(0)
@@ -162,8 +186,8 @@ func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
-	col := tableDesc.GetColumns()[colIdx]
-	var seqDescs []*ImmutableTableDescriptor
+	col := tableDesc.PublicColumns()[colIdx]
+	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
@@ -171,24 +195,25 @@ func assertColumnOwnsSequences(
 		)
 	}
 
-	if len(col.OwnsSequenceIds) != len(seqDescs) {
+	if col.NumOwnsSequences() != len(seqDescs) {
 		t.Fatalf(
 			"unexpected number of sequence ownership dependencies. expected: %d, got:%d",
-			len(seqDescs), len(col.OwnsSequenceIds),
+			len(seqDescs), col.NumOwnsSequences(),
 		)
 	}
 
-	for i, seqID := range col.OwnsSequenceIds {
+	for i := 0; i < col.NumOwnsSequences(); i++ {
+		seqID := col.GetOwnsSequenceID(i)
 		if seqID != seqDescs[i].GetID() {
 			t.Fatalf("unexpected sequence id. expected %d got %d", seqDescs[i].GetID(), seqID)
 		}
 
-		ownerTableID := seqDescs[i].SequenceOpts.SequenceOwner.OwnerTableID
-		ownerColID := seqDescs[i].SequenceOpts.SequenceOwner.OwnerColumnID
-		if ownerTableID != tableDesc.GetID() || ownerColID != col.ID {
+		ownerTableID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerTableID
+		ownerColID := seqDescs[i].GetSequenceOpts().SequenceOwner.OwnerColumnID
+		if ownerTableID != tableDesc.GetID() || ownerColID != col.GetID() {
 			t.Fatalf(
 				"unexpected sequence owner. expected table id %d, got: %d; expected column id %d, got :%d",
-				tableDesc.GetID(), ownerTableID, col.ID, ownerColID,
+				tableDesc.GetID(), ownerTableID, col.GetID(), ownerColID,
 			)
 		}
 	}
@@ -352,6 +377,400 @@ CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 	}
 }
 
+// TestCachedSequences tests the behavior of cached sequences.
+func TestCachedSequences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Start test cluster.
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlSessions := []*sqlutils.SQLRunner{}
+	for i := 0; i < 3; i++ {
+		newConn, err := tc.ServerConn(0).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlSessions = append(sqlSessions, sqlutils.MakeSQLRunner(newConn))
+	}
+
+	anySession := func() int {
+		return rand.Intn(3)
+	}
+
+	execStmt := func(t *testing.T, statement string) {
+		sqlSessions[anySession()].Exec(t, statement)
+	}
+
+	checkIntValue := func(t *testing.T, session int, statement string, value int) {
+		sqlSessions[session].CheckQueryResults(t, statement, [][]string{
+			{fmt.Sprintf("%d", value)},
+		})
+	}
+
+	testCases := []struct {
+		name string
+		test func(*testing.T)
+	}{
+		// Test a cached sequences in a single session.
+		{
+			name: "Single Session Cache Test",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE SEQUENCE s
+									CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				// The cache starts out empty. When the cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount, so it should increase by 10 each time.
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('s')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('s')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('s')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('s')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 20)
+
+				execStmt(t, "DROP SEQUENCE s")
+			},
+		},
+		// Test multiple cached sequences using multiple sessions.
+		{
+			name: "Multi-Session, Multi-Sequence Cache Test",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE SEQUENCE s1
+									CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				execStmt(t, `
+				CREATE SEQUENCE s2
+									CACHE 4
+				   INCREMENT BY 3
+					   START WITH 3
+			  `)
+
+				// The caches all start out empty. When a cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount.
+				//
+				// s1 increases by 10 each time, and s2 increases by 12 each time.
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//  session 1: -
+				//  session 2: -
+				// db:
+				//  s1: 10
+				checkIntValue(t, 0, "SELECT nextval('s1')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 10)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1: -
+				//  session 2: -
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 0, "SELECT nextval('s2')", 3)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 12)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 14,16,18,20
+				//  session 2: -
+				// db:
+				//  s1: 20
+				//  s2: 12
+				checkIntValue(t, 1, "SELECT nextval('s1')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 20)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  session 2: -
+				// db:
+				//  s1: 20
+				//  s2: 24
+				checkIntValue(t, 1, "SELECT nextval('s2')", 15)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 24)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  session 2:
+				//   s1: 24,26,28,30
+				// db:
+				//  s1: 30
+				//  s2: 24
+				checkIntValue(t, 2, "SELECT nextval('s1')", 22)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 30)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  session 2:
+				//   s1: 24,26,28,30
+				//   s2: 30,33,36
+				// db:
+				//  s1: 30
+				//  s2: 36
+				checkIntValue(t, 2, "SELECT nextval('s2')", 27)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 36)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  session 2:
+				//   s1: 24,26,28,30
+				//   s2: 30,33,36
+				// db:
+				//  s1: 30
+				//  s2: 36
+				wg := sync.WaitGroup{}
+				emptyCache := func(session, start, finish, inc int, seq string) {
+					for sequenceNumber := start; sequenceNumber <= finish; sequenceNumber += inc {
+						checkIntValue(t, session, fmt.Sprintf("SELECT nextval('%s')", seq), sequenceNumber)
+					}
+					wg.Done()
+				}
+				wg.Add(3)
+				go emptyCache(0, 4, 10, 2, "s1")
+				go emptyCache(1, 14, 20, 2, "s1")
+				go emptyCache(2, 24, 30, 2, "s1")
+				wg.Wait()
+
+				wg.Add(3)
+				go emptyCache(0, 6, 12, 3, "s2")
+				go emptyCache(1, 18, 24, 3, "s2")
+				go emptyCache(2, 30, 36, 3, "s2")
+				wg.Wait()
+
+				// caches:
+				//  session 0: -
+				//  session 1: -
+				//  session 2: -
+				// db:
+				//  s1: 30
+				//  s2: 36
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 30)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 36)
+
+				execStmt(t, "DROP SEQUENCE s1")
+				execStmt(t, "DROP SEQUENCE s2")
+			},
+		},
+		{
+			name: "Create Table With GENERATED ALWAYS AS IDENTITY",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE TABLE demo_t_always (
+           x INT UNIQUE,
+				   y INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 2 CACHE 5)
+				)
+			  `)
+				// The `GENERATED ALWAYS AS IDENTITY` syntax automatically creates
+				// an underlying sequence named `demo_t_always_y_seq` for the y column of the
+				// demo_t_always table. Such creation applies the sequence option (
+				// START 2 INCREMENT 2 CACHE 5) in the statement.
+				// The cache of demo_t_always_y_seq starts out empty. When the cache is empty,
+				// the underlying sequence in the database
+				// should be incremented by the cache size * increment amount,
+				// so it should increase by 10 each time.
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 20)
+
+				execStmt(t, "DROP TABLE demo_t_always")
+			},
+		},
+		{
+			name: "Create Table With GENERATED BY DEFAULT AS IDENTITY",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE TABLE demo_t_bydefault (
+           x INT UNIQUE,
+				   y INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 2 CACHE 5)
+				)
+			  `)
+				// The `GENERATED ALWAYS AS IDENTITY` syntax automatically creates
+				// an underlying sequence named `demo_t_bydefault_y_seq` for the y column of the
+				// demo_t_bydefault table. Such creation applies the sequence option (
+				// START 2 INCREMENT 2 CACHE 5) in the statement.
+				// The cache of demo_t_bydefault_y_seq starts out empty. When the cache is empty,
+				// the underlying sequence in the database
+				// should be incremented by the cache size * increment amount,
+				// so it should increase by 10 each time.
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 20)
+
+				execStmt(t, "DROP TABLE demo_t_bydefault")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.test(t)
+		})
+	}
+}
+
+// TestSequencesZeroCacheSize is a regression test for #51259, sequence caching.
+// Prior sequences will have cache sizes of 0, and sequences made after will have
+// a cache size of at least 1 where 1 means no caching. This test verifies that sequences
+// cache sizes of 0 function in the same way as sequences with a cache size of 1.
+func TestSequencesZeroCacheSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlConn, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE test;
+		CREATE SEQUENCE test.seq INCREMENT BY 1 START WITH 1;
+  `)
+
+	// Alter the descriptor to have a cache size of 0.
+	seqDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
+	seqDesc.SequenceOpts.CacheSize = 0
+	err := kvDB.Put(
+		context.Background(),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
+		seqDesc.DescriptorProto(),
+	)
+	require.NoError(t, err)
+
+	// Verify the sequences increases by 1.
+	sqlDB.CheckQueryResults(t, `SELECT nextval('test.seq')`, [][]string{{"1"}})
+	sqlDB.CheckQueryResults(t, `SELECT last_value from test.seq`, [][]string{{"1"}})
+	sqlDB.CheckQueryResults(t, `SELECT nextval('test.seq')`, [][]string{{"2"}})
+	sqlDB.CheckQueryResults(t, `SELECT last_value from test.seq`, [][]string{{"2"}})
+}
+
 // addOwnedSequence adds the sequence referenced by seqName to the
 // ownsSequenceIDs of the column referenced by (dbName, tableName, colIdx).
 func addOwnedSequence(
@@ -362,11 +781,11 @@ func addOwnedSequence(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
-		tableDesc.GetColumns()[colIdx].OwnsSequenceIds, seqDesc.ID)
+		tableDesc.GetColumns()[colIdx].OwnsSequenceIds, seqDesc.GetID())
 
 	err := kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
 		tableDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)
@@ -384,23 +803,23 @@ func breakOwnershipMapping(
 
 	for colIdx := range tableDesc.GetColumns() {
 		for i := range tableDesc.GetColumns()[colIdx].OwnsSequenceIds {
-			if tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] == seqDesc.ID {
+			if tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] == seqDesc.GetID() {
 				tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] = math.MaxInt32
 			}
 		}
 	}
-	seqDesc.SequenceOpts.SequenceOwner.OwnerTableID = math.MaxInt32
+	seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID = math.MaxInt32
 
 	err := kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
 		tableDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)
 
 	err = kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
 		seqDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)

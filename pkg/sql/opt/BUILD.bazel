@@ -1,0 +1,126 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "opt",
+    srcs = [
+        "colset.go",
+        "column_meta.go",
+        "constants.go",
+        "doc.go",
+        "metadata.go",
+        "operator.go",
+        "ordering.go",
+        "rule_name.go",
+        "table_meta.go",
+        "telemetry.go",
+        "view_dependencies.go",
+        ":gen-operator",  # keep
+        ":gen-rulenames",  # keep
+        ":gen-rulenames-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/telemetry",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "opt_test",
+    size = "small",
+    srcs = [
+        "colset_test.go",
+        "metadata_test.go",
+        "operator_test.go",
+        "ordering_test.go",
+    ],
+    embed = [":opt"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+    ],
+)
+
+# Define a file group for all the operator definitions.
+ops = filegroup(
+    name = "ops",
+    srcs = glob(["ops/*.opt"]),
+    visibility = ["//visibility:public"],
+)
+
+# Define the generator for the operator definitions and functions.
+genrule(
+    name = "gen-operator",
+    srcs = [":ops"],
+    outs = ["operator.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)
+
+# Define the generator for the enumeration of rulenames.
+genrule(
+    name = "gen-rulenames",
+    srcs = [
+        ":ops",
+        "//pkg/sql/opt/xform:rules",
+        "//pkg/sql/opt/norm:rules",
+    ],
+    outs = ["rule_name.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ rulenames \
+          $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)
+
+# Define the generator for the stringification of rulenames.
+#
+# NB: Stringer doesn't support running stringer across files in multiple
+# directories. To work around this, we manually copy one of the source files
+# over into the location of the other, and run stringer there instead. Ew.
+genrule(
+    name = "gen-rulenames-stringer",
+    srcs = [
+        "rule_name.go",
+        ":gen-rulenames",
+    ],
+    outs = ["rule_name_string.go"],
+    # golang.org/x/tools executes commands via
+    # golang.org/x/sys/execabs which requires all PATH lookups to
+    # result in absolute paths. To account for this, we resolve the
+    # relative path returned by location to an absolute path.
+    cmd = """
+      cp $(location rule_name.go) `dirname $(location :gen-rulenames)`/rule_name.go
+      GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+      GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+      # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+      env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
+      $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
+      -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
+    """,
+    exec_tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)

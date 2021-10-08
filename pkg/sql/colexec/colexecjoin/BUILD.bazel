@@ -1,0 +1,99 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecjoin",
+    srcs = [
+        "crossjoiner.go",
+        "hashjoiner.go",
+        "joiner_utils.go",
+        "mergejoiner.go",
+        "mergejoiner_util.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colcontainer",
+        "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexechash",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/duration",  # keep
+        "//pkg/util/json",  # keep
+        "//pkg/util/mon",
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_marusama_semaphore//:semaphore",
+    ],
+)
+
+go_test(
+    name = "colexecjoin_test",
+    srcs = [
+        "dep_test.go",
+        "main_test.go",
+        "mergejoiner_test.go",
+    ],
+    embed = [":colexecjoin"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/testutils/colcontainerutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("crossjoiner.eg.go", "crossjoiner_tmpl.go"),
+    ("hashjoiner.eg.go", "hashjoiner_tmpl.go"),
+    ("mergejoinbase.eg.go", "mergejoinbase_tmpl.go"),
+    ("mergejoiner_exceptall.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_fullouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_inner.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_intersectall.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftanti.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_leftsemi.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightanti.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightouter.eg.go", "mergejoiner_tmpl.go"),
+    ("mergejoiner_rightsemi.eg.go", "mergejoiner_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

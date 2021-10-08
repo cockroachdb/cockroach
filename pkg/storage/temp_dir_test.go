@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 func TestCreateTempDir(t *testing.T) {
@@ -51,7 +52,7 @@ func TestCreateTempDir(t *testing.T) {
 	}
 
 	_, err = os.Stat(tempDir)
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		t.Fatalf("expected %s temp subdirectory to exist", tempDir)
 	}
 	if err != nil {
@@ -157,12 +158,12 @@ func TestCleanupTempDirs(t *testing.T) {
 	// We check if all the temporary subdirectories and files were removed.
 	for _, fname := range append(tempDirs, tempFiles...) {
 		_, err = os.Stat(fname)
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			t.Fatalf("file %s expected to be removed by cleanup", fname)
 		}
 		if err != nil {
 			// We expect the files to not exist anymore.
-			if os.IsNotExist(err) {
+			if oserror.IsNotExist(err) {
 				continue
 			}
 

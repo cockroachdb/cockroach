@@ -11,9 +11,9 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -216,6 +216,41 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 	return false
 }
 
+// VirtualColumns returns the set of columns in the scanPrivate's table that are
+// virtual computed columns.
+func (c *CustomFuncs) VirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
+	tabMeta := c.mem.Metadata().TableMeta(scanPrivate.Table)
+	return tabMeta.VirtualComputedColumns()
+}
+
+// InlinableVirtualColumnFilters returns a new filters expression containing any
+// of the given filters that meet the criteria:
+//
+//   1. The filter has references to any of the columns in virtualColumns.
+//   2. The filter is not a correlated subquery.
+//
+func (c *CustomFuncs) InlinableVirtualColumnFilters(
+	filters memo.FiltersExpr, virtualColumns opt.ColSet,
+) (inlinableFilters memo.FiltersExpr) {
+	for i := range filters {
+		item := &filters[i]
+
+		// Do not inline a filter if it has a correlated subquery or it does not
+		// reference a virtual column.
+		if item.ScalarProps().HasCorrelatedSubquery || !item.ScalarProps().OuterCols.Intersects(virtualColumns) {
+			continue
+		}
+
+		// Initialize inlinableFilters lazily.
+		if inlinableFilters == nil {
+			inlinableFilters = make(memo.FiltersExpr, 0, len(filters)-i)
+		}
+
+		inlinableFilters = append(inlinableFilters, *item)
+	}
+	return inlinableFilters
+}
+
 // InlineSelectProject searches the filter conditions for any variable
 // references to columns from the given projections expression. Each variable is
 // replaced by the corresponding inlined projection expression.
@@ -237,14 +272,14 @@ func (c *CustomFuncs) InlineSelectProject(
 // operator). Each variable is replaced by the corresponding inlined projection
 // expression.
 func (c *CustomFuncs) InlineProjectProject(
-	input memo.RelExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
+	innerProject *memo.ProjectExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
 ) memo.RelExpr {
-	innerProject := input.(*memo.ProjectExpr)
 	innerProjections := innerProject.Projections
 
 	newProjections := make(memo.ProjectionsExpr, len(projections))
 	for i := range projections {
 		item := &projections[i]
+
 		newProjections[i] = c.f.ConstructProjectionsItem(
 			c.inlineProjections(item.Element, innerProjections).(opt.ScalarExpr),
 			item.Col,
@@ -324,7 +359,7 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 	for i := range f {
 		if ok, l, _ := c.extractVarEqualsConst(f[i].Condition); ok {
 			colType := c.mem.Metadata().ColumnMeta(l.Col).Type
-			if sqlbase.HasCompositeKeyEncoding(colType) {
+			if colinfo.CanHaveCompositeKeyEncoding(colType) {
 				// TODO(justin): allow inlining if the check we're doing is oblivious
 				// to composite-ness.
 				continue
@@ -360,7 +395,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	for i := range f {
 		if ok, v, e := c.extractVarEqualsConst(f[i].Condition); ok {
 			colType := c.mem.Metadata().ColumnMeta(v.Col).Type
-			if sqlbase.HasCompositeKeyEncoding(colType) {
+			if colinfo.CanHaveCompositeKeyEncoding(colType) {
 				continue
 			}
 			if _, ok := vals[v.Col]; !ok {

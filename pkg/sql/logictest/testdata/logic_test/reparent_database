@@ -1,0 +1,84 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+CREATE DATABASE pgdatabase;
+CREATE TABLE pgdatabase.t1 (x INT PRIMARY KEY);
+CREATE DATABASE pgschema;
+CREATE TABLE pgschema.t1 (x INT);
+CREATE TABLE pgschema.t2 (x INT);
+CREATE TABLE pgschema.t3 (x INT PRIMARY KEY);
+ALTER TABLE pgschema.t3 ADD FOREIGN KEY (x) REFERENCES pgdatabase.t1 (x); -- references shouldn't be affected by reparenting.
+CREATE TYPE pgschema.typ AS ENUM ('schema');
+
+let $db_id
+SELECT id FROM system.namespace WHERE name = 'pgschema'
+
+statement ok
+ALTER DATABASE pgschema CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+query I
+SELECT * FROM pgdatabase.pgschema.t1
+
+query I
+SELECT * FROM pgdatabase.pgschema.t2
+
+query T
+SELECT 'schema'::pgdatabase.pgschema.typ
+----
+schema
+
+statement error pq: insert on table "t3" violates foreign key constraint "fk_x_ref_t1"
+INSERT INTO pgdatabase.pgschema.t3 VALUES (1)
+
+# Assert there aren't any namespace entries left with the old parentID.
+query T
+SELECT name FROM system.namespace WHERE "parentID" = $db_id
+
+# We can't reparent a database that has any child schemas.
+statement ok
+CREATE DATABASE parent;
+USE parent;
+CREATE SCHEMA child;
+USE test;
+
+statement error pq: cannot convert database with schemas into schema
+ALTER DATABASE parent CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+# We can't reparent a database if it causes a name conflict.
+statement ok
+CREATE DATABASE pgschema
+
+statement error pq: schema "pgschema" already exists
+ALTER DATABASE pgschema CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+statement ok
+DROP DATABASE pgschema
+
+# We can't convert a database with an invalid schema name into a schema.
+statement ok
+CREATE DATABASE pg_temp
+
+statement error pq: unacceptable schema name "pg_temp"
+ALTER DATABASE pg_temp CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+# We can't reparent a database that has any tables in use by views,
+# because we aren't able to rewrite those references.
+statement ok
+CREATE DATABASE with_views;
+CREATE TABLE with_views.t (x INT);
+CREATE VIEW with_views.v AS SELECT x FROM with_views.t
+
+statement error pq: could not convert database "with_views" into schema because "with_views.public.t" has dependent objects \[with_views.public.v\]
+ALTER DATABASE with_views CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+# Ensure only valid privileges are copied over to the schema.
+statement ok
+CREATE DATABASE to_schema;
+GRANT CREATE, DROP, SELECT, INSERT, DELETE, UPDATE ON DATABASE to_schema TO testuser;
+CREATE DATABASE parent2;
+
+# No privilege validation error should occur.
+statement ok
+ALTER DATABASE to_schema CONVERT TO SCHEMA WITH PARENT parent2;
+
+statement ok
+GRANT USAGE ON SCHEMA parent2.to_schema TO testuser;

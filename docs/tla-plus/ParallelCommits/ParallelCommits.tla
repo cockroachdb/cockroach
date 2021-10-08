@@ -228,7 +228,7 @@ begin
             with key \in to_check do
               if QueryIntent(key, txn_epoch, txn_ts) then
                 \* Intent found. Pipelined write succeeded.
-                to_check := to_check \union {key}
+                to_check := to_check \ {key}
               else
                 \* Intent missing. Pipelined write failed.
                 \* Check the transaction record to see whether it has already
@@ -448,7 +448,7 @@ begin
 
 end process;
 end algorithm;*)
-\* BEGIN TRANSLATION
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-7847e3ffca2156d2f95a169911409dbb
 VARIABLES record, intent_writes, tscache, commit_ack, pc
 
 (* define statement *)
@@ -639,7 +639,7 @@ StageWritesAndRecordLoop == /\ pc["committer"] = "StageWritesAndRecordLoop"
 QueryPipelinedWrite == /\ pc["committer"] = "QueryPipelinedWrite"
                        /\ \E key \in to_check:
                             IF QueryIntent(key, txn_epoch, txn_ts)
-                               THEN /\ to_check' = (to_check \union {key})
+                               THEN /\ to_check' = to_check \ {key}
                                     /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                     /\ UNCHANGED attempt
                                ELSE /\ IF record.status \in {"pending", "staging"}
@@ -908,11 +908,12 @@ Spec == /\ Init /\ [][Next]_vars
 
 Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
-\* END TRANSLATION
+\* END TRANSLATION - the hash of the generated TLA code (remove to silence divergence warnings): TLA-4b99a68dacd4c127554eb3f72922c6c6
 
 
 
 =============================================================================
 \* Modification History
+\* Last modified Sat Sep 12 18:07:57 JST 2020 by ytaka23
 \* Last modified Mon Sep 23 17:38:55 EDT 2019 by nathan
 \* Created Mon May 13 10:03:40 EDT 2019 by nathan

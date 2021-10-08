@@ -12,6 +12,7 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,6 +27,8 @@ const (
 	LeftAntiJoin     = JoinType_LEFT_ANTI
 	IntersectAllJoin = JoinType_INTERSECT_ALL
 	ExceptAllJoin    = JoinType_EXCEPT_ALL
+	RightSemiJoin    = JoinType_RIGHT_SEMI
+	RightAntiJoin    = JoinType_RIGHT_ANTI
 )
 
 // JoinTypeFromAstString takes a join string as found in a SQL
@@ -54,6 +57,17 @@ func (j JoinType) IsSetOpJoin() bool {
 	return j == IntersectAllJoin || j == ExceptAllJoin
 }
 
+// ShouldIncludeLeftColsInOutput returns true if this join should include
+// the columns from the left side into the output.
+func (j JoinType) ShouldIncludeLeftColsInOutput() bool {
+	switch j {
+	case RightSemiJoin, RightAntiJoin:
+		return false
+	default:
+		return true
+	}
+}
+
 // ShouldIncludeRightColsInOutput returns true if this join should include
 // the columns from the right side into the output.
 func (j JoinType) ShouldIncludeRightColsInOutput() bool {
@@ -63,4 +77,53 @@ func (j JoinType) ShouldIncludeRightColsInOutput() bool {
 	default:
 		return true
 	}
+}
+
+// IsEmptyOutputWhenRightIsEmpty returns whether this join type will always
+// produce an empty output when the right relation is empty.
+func (j JoinType) IsEmptyOutputWhenRightIsEmpty() bool {
+	switch j {
+	case InnerJoin, RightOuterJoin, LeftSemiJoin,
+		RightSemiJoin, IntersectAllJoin, RightAntiJoin:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsLeftOuterOrFullOuter returns whether j is either LEFT OUTER or FULL OUTER
+// join type.
+func (j JoinType) IsLeftOuterOrFullOuter() bool {
+	return j == LeftOuterJoin || j == FullOuterJoin
+}
+
+// IsLeftAntiOrExceptAll returns whether j is either LEFT ANTI or EXCEPT ALL
+// join type.
+func (j JoinType) IsLeftAntiOrExceptAll() bool {
+	return j == LeftAntiJoin || j == ExceptAllJoin
+}
+
+// IsRightSemiOrRightAnti returns whether j is either RIGHT SEMI or RIGHT ANTI
+// join type.
+func (j JoinType) IsRightSemiOrRightAnti() bool {
+	return j == RightSemiJoin || j == RightAntiJoin
+}
+
+// MakeOutputTypes computes the output types for this join type.
+func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
+	numOutputTypes := 0
+	if j.ShouldIncludeLeftColsInOutput() {
+		numOutputTypes += len(left)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		numOutputTypes += len(right)
+	}
+	outputTypes := make([]*types.T, 0, numOutputTypes)
+	if j.ShouldIncludeLeftColsInOutput() {
+		outputTypes = append(outputTypes, left...)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		outputTypes = append(outputTypes, right...)
+	}
+	return outputTypes
 }

@@ -1,0 +1,47 @@
+parse
+SHOW DEFAULT PRIVILEGES
+----
+SHOW DEFAULT PRIVILEGES  -- normalized!
+SHOW DEFAULT PRIVILEGES  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES  -- literals removed
+SHOW DEFAULT PRIVILEGES  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ROLE foo
+----
+SHOW DEFAULT PRIVILEGES FOR ROLE foo  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ROLE foo  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ROLE foo  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ROLE _  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar
+----
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ROLE _, _  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ROLE fOo, baR
+----
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ROLE _, _  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"
+----
+SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ROLE "fOo", "baR"  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ROLE _, _  -- identifiers removed
+
+parse
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- normalized!
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- fully parenthesized
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- literals removed
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES  -- identifiers removed

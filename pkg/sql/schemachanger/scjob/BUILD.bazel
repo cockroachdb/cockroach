@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scjob",
+    srcs = ["job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log/logcrash",
+    ],
+)

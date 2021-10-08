@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bench",
+    srcs = [
+        "foreachdb.go",
+        "query.go",
+        "setup.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/bench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "bench_test",
+    size = "small",
+    srcs = [
+        "bench_test.go",
+        "main_test.go",
+        "pgbench_test.go",
+    ],
+    embed = [":bench"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_lib_pq//:pq",
+    ],
+)

@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "idxconstraint",
+    srcs = ["index_constraints.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "idxconstraint_test",
+    size = "small",
+    srcs = ["index_constraints_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":idxconstraint",
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/exec/execbuilder",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/testutils",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

@@ -16,18 +16,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (
@@ -46,11 +45,13 @@ const (
 	// Allow a limited number of Raft log truncations to be processed
 	// concurrently.
 	raftLogQueueConcurrency = 4
-	// While a snapshot is in flight, we won't truncate past the snapshot's log
-	// index. This behavior is extended to a grace period after the snapshot is
-	// marked as completed as it is applied at the receiver only a little later,
-	// leaving a window for a truncation that requires another snapshot.
-	raftLogQueuePendingSnapshotGracePeriod = 3 * time.Second
+	// RaftLogQueuePendingSnapshotGracePeriod indicates the grace period after an
+	// in-flight snapshot is marked completed. While a snapshot is in-flight we
+	// will not truncate past the snapshot's log index but we also don't want to
+	// do so the moment the in-flight snapshot completes, since it is only applied
+	// at the receiver a little later. This grace period reduces the probability
+	// of an ill-timed log truncation that would necessitate another snapshot.
+	RaftLogQueuePendingSnapshotGracePeriod = 3 * time.Second
 )
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
@@ -69,13 +70,13 @@ type raftLogQueue struct {
 // log short overall and allowing slower followers to catch up before they get
 // cut off by a truncation and need a snapshot. See newTruncateDecision for
 // details on this decision making process.
-func newRaftLogQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *raftLogQueue {
+func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 	rlq := &raftLogQueue{
 		db:           db,
 		logSnapshots: util.Every(10 * time.Second),
 	}
 	rlq.baseQueue = newBaseQueue(
-		"raftlog", rlq, store, gossip,
+		"raftlog", rlq, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       raftLogQueueConcurrency,
@@ -167,8 +168,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if targetSize > *r.mu.zone.RangeMaxBytes {
-		targetSize = *r.mu.zone.RangeMaxBytes
+	if targetSize > r.mu.conf.RangeMaxBytes {
+		targetSize = r.mu.conf.RangeMaxBytes
 	}
 	raftStatus := r.raftStatusRLocked()
 
@@ -202,7 +203,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().All(),
+		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 		func(replicaID roachpb.ReplicaID) bool {
 			return r.mu.lastUpdateTimes.isFollowerActiveSince(
 				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
@@ -526,8 +527,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
-) (shouldQ bool, priority float64) {
+	ctx context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+) (shouldQueue bool, priority float64) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
@@ -568,7 +569,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context, r *Replica, _ *config.SystemConfig,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {

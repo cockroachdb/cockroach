@@ -20,12 +20,9 @@
 package colexec
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -46,21 +43,21 @@ func newSubstringOperator(
 	typs []*types.T,
 	argumentCols []int,
 	outputIdx int,
-	input colexecbase.Operator,
-) colexecbase.Operator {
+	input colexecop.Operator,
+) colexecop.Operator {
 	startType := typs[argumentCols[1]]
 	lengthType := typs[argumentCols[2]]
 	base := substringFunctionBase{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		argumentCols: argumentCols,
-		outputIdx:    outputIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		allocator:      allocator,
+		argumentCols:   argumentCols,
+		outputIdx:      outputIdx,
 	}
 	if startType.Family() != types.IntFamily {
-		colexecerror.InternalError(fmt.Sprintf("non-int start argument type %s", startType))
+		colexecerror.InternalError(errors.AssertionFailedf("non-int start argument type %s", startType))
 	}
 	if lengthType.Family() != types.IntFamily {
-		colexecerror.InternalError(fmt.Sprintf("non-int length argument type %s", lengthType))
+		colexecerror.InternalError(errors.AssertionFailedf("non-int length argument type %s", lengthType))
 	}
 	switch startType.Width() {
 	// {{range $startWidth, $lengthWidths := .}}
@@ -79,14 +76,10 @@ func newSubstringOperator(
 }
 
 type substringFunctionBase struct {
-	OneInputNode
+	colexecop.OneInputHelper
 	allocator    *colmem.Allocator
 	argumentCols []int
 	outputIdx    int
-}
-
-func (s *substringFunctionBase) Init() {
-	s.input.Init()
 }
 
 // {{range $startWidth, $lengthWidths := .}}
@@ -96,10 +89,10 @@ type substring_StartType_LengthTypeOperator struct {
 	substringFunctionBase
 }
 
-var _ colexecbase.Operator = &substring_StartType_LengthTypeOperator{}
+var _ colexecop.Operator = &substring_StartType_LengthTypeOperator{}
 
-func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) coldata.Batch {
-	batch := s.input.Next(ctx)
+func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
+	batch := s.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -119,6 +112,8 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {

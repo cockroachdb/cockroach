@@ -211,12 +211,8 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 			if name == "min" || name == "max" {
 				// Evaluate the return typer.
 				types := overload.Types.Types()
-				args := make([]tree.TypedExpr, len(types))
-				for i, t := range types {
-					args[i] = &tree.TypedDummy{Typ: t}
-				}
-				retType = overload.ReturnType(args)
-				if retType != overload.Types.Types()[0] {
+				retType = overload.InferReturnTypeFromInputArgTypes(types)
+				if retType != types[0] {
 					t.Errorf("return type differs from arg type for %s: %+v", name, overload.Types.Types())
 				}
 				continue

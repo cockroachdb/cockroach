@@ -13,18 +13,18 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 type refreshMaterializedViewNode struct {
 	n    *tree.RefreshMaterializedView
-	desc *sqlbase.MutableTableDescriptor
+	desc *tabledesc.Mutable
 }
 
 func (p *planner) RefreshMaterializedView(
@@ -33,7 +33,7 @@ func (p *planner) RefreshMaterializedView(
 	if !p.EvalContext().TxnImplicit {
 		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in an explicit transaction")
 	}
-	desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
+	_, desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +48,26 @@ func (p *planner) RefreshMaterializedView(
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "view is already being refreshed")
 		}
 	}
+
+	// Only the owner or an admin (superuser) can refresh the view.
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if !(hasOwnership || hasAdminRole) {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"must be owner of materialized view %s",
+			desc.Name,
+		)
+	}
+
 	return &refreshMaterializedViewNode{n: n, desc: desc}, nil
 }
 
@@ -59,19 +79,21 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
 
+	telemetry.Inc(n.n.TelemetryCounter())
+
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as views are refreshed concurrently"),
 		)
 	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := protoutil.Clone(&n.desc.PrimaryIndex).(*descpb.IndexDescriptor)
-	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.Indexes))
-	for i := range n.desc.Indexes {
-		newIndexes[i] = *protoutil.Clone(&n.desc.Indexes[i]).(*descpb.IndexDescriptor)
+	newPrimaryIndex := n.desc.GetPrimaryIndex().IndexDescDeepCopy()
+	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.PublicNonPrimaryIndexes()))
+	for i, idx := range n.desc.PublicNonPrimaryIndexes() {
+		newIndexes[i] = idx.IndexDescDeepCopy()
 	}
 
 	// Reset and allocate new IDs for the new indexes.
@@ -87,9 +109,10 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Queue the refresh mutation.
 	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
-		NewPrimaryIndex: *newPrimaryIndex,
+		NewPrimaryIndex: newPrimaryIndex,
 		NewIndexes:      newIndexes,
 		AsOf:            params.p.Txn().ReadTimestamp(),
+		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
 	})
 
 	return params.p.writeSchemaChange(

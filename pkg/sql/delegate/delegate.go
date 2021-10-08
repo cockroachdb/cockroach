@@ -44,10 +44,16 @@ func TryDelegate(
 		return d.delegateShowDatabases(t)
 
 	case *tree.ShowEnums:
-		return d.delegateShowEnums()
+		return d.delegateShowEnums(t)
+
+	case *tree.ShowTypes:
+		return d.delegateShowTypes()
 
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
+
+	case *tree.ShowCreateAllTables:
+		return d.delegateShowCreateAllTables()
 
 	case *tree.ShowDatabaseIndexes:
 		return d.delegateShowDatabaseIndexes(t)
@@ -70,6 +76,9 @@ func TryDelegate(
 	case *tree.ShowJobs:
 		return d.delegateShowJobs(t)
 
+	case *tree.ShowChangefeedJobs:
+		return d.delegateShowChangefeedJobs(t)
+
 	case *tree.ShowQueries:
 		return d.delegateShowQueries(t)
 
@@ -78,6 +87,12 @@ func TryDelegate(
 
 	case *tree.ShowRangeForRow:
 		return d.delegateShowRangeForRow(t)
+
+	case *tree.ShowSurvivalGoal:
+		return d.delegateShowSurvivalGoal(t)
+
+	case *tree.ShowRegions:
+		return d.delegateShowRegions(t)
 
 	case *tree.ShowRoleGrants:
 		return d.delegateShowRoleGrants(t)
@@ -100,6 +115,9 @@ func TryDelegate(
 	case *tree.ShowTables:
 		return d.delegateShowTables(t)
 
+	case *tree.ShowTransactions:
+		return d.delegateShowTransactions(t)
+
 	case *tree.ShowUsers:
 		return d.delegateShowRoles()
 
@@ -116,7 +134,22 @@ func TryDelegate(
 		return d.delegateShowSchedules(t)
 
 	case *tree.ControlJobsForSchedules:
-		return d.delegateJobControl(t)
+		return d.delegateJobControl(ControlJobsDelegate{
+			Schedules: t.Schedules,
+			Command:   t.Command,
+		})
+
+	case *tree.ControlJobsOfType:
+		return d.delegateJobControl(ControlJobsDelegate{
+			Type:    t.Type,
+			Command: t.Command,
+		})
+
+	case *tree.ShowFullTableScans:
+		return d.delegateShowFullTableScans()
+
+	case *tree.ShowDefaultPrivileges:
+		return d.delegateShowDefaultPrivileges(t)
 
 	case *tree.ShowLastQueryStatistics:
 		return nil, unimplemented.New(

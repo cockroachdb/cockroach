@@ -24,6 +24,15 @@ type Command interface {
 	// that were locally proposed typically have a client waiting on a
 	// response, so there is additional urgency to apply them quickly.
 	IsLocal() bool
+	// AckErrAndFinish signals that the application of the command has been
+	// rejected due to the provided error. It also relays this rejection of
+	// the command to its client if it was proposed locally. An error will
+	// immediately stall entry application, so one must only be returned if
+	// the state machine is no longer able to make progress.
+	//
+	// Either AckOutcomeAndFinish or AckErrAndFinish will be called exactly
+	// once per Command.
+	AckErrAndFinish(context.Context, error) error
 }
 
 // CheckedCommand is a command that has been checked to see whether it can
@@ -41,7 +50,7 @@ type CheckedCommand interface {
 	CanAckBeforeApplication() bool
 	// AckSuccess acknowledges the success of the command to its client.
 	// Must only be called if !Rejected.
-	AckSuccess() error
+	AckSuccess(context.Context) error
 }
 
 // AppliedCommand is a command that has been applied to the replicated state
@@ -52,13 +61,15 @@ type CheckedCommand interface {
 // the state machine.
 type AppliedCommand interface {
 	CheckedCommand
-	// FinishAndAckOutcome signals that the application of the command has
+	// AckOutcomeAndFinish signals that the application of the command has
 	// completed. It also acknowledges the outcome of the command to its
 	// client if it was proposed locally. An error will immediately stall
 	// entry application, so one must only be returned if the state machine
-	// is no longer able to make progress. The method will be called exactly
+	// is no longer able to make progress.
+	//
+	// Either AckOutcomeAndFinish or AckErrAndFinish will be called exactly
 	// once per Command.
-	FinishAndAckOutcome(context.Context) error
+	AckOutcomeAndFinish(context.Context) error
 }
 
 // CommandIteratorBase is a common interface extended by all iterator and
@@ -163,6 +174,7 @@ func mapCmdIter(
 	for iter.Valid() {
 		checked, err := fn(iter.Cur())
 		if err != nil {
+			ret.Close()
 			return nil, err
 		}
 		iter.Next()
@@ -183,6 +195,7 @@ func mapCheckedCmdIter(
 	for iter.Valid() {
 		applied, err := fn(iter.CurChecked())
 		if err != nil {
+			ret.Close()
 			return nil, err
 		}
 		iter.Next()
@@ -191,12 +204,35 @@ func mapCheckedCmdIter(
 	return ret, nil
 }
 
-// forEachCheckedCmdIter calls a closure on each command in the provided
-// iterator. The function closes the provided iterator.
-func forEachCheckedCmdIter(iter CheckedCommandIterator, fn func(CheckedCommand) error) error {
+// In the following three functions, fn is written with ctx as a 2nd param
+// because callers want to bind it to methods that have Commands (or variants)
+// as the receiver, which mandates that to be the first param. The caller didn't
+// want to introduce a callback instead to make it clear that nothing escapes to
+// the heap.
+
+// forEachCmdIter calls a closure on each command in the provided iterator. The
+// function closes the provided iterator.
+func forEachCmdIter(
+	ctx context.Context, iter CommandIterator, fn func(Command, context.Context) error,
+) error {
 	defer iter.Close()
 	for iter.Valid() {
-		if err := fn(iter.CurChecked()); err != nil {
+		if err := fn(iter.Cur(), ctx); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
+}
+
+// forEachCheckedCmdIter calls a closure on each command in the provided
+// iterator. The function closes the provided iterator.
+func forEachCheckedCmdIter(
+	ctx context.Context, iter CheckedCommandIterator, fn func(CheckedCommand, context.Context) error,
+) error {
+	defer iter.Close()
+	for iter.Valid() {
+		if err := fn(iter.CurChecked(), ctx); err != nil {
 			return err
 		}
 		iter.Next()
@@ -207,13 +243,7 @@ func forEachCheckedCmdIter(iter CheckedCommandIterator, fn func(CheckedCommand) 
 // forEachAppliedCmdIter calls a closure on each command in the provided
 // iterator. The function closes the provided iterator.
 func forEachAppliedCmdIter(
-	ctx context.Context,
-	iter AppliedCommandIterator,
-	// fn is weirdly written with ctx as a 2nd param because the caller wants to
-	// bind it to a method that has the AppliedCommand on the receiver, thus
-	// forcing that to be the first param. The caller didn't want to introduce a
-	// callback instead to make it clear that nothing escapes to the heap.
-	fn func(AppliedCommand, context.Context) error,
+	ctx context.Context, iter AppliedCommandIterator, fn func(AppliedCommand, context.Context) error,
 ) error {
 	defer iter.Close()
 	for iter.Valid() {

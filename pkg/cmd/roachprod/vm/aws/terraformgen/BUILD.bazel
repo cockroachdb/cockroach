@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "terraformgen_lib",
+    srcs = ["terraformgen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws/terraformgen",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_spf13_cobra//:cobra"],
+)
+
+go_binary(
+    name = "terraformgen",
+    embed = [":terraformgen_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,24 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+option go_package = "sessiondatapb";
+
+import "gogoproto/gogo.proto";
+import "sql/sessiondatapb/session_data.proto";
+import "sql/sessiondatapb/local_only_session_data.proto";
+
+// MigratableSession represents a serialization of a session that can be
+// migrated between SQL sessions.
+message MigratableSession {
+  cockroach.sql.sessiondatapb.SessionData session_data = 1 [(gogoproto.nullable)=false];
+  cockroach.sql.sessiondatapb.LocalOnlySessionData local_only_session_data = 2 [(gogoproto.nullable)=false];
+}

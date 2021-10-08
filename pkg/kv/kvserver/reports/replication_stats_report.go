@@ -71,19 +71,17 @@ func (r RangeReport) EnsureEntry(zKey ZoneKey) {
 
 // CountRange adds one range's info to the report. If there's no entry in the
 // report for the range's zone, a new one is created.
-func (r RangeReport) CountRange(
-	zKey ZoneKey, unavailable bool, underReplicated bool, overReplicated bool,
-) {
+func (r RangeReport) CountRange(zKey ZoneKey, status roachpb.RangeStatusReport) {
 	r.EnsureEntry(zKey)
 	rStat := r[zKey]
 	rStat.numRanges++
-	if unavailable {
+	if !status.Available {
 		rStat.unavailable++
 	}
-	if underReplicated {
+	if status.UnderReplicated {
 		rStat.underReplicated++
 	}
-	if overReplicated {
+	if status.OverReplicated {
 		rStat.overReplicated++
 	}
 	r[zKey] = rStat
@@ -111,15 +109,17 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	const prevViolations = "select zone_id, subzone_id, total_ranges, " +
 		"unavailable_ranges, under_replicated_ranges, over_replicated_ranges " +
 		"from system.replication_stats"
-	rows, err := ex.Query(
+	it, err := ex.QueryIterator(
 		ctx, "get-previous-replication-stats", txn, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(RangeReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(RangeReport)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		key := ZoneKey{}
 		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
@@ -130,8 +130,7 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 			(int32)(*row[5].(*tree.DInt)),
 		}
 	}
-
-	return nil
+	return err
 }
 
 func (r *replicationStatsReportSaver) updateTimestamp(
@@ -376,41 +375,25 @@ func (v *replicationStatsVisitor) visitNewZone(
 			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	v.countRange(zKey, numReplicas, r)
+	v.countRange(ctx, zKey, numReplicas, r)
 	return nil
 }
 
 // visitSameZone is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) visitSameZone(ctx context.Context, r *roachpb.RangeDescriptor) {
-	v.countRange(v.prevZoneKey, v.prevNumReplicas, r)
+	v.countRange(ctx, v.prevZoneKey, v.prevNumReplicas, r)
 }
 
 func (v *replicationStatsVisitor) countRange(
-	key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
+	ctx context.Context, key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
 ) {
-	voters := len(r.Replicas().Voters())
-	var liveVoters int
-	for _, rep := range r.Replicas().Voters() {
-		if v.nodeChecker(rep.NodeID) {
-			liveVoters++
-		}
-	}
-
-	// TODO(andrei): This unavailability determination is naive. We need to take
-	// into account two different quorums when the range is in the joint-consensus
-	// state. See #43836.
-	unavailable := liveVoters < (voters/2 + 1)
-	// TODO(andrei): In the joint-consensus state, this under-replication also
-	// needs to consider the number of live replicas in each quorum. For example,
-	// with 2 VoterFulls, 1 VoterOutgoing, 1 VoterIncoming, if the outgoing voter
-	// is on a dead node, the range should be considered under-replicated.
-	underReplicated := replicationFactor > liveVoters
-	overReplicated := replicationFactor < voters
+	status := r.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
+		return v.nodeChecker(rDesc.NodeID)
+	}, replicationFactor)
 	// Note that a range can be under-replicated and over-replicated at the same
 	// time if it has many replicas, but sufficiently many of them are on dead
 	// nodes.
-
-	v.report.CountRange(key, unavailable, underReplicated, overReplicated)
+	v.report.CountRange(key, status)
 }
 
 // zoneChangesReplication determines whether a given zone config changes

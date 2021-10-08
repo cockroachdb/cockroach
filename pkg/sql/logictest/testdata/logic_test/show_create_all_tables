@@ -1,0 +1,428 @@
+statement ok
+CREATE DATABASE d
+
+statement ok
+USE d
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+
+statement ok
+CREATE TABLE d.parent (
+    x INT,
+    y INT,
+    z INT,
+    UNIQUE (x, y, z),
+    FAMILY f1 (x, y, z),
+    UNIQUE (x)
+);
+
+statement ok
+CREATE TABLE d.full_test (
+    x INT,
+    y INT,
+    z INT,
+    FOREIGN KEY (x, y, z) REFERENCES d.parent (x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
+    FAMILY f1 (x, y, z),
+    UNIQUE (x)
+  );
+
+statement ok
+ALTER TABLE d.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES d.parent (x) ON DELETE CASCADE
+
+statement ok
+CREATE VIEW d.vx AS SELECT 1
+
+statement ok
+CREATE SEQUENCE d.s
+
+# parent should come before full_test due to dependency ordering.
+# if dependency's aren't considered, full_test will appear first due to
+# lexicographical ordering.
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.parent (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+    UNIQUE INDEX parent_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
+);
+CREATE TABLE public.full_test (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
+);
+CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+# testuser does not have CONNECT on database d and cannot see any tables.
+user testuser
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+
+user root
+
+statement ok
+GRANT CREATE on DATABASE d TO testuser
+
+# testuser should be able to see the descriptors with
+# CREATE privilege on the database.
+# TODO(richardjcai): Replace this with CONNECT and
+# add CONNECT privilege required on the builtin description once #59676 is in.
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.parent (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+    UNIQUE INDEX parent_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
+);
+CREATE TABLE public.full_test (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
+);
+CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+user root
+
+# Make sure temp tables don't show up in crdb_internal.show_create_all_tables.
+statement ok
+CREATE DATABASE temp_test
+
+statement ok
+USE temp_test
+
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE t()
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+
+# Test that a database with foreign keys has the right order.
+statement ok
+CREATE DATABASE test_fk_order;
+USE test_fk_order;
+-- B -> A
+CREATE TABLE b (i int PRIMARY KEY);
+CREATE TABLE a (i int REFERENCES b);
+INSERT INTO b VALUES (1);
+INSERT INTO a VALUES (1);
+-- Test multiple tables to make sure transitive deps are sorted correctly.
+-- E -> D -> C
+-- G -> F -> D -> C
+CREATE TABLE g (i int PRIMARY KEY);
+CREATE TABLE f (i int PRIMARY KEY, g int REFERENCES g, FAMILY f1 (i, g));
+CREATE TABLE e (i int PRIMARY KEY);
+CREATE TABLE d (i int PRIMARY KEY, e int REFERENCES e, f int REFERENCES f, FAMILY f1 (i, e, f));
+CREATE TABLE c (i int REFERENCES d);
+-- Test a table that uses a sequence to make sure the sequence is dumped first.
+CREATE SEQUENCE s;
+CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
+
+# Table order should be B, A, G, F, E, D, C, sequence s, s_tbl.
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.b (
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
+);
+CREATE TABLE public.a (
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+);
+CREATE TABLE public.g (
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
+);
+CREATE TABLE public.f (
+    i INT8 NOT NULL,
+    g INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY f1 (i, g)
+);
+CREATE TABLE public.e (
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
+);
+CREATE TABLE public.d (
+    i INT8 NOT NULL,
+    e INT8 NULL,
+    f INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY f1 (i, e, f)
+);
+CREATE TABLE public.c (
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+);
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE TABLE public.s_tbl (
+    id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    FAMILY f1 (id, v)
+);
+ALTER TABLE public.a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES public.b(i);
+ALTER TABLE public.f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES public.g(i);
+ALTER TABLE public.d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES public.e(i);
+ALTER TABLE public.d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES public.f(i);
+ALTER TABLE public.c ADD CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES public.d(i);
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.a VALIDATE CONSTRAINT fk_i_ref_b;
+ALTER TABLE public.f VALIDATE CONSTRAINT fk_g_ref_g;
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_e_ref_e;
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_f_ref_f;
+ALTER TABLE public.c VALIDATE CONSTRAINT fk_i_ref_d;
+
+# Test that a cycle between two tables is handled correctly.
+statement ok
+CREATE DATABASE test_cycle;
+USE test_cycle;
+CREATE TABLE loop_a (
+  id INT PRIMARY KEY,
+  b_id INT,
+  INDEX(b_id),
+  FAMILY f1 (id, b_id)
+);
+CREATE TABLE loop_b (
+  id INT PRIMARY KEY,
+  a_id INT REFERENCES loop_a ON DELETE CASCADE,
+  FAMILY f1 (id, a_id)
+);
+ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
+FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.loop_b (
+  id INT8 NOT NULL,
+  a_id INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  FAMILY f1 (id, a_id)
+);
+CREATE TABLE public.loop_a (
+  id INT8 NOT NULL,
+  b_id INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  INDEX loop_a_b_id_idx (b_id ASC),
+  FAMILY f1 (id, b_id)
+);
+ALTER TABLE public.loop_b ADD CONSTRAINT fk_a_id_ref_loop_a FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
+ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.loop_b VALIDATE CONSTRAINT fk_a_id_ref_loop_a;
+ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
+
+# Test that a primary key with a non-default name works.
+statement ok
+CREATE DATABASE test_primary_key;
+USE test_primary_key;
+CREATE TABLE test_primary_key.t (
+	i int,
+	CONSTRAINT pk_name PRIMARY KEY (i)
+);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    i INT8 NOT NULL,
+    CONSTRAINT pk_name PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
+);
+
+# Test that computed columns are shown correctly.
+statement ok
+CREATE DATABASE test_computed_column;
+USE test_computed_column;
+CREATE TABLE test_computed_column.t (
+	a INT PRIMARY KEY,
+	b INT AS (a + 1) STORED,
+	FAMILY f1 (a, b)
+);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NULL AS (a + 1:::INT8) STORED,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    FAMILY f1 (a, b)
+);
+
+# Test showing a table with a semicolon in the table, index, and
+# column names properly escapes.
+statement ok
+CREATE DATABASE test_escaping;
+USE test_escaping;
+CREATE TABLE test_escaping.";" (";" int, index (";"));
+INSERT INTO test_escaping.";" VALUES (1);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.";" (
+    ";" INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    INDEX ";_;_idx" (";" ASC),
+    FAMILY "primary" (";", rowid)
+);
+
+# Ensure quotes in comments are properly escaped, also that the object names
+# are properly escaped in the output of the COMMENT statements.
+statement ok
+CREATE DATABASE test_comment;
+USE test_comment;
+CREATE TABLE test_comment."t   t" ("x'" INT PRIMARY KEY);
+COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
+COMMENT ON INDEX test_comment."t   t"@primary IS 'has '' more '' quotes';
+COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public."t   t" (
+  "x'" INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY ("x'" ASC),
+  FAMILY "primary" ("x'")
+);
+COMMENT ON TABLE public."t   t" IS e'has \' quotes';
+COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
+COMMENT ON INDEX public."t   t"@primary IS e'has \' more \' quotes';
+
+# Ensure schemas are shown correctly.
+statement ok
+CREATE DATABASE test_schema;
+USE test_schema;
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TABLE sc1.t (x int);
+CREATE TABLE sc2.t (x int);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE sc1.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE sc2.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+
+# Ensure sequences are shown correctly.
+statement ok
+CREATE DATABASE test_sequence;
+USE test_sequence;
+CREATE SEQUENCE s1 INCREMENT 123;
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
+
+# Test with UDTs.
+statement ok
+CREATE DATABASE type_test;
+USE type_test;
+CREATE TYPE test AS enum();
+CREATE TABLE t(x test);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    x public.test NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+
+# Test with column families.
+statement ok
+CREATE DATABASE column_family_test;
+USE column_family_test;
+CREATE TABLE t(x INT, y INT, z INT, h STRING, FAMILY f1 (x, y), FAMILY f2 (z), FAMILY f3(h));
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    h STRING NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY f1 (x, y, rowid),
+    FAMILY f2 (z),
+    FAMILY f3 (h)
+);

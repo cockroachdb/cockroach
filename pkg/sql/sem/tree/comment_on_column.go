@@ -10,7 +10,7 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 
 // CommentOnColumn represents an COMMENT ON COLUMN statement.
 type CommentOnColumn struct {
@@ -24,7 +24,13 @@ func (n *CommentOnColumn) Format(ctx *FmtCtx) {
 	ctx.FormatNode(n.ColumnItem)
 	ctx.WriteString(" IS ")
 	if n.Comment != nil {
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
+		// TODO(knz): Replace all this with ctx.FormatNode
+		// when COMMENT supports expressions.
+		if ctx.flags.HasFlags(FmtHideConstants) {
+			ctx.WriteString("'_'")
+		} else {
+			lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
+		}
 	} else {
 		ctx.WriteString("NULL")
 	}

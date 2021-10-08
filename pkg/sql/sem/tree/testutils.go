@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -67,7 +68,7 @@ func SampleDatum(t *types.T) Datum {
 	case types.TimestampTZFamily:
 		return MustMakeDTimestampTZ(timeutil.Unix(123, 123), time.Second)
 	case types.IntervalFamily:
-		i, _ := ParseDInterval("1h1m1s")
+		i, _ := ParseDInterval(duration.IntervalStyle_POSTGRES, "1h1m1s")
 		return i
 	case types.UuidFamily:
 		u, _ := ParseDUuidFromString("3189ad07-52f2-4d60-83e8-4a8347fef718")
@@ -82,7 +83,7 @@ func SampleDatum(t *types.T) Datum {
 		return NewDOid(DInt(1009))
 	case types.Box2DFamily:
 		b := geo.NewCartesianBoundingBox().AddPoint(1, 2).AddPoint(3, 4)
-		return NewDBox2D(b)
+		return NewDBox2D(*b)
 	case types.GeographyFamily:
 		return NewDGeography(geo.MustParseGeographyFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")))
 	case types.GeometryFamily:

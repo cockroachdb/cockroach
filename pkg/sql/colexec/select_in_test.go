@@ -18,7 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -31,40 +32,40 @@ func TestSelectInInt64(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		desc         string
-		inputTuples  tuples
-		outputTuples tuples
+		inputTuples  colexectestutils.Tuples
+		outputTuples colexectestutils.Tuples
 		filterRow    []int64
 		hasNulls     bool
 		negate       bool
 	}{
 		{
 			desc:         "Simple in test",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{0}, {1}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{0}, {1}},
 			filterRow:    []int64{0, 1},
 			hasNulls:     false,
 			negate:       false,
 		},
 		{
 			desc:         "Simple not in test",
-			inputTuples:  tuples{{0}, {1}, {2}},
-			outputTuples: tuples{{2}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{2}},
 			filterRow:    []int64{0, 1},
 			hasNulls:     false,
 			negate:       true,
 		},
 		{
 			desc:         "In test with NULLs",
-			inputTuples:  tuples{{nil}, {1}, {2}},
-			outputTuples: tuples{{1}},
+			inputTuples:  colexectestutils.Tuples{{nil}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{{1}},
 			filterRow:    []int64{1},
 			hasNulls:     true,
 			negate:       false,
 		},
 		{
 			desc:         "Not in test with NULLs",
-			inputTuples:  tuples{{nil}, {1}, {2}},
-			outputTuples: tuples{},
+			inputTuples:  colexectestutils.Tuples{{nil}, {1}, {2}},
+			outputTuples: colexectestutils.Tuples{},
 			filterRow:    []int64{1},
 			hasNulls:     true,
 			negate:       true,
@@ -73,18 +74,18 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(context.Background(), "%s", c.desc)
-		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			op := selectInOpInt64{
-				OneInputNode: NewOneInputNode(input[0]),
-				colIdx:       0,
-				filterRow:    c.filterRow,
-				negate:       c.negate,
-				hasNulls:     c.hasNulls,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				colIdx:         0,
+				filterRow:      c.filterRow,
+				negate:         c.negate,
+				hasNulls:       c.hasNulls,
 			}
 			return &op, nil
 		}
 		if !c.hasNulls || !c.negate {
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 		} else {
 			// When the input tuples already have nulls and we have NOT IN
 			// operator, then the nulls injection might not change the output. For
@@ -92,12 +93,13 @@ func TestSelectInInt64(t *testing.T) {
 			// output of length 0; similarly, we will get the same zero-length
 			// output for the corresponding nulls injection test case
 			// "1 NOT IN (NULL, NULL, NULL)".
-			runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, opConstructor)
+			colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, nil, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 		}
 	}
 }
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
@@ -129,19 +131,18 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 		}
 	}
 
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	inOp := &selectInOpInt64{
-		OneInputNode: NewOneInputNode(source),
-		colIdx:       0,
-		filterRow:    []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		OneInputHelper: colexecop.MakeOneInputHelper(source),
+		colIdx:         0,
+		filterRow:      []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 	}
-	inOp.Init()
+	inOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inOp.Next(ctx)
+		inOp.Next()
 	}
 }
 
@@ -170,55 +171,55 @@ func TestProjectInInt64(t *testing.T) {
 	}
 	testCases := []struct {
 		desc         string
-		inputTuples  tuples
-		outputTuples tuples
+		inputTuples  colexectestutils.Tuples
+		outputTuples colexectestutils.Tuples
 		inClause     string
 	}{
 		{
 			desc:         "Simple in test",
-			inputTuples:  tuples{{0}, {1}},
-			outputTuples: tuples{{0, true}, {1, true}},
+			inputTuples:  colexectestutils.Tuples{{0}, {1}},
+			outputTuples: colexectestutils.Tuples{{0, true}, {1, true}},
 			inClause:     "IN (0, 1)",
 		},
 		{
 			desc:         "Simple not in test",
-			inputTuples:  tuples{{2}},
-			outputTuples: tuples{{2, true}},
+			inputTuples:  colexectestutils.Tuples{{2}},
+			outputTuples: colexectestutils.Tuples{{2, true}},
 			inClause:     "NOT IN (0, 1)",
 		},
 		{
 			desc:         "In test with NULLs",
-			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{1, true}, {2, nil}, {nil, nil}},
+			inputTuples:  colexectestutils.Tuples{{1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{1, true}, {2, nil}, {nil, nil}},
 			inClause:     "IN (1, NULL)",
 		},
 		{
 			desc:         "Not in test with NULLs",
-			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{1, false}, {2, nil}, {nil, nil}},
+			inputTuples:  colexectestutils.Tuples{{1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{1, false}, {2, nil}, {nil, nil}},
 			inClause:     "NOT IN (1, NULL)",
 		},
 		{
 			desc:         "Not in test with NULLs and no nulls in filter",
-			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{1, false}, {2, true}, {nil, nil}},
+			inputTuples:  colexectestutils.Tuples{{1}, {2}, {nil}},
+			outputTuples: colexectestutils.Tuples{{1, false}, {2, true}, {nil, nil}},
 			inClause:     "NOT IN (1)",
 		},
 		{
 			desc:         "Test with false values",
-			inputTuples:  tuples{{1}, {2}},
-			outputTuples: tuples{{1, false}, {2, false}},
+			inputTuples:  colexectestutils.Tuples{{1}, {2}},
+			outputTuples: colexectestutils.Tuples{{1, false}, {2, false}},
 			inClause:     "IN (3)",
 		},
 	}
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					fmt.Sprintf("@1 %s", c.inClause), false, /* canFallbackToRowexec */
+					fmt.Sprintf("@1 %s", c.inClause), false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}

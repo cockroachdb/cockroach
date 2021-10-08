@@ -10,24 +10,7 @@
 
 package storage
 
-import "unsafe"
-
 func nonZeroingMakeByteSlice(len int) []byte {
 	ptr := mallocgc(uintptr(len), nil, false)
 	return (*[MaxArrayLen]byte)(ptr)[:len:len]
-}
-
-// Replacement for C.GoBytes which does not zero initialize the returned slice
-// before overwriting it.
-//
-// TODO(peter): Remove when go1.11 is released which has a similar change to
-// C.GoBytes.
-func gobytes(ptr unsafe.Pointer, len int) []byte {
-	if len == 0 {
-		return make([]byte, 0)
-	}
-	x := nonZeroingMakeByteSlice(len)
-	src := (*[MaxArrayLen]byte)(ptr)[:len:len]
-	copy(x, src)
-	return x
 }

@@ -16,7 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -79,7 +79,17 @@ func (r *Replica) preDestroyRaftMuLocked(
 	clearRangeIDLocalOnly bool,
 	mustUseClearRange bool,
 ) error {
-	desc := r.Desc()
+	r.mu.RLock()
+	desc := r.descRLocked()
+	removed := r.mu.destroyStatus.Removed()
+	r.mu.RUnlock()
+
+	// The replica must be marked as destroyed before its data is removed. If
+	// not, we risk new commands being accepted and observing the missing data.
+	if !removed {
+		log.Fatalf(ctx, "replica not marked as destroyed before call to preDestroyRaftMuLocked: %v", r)
+	}
+
 	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
 	if err != nil {
 		return err
@@ -94,22 +104,6 @@ func (r *Replica) preDestroyRaftMuLocked(
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
-	// Suggest the cleared range to the compactor queue.
-	//
-	// TODO(benesch): we would ideally atomically suggest the compaction with
-	// the deletion of the data itself.
-	if ms != (enginepb.MVCCStats{}) && r.store.compactor != nil {
-		desc := r.Desc()
-		r.store.compactor.Suggest(ctx, kvserverpb.SuggestedCompaction{
-			StartKey: roachpb.Key(desc.StartKey),
-			EndKey:   roachpb.Key(desc.EndKey),
-			Compaction: kvserverpb.Compaction{
-				Bytes:            ms.Total(),
-				SuggestedAtNanos: timeutil.Now().UnixNano(),
-			},
-		})
-	}
-
 	// NB: we need the nil check below because it's possible that we're GC'ing a
 	// Replica without a replicaID, in which case it does not have a sideloaded
 	// storage.
@@ -144,7 +138,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
-	batch := r.Engine().NewWriteOnlyBatch()
+	batch := r.Engine().NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 	clearRangeIDLocalOnly := !r.IsInitialized()
 	if err := r.preDestroyRaftMuLocked(
@@ -192,8 +186,6 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 // is one, and removes the in-memory raft state.
 func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	r.readOnlyCmdMu.Lock()
-	defer r.readOnlyCmdMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// NB: In the very rare scenario that we're being removed but currently
@@ -203,13 +195,15 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
-	r.mu.proposalBuf.FlushLockedWithoutProposing()
+	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
 		p.finishApplication(ctx, proposalResult{
-			Err: roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+			Err: roachpb.NewError(
+				roachpb.NewAmbiguousResultError(
+					apply.ErrRemoved.Error())),
 		})
 	}
 	r.mu.internalRaftGroup = nil
@@ -247,7 +241,7 @@ func writeTombstoneKey(
 	tombstone := &roachpb.RangeTombstone{
 		NextReplicaID: nextReplicaID,
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
 		hlc.Timestamp{}, tombstone, nil)
 }

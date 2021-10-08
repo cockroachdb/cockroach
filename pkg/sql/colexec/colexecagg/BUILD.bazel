@@ -1,0 +1,77 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecagg",
+    srcs = [
+        "aggregate_funcs.go",
+        "aggregators_util.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colconv",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/json",  # keep
+        "//pkg/util/mon",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colexecagg_test",
+    srcs = ["dep_test.go"],
+    embed = [":colexecagg"],
+    deps = ["//pkg/testutils/buildutil"],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("hash_any_not_null_agg.eg.go", "any_not_null_agg_tmpl.go"),
+    ("hash_avg_agg.eg.go", "avg_agg_tmpl.go"),
+    ("hash_bool_and_or_agg.eg.go", "bool_and_or_agg_tmpl.go"),
+    ("hash_concat_agg.eg.go", "concat_agg_tmpl.go"),
+    ("hash_count_agg.eg.go", "count_agg_tmpl.go"),
+    ("hash_default_agg.eg.go", "default_agg_tmpl.go"),
+    ("hash_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
+    ("hash_sum_agg.eg.go", "sum_agg_tmpl.go"),
+    ("hash_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+    ("ordered_any_not_null_agg.eg.go", "any_not_null_agg_tmpl.go"),
+    ("ordered_avg_agg.eg.go", "avg_agg_tmpl.go"),
+    ("ordered_bool_and_or_agg.eg.go", "bool_and_or_agg_tmpl.go"),
+    ("ordered_concat_agg.eg.go", "concat_agg_tmpl.go"),
+    ("ordered_count_agg.eg.go", "count_agg_tmpl.go"),
+    ("ordered_default_agg.eg.go", "default_agg_tmpl.go"),
+    ("ordered_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
+    ("ordered_sum_agg.eg.go", "sum_agg_tmpl.go"),
+    ("ordered_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+    ("window_avg_agg.eg.go", "avg_agg_tmpl.go"),
+    ("window_bool_and_or_agg.eg.go", "bool_and_or_agg_tmpl.go"),
+    ("window_concat_agg.eg.go", "concat_agg_tmpl.go"),
+    ("window_count_agg.eg.go", "count_agg_tmpl.go"),
+    ("window_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
+    ("window_sum_agg.eg.go", "sum_agg_tmpl.go"),
+    ("window_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

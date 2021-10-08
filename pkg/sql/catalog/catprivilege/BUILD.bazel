@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "catprivilege",
+    srcs = [
+        "default_privilege.go",
+        "fix.go",
+        "system.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+    ],
+)
+
+go_test(
+    name = "catprivilege_test",
+    srcs = [
+        "default_privilege_test.go",
+        "fix_test.go",
+    ],
+    embed = [":catprivilege"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+    ],
+)

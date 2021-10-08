@@ -56,7 +56,7 @@ func TestGenerateCACert(t *testing.T) {
 	certsDir, cleanup := tempDir(t)
 	defer cleanup()
 
-	cm, err := security.NewCertificateManager(certsDir)
+	cm, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -237,7 +237,7 @@ func generateBaseCerts(certsDir string) error {
 
 		if err := security.CreateClientPair(
 			certsDir, caKey,
-			testKeySize, time.Hour*48, true, security.RootUser, false,
+			testKeySize, time.Hour*48, true, security.RootUserName(), false,
 		); err != nil {
 			return err
 		}
@@ -287,14 +287,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.NodeUser, false,
+		testKeySize, time.Hour*48, true, security.NodeUserName(), false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.RootUser, false,
+		testKeySize, time.Hour*48, true, security.RootUserName(), false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestUseCerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -372,7 +372,7 @@ func TestUseCerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -442,7 +442,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -462,7 +462,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -507,17 +507,19 @@ func TestUseSplitCACerts(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), tc.user, certsDir, tc.caName, tc.certPrefix+".crt", tc.certPrefix+".key")
-		goDB, err := gosql.Open("postgres", pgUrl)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer goDB.Close()
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), tc.user, certsDir, tc.caName, tc.certPrefix+".crt", tc.certPrefix+".key")
+			goDB, err := gosql.Open("postgres", pgUrl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer goDB.Close()
 
-		_, err = goDB.Exec("SELECT 1")
-		if !testutils.IsError(err, tc.expectedError) {
-			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
-		}
+			_, err = goDB.Exec("SELECT 1")
+			if !testutils.IsError(err, tc.expectedError) {
+				t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+			}
+		})
 	}
 }
 
@@ -566,7 +568,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	sCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -586,7 +588,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		secondCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 		httpClient, err = secondCtx.GetHTTPClient()
 	}
 	if err != nil {

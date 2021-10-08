@@ -1,0 +1,214 @@
+load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
+load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl",
+     "env_entry",
+     "env_set",
+     "feature",
+     "flag_group",
+     "flag_set",
+     "tool_path")
+
+all_compile_actions = [
+    ACTION_NAMES.c_compile,
+    ACTION_NAMES.cpp_compile,
+    ACTION_NAMES.linkstamp_compile,
+    ACTION_NAMES.assemble,
+    ACTION_NAMES.preprocess_assemble,
+    ACTION_NAMES.cpp_header_parsing,
+    ACTION_NAMES.cpp_module_compile,
+    ACTION_NAMES.cpp_module_codegen,
+    ACTION_NAMES.clif_match,
+    ACTION_NAMES.lto_backend,
+]
+
+all_link_actions = [
+    ACTION_NAMES.cpp_link_executable,
+    ACTION_NAMES.cpp_link_dynamic_library,
+    ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+]
+
+all_archive_actions = [
+    ACTION_NAMES.cpp_link_static_library,
+]
+
+def _impl(ctx):
+    tool_paths = [
+        tool_path(
+            name = "gcc",
+            path = "bin/x86_64-apple-darwin19-cc",
+        ),
+        tool_path(
+            name = "ld",
+            path = "bin/x86_64-apple-darwin19-ld",
+        ),
+        tool_path(
+            name = "cpp",
+            path = "bin/x86_64-apple-darwin19-c++",
+        ),
+        tool_path(
+            name = "gcov",
+            path = "bin/x86_64-apple-darwin19-gcov",
+        ),
+        tool_path(
+            name = "nm",
+            path = "bin/x86_64-apple-darwin19-nm",
+        ),
+        tool_path(
+            name = "objdump",
+            path = "bin/x86_64-apple-darwin19-objdump",
+        ),
+        tool_path(
+            name = "strip",
+            path = "bin/x86_64-apple-darwin19-strip",
+        ),
+        tool_path(
+            name = "ar",
+            path = "bin/x86_64-apple-darwin19-ar",
+        ),
+    ]
+
+    opt_feature = feature(
+        name = "opt",
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-O3",
+                        ]
+                    ),
+                ]),
+            ),
+        ],
+    )
+    fastbuild_feature = feature(name = "fastbuild")
+    dbg_feature = feature(
+        name = "dbg",
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-g3",
+                        ]
+                    ),
+                ]),
+            ),
+        ],
+    )
+
+    supports_pic_feature = feature(name = "supports_pic", enabled = True)
+    supports_dynamic_linker_feature = feature(name = "supports_dynamic_linker", enabled = False)
+
+    default_compile_flags = feature(
+        name = "default_compile_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-g1",
+                            "-Wall",
+                            "-I%{repo_path}/SDK/MacOSX10.15.sdk/usr/include/c++/v1",
+                        ],
+                    ),
+                ]),
+            ),
+        ],
+    )
+
+    linker_flags = [
+        "-lstdc++",
+        "-L%{repo_path}/lib",
+    ]
+
+    default_linker_flags = feature(
+        name = "default_linker_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_link_actions,
+                flag_groups = ([flag_group(flags = linker_flags)]),
+            ),
+        ],
+	env_sets = [
+            env_set(
+                actions = all_link_actions,
+                env_entries = [
+                    env_entry(key = "LD_LIBRARY_PATH", value = "%{repo_path}/lib"),
+                ],
+            ),
+	]
+    )
+
+    default_archiver_flags = feature(
+        name = "archiver_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    # NOTE(ricky): Bazel defaults to using rcsD here -- the
+                    # macOS ar doesn't understand the D flag, though.
+                    flag_group(flags = ["rcs"]),
+                    flag_group(
+                        flags = ["%{output_execpath}"],
+                        expand_if_available = "output_execpath",
+                    ),
+                ],
+            ),
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    flag_group(
+                        iterate_over = "libraries_to_link",
+                        flag_groups = [
+                            flag_group(
+                                flags = ["%{libraries_to_link.name}"],
+                            ),
+                        ],
+                        expand_if_available = "libraries_to_link",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    features = [
+        opt_feature,
+        fastbuild_feature,
+        dbg_feature,
+        supports_pic_feature,
+        supports_dynamic_linker_feature,
+        default_archiver_flags,
+        default_compile_flags,
+        default_linker_flags,
+    ]
+
+    return cc_common.create_cc_toolchain_config_info(
+        ctx = ctx,
+        features = features,
+        toolchain_identifier = "x86_64-apple-darwin19-cross-toolchain",
+        host_system_name = "x86_64-apple-darwin19",
+        target_system_name = "x86_64-apple-darwin19",
+        target_cpu = "x86_64-apple-darwin19",
+        target_libc = "glibc-2.14",
+        compiler = "clang",
+        abi_version = "clang-10.0.0",
+        abi_libc_version = "x86_64-apple-darwin19",
+        tool_paths = tool_paths,
+        cxx_builtin_include_directories = [
+            "%sysroot%/usr/include",
+            "/usr/lib/llvm-10/lib/clang/10.0.0/include",
+        ],
+        builtin_sysroot = "%{repo_path}/SDK/MacOSX10.15.sdk",
+    )
+
+cc_toolchain_config = rule(
+    implementation = _impl,
+    attrs = {},
+    provides = [CcToolchainConfigInfo],
+)

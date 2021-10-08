@@ -17,21 +17,24 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -122,11 +125,11 @@ func (ep *execPlan) reqOrdering(expr memo.RelExpr) exec.OutputOrdering {
 
 // sqlOrdering converts an Ordering to a ColumnOrdering (according to the
 // outputCols map).
-func (ep *execPlan) sqlOrdering(ordering opt.Ordering) sqlbase.ColumnOrdering {
+func (ep *execPlan) sqlOrdering(ordering opt.Ordering) colinfo.ColumnOrdering {
 	if ordering.Empty() {
 		return nil
 	}
-	colOrder := make(sqlbase.ColumnOrdering, len(ordering))
+	colOrder := make(colinfo.ColumnOrdering, len(ordering))
 	for i := range ordering {
 		colOrder[i].ColIdx = int(ep.getNodeColumnOrdinal(ordering[i].ID()))
 		if ordering[i].Descending() {
@@ -156,15 +159,27 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 			return execPlan{}, errors.WithSecondaryError(
 				unimplemented.NewWithIssuef(26508,
-					"schema change statement cannot follow a statement that has written in the same transaction"),
+					"the first schema change statement in a transaction must precede any writes"),
 				err)
 		}
 	}
 
-	// Raise error if mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
-		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-			"cannot execute %s in a read-only transaction", b.statementTag(e))
+	if opt.IsMutationOp(e) {
+		b.ContainsMutation = true
+		// Raise error if mutation op is part of a read-only transaction.
+		if b.evalCtx.TxnReadOnly {
+			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+				"cannot execute %s in a read-only transaction", b.statementTag(e))
+		}
+	}
+
+	// Raise error if bounded staleness is used incorrectly.
+	if b.boundedStaleness() {
+		if _, ok := boundedStalenessAllowList[e.Op()]; !ok {
+			return execPlan{}, unimplemented.NewWithIssuef(67562,
+				"cannot use bounded staleness for %s", b.statementTag(e),
+			)
+		}
 	}
 
 	// Collect usage telemetry for relational node, if appropriate.
@@ -191,6 +206,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
 
+	case *memo.PlaceholderScanExpr:
+		ep, err = b.buildPlaceholderScan(t)
+
 	case *memo.SelectExpr:
 		ep, err = b.buildSelect(t)
 
@@ -203,6 +221,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.DistinctOnExpr, *memo.EnsureDistinctOnExpr, *memo.UpsertDistinctOnExpr,
 		*memo.EnsureUpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
+
+	case *memo.TopKExpr:
+		ep, err = b.buildTopK(t)
 
 	case *memo.LimitExpr, *memo.OffsetExpr:
 		ep, err = b.buildLimitOffset(e)
@@ -303,6 +324,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CancelSessionsExpr:
 		ep, err = b.buildCancelSessions(t)
 
+	case *memo.CreateStatisticsExpr:
+		ep, err = b.buildCreateStatistics(t)
+
 	case *memo.ExportExpr:
 		ep, err = b.buildExport(t)
 
@@ -325,9 +349,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// In race builds, assert that the exec plan output columns match the opt
+	// In test builds, assert that the exec plan output columns match the opt
 	// plan output columns.
-	if util.RaceEnabled {
+	if util.CrdbTestBuild {
 		optCols := e.Relational().OutputCols
 		var execCols opt.ColSet
 		ep.outputCols.ForEach(func(key, val int) {
@@ -335,7 +359,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		})
 		if !execCols.Equals(optCols) {
 			return execPlan{}, errors.AssertionFailedf(
-				"exec columns do not match opt columns: expected %v, got %v", optCols, execCols)
+				"exec columns do not match opt columns: expected %v, got %v. op: %T", optCols, execCols, e)
 		}
 	}
 
@@ -343,11 +367,24 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// information.
 	if ef, ok := b.factory.(exec.ExplainFactory); ok {
 		stats := &e.Relational().Stats
-		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &exec.EstimatedStats{
+		val := exec.EstimatedStats{
 			TableStatsAvailable: stats.Available,
 			RowCount:            stats.RowCount,
 			Cost:                float64(e.Cost()),
-		})
+		}
+		if scan, ok := e.(*memo.ScanExpr); ok {
+			tab := b.mem.Metadata().Table(scan.Table)
+			if tab.StatisticCount() > 0 {
+				// The first stat is the most recent one.
+				stat := tab.Statistic(0)
+				val.TableStatsRowCount = stat.RowCount()
+				if val.TableStatsRowCount == 0 {
+					val.TableStatsRowCount = 1
+				}
+				val.TableStatsCreatedAt = stat.CreatedAt()
+			}
+		}
+		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
 	}
 
 	if saveTableName != "" {
@@ -375,17 +412,13 @@ func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
 func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, error) {
 	numCols := len(values.Cols)
 
-	rows := make([][]tree.TypedExpr, len(values.Rows))
-	rowBuf := make([]tree.TypedExpr, len(rows)*numCols)
+	rows := makeTypedExprMatrix(len(values.Rows), numCols)
 	scalarCtx := buildScalarCtx{}
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
 			return nil, fmt.Errorf("inconsistent row length %d vs %d", len(tup.Elems), numCols)
 		}
-		// Chop off prefix of rowBuf and limit its capacity.
-		rows[i] = rowBuf[:numCols:numCols]
-		rowBuf = rowBuf[numCols:]
 		var err error
 		for j := 0; j < numCols; j++ {
 			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
@@ -397,9 +430,21 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 	return rows, nil
 }
 
+// makeTypedExprMatrix allocates a TypedExpr matrix of the given size.
+func makeTypedExprMatrix(numRows, numCols int) [][]tree.TypedExpr {
+	rows := make([][]tree.TypedExpr, numRows)
+	rowBuf := make([]tree.TypedExpr, numRows*numCols)
+	for i := range rows {
+		// Chop off prefix of rowBuf and limit its capacity.
+		rows[i] = rowBuf[:numCols:numCols]
+		rowBuf = rowBuf[numCols:]
+	}
+	return rows
+}
+
 func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {
 	md := b.mem.Metadata()
-	resultCols := make(sqlbase.ResultColumns, len(cols))
+	resultCols := make(colinfo.ResultColumns, len(cols))
 	for i, col := range cols {
 		colMeta := md.ColumnMeta(col)
 		resultCols[i].Name = colMeta.Alias
@@ -419,7 +464,7 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 
 // getColumns returns the set of column ordinals in the table for the set of
 // column IDs, along with a mapping from the column IDs to output ordinals
-// (starting with outputOrdinalStart).
+// (starting with 0).
 func (b *Builder) getColumns(
 	cols opt.ColSet, tableID opt.TableID,
 ) (exec.TableColumnOrdinalSet, opt.ColMap) {
@@ -443,7 +488,9 @@ func (b *Builder) getColumns(
 // indexConstraintMaxResults returns the maximum number of results for a scan;
 // if successful (ok=true), the scan is guaranteed never to return more results
 // than maxRows.
-func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64, ok bool) {
+func (b *Builder) indexConstraintMaxResults(
+	scan *memo.ScanPrivate, relProps *props.Relational,
+) (maxRows uint64, ok bool) {
 	c := scan.Constraint
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
 		return 0, false
@@ -454,32 +501,46 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64
 	for i := 0; i < numCols; i++ {
 		indexCols.Add(c.Columns.Get(i).ID())
 	}
-	rel := scan.Relational()
-	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
+	if !relProps.FuncDeps.ColsAreLaxKey(indexCols) {
 		return 0, false
 	}
 
-	return c.CalculateMaxResults(b.evalCtx, indexCols, rel.NotNullCols)
+	return c.CalculateMaxResults(b.evalCtx, indexCols, relProps.NotNullCols)
 }
 
+// scanParams populates ScanParams and the output column mapping.
 func (b *Builder) scanParams(
-	tab cat.Table, scan *memo.ScanExpr,
+	tab cat.Table, scan *memo.ScanPrivate, relProps *props.Relational, reqProps *physical.Required,
 ) (exec.ScanParams, opt.ColMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
 		idx := tab.Index(scan.Flags.Index)
+		isInverted := idx.IsInverted()
+		_, isPartial := idx.Predicate()
+
 		var err error
-		if idx.IsInverted() {
-			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.Name())
-		} else if _, isPartial := idx.Predicate(); isPartial {
+		switch {
+		case isInverted && isPartial:
+			err = fmt.Errorf(
+				"index \"%s\" is a partial inverted index and cannot be used for this query",
+				idx.Name(),
+			)
+		case isInverted:
+			err = fmt.Errorf(
+				"index \"%s\" is inverted and cannot be used for this query",
+				idx.Name(),
+			)
+		case isPartial:
 			err = fmt.Errorf(
 				"index \"%s\" is a partial index that does not contain all the rows needed to execute this query",
-				idx.Name())
-		} else {
+				idx.Name(),
+			)
+		default:
 			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
 		}
+
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
@@ -496,28 +557,53 @@ func (b *Builder) scanParams(
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
 
-	// Get the estimated row count from the statistics.
+	// Get the estimated row count from the statistics. When there are no
+	// statistics available, we construct a scan node with
+	// the estimated row count of zero rows.
+	//
 	// Note: if this memo was originally created as part of a PREPARE
 	// statement or was stored in the query cache, the column stats would have
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
-	rowCount := scan.Relational().Stats.RowCount
-	if !scan.Relational().Stats.Available {
-		// When there are no statistics available, we construct a scan node with
-		// the estimated row count of zero rows.
-		rowCount = 0
+	var rowCount float64
+	if relProps.Stats.Available {
+		rowCount = relProps.Stats.RowCount
 	}
 
 	if scan.PartitionConstrainedScan {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := int64(math.Ceil(scan.RequiredPhysical().LimitHint))
+	softLimit := int64(math.Ceil(reqProps.LimitHint))
 	hardLimit := scan.HardLimit.RowCount()
+
+	// If this is a bounded staleness query, check that it touches at most one
+	// range.
+	if b.boundedStaleness() {
+		valid := true
+		if b.containsBoundedStalenessScan {
+			// We already planned a scan, perhaps as part of a subquery.
+			valid = false
+		} else if hardLimit != 0 {
+			// If hardLimit is not 0, from KV's perspective, this is a multi-row scan
+			// with a limit. That means that even if the limit is 1, the scan can span
+			// multiple ranges if the first range is empty.
+			valid = false
+		} else {
+			maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
+			valid = ok && maxResults == 1
+		}
+		if !valid {
+			return exec.ScanParams{}, opt.ColMap{}, unimplemented.NewWithIssuef(67562,
+				"cannot use bounded staleness for queries that may touch more than one range or require an index join",
+			)
+		}
+		b.containsBoundedStalenessScan = true
+	}
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
-		maxResults, ok := b.indexConstraintMaxResults(scan)
+		maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
 		if ok && maxResults < ParallelScanResultThreshold {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
@@ -529,24 +615,40 @@ func (b *Builder) scanParams(
 		}
 	}
 
+	// Figure out if we need to scan in reverse (ScanPrivateCanProvide takes
+	// HardLimit.Reverse() into account).
+	ok, reverse := ordering.ScanPrivateCanProvide(
+		b.mem.Metadata(),
+		scan,
+		&reqProps.Ordering,
+	)
+	if !ok {
+		return exec.ScanParams{}, opt.ColMap{}, errors.AssertionFailedf("scan can't provide required ordering")
+	}
+
 	return exec.ScanParams{
 		NeededCols:         needed,
 		IndexConstraint:    scan.Constraint,
 		InvertedConstraint: scan.InvertedConstraint,
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
-		// HardLimit.Reverse() is taken into account by ScanIsReverse.
-		Reverse:           ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
-		Parallelize:       parallelize,
-		Locking:           locking,
-		EstimatedRowCount: rowCount,
+		Reverse:            reverse,
+		Parallelize:        parallelize,
+		Locking:            locking,
+		EstimatedRowCount:  rowCount,
+		LocalityOptimized:  scan.LocalityOptimized,
 	}, outputMap, nil
 }
 
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
-	params, outputCols, err := b.scanParams(tab, scan)
+
+	if !b.disableTelemetry && scan.PartialIndexPredicate(md) != nil {
+		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
+	}
+
+	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -560,6 +662,91 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+
+	if scan.Flags.ForceZigzag {
+		return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_ZIGZAG hint")
+	}
+
+	// Save if we planned a full table/index scan on the builder so that the
+	// planner can be made aware later. We only do this for non-virtual tables.
+	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
+		stats := scan.Relational().Stats
+		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		if scan.Index == cat.PrimaryIndex {
+			b.ContainsFullTableScan = true
+			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
+		} else {
+			b.ContainsFullIndexScan = true
+			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
+		}
+	}
+
+	res.root = root
+	return res, nil
+}
+
+func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan, error) {
+	if scan.Constraint != nil || scan.InvertedConstraint != nil {
+		return execPlan{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+	idx := tab.Index(scan.Index)
+
+	// Build the index constraint.
+	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
+	for i := range spanColumns {
+		col := idx.Column(i)
+		ordinal := col.Ordinal()
+		colID := scan.Table.ColumnID(ordinal)
+		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+	}
+	var columns constraint.Columns
+	columns.Init(spanColumns)
+	keyCtx := constraint.MakeKeyContext(&columns, b.evalCtx)
+
+	values := make([]tree.Datum, len(scan.Span))
+	for i, expr := range scan.Span {
+		// The expression is either a placeholder or a constant.
+		if p, ok := expr.(*memo.PlaceholderExpr); ok {
+			val, err := p.Value.(*tree.Placeholder).Eval(b.evalCtx)
+			if err != nil {
+				return execPlan{}, err
+			}
+			values[i] = val
+		} else {
+			values[i] = memo.ExtractConstDatum(expr)
+		}
+	}
+
+	key := constraint.MakeCompositeKey(values...)
+	var span constraint.Span
+	span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+	var spans constraint.Spans
+	spans.InitSingleSpan(&span)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+
+	private := scan.ScanPrivate
+	private.SetConstraint(b.evalCtx, &c)
+
+	params, outputCols, err := b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{outputCols: outputCols}
+	root, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(scan.Index),
+		params,
+		res.reqOrdering(scan),
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
 	res.root = root
 	return res, nil
 }
@@ -591,9 +778,25 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 	// A filtering node does not modify the schema.
 	res := execPlan{outputCols: input.outputCols}
 	invertedCol := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
+	var typedPreFilterExpr tree.TypedExpr
+	var typ *types.T
+	if invFilter.PreFiltererState != nil && invFilter.PreFiltererState.Expr != nil {
+		// The expression has a single variable, corresponding to the indexed
+		// column. We assign it an ordinal of 0.
+		var colMap opt.ColMap
+		colMap.Set(int(invFilter.PreFiltererState.Col), 0)
+		ctx := buildScalarCtx{
+			ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.Len()),
+			ivarMap: colMap,
+		}
+		typedPreFilterExpr, err = b.buildScalar(&ctx, invFilter.PreFiltererState.Expr)
+		if err != nil {
+			return execPlan{}, err
+		}
+		typ = invFilter.PreFiltererState.Typ
+	}
 	res.root, err = b.factory.ConstructInvertedFilter(
-		input.root, invFilter.InvertedExpression, invertedCol,
-	)
+		input.root, invFilter.InvertedExpression, typedPreFilterExpr, typ, invertedCol)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -643,7 +846,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 
 	var res execPlan
 	exprs := make(tree.TypedExprs, 0, len(projections)+prj.Passthrough.Len())
-	cols := make(sqlbase.ResultColumns, 0, len(exprs))
+	cols := make(colinfo.ResultColumns, 0, len(exprs))
 	ctx := input.makeBuildScalarCtx()
 	for i := range projections {
 		item := &projections[i]
@@ -653,7 +856,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		}
 		res.outputCols.Set(int(item.Col), i)
 		exprs = append(exprs, expr)
-		cols = append(cols, sqlbase.ResultColumn{
+		cols = append(cols, colinfo.ResultColumn{
 			Name: md.ColumnMeta(item.Col).Alias,
 			Typ:  item.Typ,
 		})
@@ -663,7 +866,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		indexedVar := b.indexedVar(&ctx, md, colID)
 		exprs = append(exprs, indexedVar)
 		meta := md.ColumnMeta(colID)
-		cols = append(cols, sqlbase.ResultColumn{
+		cols = append(cols, colinfo.ResultColumn{
 			Name: meta.Alias,
 			Typ:  meta.Type,
 		})
@@ -689,9 +892,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightProps := rightExpr.Relational()
 	filters := join.Child(2).(*memo.FiltersExpr)
 
-	if len(memo.WithUses(rightExpr)) != 0 {
-		return execPlan{}, fmt.Errorf("references to WITH expressions from correlated subqueries are unsupported")
-	}
+	// We will pre-populate the withExprs of the right-hand side execbuilder.
+	withExprs := make([]builtWithExpr, len(b.withExprs))
+	copy(withExprs, b.withExprs)
 
 	leftPlan, err := b.buildRelational(leftExpr)
 	if err != nil {
@@ -736,6 +939,19 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				if leftOrd, ok := leftBoundColMap.Get(int(t.Col)); ok {
 					return f.ConstructConstVal(leftRow[leftOrd], t.Typ)
 				}
+
+			case *memo.WithScanExpr:
+				// Allow referring to "outer" With expressions. The bound expressions
+				// are not part of this Memo but they are used only for their relational
+				// properties, which should be valid.
+				for i := range withExprs {
+					if withExprs[i].id == t.With {
+						memoExpr := b.mem.Metadata().WithBinding(t.With)
+						f.Metadata().AddWithBinding(t.With, memoExpr)
+						break
+					}
+				}
+				// Fall through.
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
@@ -746,8 +962,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			return nil, err
 		}
 
-		eb := New(ef, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
+		eb.withExprs = withExprs
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -783,8 +1000,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	}
 
 	var outputCols opt.ColMap
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		outputCols = leftPlan.outputCols
 	} else {
 		outputCols = allCols
@@ -821,11 +1037,11 @@ func (b *Builder) makePresentation(cols opt.ColSet) physical.Presentation {
 
 // presentationToResultColumns returns ResultColumns corresponding to the
 // columns in a presentation.
-func (b *Builder) presentationToResultColumns(pres physical.Presentation) sqlbase.ResultColumns {
+func (b *Builder) presentationToResultColumns(pres physical.Presentation) colinfo.ResultColumns {
 	md := b.mem.Metadata()
-	result := make(sqlbase.ResultColumns, len(pres))
+	result := make(colinfo.ResultColumns, len(pres))
 	for i := range pres {
-		result[i] = sqlbase.ResultColumn{
+		result[i] = colinfo.ResultColumn{
 			Name: pres[i].Alias,
 			Typ:  md.ColumnMeta(pres[i].ID).Type,
 		}
@@ -834,12 +1050,14 @@ func (b *Builder) presentationToResultColumns(pres physical.Presentation) sqlbas
 }
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
-	if f := join.Private().(*memo.JoinPrivate).Flags; !f.Has(memo.AllowHashJoinStoreRight) {
+	if f := join.Private().(*memo.JoinPrivate).Flags; f.Has(memo.DisallowHashJoinStoreRight) {
 		// We need to do a bit of reverse engineering here to determine what the
 		// hint was.
 		hint := tree.AstLookup
-		if f.Has(memo.AllowMergeJoin) {
+		if !f.Has(memo.DisallowMergeJoin) {
 			hint = tree.AstMerge
+		} else if !f.Has(memo.DisallowInvertedJoinIntoLeft) || !f.Has(memo.DisallowInvertedJoinIntoRight) {
+			hint = tree.AstInverted
 		}
 
 		return execPlan{}, errors.Errorf(
@@ -851,6 +1069,23 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
+		// We have a partial join, and we want to make sure that the relation
+		// with smaller cardinality is on the right side. Note that we assumed
+		// it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount := leftExpr.Relational().Stats.RowCount
+		rightRowCount := rightExpr.Relational().Stats.RowCount
+		if leftRowCount < rightRowCount {
+			if joinType == descpb.LeftSemiJoin {
+				joinType = descpb.RightSemiJoin
+			} else {
+				joinType = descpb.RightAntiJoin
+			}
+			leftExpr, rightExpr = rightExpr, leftExpr
+		}
+	}
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftExpr.Relational().OutputCols,
@@ -908,12 +1143,6 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
 	}
 
-	if plan, ok, err := b.tryBuildInterleavedJoin(join); err != nil {
-		return execPlan{}, err
-	} else if ok {
-		return plan, nil
-	}
-
 	joinType := joinOpToJoinType(join.JoinType)
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
@@ -941,140 +1170,6 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	return ep, nil
 }
 
-// tryBuildInterleavedJoin attempts to build the merge-sort as an interleaved
-// join.
-//
-// We can use an interleaved join when all following conditions are satisfied:
-//  1. Both sides of the join are Scans or Filter->Scan complexes.
-//  2. The scans have the same direction.
-//  3. The scans don't have limits.
-//  4. The tables are interleaved and one is the ancestor of the other.
-//  5. The merge join equality columns map exactly to the ancestor index key
-//     columns and the corresponding prefix of the descendant index.
-//
-// TODO(radu): this matching belongs in a rule (but for that we need to design
-// a proper optimizer operator).
-func (b *Builder) tryBuildInterleavedJoin(join *memo.MergeJoinExpr) (_ execPlan, ok bool, _ error) {
-	if !b.allowInterleavedJoins {
-		return execPlan{}, false, nil
-	}
-
-	getScanAndFilters := func(input memo.RelExpr) (scan *memo.ScanExpr, filters memo.FiltersExpr) {
-		if sel, isSelect := input.(*memo.SelectExpr); isSelect {
-			filters = sel.Filters
-			input = sel.Input
-		}
-		if scan, isScan := input.(*memo.ScanExpr); isScan {
-			return scan, filters
-		}
-		return nil, nil
-	}
-	leftScan, leftFilters := getScanAndFilters(join.Left)
-	if leftScan == nil {
-		// Condition 1 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	rightScan, rightFilters := getScanAndFilters(join.Right)
-	if rightScan == nil {
-		// Condition 1 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	reverse := ordering.ScanIsReverse(leftScan, &leftScan.RequiredPhysical().Ordering)
-	rightReverse := ordering.ScanIsReverse(rightScan, &rightScan.RequiredPhysical().Ordering)
-	if rightReverse != reverse {
-		// Condition 2 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	if leftScan.HardLimit != 0 || rightScan.HardLimit != 0 {
-		// Condition 3 is not satisfied.
-		return execPlan{}, false, nil
-	}
-
-	md := b.mem.Metadata()
-	leftTab := md.Table(leftScan.Table)
-	leftIdx := leftTab.Index(leftScan.Index)
-	rightTab := md.Table(rightScan.Table)
-	rightIdx := rightTab.Index(rightScan.Index)
-
-	ok, leftIsAncestor := cat.InterleaveAncestorDescendant(leftIdx, rightIdx)
-	if !ok {
-		// Condition 4 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	ancestorIdx := leftIdx
-	if !leftIsAncestor {
-		ancestorIdx = rightIdx
-	}
-	if ancestorIdx.LaxKeyColumnCount() != len(join.LeftEq) {
-		// Condition 5 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	for i := range join.LeftEq {
-		if join.LeftEq[i].ID() != leftScan.Table.ColumnID(leftIdx.Column(i).Ordinal()) {
-			// Condition 5 is not satisfied.
-			return execPlan{}, false, nil
-		}
-		if join.RightEq[i].ID() != rightScan.Table.ColumnID(rightIdx.Column(i).Ordinal()) {
-			// Condition 5 is not satisfied.
-			return execPlan{}, false, nil
-		}
-	}
-
-	// All conditions are satisfied; start the build.
-	var leftFilterExpr, rightFilterExpr, onExpr tree.TypedExpr
-
-	leftScanParams, leftScanColMap, err := b.scanParams(leftTab, leftScan)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-
-	if len(leftFilters) > 0 {
-		leftFilterExpr, err = b.buildScalarWithMap(leftScanColMap, &leftFilters)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-	rightScanParams, rightScanColMap, err := b.scanParams(rightTab, rightScan)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-	if len(rightFilters) > 0 {
-		rightFilterExpr, err = b.buildScalarWithMap(rightScanColMap, &rightFilters)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-
-	joinType := joinOpToJoinType(join.JoinType)
-
-	joinCols := joinOutputMap(leftScanColMap, rightScanColMap)
-	if len(join.On) > 0 {
-		onExpr, err = b.buildScalarWithMap(joinCols, &join.On)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-	if !joinType.ShouldIncludeRightColsInOutput() {
-		// For semi and anti join, only the left columns are output.
-		joinCols = leftScanColMap
-	}
-
-	ep := execPlan{outputCols: joinCols}
-
-	ep.root, err = b.factory.ConstructInterleavedJoin(
-		joinType,
-		leftTab, leftIdx, leftScanParams, leftFilterExpr,
-		rightTab, rightIdx, rightScanParams, rightFilterExpr,
-		leftIsAncestor,
-		onExpr,
-		ep.reqOrdering(join),
-	)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-	return ep, true, nil
-}
-
 // initJoinBuild builds the inputs to the join as well as the ON expression.
 func (b *Builder) initJoinBuild(
 	leftChild memo.RelExpr,
@@ -1100,8 +1195,10 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeLeftColsInOutput() {
+		return leftPlan, rightPlan, onExpr, rightPlan.outputCols, nil
+	}
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
 	return leftPlan, rightPlan, onExpr, allCols, nil
@@ -1267,7 +1364,7 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	if input.outputCols.Len() == outCols.Len() {
 		return ep, nil
 	}
-	return b.ensureColumns(ep, opt.ColSetToList(outCols), distinct.ProvidedPhysical().Ordering)
+	return b.ensureColumns(ep, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
@@ -1373,7 +1470,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	switch set.Op() {
 	case opt.UnionOp:
 		typ, all = tree.UnionOp, false
-	case opt.UnionAllOp:
+	case opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
 		typ, all = tree.UnionOp, true
 	case opt.IntersectOp:
 		typ, all = tree.IntersectOp, false
@@ -1387,15 +1484,73 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		panic(errors.AssertionFailedf("invalid operator %s", log.Safe(set.Op())))
 	}
 
-	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
-	if err != nil {
-		return execPlan{}, err
+	hardLimit := uint64(0)
+	if set.Op() == opt.LocalityOptimizedSearchOp {
+		if !b.disableTelemetry {
+			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
+		}
+
+		// If we are performing locality optimized search, set a limit equal to
+		// the maximum possible number of rows. This will tell the execution engine
+		// not to execute the right child if the limit is reached by the left
+		// child.
+		// TODO(rytaft): Store the limit in the expression.
+		hardLimit = uint64(set.Relational().Cardinality.Max)
 	}
-	ep := execPlan{root: node}
+
+	ep := execPlan{}
 	for i, col := range private.OutCols {
 		ep.outputCols.Set(int(col), i)
 	}
+	streamingOrdering := ep.sqlOrdering(
+		ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering),
+	)
+	reqOrdering := ep.reqOrdering(set)
+
+	if typ == tree.UnionOp && all {
+		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit)
+	} else if len(streamingOrdering) > 0 {
+		ep.root, err = b.factory.ConstructStreamingSetOp(typ, all, left.root, right.root, streamingOrdering, reqOrdering)
+	} else {
+		if len(reqOrdering) > 0 {
+			return execPlan{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")
+		}
+		ep.root, err = b.factory.ConstructHashSetOp(typ, all, left.root, right.root)
+	}
+	if err != nil {
+		return execPlan{}, err
+	}
 	return ep, nil
+}
+
+// buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp.
+func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
+	inputExpr := e.Input
+	input, err := b.buildRelational(inputExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ordering := e.Ordering.ToOrdering()
+	inputOrdering := e.Input.ProvidedPhysical().Ordering
+	alreadyOrderedPrefix := 0
+	for i := range inputOrdering {
+		if i == len(ordering) {
+			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+		}
+		if inputOrdering[i] != ordering[i] {
+			break
+		}
+		alreadyOrderedPrefix = i + 1
+	}
+	node, err := b.factory.ConstructTopK(
+		input.root,
+		e.K,
+		exec.OutputOrdering(input.sqlOrdering(ordering)),
+		alreadyOrderedPrefix)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 // buildLimitOffset builds a plan for a LimitOp or OffsetOp
@@ -1504,17 +1659,21 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
+
+		if join.UsesPartialIndex(md) {
+			telemetry.Inc(sqltelemetry.PartialIndexLookupJoinUseCounter)
+		}
 	}
 
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	md := b.mem.Metadata()
 
 	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {
@@ -1537,6 +1696,21 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
+	var lookupExpr, remoteLookupExpr tree.TypedExpr
+	if len(join.LookupExpr) > 0 {
+		var err error
+		lookupExpr, err = b.buildScalar(&ctx, &join.LookupExpr)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+	if len(join.RemoteLookupExpr) > 0 {
+		var err error
+		remoteLookupExpr, err = b.buildScalar(&ctx, &join.RemoteLookupExpr)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
 	var onExpr tree.TypedExpr
 	if len(join.On) > 0 {
 		var err error
@@ -1549,6 +1723,11 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
+	var locking *tree.LockingItem
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinOpToJoinType(join.JoinType),
 		input.root,
@@ -1556,15 +1735,23 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		idx,
 		keyCols,
 		join.LookupColsAreTableKey,
+		lookupExpr,
+		remoteLookupExpr,
 		lookupOrdinals,
 		onExpr,
+		join.IsSecondJoinInPairedJoiner,
 		res.reqOrdering(join),
+		locking,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
+	//
+	// NB: For paired-joins, this is where the continuation column and the PK
+	// columns for the right side, which were part of the inputCols, are projected
+	// away.
 	if !inputCols.SubsetOf(join.Cols) {
 		outCols := join.Cols
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
@@ -1582,18 +1769,43 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	md := b.mem.Metadata()
+	tab := md.Table(join.Table)
+	idx := tab.Index(join.Index)
+
+	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
+	for i, c := range join.PrefixKeyCols {
+		prefixEqCols[i] = input.getNodeColumnOrdinal(c)
+	}
 
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
+	if join.IsFirstJoinInPairedJoiner {
+		lookupCols.Remove(join.ContinuationCol)
+	}
 
-	// Add the inverted column since it will be referenced in the inverted
-	// expression and needs a corresponding indexed var. It will be projected
-	// away below.
-	lookupCols.Add(join.InvertedCol)
+	// Add the inverted column. Its source column will be referenced in the
+	// inverted expression and needs a corresponding indexed var. It will be
+	// projected away below.
+	invertedColumn := idx.InvertedColumn()
+	invertedColID := join.Table.ColumnID(invertedColumn.Ordinal())
+	lookupCols.Add(invertedColID)
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
-	allCols := joinOutputMap(input.outputCols, lookupColMap)
+	// allExprCols are the columns used in expressions evaluated by this join.
+	allExprCols := joinOutputMap(input.outputCols, lookupColMap)
 
+	allCols := allExprCols
+	if join.IsFirstJoinInPairedJoiner {
+		// allCols needs to include the continuation column since it will be
+		// in the result output by this join.
+		allCols = allExprCols.Copy()
+		maxValue, ok := allCols.MaxValue()
+		if !ok {
+			return execPlan{}, errors.AssertionFailedf("allCols should not be empty")
+		}
+		// Assign the continuation column the next unused value in the map.
+		allCols.Set(int(join.ContinuationCol), maxValue+1)
+	}
 	res := execPlan{outputCols: allCols}
 	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 		// For semi and anti join, only the left columns are output.
@@ -1601,26 +1813,24 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
-		ivarMap: allCols.Copy(),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allExprCols.Len()),
+		ivarMap: allExprCols.Copy(),
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {
 		return execPlan{}, err
 	}
-	tab := md.Table(join.Table)
-	idx := tab.Index(join.Index)
 
-	// The inverted filter refers to the original column, but it is actually
-	// evaluated implicitly using the inverted column; the original column is not
-	// even accessible here.
+	// The inverted filter refers to the inverted column's source column, but it
+	// is actually evaluated implicitly using the inverted column; the inverted
+	// column's source column is not even accessible here.
 	//
 	// TODO(radu): this is sketchy. The inverted column should not even have the
 	// geospatial type (which would make the expression invalid in terms of
 	// typing). Perhaps we need to pass this information in a more specific way
 	// and not as a generic expression?
-	ord, _ := ctx.ivarMap.Get(int(join.InvertedCol))
-	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.Column(0).InvertedSourceColumnOrdinal())), ord)
+	ord, _ := ctx.ivarMap.Get(int(invertedColID))
+	ctx.ivarMap.Set(int(join.Table.ColumnID(invertedColumn.InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
 		return execPlan{}, err
@@ -1632,8 +1842,10 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		input.root,
 		tab,
 		idx,
+		prefixEqCols,
 		lookupOrdinals,
 		onExpr,
+		join.IsFirstJoinInPairedJoiner,
 		res.reqOrdering(join),
 	)
 	if err != nil {
@@ -1764,8 +1976,9 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		// subquery mode that reads and discards all rows. This could possibly also
 		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
 		// to behave like a spoolNode) and using the EXISTS mode.
-		Mode: exec.SubqueryAllRows,
-		Root: buffer,
+		Mode:     exec.SubqueryAllRows,
+		Root:     buffer,
+		RowCount: int64(with.Relational().Stats.RowCountIfAvailable()),
 	})
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
@@ -1819,7 +2032,8 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks)
+		rootRowCount := int64(rec.Recursive.Relational().Stats.RowCountIfAvailable())
+		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
 	}
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)
@@ -1852,38 +2066,21 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	res := execPlan{root: node}
+	res := execPlan{root: node, outputCols: e.outputCols}
 
-	if maxVal, _ := e.outputCols.MaxValue(); len(withScan.InCols) == maxVal+1 {
-		// We are outputting all columns. Just set up the map.
-
-		// The ColumnIDs from the With expression need to get remapped according to
-		// the mapping in the withScan to get the actual colMap for this expression.
-		for i := range withScan.InCols {
-			idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
-			res.outputCols.Set(int(withScan.OutCols[i]), idx)
-		}
-	} else {
-		// We need a projection.
-		cols := make([]exec.NodeColumnOrdinal, len(withScan.InCols))
-		for i := range withScan.InCols {
-			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
-			if !ok {
-				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
-			}
-			cols[i] = exec.NodeColumnOrdinal(col)
-			res.outputCols.Set(int(withScan.OutCols[i]), i)
-		}
-		res.root, err = b.factory.ConstructSimpleProject(
-			res.root, cols,
-			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
-		)
-		if err != nil {
-			return execPlan{}, err
-		}
+	// Apply any necessary projection to produce the InCols in the given order.
+	res, err = b.ensureColumns(res, withScan.InCols, withScan.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
 	}
-	return res, nil
 
+	// Renumber the columns.
+	res.outputCols = opt.ColMap{}
+	for i, col := range withScan.OutCols {
+		res.outputCols.Set(int(col), i)
+	}
+
+	return res, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
@@ -1897,7 +2094,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	scalarCtx := input.makeBuildScalarCtx()
 
 	exprs := make(tree.TypedExprs, len(zip))
-	zipCols := make(sqlbase.ResultColumns, 0, len(zip))
+	zipCols := make(colinfo.ResultColumns, 0, len(zip))
 	numColsPerGen := make([]int, len(zip))
 
 	ep := execPlan{outputCols: input.outputCols}
@@ -1912,7 +2109,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 
 		for _, col := range item.Cols {
 			colMeta := md.ColumnMeta(col)
-			zipCols = append(zipCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+			zipCols = append(zipCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
 
 			ep.outputCols.Set(int(col), n)
 			n++
@@ -1929,9 +2126,9 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	return ep, nil
 }
 
-func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
+func (b *Builder) resultColumn(id opt.ColumnID) colinfo.ResultColumn {
 	colMeta := b.mem.Metadata().ColumnMeta(id)
-	return sqlbase.ResultColumn{
+	return colinfo.ResultColumn{
 		Name: colMeta.Alias,
 		Typ:  colMeta.Type,
 	}
@@ -2142,7 +2339,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		)
 	}
 
-	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
+	resultCols := make(colinfo.ResultColumns, w.Relational().OutputCols.Len())
 
 	// All the passthrough cols will keep their ordinal index.
 	passthrough.ForEach(func(col opt.ColumnID) {
@@ -2169,20 +2366,14 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		outputIdxs[i] = windowStart + i
 	}
 
-	var rangeOffsetColumn exec.NodeColumnOrdinal
-	if ord.Empty() {
-		idx, _ := input.outputCols.Get(int(w.RangeOffsetColumn))
-		rangeOffsetColumn = exec.NodeColumnOrdinal(idx)
-	}
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:              resultCols,
-		Exprs:             exprs,
-		OutputIdxs:        outputIdxs,
-		ArgIdxs:           argIdxs,
-		FilterIdxs:        filterIdxs,
-		Partition:         partitionIdxs,
-		Ordering:          input.sqlOrdering(ord),
-		RangeOffsetColumn: rangeOffsetColumn,
+		Cols:       resultCols,
+		Exprs:      exprs,
+		OutputIdxs: outputIdxs,
+		ArgIdxs:    argIdxs,
+		FilterIdxs: filterIdxs,
+		Partition:  partitionIdxs,
+		Ordering:   input.sqlOrdering(ord),
 	})
 	if err != nil {
 		return execPlan{}, err
@@ -2212,7 +2403,7 @@ func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan
 func (b *Builder) applySaveTable(
 	input execPlan, e memo.RelExpr, saveTableName string,
 ) (execPlan, error) {
-	name := tree.NewTableName(tree.Name(opt.SaveTablesDatabase), tree.Name(saveTableName))
+	name := tree.NewTableNameWithSchema(tree.Name(opt.SaveTablesDatabase), tree.PublicSchemaName, tree.Name(saveTableName))
 
 	// Ensure that the column names are unique and match the names used by the
 	// opttester.
@@ -2335,4 +2526,26 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	default:
 		return expr.Op().SyntaxTag()
 	}
+}
+
+// boundedStalenessAllowList contains the operators that may be used with
+// bounded staleness queries.
+var boundedStalenessAllowList = map[opt.Operator]struct{}{
+	opt.ValuesOp:           {},
+	opt.ScanOp:             {},
+	opt.PlaceholderScanOp:  {},
+	opt.SelectOp:           {},
+	opt.ProjectOp:          {},
+	opt.GroupByOp:          {},
+	opt.ScalarGroupByOp:    {},
+	opt.DistinctOnOp:       {},
+	opt.EnsureDistinctOnOp: {},
+	opt.LimitOp:            {},
+	opt.OffsetOp:           {},
+	opt.SortOp:             {},
+	opt.OrdinalityOp:       {},
+	opt.Max1RowOp:          {},
+	opt.ProjectSetOp:       {},
+	opt.WindowOp:           {},
+	opt.ExplainOp:          {},
 }

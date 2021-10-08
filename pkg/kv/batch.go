@@ -48,7 +48,14 @@ type Batch struct {
 	// The Header which will be used to send the resulting BatchRequest.
 	// To be modified directly.
 	Header roachpb.Header
-	reqs   []roachpb.RequestUnion
+	// The AdmissionHeader which will be used when sending the resulting
+	// BatchRequest. To be modified directly.
+	AdmissionHeader roachpb.AdmissionHeader
+	reqs            []roachpb.RequestUnion
+
+	// approxMutationReqBytes tracks the approximate size of keys and values in
+	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
+	approxMutationReqBytes int
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
 	raw bool
@@ -62,6 +69,13 @@ type Batch struct {
 	rowsBuf       []KeyValue
 	rowsStaticBuf [8]KeyValue
 	rowsStaticIdx int
+}
+
+// ApproximateMutationBytes returns the approximate byte size of the mutations
+// added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
+// via AddRawRequest are not tracked.
+func (b *Batch) ApproximateMutationBytes() int {
+	return b.approxMutationReqBytes
 }
 
 // RawResponse returns the BatchResponse which was the result of a successful
@@ -79,13 +93,15 @@ func (b *Batch) MustPErr() *roachpb.Error {
 	return b.pErr
 }
 
-func (b *Batch) prepare() error {
-	for _, r := range b.Results {
-		if r.Err != nil {
-			return r.Err
-		}
+// validate that there were no errors while marshaling keys and values.
+func (b *Batch) validate() error {
+	err := b.resultErr()
+	if err != nil {
+		// Set pErr just as sendAndFill does, so that higher layers can find it
+		// using MustPErr.
+		b.pErr = roachpb.NewError(err)
 	}
-	return nil
+	return err
 }
 
 func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
@@ -227,18 +243,10 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.DeleteRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
-
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
-
-			default:
-				if result.Err == nil {
-					result.Err = errors.Errorf("unsupported reply: %T for %T",
-						reply, args)
-				}
-
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
 			case *roachpb.EndTxnRequest:
@@ -260,20 +268,23 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
-			case *roachpb.WriteBatchRequest:
-			case *roachpb.ImportRequest:
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
+			case *roachpb.MigrateRequest:
+			case *roachpb.QueryResolvedTimestampRequest:
+			case *roachpb.BarrierRequest:
+			case *roachpb.ScanInterleavedIntentsRequest:
+			default:
+				if result.Err == nil {
+					result.Err = errors.Errorf("unsupported reply: %T for %T",
+						reply, args)
+				}
 			}
 			// Fill up the resume span.
-			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
-				result.ResumeSpan = reply.Header().ResumeSpan
-				result.ResumeReason = reply.Header().ResumeReason
-				// The ResumeReason might be missing when talking to a 1.1 node; assume
-				// it's the key limit (which was the only reason why 1.1 would return a
-				// resume span). This can be removed in 2.1.
-				if result.ResumeReason == roachpb.RESUME_UNKNOWN {
-					result.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			if result.Err == nil && reply != nil {
+				if h := reply.Header(); h.ResumeSpan != nil {
+					result.ResumeSpan = h.ResumeSpan
+					result.ResumeReason = h.ResumeReason
 				}
 			}
 		}
@@ -336,21 +347,37 @@ func (b *Batch) AddRawRequest(reqs ...roachpb.Request) {
 	}
 }
 
-// Get retrieves the value for a key. A new result will be appended to the
-// batch which will contain a single row.
+func (b *Batch) get(key interface{}, forUpdate bool) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	b.appendReqs(roachpb.NewGet(k, forUpdate))
+	b.initResult(1, 1, notRaw, nil)
+}
+
+// Get retrieves the value for a key. A new result will be appended to the batch
+// which will contain a single row.
 //
 //   r, err := db.Get("a")
 //   // string(r.Rows[0].Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewGet(k))
-	b.initResult(1, 1, notRaw, nil)
+	b.get(key, false /* forUpdate */)
+}
+
+// GetForUpdate retrieves the value for a key. An unreplicated, exclusive lock
+// is acquired on the key, if it exists. A new result will be appended to the
+// batch which will contain a single row.
+//
+//   r, err := db.GetForUpdate("a")
+//   // string(r.Rows[0].Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (b *Batch) GetForUpdate(key interface{}) {
+	b.get(key, true /* forUpdate */)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool) {
@@ -369,6 +396,7 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	} else {
 		b.appendReqs(roachpb.NewPut(k, v))
 	}
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -421,17 +449,37 @@ func (b *Batch) PutInline(key, value interface{}) {
 // expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
 // value without the checksum (as the checksum includes the key too).
 func (b *Batch) CPut(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, false)
+	b.cputInternal(key, value, expValue, false, false)
 }
 
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
 func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, true)
+	b.cputInternal(key, value, expValue, true, false)
 }
 
-func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotExist bool) {
+// CPutInline conditionally sets the value for a key if the existing value is
+// equal to expValue, but does not maintain multi-version values. To
+// conditionally set a value only if the key doesn't currently exist, pass an
+// empty expValue. The most recent value is always overwritten. Inline values
+// cannot be mutated transactionally and should be used with caution.
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// A nil value can be used to delete the respective key, since there is no
+// DelInline(). This is different from CPut().
+func (b *Batch) CPutInline(key, value interface{}, expValue []byte) {
+	b.cputInternal(key, value, expValue, false, true)
+}
+
+func (b *Batch) cputInternal(
+	key, value interface{}, expValue []byte, allowNotExist bool, inline bool,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -442,7 +490,12 @@ func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotEx
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+	if inline {
+		b.appendReqs(roachpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
+	} else {
+		b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+	}
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -466,6 +519,7 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 		return
 	}
 	b.appendReqs(roachpb.NewInitPut(k, v, failOnTombstones))
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -567,6 +621,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			return
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
+		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
 	b.initResult(len(reqs), len(reqs), notRaw, nil)
@@ -685,7 +740,9 @@ func (b *Batch) adminChangeReplicas(
 
 // adminRelocateRange is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.ReplicationTarget) {
+func (b *Batch) adminRelocateRange(
+	key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -695,29 +752,8 @@ func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.Replicatio
 		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
-		Targets: targets,
-	}
-	b.appendReqs(req)
-	b.initResult(1, 0, notRaw, nil)
-}
-
-// writeBatch is only exported on DB.
-func (b *Batch) writeBatch(s, e interface{}, data []byte) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	span := roachpb.Span{Key: begin, EndKey: end}
-	req := &roachpb.WriteBatchRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(span),
-		DataSpan:      span,
-		Data:          data,
+		VoterTargets:    voterTargets,
+		NonVoterTargets: nonVoterTargets,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -750,6 +786,93 @@ func (b *Batch) addSSTable(
 		DisallowShadowing: disallowShadowing,
 		MVCCStats:         stats,
 		IngestAsWrites:    ingestAsWrites,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// migrate is only exported on DB.
+func (b *Batch) migrate(s, e interface{}, version roachpb.Version) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+		Version: version,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// queryResolvedTimestamp is only exported on DB.
+func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.QueryResolvedTimestampRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) scanInterleavedIntents(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.ScanInterleavedIntentsRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) barrier(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.BarrierRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

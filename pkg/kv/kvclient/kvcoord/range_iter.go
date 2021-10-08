@@ -13,6 +13,7 @@ package kvcoord
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -29,7 +30,7 @@ type RangeIterator struct {
 	scanDir ScanDirection
 	key     roachpb.RKey
 	// token represents the results of the latest cache lookup.
-	token EvictionToken
+	token rangecache.EvictionToken
 	init  bool
 	err   error
 }
@@ -85,9 +86,22 @@ func (ri *RangeIterator) Leaseholder() *roachpb.ReplicaDescriptor {
 	return ri.token.Leaseholder()
 }
 
+// ClosedTimestampPolicy returns the closed timestamp policy of the range at
+// which the iterator is currently positioned. The iterator must be valid.
+//
+// The policy information comes from a cache, and so it can be stale. Returns
+// the default policy of LAG_BY_CLUSTER_SETTING if no policy information is
+// known.
+func (ri *RangeIterator) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	if !ri.Valid() {
+		panic(ri.Error())
+	}
+	return ri.token.ClosedTimestampPolicy()
+}
+
 // Token returns the eviction token corresponding to the range
 // descriptor for the current iteration. The iterator must be valid.
-func (ri *RangeIterator) Token() EvictionToken {
+func (ri *RangeIterator) Token() rangecache.EvictionToken {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
@@ -117,11 +131,13 @@ func (ri *RangeIterator) Valid() bool {
 	return ri.Error() == nil
 }
 
+var errRangeIterNotInitialized = errors.New("range iterator not intialized with Seek()")
+
 // Error returns the error the iterator encountered, if any. If
 // the iterator has not been initialized, returns iterator error.
 func (ri *RangeIterator) Error() error {
 	if !ri.init {
-		return errors.New("range iterator not intialized with Seek()")
+		return errRangeIterNotInitialized // hot path
 	}
 	return ri.err
 }
@@ -173,7 +189,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// deals with retryable range descriptor lookups.
 	var err error
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		var rngInfo EvictionToken
+		var rngInfo rangecache.EvictionToken
 		rngInfo, err = ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		// getRoutingInfo may fail retryably if, for example, the first
@@ -183,7 +199,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 		// for before reaching this point.
 		if err != nil {
 			log.VEventf(ctx, 1, "range descriptor lookup failed: %s", err)
-			if !isRangeLookupErrorRetryable(err) {
+			if !rangecache.IsRangeLookupErrorRetryable(err) {
 				break
 			}
 			continue

@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "migrationcluster",
+    srcs = [
+        "cluster.go",
+        "nodes.go",
+        "tenant_cluster.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationcluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/server/serverpb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "migrationcluster_test",
+    size = "small",
+    srcs = [
+        "client_test.go",
+        "helper_test.go",
+        "main_test.go",
+        "nodes_test.go",
+    ],
+    embed = [":migrationcluster"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/migration/nodelivenesstest",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/sql/tests",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)

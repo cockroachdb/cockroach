@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "dev_lib",
+    srcs = [
+        "bench.go",
+        "build.go",
+        "builder.go",
+        "dev.go",
+        "doctor.go",
+        "generate.go",
+        "lint.go",
+        "logic.go",
+        "main.go",
+        "test.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/util",
+        "//pkg/cmd/dev/io/exec",
+        "//pkg/cmd/dev/io/os",
+        "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_binary(
+    name = "dev",
+    embed = [":dev_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "dev_test",
+    srcs = [
+        "datadriven_test.go",
+        "dev_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":dev_lib"],
+    deps = [
+        "//pkg/cmd/dev/io/exec",
+        "//pkg/cmd/dev/io/os",
+        "//pkg/cmd/dev/recording",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

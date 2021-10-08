@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -22,19 +21,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -65,22 +68,76 @@ func pgTypeForParserType(t *types.T) pgType {
 	}
 }
 
-// resolveBlankPaddedChar pads the given string with spaces if blank padding is
-// required or returns the string unmodified otherwise.
-func resolveBlankPaddedChar(s string, t *types.T) string {
-	if t.Oid() == oid.T_bpchar {
-		// Pad spaces on the right of the string to make it of length specified in
-		// the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
+func writeTextBool(b *writeBuffer, v bool) {
+	b.putInt32(1)
+	b.writeByte(tree.PgwireFormatBool(v))
+}
+
+func writeTextInt64(b *writeBuffer, v int64) {
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := strconv.AppendInt(b.putbuf[4:4], v, 10)
+	b.putInt32(int32(len(s)))
+	b.write(s)
+}
+
+func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig) {
+	var s []byte
+	// PostgreSQL supports 'Inf' as a valid literal for the floating point
+	// special value Infinity, therefore handling the special cases for them.
+	// (https://github.com/cockroachdb/cockroach/issues/62601)
+	if math.IsInf(fl, 1) {
+		s = []byte("Infinity")
+	} else if math.IsInf(fl, -1) {
+		s = []byte("-Infinity")
+	} else {
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s = strconv.AppendFloat(b.putbuf[4:4], fl, 'g', conv.GetFloatPrec(), 64)
 	}
-	return s
+	b.putInt32(int32(len(s)))
+	b.write(s)
+}
+
+func writeTextBytes(b *writeBuffer, v string, conv sessiondatapb.DataConversionConfig) {
+	result := lex.EncodeByteArrayToRawBytes(v, conv.BytesEncodeFormat, false /* skipHexPrefix */)
+	b.putInt32(int32(len(result)))
+	b.write([]byte(result))
+}
+
+func writeTextUUID(b *writeBuffer, v uuid.UUID) {
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := b.putbuf[4 : 4+36]
+	v.StringBytes(s)
+	b.putInt32(int32(len(s)))
+	b.write(s)
+}
+
+func writeTextString(b *writeBuffer, v string, t *types.T) {
+	b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v, t))
+}
+
+func writeTextTimestamp(b *writeBuffer, v time.Time) {
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := formatTs(v, nil, b.putbuf[4:4])
+	b.putInt32(int32(len(s)))
+	b.write(s)
+}
+
+func writeTextTimestampTZ(b *writeBuffer, v time.Time, sessionLoc *time.Location) {
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := formatTs(v, sessionLoc, b.putbuf[4:4])
+	b.putInt32(int32(len(s)))
+	b.write(s)
 }
 
 // writeTextDatum writes d to the buffer. Type t must be specified for types
 // that have various width encodings and therefore need padding (chars).
 // It is ignored (and can be nil) for types which do not need padding.
 func (b *writeBuffer) writeTextDatum(
-	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig, t *types.T,
+	ctx context.Context,
+	d tree.Datum,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+	t *types.T,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
@@ -90,121 +147,379 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(-1)
 		return
 	}
-	switch v := tree.UnwrapDatum(nil, d).(type) {
-	case *tree.DBitArray:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+	writeTextDatumNotNull(b, d, conv, sessionLoc, t)
+}
 
-	case *tree.DBool:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+// writeTextDatumNotNull writes d to the buffer when d is not null. Type t must
+// be specified for types that have various width encodings and therefore need
+// padding (chars). It is ignored (and can be nil) for types which do not need
+// padding.
+func writeTextDatumNotNull(
+	b *writeBuffer,
+	d tree.Datum,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+	t *types.T,
+) {
+	b.textFormatter.WithDataConversionConfig(
+		conv,
+		func() {
+			switch v := tree.UnwrapDatum(nil, d).(type) {
+			case *tree.DBitArray:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DInt:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DBool:
+				writeTextBool(b, bool(*v))
 
-	case *tree.DFloat:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'g', conv.GetFloatPrec(), 64)
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DInt:
+				writeTextInt64(b, int64(*v))
 
-	case *tree.DDecimal:
-		b.writeLengthPrefixedDatum(v)
+			case *tree.DFloat:
+				fl := float64(*v)
+				writeTextFloat64(b, fl, conv)
 
-	case *tree.DBytes:
-		result := lex.EncodeByteArrayToRawBytes(
-			string(*v), conv.BytesEncodeFormat, false /* skipHexPrefix */)
-		b.putInt32(int32(len(result)))
-		b.write([]byte(result))
+			case *tree.DDecimal:
+				b.writeLengthPrefixedDatum(v)
 
-	case *tree.DUuid:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := b.putbuf[4 : 4+36]
-		v.UUID.StringBytes(s)
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DBytes:
+				writeTextBytes(b, string(*v), conv)
 
-	case *tree.DIPAddr:
-		b.writeLengthPrefixedString(v.IPAddr.String())
+			case *tree.DUuid:
+				writeTextUUID(b, v.UUID)
 
-	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+			case *tree.DIPAddr:
+				b.writeLengthPrefixedString(v.IPAddr.String())
 
-	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+			case *tree.DString:
+				writeTextString(b, string(*v), t)
 
-	case *tree.DDate:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DCollatedString:
+				b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
-	case *tree.DTime:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DDate:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DTimeTZ:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DTime:
+				// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+				s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
+				b.putInt32(int32(len(s)))
+				b.write(s)
 
-	case *tree.DBox2D:
-		s := v.Repr()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DTimeTZ:
+				// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+				s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
+				b.putInt32(int32(len(s)))
+				b.write(s)
 
-	case *tree.DGeography:
-		s := v.Geography.EWKBHex()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DBox2D:
+				s := v.Repr()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DGeometry:
-		s := v.Geometry.EWKBHex()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DGeography:
+				s := v.Geography.EWKBHex()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DTimestamp:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(v.Time, nil, b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DGeometry:
+				s := v.Geometry.EWKBHex()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DTimestampTZ:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(v.Time, conv.Location, b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DTimestamp:
+				writeTextTimestamp(b, v.Time)
 
-	case *tree.DInterval:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DTimestampTZ:
+				writeTextTimestampTZ(b, v.Time, sessionLoc)
 
-	case *tree.DJSON:
-		b.writeLengthPrefixedString(v.JSON.String())
+			case *tree.DInterval:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DTuple:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DJSON:
+				b.writeLengthPrefixedString(v.JSON.String())
 
-	case *tree.DArray:
-		// Arrays have custom formatting depending on their OID.
-		b.textFormatter.FormatNode(d)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DTuple:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DOid:
-		b.writeLengthPrefixedDatum(v)
+			case *tree.DArray:
+				// Arrays have custom formatting depending on their OID.
+				b.textFormatter.FormatNode(d)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DEnum:
-		// Enums are serialized with their logical representation.
-		b.writeLengthPrefixedString(v.LogicalRep)
+			case *tree.DOid:
+				b.writeLengthPrefixedDatum(v)
 
+			case *tree.DEnum:
+				// Enums are serialized with their logical representation.
+				b.writeLengthPrefixedString(v.LogicalRep)
+
+			default:
+				b.setError(errors.Errorf("unsupported type %T", d))
+			}
+		})
+}
+
+// getInt64 returns an int64 from vectors of Int family.
+func getInt64(vec coldata.Vec, idx int) int64 {
+	switch vec.Type().Width() {
+	case 16:
+		return int64(vec.Int16().Get(idx))
+	case 32:
+		return int64(vec.Int32().Get(idx))
 	default:
-		b.setError(errors.Errorf("unsupported type %T", d))
+		return vec.Int64().Get(idx)
 	}
+}
+
+// writeTextColumnarElement is the same as writeTextDatum where the datum is
+// represented in a columnar element (at position idx in vec).
+func (b *writeBuffer) writeTextColumnarElement(
+	ctx context.Context,
+	vec coldata.Vec,
+	idx int,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+) {
+	b.textFormatter.WithDataConversionConfig(
+		conv,
+		func() {
+			if log.V(2) {
+				log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", vec.Type())
+			}
+			if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				// NULL is encoded as -1; all other values have a length prefix.
+				b.putInt32(-1)
+				return
+			}
+			switch vec.Type().Family() {
+			case types.BoolFamily:
+				writeTextBool(b, vec.Bool().Get(idx))
+
+			case types.IntFamily:
+				writeTextInt64(b, getInt64(vec, idx))
+
+			case types.FloatFamily:
+				writeTextFloat64(b, vec.Float64().Get(idx), conv)
+
+			case types.DecimalFamily:
+				d := vec.Decimal().Get(idx)
+				// The logic here is the simplification of tree.DDecimal.Format given
+				// that we use tree.FmtSimple.
+				b.writeLengthPrefixedString(d.String())
+
+			case types.BytesFamily:
+				writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
+
+			case types.UuidFamily:
+				id, err := uuid.FromBytes(vec.Bytes().Get(idx))
+				if err != nil {
+					panic(errors.Wrap(err, "unexpectedly couldn't retrieve UUID object"))
+				}
+				writeTextUUID(b, id)
+
+			case types.StringFamily:
+				writeTextString(b, string(vec.Bytes().Get(idx)), vec.Type())
+
+			case types.DateFamily:
+				tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)), b.textFormatter)
+				b.writeFromFmtCtx(b.textFormatter)
+
+			case types.TimestampFamily:
+				writeTextTimestamp(b, vec.Timestamp().Get(idx))
+
+			case types.TimestampTZFamily:
+				writeTextTimestampTZ(b, vec.Timestamp().Get(idx), sessionLoc)
+
+			case types.IntervalFamily:
+				tree.FormatDuration(vec.Interval().Get(idx), b.textFormatter)
+				b.writeFromFmtCtx(b.textFormatter)
+
+			case types.JsonFamily:
+				b.writeLengthPrefixedString(vec.JSON().Get(idx).String())
+
+			default:
+				// All other types are represented via the datum-backed vector.
+				writeTextDatumNotNull(b, vec.Datum().Get(idx).(tree.Datum), conv, sessionLoc, vec.Type())
+			}
+		},
+	)
+}
+
+func writeBinaryBool(b *writeBuffer, v bool) {
+	b.putInt32(1)
+	if v {
+		b.writeByte(1)
+	} else {
+		b.writeByte(0)
+	}
+}
+
+func writeBinaryInt(b *writeBuffer, v int64, t *types.T) {
+	switch t.Oid() {
+	case oid.T_int2:
+		b.putInt32(2)
+		b.putInt16(int16(v))
+	case oid.T_int4:
+		b.putInt32(4)
+		b.putInt32(int32(v))
+	case oid.T_int8:
+		b.putInt32(8)
+		b.putInt64(v)
+	default:
+		b.setError(errors.Errorf("unsupported int oid: %v", t.Oid()))
+	}
+}
+
+func writeBinaryFloat(b *writeBuffer, v float64, t *types.T) {
+	switch t.Oid() {
+	case oid.T_float4:
+		b.putInt32(4)
+		b.putInt32(int32(math.Float32bits(float32(v))))
+	case oid.T_float8:
+		b.putInt32(8)
+		b.putInt64(int64(math.Float64bits(v)))
+	default:
+		b.setError(errors.Errorf("unsupported float oid: %v", t.Oid()))
+	}
+}
+
+func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
+	if v.Form != apd.Finite {
+		b.putInt32(8)
+		// 0 digits.
+		b.putInt32(0)
+		// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+		b.write([]byte{0xc0, 0, 0, 0})
+
+		if v.Form == apd.Infinite {
+			// TODO(mjibson): #32489
+			// The above encoding is not correct for Infinity, but since that encoding
+			// doesn't exist in postgres, it's unclear what to do. For now use the NaN
+			// encoding and count it to see if anyone even needs this.
+			telemetry.Inc(sqltelemetry.BinaryDecimalInfinityCounter)
+		}
+
+		return
+	}
+
+	alloc := struct {
+		pgNum pgwirebase.PGNumeric
+
+		bigI big.Int
+	}{
+		pgNum: pgwirebase.PGNumeric{
+			// Since we use 2000 as the exponent limits in tree.DecimalCtx, this
+			// conversion should not overflow.
+			Dscale: int16(-v.Exponent),
+		},
+	}
+
+	if v.Sign() >= 0 {
+		alloc.pgNum.Sign = pgwirebase.PGNumericPos
+	} else {
+		alloc.pgNum.Sign = pgwirebase.PGNumericNeg
+	}
+
+	isZero := func(r rune) bool {
+		return r == '0'
+	}
+
+	// Mostly cribbed from libpqtypes' str2num.
+	digits := strings.TrimLeftFunc(alloc.bigI.Abs(&v.Coeff).String(), isZero)
+	dweight := len(digits) - int(alloc.pgNum.Dscale) - 1
+	digits = strings.TrimRightFunc(digits, isZero)
+
+	if dweight >= 0 {
+		alloc.pgNum.Weight = int16((dweight+1+pgwirebase.PGDecDigits-1)/pgwirebase.PGDecDigits - 1)
+	} else {
+		alloc.pgNum.Weight = int16(-((-dweight-1)/pgwirebase.PGDecDigits + 1))
+	}
+	offset := (int(alloc.pgNum.Weight)+1)*pgwirebase.PGDecDigits - (dweight + 1)
+	alloc.pgNum.Ndigits = int16((len(digits) + offset + pgwirebase.PGDecDigits - 1) / pgwirebase.PGDecDigits)
+
+	if len(digits) == 0 {
+		offset = 0
+		alloc.pgNum.Ndigits = 0
+		alloc.pgNum.Weight = 0
+	}
+
+	digitIdx := -offset
+
+	nextDigit := func() int16 {
+		var ndigit int16
+		for nextDigitIdx := digitIdx + pgwirebase.PGDecDigits; digitIdx < nextDigitIdx; digitIdx++ {
+			ndigit *= 10
+			if digitIdx >= 0 && digitIdx < len(digits) {
+				ndigit += int16(digits[digitIdx] - '0')
+			}
+		}
+		return ndigit
+	}
+
+	// The dscale is defined as number of digits (in base 10) visible
+	// after the decimal separator, so it can't be negative.
+	if alloc.pgNum.Dscale < 0 {
+		alloc.pgNum.Dscale = 0
+	}
+
+	b.putInt32(int32(2 * (4 + alloc.pgNum.Ndigits)))
+	b.putInt16(alloc.pgNum.Ndigits)
+	b.putInt16(alloc.pgNum.Weight)
+	b.putInt16(int16(alloc.pgNum.Sign))
+	b.putInt16(alloc.pgNum.Dscale)
+
+	for digitIdx < len(digits) {
+		b.putInt16(nextDigit())
+	}
+}
+
+func writeBinaryBytes(b *writeBuffer, v []byte) {
+	b.putInt32(int32(len(v)))
+	b.write(v)
+}
+
+func writeBinaryString(b *writeBuffer, v string, t *types.T) {
+	s := tree.ResolveBlankPaddedChar(v, t)
+	if t.Oid() == oid.T_char && s == "" {
+		// Match Postgres and always explicitly include a null byte if we have
+		// an empty string for the "char" type in the binary format.
+		s = string([]byte{0})
+	}
+	b.writeLengthPrefixedString(s)
+}
+
+func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
+	b.putInt32(8)
+	b.putInt64(timeToPgBinary(v, nil))
+}
+
+func writeBinaryTimestampTZ(b *writeBuffer, v time.Time, sessionLoc *time.Location) {
+	b.putInt32(8)
+	b.putInt64(timeToPgBinary(v, sessionLoc))
+}
+
+func writeBinaryDate(b *writeBuffer, v pgdate.Date) {
+	b.putInt32(4)
+	b.putInt32(v.PGEpochDays())
+}
+
+func writeBinaryInterval(b *writeBuffer, v duration.Duration) {
+	b.putInt32(16)
+	b.putInt64(v.Nanos() / int64(time.Microsecond/time.Nanosecond))
+	b.putInt32(int32(v.Days))
+	b.putInt32(int32(v.Months))
+}
+
+func writeBinaryJSON(b *writeBuffer, v json.JSON) {
+	s := v.String()
+	b.putInt32(int32(len(s) + 1))
+	// Postgres version number, as of writing, `1` is the only valid value.
+	b.writeByte(1)
+	b.writeString(s)
 }
 
 // writeBinaryDatum writes d to the buffer. Type t must be specified for types
@@ -221,6 +536,16 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(-1)
 		return
 	}
+	writeBinaryDatumNotNull(ctx, b, d, sessionLoc, t)
+}
+
+// writeBinaryDatumNotNull writes d to the buffer when d is not null. Type t
+// must be specified for types that have various width encodings (floats, ints,
+// chars). It is ignored (and can be nil) for types with a 1:1 datum:type
+// mapping.
+func writeBinaryDatumNotNull(
+	ctx context.Context, b *writeBuffer, d tree.Datum, sessionLoc *time.Location, t *types.T,
+) {
 	switch v := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		words, lastBitsUsed := v.EncodingParts()
@@ -254,130 +579,22 @@ func (b *writeBuffer) writeBinaryDatum(
 		}
 
 	case *tree.DBool:
-		b.putInt32(1)
-		if *v {
-			b.writeByte(1)
-		} else {
-			b.writeByte(0)
-		}
+		writeBinaryBool(b, bool(*v))
 
 	case *tree.DInt:
-		switch t.Oid() {
-		case oid.T_int2:
-			b.putInt32(2)
-			b.putInt16(int16(*v))
-		case oid.T_int4:
-			b.putInt32(4)
-			b.putInt32(int32(*v))
-		case oid.T_int8:
-			b.putInt32(8)
-			b.putInt64(int64(*v))
-		default:
-			b.setError(errors.Errorf("unsupported int oid: %v", t.Oid()))
-		}
+		writeBinaryInt(b, int64(*v), t)
 
 	case *tree.DFloat:
-		switch t.Oid() {
-		case oid.T_float4:
-			b.putInt32(4)
-			b.putInt32(int32(math.Float32bits(float32(*v))))
-		case oid.T_float8:
-			b.putInt32(8)
-			b.putInt64(int64(math.Float64bits(float64(*v))))
-		default:
-			b.setError(errors.Errorf("unsupported float oid: %v", t.Oid()))
-		}
+		writeBinaryFloat(b, float64(*v), t)
 
 	case *tree.DDecimal:
-		if v.Form != apd.Finite {
-			b.putInt32(8)
-			// 0 digits.
-			b.putInt32(0)
-			// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
-			b.write([]byte{0xc0, 0, 0, 0})
-
-			if v.Form == apd.Infinite {
-				// TODO(mjibson): #32489
-				// The above encoding is not correct for Infinity, but since that encoding
-				// doesn't exist in postgres, it's unclear what to do. For now use the NaN
-				// encoding and count it to see if anyone even needs this.
-				telemetry.Inc(sqltelemetry.BinaryDecimalInfinityCounter)
-			}
-
-			return
-		}
-
-		alloc := struct {
-			pgNum pgwirebase.PGNumeric
-
-			bigI big.Int
-		}{
-			pgNum: pgwirebase.PGNumeric{
-				// Since we use 2000 as the exponent limits in tree.DecimalCtx, this
-				// conversion should not overflow.
-				Dscale: int16(-v.Exponent),
-			},
-		}
-
-		if v.Sign() >= 0 {
-			alloc.pgNum.Sign = pgwirebase.PGNumericPos
-		} else {
-			alloc.pgNum.Sign = pgwirebase.PGNumericNeg
-		}
-
-		isZero := func(r rune) bool {
-			return r == '0'
-		}
-
-		// Mostly cribbed from libpqtypes' str2num.
-		digits := strings.TrimLeftFunc(alloc.bigI.Abs(&v.Coeff).String(), isZero)
-		dweight := len(digits) - int(alloc.pgNum.Dscale) - 1
-		digits = strings.TrimRightFunc(digits, isZero)
-
-		if dweight >= 0 {
-			alloc.pgNum.Weight = int16((dweight+1+pgwirebase.PGDecDigits-1)/pgwirebase.PGDecDigits - 1)
-		} else {
-			alloc.pgNum.Weight = int16(-((-dweight-1)/pgwirebase.PGDecDigits + 1))
-		}
-		offset := (int(alloc.pgNum.Weight)+1)*pgwirebase.PGDecDigits - (dweight + 1)
-		alloc.pgNum.Ndigits = int16((len(digits) + offset + pgwirebase.PGDecDigits - 1) / pgwirebase.PGDecDigits)
-
-		if len(digits) == 0 {
-			offset = 0
-			alloc.pgNum.Ndigits = 0
-			alloc.pgNum.Weight = 0
-		}
-
-		digitIdx := -offset
-
-		nextDigit := func() int16 {
-			var ndigit int16
-			for nextDigitIdx := digitIdx + pgwirebase.PGDecDigits; digitIdx < nextDigitIdx; digitIdx++ {
-				ndigit *= 10
-				if digitIdx >= 0 && digitIdx < len(digits) {
-					ndigit += int16(digits[digitIdx] - '0')
-				}
-			}
-			return ndigit
-		}
-
-		b.putInt32(int32(2 * (4 + alloc.pgNum.Ndigits)))
-		b.putInt16(alloc.pgNum.Ndigits)
-		b.putInt16(alloc.pgNum.Weight)
-		b.putInt16(int16(alloc.pgNum.Sign))
-		b.putInt16(alloc.pgNum.Dscale)
-
-		for digitIdx < len(digits) {
-			b.putInt16(nextDigit())
-		}
+		writeBinaryDecimal(b, &v.Decimal)
 
 	case *tree.DBytes:
-		b.putInt32(int32(len(*v)))
-		b.write([]byte(*v))
+		writeBinaryBytes(b, []byte(*v))
 
 	case *tree.DUuid:
-		b.putInt32(16)
-		b.write(v.GetBytes())
+		writeBinaryBytes(b, v.GetBytes())
 
 	case *tree.DIPAddr:
 		// We calculate the Postgres binary format for an IPAddr. For the spec see,
@@ -418,22 +635,19 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		writeBinaryString(b, string(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DTimestamp:
-		b.putInt32(8)
-		b.putInt64(timeToPgBinary(v.Time, nil))
+		writeBinaryTimestamp(b, v.Time)
 
 	case *tree.DTimestampTZ:
-		b.putInt32(8)
-		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
+		writeBinaryTimestampTZ(b, v.Time, sessionLoc)
 
 	case *tree.DDate:
-		b.putInt32(4)
-		b.putInt32(v.PGEpochDays())
+		writeBinaryDate(b, v.Date)
 
 	case *tree.DTime:
 		b.putInt32(8)
@@ -445,22 +659,25 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(v.OffsetSecs)
 
 	case *tree.DInterval:
-		b.putInt32(16)
-		b.putInt64(v.Nanos() / int64(time.Microsecond/time.Nanosecond))
-		b.putInt32(int32(v.Days))
-		b.putInt32(int32(v.Months))
+		writeBinaryInterval(b, v.Duration)
 
 	case *tree.DTuple:
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		initialLen := b.Len()
+
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+
 		// Put the number of datums.
-		subWriter.putInt32(int32(len(v.D)))
-		for _, elem := range v.D {
-			oid := elem.ResolvedType().Oid()
-			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
+		b.putInt32(int32(len(v.D)))
+		tupleTypes := t.TupleContents()
+		for i, elem := range v.D {
+			oid := tupleTypes[i].Oid()
+			b.putInt32(int32(oid))
+			b.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
 	case *tree.DBox2D:
 		b.putInt32(32)
@@ -483,36 +700,40 @@ func (b *writeBuffer) writeBinaryDatum(
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+
+		initialLen := b.Len()
+
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+
 		// Put the number of dimensions. We currently support 1d arrays only.
 		var ndims int32 = 1
 		if v.Len() == 0 {
 			ndims = 0
 		}
-		subWriter.putInt32(ndims)
+		b.putInt32(ndims)
 		hasNulls := 0
 		if v.HasNulls {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()
-		subWriter.putInt32(int32(hasNulls))
-		subWriter.putInt32(int32(oid))
+		b.putInt32(int32(hasNulls))
+		b.putInt32(int32(oid))
 		if v.Len() > 0 {
-			subWriter.putInt32(int32(v.Len()))
+			b.putInt32(int32(v.Len()))
 			// Lower bound, we only support a lower bound of 1.
-			subWriter.putInt32(1)
+			b.putInt32(1)
 			for _, elem := range v.Array {
-				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
+				b.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
 			}
 		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
+
 	case *tree.DJSON:
-		s := v.JSON.String()
-		b.putInt32(int32(len(s) + 1))
-		// Postgres version number, as of writing, `1` is the only valid value.
-		b.writeByte(1)
-		b.writeString(s)
+		writeBinaryJSON(b, v.JSON)
+
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
@@ -521,12 +742,69 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 }
 
+// writeBinaryColumnarElement is the same as writeBinaryDatum where the datum is
+// represented in a columnar element (at position idx in vec).
+func (b *writeBuffer) writeBinaryColumnarElement(
+	ctx context.Context, vec coldata.Vec, idx int, sessionLoc *time.Location,
+) {
+	if log.V(2) {
+		log.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", vec.Type())
+	}
+	if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+		// NULL is encoded as -1; all other values have a length prefix.
+		b.putInt32(-1)
+		return
+	}
+	switch vec.Type().Family() {
+	case types.BoolFamily:
+		writeBinaryBool(b, vec.Bool().Get(idx))
+
+	case types.IntFamily:
+		writeBinaryInt(b, getInt64(vec, idx), vec.Type())
+
+	case types.FloatFamily:
+		writeBinaryFloat(b, vec.Float64().Get(idx), vec.Type())
+
+	case types.DecimalFamily:
+		v := vec.Decimal().Get(idx)
+		writeBinaryDecimal(b, &v)
+
+	case types.BytesFamily:
+		writeBinaryBytes(b, vec.Bytes().Get(idx))
+
+	case types.UuidFamily:
+		writeBinaryBytes(b, vec.Bytes().Get(idx))
+
+	case types.StringFamily:
+		writeBinaryString(b, string(vec.Bytes().Get(idx)), vec.Type())
+
+	case types.TimestampFamily:
+		writeBinaryTimestamp(b, vec.Timestamp().Get(idx))
+
+	case types.TimestampTZFamily:
+		writeBinaryTimestampTZ(b, vec.Timestamp().Get(idx), sessionLoc)
+
+	case types.DateFamily:
+		writeBinaryDate(b, pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)))
+
+	case types.IntervalFamily:
+		writeBinaryInterval(b, vec.Interval().Get(idx))
+
+	case types.JsonFamily:
+		writeBinaryJSON(b, vec.JSON().Get(idx))
+
+	default:
+		// All other types are represented via the datum-backed vector.
+		writeBinaryDatumNotNull(ctx, b, vec.Datum().Get(idx).(tree.Datum), sessionLoc, vec.Type())
+	}
+}
+
 const (
 	pgTimeFormat              = "15:04:05.999999"
-	pgTimeTZFormat            = pgTimeFormat + "-07:00"
+	pgTimeTZFormat            = pgTimeFormat + "-07"
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07"
 	pgTime2400Format          = "24:00:00"
 )
 
@@ -544,10 +822,14 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // formatTimeTZ formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
-// Note it does not understand the "second" component of the offset as lib/pq
-// cannot parse it.
 func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
-	ret := t.ToTime().AppendFormat(tmp, pgTimeTZFormat)
+	format := pgTimeTZFormat
+	if t.OffsetSecs%60 != 0 {
+		format += ":00:00"
+	} else if t.OffsetSecs%3600 != 0 {
+		format += ":00"
+	}
+	ret := t.ToTime().AppendFormat(tmp, format)
 	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
 	if t.TimeOfDay == timeofday.Time2400 {
 		// It instead reads 00:00:00. Replace that text.
@@ -563,6 +845,11 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	var format string
 	if offset != nil {
 		format = pgTimeStampFormat
+		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
+			format += ":00:00"
+		} else if offsetSeconds%3600 != 0 {
+			format += ":00"
+		}
 	} else {
 		format = pgTimeStampFormatNoOffset
 	}

@@ -30,6 +30,7 @@ message IOFileFormat {
   optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
   optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
+  optional MysqldumpOptions mysql_dump = 9 [(gogoproto.nullable) = false];
   optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
   optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
 
@@ -58,6 +59,9 @@ message CSVOptions {
   // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
   // non-doubled quote may NOT appear in a quoted field.
   optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per CSV file.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
@@ -85,6 +89,8 @@ message MySQLOutfileOptions {
   // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string null_encoding = 8 [(gogoproto.nullable) = true];
   reserved 9;
+  // limit the number of rows to import.
+  optional int64 row_limit = 10 [(gogoproto.nullable) = false];
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
@@ -101,6 +107,23 @@ message PgCopyOptions {
 message PgDumpOptions {
   // maxRowSize is the maximum row size
   optional int32 maxRowSize = 1 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per table.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 2 [(gogoproto.nullable) = false];
+  // Indicates if all unparseable and parseable, but unimplemented PGDUMP stmts
+  // should be ignored during IMPORT.
+  optional bool ignore_unsupported = 3 [(gogoproto.nullable) = false];
+  // Points to the destination where unsupported statements during a PGDUMP
+  // import should be logged. This can only be used when ignore_unsupported is
+  // specified, otherwise the IMPORT errors out on encountering an unsupported
+  // stmt.
+  optional string ignore_unsupported_log = 4 [(gogoproto.nullable) = false];
+}
+
+message MysqldumpOptions {
+  // Indicates the number of rows to import per table.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 1 [(gogoproto.nullable) = false];
 }
 
 message AvroOptions {
@@ -125,4 +148,5 @@ message AvroOptions {
   optional string schemaJSON = 3 [(gogoproto.nullable) = false];
   optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
   optional int32 record_separator = 5 [(gogoproto.nullable) = false];
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }

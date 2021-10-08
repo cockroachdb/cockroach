@@ -1,0 +1,77 @@
+# LogicTest: local
+
+statement ok
+CREATE SCHEMA schema_a
+
+statement ok
+CREATE USER user1
+
+statement ok
+CREATE TYPE public.enum_a AS ENUM ('hello', 'goodbye');
+GRANT USAGE ON TYPE public.enum_a TO user1
+
+statement ok
+CREATE TYPE public."enum_a+b" AS ENUM ('hello', 'goodbye');
+GRANT USAGE ON TYPE public."enum_a+b" TO user1
+
+statement ok
+CREATE TYPE schema_a.enum_b AS ENUM ('hi', 'bye');
+GRANT ALL ON TYPE schema_a.enum_b TO user1
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE schema_a.enum_b, "enum_a+b", enum_a, int4
+----
+database_name  schema_name  type_name  grantee  privilege_type
+test           pg_catalog   int4       admin    ALL
+test           pg_catalog   int4       public   USAGE
+test           pg_catalog   int4       root     ALL
+test           public       enum_a     admin    ALL
+test           public       enum_a     public   USAGE
+test           public       enum_a     root     ALL
+test           public       enum_a     user1    USAGE
+test           public       enum_a+b   admin    ALL
+test           public       enum_a+b   public   USAGE
+test           public       enum_a+b   root     ALL
+test           public       enum_a+b   user1    USAGE
+test           schema_a     enum_b     admin    ALL
+test           schema_a     enum_b     public   USAGE
+test           schema_a     enum_b     root     ALL
+test           schema_a     enum_b     user1    ALL
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
+----
+database_name  schema_name  type_name  grantee  privilege_type
+test           public       enum_a     user1    USAGE
+test           schema_a     enum_b     user1    ALL
+
+query TTTTT colnames
+SHOW GRANTS FOR user1
+----
+database_name  schema_name  relation_name  grantee  privilege_type
+test           public       enum_a         user1    USAGE
+test           public       enum_a+b       user1    USAGE
+test           schema_a     enum_b         user1    ALL
+
+statement error type "non_existent" does not exist
+SHOW GRANTS ON TYPE non_existent
+
+# Regression test for #67512: should be able to see grants for a type in a
+# different database.
+statement ok
+CREATE DATABASE other;
+CREATE TYPE other.typ AS ENUM();
+GRANT ALL ON TYPE other.typ TO user1
+
+query TTTTT
+SHOW GRANTS ON TYPE other.typ
+----
+other  public  typ  admin   ALL
+other  public  typ  public  USAGE
+other  public  typ  root    ALL
+other  public  typ  user1   ALL
+
+query TTTTT
+SHOW GRANTS ON TYPE other.typ FOR user1
+----
+other  public  typ  user1  ALL

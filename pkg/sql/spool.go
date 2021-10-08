@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // spoolNode ensures that a child planNode is executed to completion
@@ -30,6 +30,9 @@ type spoolNode struct {
 	curRowIdx int
 }
 
+// spoolNode is not a mutationPlanNode itself, but it might wrap one.
+var _ mutationPlanNode = &spoolNode{}
+
 func (s *spoolNode) startExec(params runParams) error {
 	// If FastPathResults() on the source indicates that the results are
 	// already available (2nd value true), then the computation is
@@ -43,8 +46,7 @@ func (s *spoolNode) startExec(params runParams) error {
 
 	s.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(planColumns(s.source)),
-		0, /* rowCapacity */
+		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 
 	// Accumulate all the rows up to the hardLimit, if any.
@@ -104,4 +106,12 @@ func (s *spoolNode) Close(ctx context.Context) {
 		s.rows.Close(ctx)
 		s.rows = nil
 	}
+}
+
+func (s *spoolNode) rowsWritten() int64 {
+	m, ok := s.source.(mutationPlanNode)
+	if !ok {
+		return 0
+	}
+	return m.rowsWritten()
 }

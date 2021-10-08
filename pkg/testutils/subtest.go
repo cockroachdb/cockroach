@@ -24,3 +24,14 @@ func RunTrueAndFalse(t *testing.T, name string, fn func(t *testing.T, b bool)) {
 		})
 	}
 }
+
+// RunValues calls the provided function in a subtest for each of the
+// provided values.
+func RunValues(t *testing.T, name string, values []interface{}, fn func(*testing.T, interface{})) {
+	t.Helper()
+	for _, v := range values {
+		t.Run(fmt.Sprintf("%s=%v", name, v), func(t *testing.T) {
+			fn(t, v)
+		})
+	}
+}

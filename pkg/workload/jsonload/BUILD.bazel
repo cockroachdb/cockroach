@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jsonload",
+    srcs = ["json.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/jsonload",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/json",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

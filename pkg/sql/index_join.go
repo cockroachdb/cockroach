@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // indexJoinNode implements joining of results from an index with the rows
@@ -30,12 +30,10 @@ type indexJoinNode struct {
 
 	table *scanNode
 
-	// The columns returned by this node. While these are not ever different from
-	// the table scanNode in the heuristic planner, the optimizer plans them to
-	// be different in some cases.
-	cols []descpb.ColumnDescriptor
+	// The columns returned by this node.
+	cols []catalog.Column
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 
 	reqOrdering ReqOrdering
 }

@@ -88,6 +88,9 @@ type Hooks struct {
 	// Validate is called after workload flags are parsed. It should return an
 	// error if the workload configuration is invalid.
 	Validate func() error
+	// PreCreate is called before workload tables are created.
+	// Implementations should be idempotent.
+	PreCreate func(*gosql.DB) error
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
 	// Implementations should be idempotent.
@@ -239,7 +242,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 				case time.Time:
 					col.Bytes().Set(0, []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat)))
 				default:
-					panic(fmt.Sprintf(`unhandled datum type %T`, d))
+					panic(errors.AssertionFailedf(`unhandled datum type %T`, d))
 				}
 			}
 		}
@@ -458,6 +461,6 @@ func ApproxDatumSize(x interface{}) int64 {
 	case time.Time:
 		return 12
 	default:
-		panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 	}
 }

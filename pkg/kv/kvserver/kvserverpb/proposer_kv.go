@@ -10,14 +10,28 @@
 
 package kvserverpb
 
-import "math"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 var maxRaftCommandFooterSize = (&RaftCommandFooter{
 	MaxLeaseIndex: math.MaxUint64,
+	ClosedTimestamp: hlc.Timestamp{
+		WallTime:  math.MaxInt64,
+		Logical:   math.MaxInt32,
+		Synthetic: true,
+	},
 }).Size()
 
-// MaxRaftCommandFooterSize returns the maximum possible size of an
-// encoded RaftCommandFooter proto.
+// MaxRaftCommandFooterSize returns the maximum possible size of an encoded
+// RaftCommandFooter proto.
 func MaxRaftCommandFooterSize() int {
 	return maxRaftCommandFooterSize
+}
+
+// IsZero returns whether all fields are set to their zero value.
+func (r ReplicatedEvalResult) IsZero() bool {
+	return r == ReplicatedEvalResult{}
 }

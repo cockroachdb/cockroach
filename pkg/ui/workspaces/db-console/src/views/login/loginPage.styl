@@ -1,0 +1,132 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require '~src/components/core/index.styl'
+
+.login-page
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+  width 100%
+  position absolute
+  background-color $colors--neutral-1
+  background-image url("../../../assets/login-background.png")
+  background-position bottom
+  background-size cover
+  background-repeat no-repeat
+
+  .content
+    display flex
+    margin-top 27px
+
+  &__container
+    width 920px
+    display flex
+    flex-direction column
+
+  &__info.section
+    width 50%
+    padding 24px
+    margin-top 60px
+
+  &__form.section
+    background-color $colors--neutral-0
+    width 50%
+    padding 40px
+    box-shadow 0px 0px 1px rgba(67, 90, 111, 0.415)
+    border-radius 5px
+
+  .form-container
+    display flex
+    flex-direction column
+    height 100%
+    justify-content: space-between
+
+  .aside
+    margin-top 12px
+    line-height 24px
+    color $body-color
+    width 350px
+    font-size 14px
+
+  .logo
+    height 32px
+    position relative
+    margin-bottom 74px
+
+  .input-text
+    width 100%
+    font-size 14px
+    line-height 17px
+    padding 12px 18px
+    vertical-align middle
+    border 1px solid $button-border-color
+    border-radius 3px
+    margin 12px 0
+    color $body-color
+    display block
+
+    &::placeholder
+      color lightgrey
+
+    &--error
+      border-color $alert-color
+  
+  .form-internal
+    .crl-text-input__wrapper
+      margin-bottom
+
+  .submit-button
+    width 100%
+    &:disabled
+      cursor pointer
+
+  .submit-button-oidc
+    margin-top: 10px
+    width 100%
+    &:disabled
+      cursor pointer
+
+  &__error
+    @extend $text--body-strong
+    padding 14px 20px
+    background $colors--neutral-0
+    box-shadow 0px 0px 1px rgba(67, 90, 111, 0.415)
+    border-radius 3px
+    border-left 4px solid $colors--functional-red-3
+    letter-spacing 0.1px
+    color $colors--neutral-8
+    margin-bottom 18px
+    img
+      margin-right 16px
+  
+  .text--heading-3
+    color $colors--neutral-8
+    margin-bottom 30px
+
+  .text--heading-5
+    color $colors--neutral-6
+    margin-bottom 15px
+  
+  .login-note-box__sql-command
+    @extend $text--code--bold
+    background $colors--neutral-0
+    border 1px solid $colors--neutral-3
+    box-sizing border-box
+    border-radius 4px
+    padding 12px 15px
+    color $colors--neutral-7
+    width max-content
+    .sql-keyword
+      color $colors--primary-purple-3
+    .sql-string
+      color $colors--functional-orange-4

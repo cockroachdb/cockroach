@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -64,10 +63,6 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
-	// FreezeStart indicates the high water mark timestamp beyond which the range
-	// is guaranteed to not have served any requests. This value is only set when
-	// a range merge is in progress. If set, call maybeWatchForMerge.
-	FreezeStart hlc.Timestamp
 
 	// Metrics contains counters which are to be passed to the
 	// metrics subsystem.
@@ -87,7 +82,6 @@ func (lResult *LocalResult) IsZero() bool {
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
 		lResult.MaybeGossipNodeLiveness == nil &&
-		lResult.FreezeStart.IsEmpty() &&
 		lResult.Metrics == nil
 }
 
@@ -100,13 +94,13 @@ func (lResult *LocalResult) String() string {
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s FreezeStart:%s",
+		"MaybeGossipNodeLiveness:%s ",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
-		lResult.MaybeGossipNodeLiveness, lResult.FreezeStart)
+		lResult.MaybeGossipNodeLiveness)
 }
 
 // DetachEncounteredIntents returns (and removes) those encountered
@@ -164,7 +158,7 @@ func (p *Result) IsZero() bool {
 	if !p.Local.IsZero() {
 		return false
 	}
-	if !p.Replicated.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if !p.Replicated.IsZero() {
 		return false
 	}
 	if p.WriteBatch != nil {
@@ -228,6 +222,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			q.Replicated.State.GCThreshold = nil
 		}
 
+		if p.Replicated.State.Version == nil {
+			p.Replicated.State.Version = q.Replicated.State.Version
+		} else if q.Replicated.State.Version != nil {
+			return errors.AssertionFailedf("conflicting Version")
+		}
+		q.Replicated.State.Version = nil
+
 		if q.Replicated.State.Stats != nil {
 			return errors.AssertionFailedf("must not specify Stats")
 		}
@@ -280,21 +281,19 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
-	if q.Replicated.SuggestedCompactions != nil {
-		if p.Replicated.SuggestedCompactions == nil {
-			p.Replicated.SuggestedCompactions = q.Replicated.SuggestedCompactions
-		} else {
-			p.Replicated.SuggestedCompactions = append(p.Replicated.SuggestedCompactions, q.Replicated.SuggestedCompactions...)
-		}
-	}
-	q.Replicated.SuggestedCompactions = nil
-
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
 	} else if q.Replicated.PrevLeaseProposal != nil {
 		return errors.AssertionFailedf("conflicting lease expiration")
 	}
 	q.Replicated.PrevLeaseProposal = nil
+
+	if p.Replicated.PriorReadSummary == nil {
+		p.Replicated.PriorReadSummary = q.Replicated.PriorReadSummary
+	} else if q.Replicated.PriorReadSummary != nil {
+		return errors.AssertionFailedf("conflicting prior read summary")
+	}
+	q.Replicated.PriorReadSummary = nil
 
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
@@ -337,13 +336,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.AssertionFailedf("conflicting MaybeGossipNodeLiveness")
 	}
 	q.Local.MaybeGossipNodeLiveness = nil
-
-	if p.Local.FreezeStart.IsEmpty() {
-		p.Local.FreezeStart = q.Local.FreezeStart
-	} else if !q.Local.FreezeStart.IsEmpty() {
-		return errors.AssertionFailedf("conflicting FreezeStart")
-	}
-	q.Local.FreezeStart = hlc.Timestamp{}
 
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)

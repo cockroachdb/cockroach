@@ -29,7 +29,7 @@ import (
 
 const (
 	goroutineDumpPrefix = "goroutine_dump"
-	timeFormat          = "2006-01-02T15_04_05.999"
+	timeFormat          = "2006-01-02T15_04_05.000"
 )
 
 var (

@@ -28,8 +28,8 @@ type File interface {
 
 // FS provides a filesystem interface.
 type FS interface {
-	// Create creates the named file for writing, truncating it if it already
-	// exists.
+	// Create creates the named file for writing, removing the file at
+	// the provided path if one already exists.
 	Create(name string) (File, error)
 
 	// CreateWithSync is similar to Create, but the file is periodically
@@ -48,7 +48,7 @@ type FS interface {
 	OpenDir(name string) (File, error)
 
 	// Remove removes the named file. If the file with given name doesn't
-	// exist, return an error that returns true from os.IsNotExist().
+	// exist, return an error that returns true from oserror.IsNotExist().
 	Remove(name string) error
 
 	// Rename renames a file. It overwrites the file at newname if one exists,
@@ -58,9 +58,6 @@ type FS interface {
 	// MkdirAll creates the named dir and its parents. Does nothing if the
 	// directory already exists.
 	MkdirAll(name string) error
-
-	// RemoveDir removes the named dir.
-	RemoveDir(name string) error
 
 	// RemoveAll deletes the path and any children it contains.
 	RemoveAll(dir string) error

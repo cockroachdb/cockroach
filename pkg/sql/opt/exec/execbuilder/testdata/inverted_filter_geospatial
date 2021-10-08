@@ -1,0 +1,188 @@
+# LogicTest: local
+
+# EXPLAIN test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  k_plus_one int,
+  PRIMARY KEY (k, k_plus_one),
+  INVERTED INDEX geom_index(geom)
+)
+
+query T
+EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk8-O0zAQxu88hTWXtpLZ2kkRyKfwJwtB3ba0lQDhqgr1UCJaO9guCqr67igJ0O2ukt3kYGlm8vN8_uw5gvu5AwHxp9n4ZTIh_TfJYrn4MB6QRTyOXy_JD3I9n96QLZq1T7_uMCAf38XzmDi_zrRH63DjXb83myaTZT-8YiS8YoOeEG_j6U28nH-mJbofAAVtFE7SPToQX4DDikJuzQadM7ZMHasfElWAYBQynR98mV5R2BiLII7gM79DELAsdcwxVWiHDCgo9Gm2q7Y9y4zKtutMKyyAwiJPtRNkKOGVlMU3JWXBmZQFe2iBp10ZLoGkWpGQEeO_o3VAYXrwgkScRiGNAlidKJiDPx_Q-XSLIPiJPt6ERP9C61FdZzuPFu2QXzrxrx4XuSVGkygQxJUuEOdT60V1qvD5MylZwKRk7KEFCGrVFSvNaHaj2YqgixXvTab_Poeg8TnkNtun9vfj2odd2v-_gfCyeZ0XdyeFccbZ_e_F6F7cE7fHKAoGZ_GNykddlM_R5UY7vNDdtDM7rSig2mI9rM4c7AZn1myqNnU4rbgqodD5usrrINF1qRR4G-atcNAOB61w2A6HrfDoDrw6PfkTAAD___DFn88=
+
+query T
+EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9-PEjEQx9_9K5p5OUjq0W4xmj6tP_Z0DQcIJGosISsdcXNLu7bFrCH872Z31Tvuspzw0GRm-HS-_e7MHvyPAiQkn6ajl-mY9N6k88X8w6hP5skoeb0gN5TcrMpi51fWILmaTa7JBu0qZF8LjMjHd8ksIT6schPQeVwH37uYTtLxoicuGRGXrH8h5dtkcp0sZp9pjW77QMFYjeNsix7kF-CwpFA6u0bvratT--YPqa5AMgq5KXehTi8prK1DkHsIeSgQJCxqHTPMNLoBAwoaQ5YXzbW3MuO67So3GiugMC8z4yUZKHilVPVNK1VxplTFHjvg6bkMV0Ayo4lgxIbv6DxQmOyCJDGnsaBxBMsDBbsLtw_0IdsgSH6g_29Can6iC6iv8iKgQzfgx078rSdV6Yg1JI4k8bULxIfMBdm8Sjx_phSLmFKMPXYAQaPPxWozut3otiI6x4r3Njd_xiHqHIfS5dvM_TpqT2PRqUCco-DfRxDH_du8vL8sjDPOHv5eDB_EF_LuJsVR_2iYOsUPzxE_Q19a4_FIetfN7LCkgHqD7cp6u3NrnDq7btq04aThmoRGH9oqb4PUtKVa4F2Yn4Sj03B0EhanYXESHt6Dl4cnvwMAAP__phyliA==
+
+query T
+EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+
+query T
+EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_DFullyWithin('POINT(3.0 3.0)'::geometry, geom, 1)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 30
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 30 spans
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query T
+EXPLAIN SELECT k FROM geo_table2 WHERE geom && 'POINT(3.0 3.0)'::geometry
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: geom && '010100000000000000000008400000000000000840'
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+
+query T
+EXPLAIN SELECT k FROM geo_table2 WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: 'BOX(3 3,3 3)' && geom
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+
+query T
+EXPLAIN SELECT k FROM geo_table2 WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 33
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 33 spans
+
+query T
+EXPLAIN SELECT k FROM geo_table2 WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: geom ~ 'BOX(1 1,5 5)'
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 30
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 30 spans

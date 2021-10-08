@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "opbench",
+    srcs = [
+        "cat.go",
+        "config.go",
+        "spec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/opbench",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/opt/testutils/testcat"],
+)
+
+go_test(
+    name = "opbench_test",
+    size = "small",
+    srcs = [
+        "config_test.go",
+        "opbench_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":opbench"],
+    deps = [
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

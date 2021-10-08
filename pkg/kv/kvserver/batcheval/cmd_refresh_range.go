@@ -33,7 +33,7 @@ func RefreshRange(
 	h := cArgs.Header
 
 	if h.Txn == nil {
-		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
+		return result.Result{}, errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 
 	// We're going to refresh up to the transaction's read timestamp.
@@ -63,11 +63,11 @@ func RefreshRange(
 			Inconsistent: true,
 			Tombstones:   true,
 		},
-		func(kv roachpb.KeyValue) (bool, error) {
+		func(kv roachpb.KeyValue) error {
 			if ts := kv.Value.Timestamp; refreshFrom.LessEq(ts) {
-				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
+				return errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
 			}
-			return false, nil
+			return nil
 		})
 	if err != nil {
 		return result.Result{}, err

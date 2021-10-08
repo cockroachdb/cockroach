@@ -12,6 +12,8 @@ package telemetry
 
 import (
 	"fmt"
+	"math"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,16 +29,22 @@ import (
 // raw numbers.
 // The numbers 0-10 are reported unchanged.
 func Bucket10(num int64) int64 {
-	if num <= 0 {
-		return 0
+	if num == math.MinInt64 {
+		// This is needed to prevent overflow in the negation below.
+		return -1000000000000000000
+	}
+	sign := int64(1)
+	if num < 0 {
+		sign = -1
+		num = -num
 	}
 	if num < 10 {
-		return num
+		return num * sign
 	}
 	res := int64(10)
-	for ; res < 1000000000000000000 && res*10 < num; res *= 10 {
+	for ; res < 1000000000000000000 && res*10 <= num; res *= 10 {
 	}
-	return res
+	return res * sign
 }
 
 // CountBucketed counts the feature identified by prefix and the value, using
@@ -217,6 +225,10 @@ func GetFeatureCounts(quantize QuantizeCounts, reset ResetCounters) map[string]i
 	return m
 }
 
+// ValidationTelemetryKeyPrefix is the prefix of telemetry keys pertaining to
+// descriptor validation failures.
+const ValidationTelemetryKeyPrefix = "sql.schema.validation_errors."
+
 // RecordError takes an error and increments the corresponding count
 // for its error code, and, if it is an unimplemented or internal
 // error, the count for that feature or the internal error's shortened
@@ -240,9 +252,13 @@ func RecordError(err error) {
 		default:
 			prefix = "othererror." + code.String() + "."
 		}
-
 		for _, tk := range tkeys {
-			Count(prefix + tk)
+			prefixedTelemetryKey := prefix + tk
+			if strings.HasPrefix(tk, ValidationTelemetryKeyPrefix) {
+				// Descriptor validation errors already have their own prefixing scheme.
+				prefixedTelemetryKey = tk
+			}
+			Count(prefixedTelemetryKey)
 		}
 	}
 }

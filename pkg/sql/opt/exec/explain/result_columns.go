@@ -11,11 +11,10 @@
 package explain
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
@@ -25,8 +24,8 @@ import (
 // arguments passed to the Construct function and the ResultColumns of all its
 // input exec.Nodes.
 func getResultColumns(
-	op execOperator, args interface{}, inputs ...sqlbase.ResultColumns,
-) (out sqlbase.ResultColumns, err error) {
+	op execOperator, args interface{}, inputs ...colinfo.ResultColumns,
+) (out colinfo.ResultColumns, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// If we have a bug in the code below, it's easily possible to hit panic
@@ -40,8 +39,8 @@ func getResultColumns(
 	}()
 
 	switch op {
-	case filterOp, invertedFilterOp, limitOp, max1RowOp,
-		sortOp, bufferOp, setOpOp, distinctOp, saveTableOp, recursiveCTEOp:
+	case filterOp, invertedFilterOp, limitOp, max1RowOp, sortOp, topKOp, bufferOp, hashSetOpOp,
+		streamingSetOpOp, unionAllOp, distinctOp, saveTableOp, recursiveCTEOp:
 		// These ops inherit the columns from their first input.
 		return inputs[0], nil
 
@@ -84,16 +83,8 @@ func getResultColumns(
 		a := args.(*lookupJoinArgs)
 		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
 
-	case interleavedJoinOp:
-		a := args.(*interleavedJoinArgs)
-		return joinColumns(
-			a.JoinType,
-			tableColumns(a.LeftTable, a.LeftParams.NeededCols),
-			tableColumns(a.RightTable, a.RightParams.NeededCols),
-		), nil
-
 	case ordinalityOp:
-		return appendColumns(inputs[0], sqlbase.ResultColumn{
+		return appendColumns(inputs[0], colinfo.ResultColumn{
 			Name: args.(*ordinalityArgs).ColName,
 			Typ:  types.Int,
 		}), nil
@@ -111,7 +102,12 @@ func getResultColumns(
 
 	case invertedJoinOp:
 		a := args.(*invertedJoinArgs)
-		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
+		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
+		// The following matches the behavior of execFactory.ConstructInvertedJoin.
+		if a.IsFirstJoinInPairedJoiner {
+			cols = append(cols, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		}
+		return cols, nil
 
 	case zigzagJoinOp:
 		a := args.(*zigzagJoinArgs)
@@ -151,53 +147,34 @@ func getResultColumns(
 		return args.(*opaqueArgs).Metadata.Columns(), nil
 
 	case alterTableSplitOp:
-		return sqlbase.AlterTableSplitColumns, nil
+		return colinfo.AlterTableSplitColumns, nil
 
 	case alterTableUnsplitOp, alterTableUnsplitAllOp:
-		return sqlbase.AlterTableUnsplitColumns, nil
+		return colinfo.AlterTableUnsplitColumns, nil
 
 	case alterTableRelocateOp:
-		return sqlbase.AlterTableRelocateColumns, nil
+		return colinfo.AlterTableRelocateColumns, nil
 
 	case exportOp:
-		return sqlbase.ExportColumns, nil
+		return colinfo.ExportColumns, nil
 
 	case sequenceSelectOp:
-		return sqlbase.SequenceSelectColumns, nil
+		return colinfo.SequenceSelectColumns, nil
 
 	case explainOp:
-		switch o := args.(*explainArgs).Options; o.Mode {
-		case tree.ExplainPlan:
-			if o.Flags[tree.ExplainFlagVerbose] || o.Flags[tree.ExplainFlagTypes] {
-				return sqlbase.ExplainPlanVerboseColumns, nil
-			}
-			return sqlbase.ExplainPlanColumns, nil
-		case tree.ExplainDistSQL:
-			return sqlbase.ExplainDistSQLColumns, nil
-		case tree.ExplainVec:
-			return sqlbase.ExplainVecColumns, nil
-		default:
-			return nil, errors.AssertionFailedf("unknown explain mode %v", o.Mode)
-		}
-
-	case explainPlanOp:
-		o := args.(*explainPlanArgs).Options
-		if o.Flags[tree.ExplainFlagVerbose] || o.Flags[tree.ExplainFlagTypes] {
-			return sqlbase.ExplainPlanVerboseColumns, nil
-		}
-		return sqlbase.ExplainPlanColumns, nil
+		return colinfo.ExplainPlanColumns, nil
 
 	case explainOptOp:
-		return sqlbase.ExplainOptColumns, nil
+		return colinfo.ExplainPlanColumns, nil
 
 	case showTraceOp:
 		if args.(*showTraceArgs).Compact {
-			return sqlbase.ShowCompactTraceColumns, nil
+			return colinfo.ShowCompactTraceColumns, nil
 		}
-		return sqlbase.ShowTraceColumns, nil
+		return colinfo.ShowTraceColumns, nil
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
-		cancelQueriesOp, cancelSessionsOp, errorIfRowsOp, deleteRangeOp:
+		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp:
 		// These operations produce no columns.
 		return nil, nil
 
@@ -206,11 +183,11 @@ func getResultColumns(
 	}
 }
 
-func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) sqlbase.ResultColumns {
-	cols := make(sqlbase.ResultColumns, 0, ordinals.Len())
+func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.ResultColumns {
+	cols := make(colinfo.ResultColumns, 0, ordinals.Len())
 	for i, ok := ordinals.Next(0); ok; i, ok = ordinals.Next(i + 1) {
 		col := table.Column(i)
-		cols = append(cols, sqlbase.ResultColumn{
+		cols = append(cols, colinfo.ResultColumn{
 			Name: string(col.ColName()),
 			Typ:  col.DatumType(),
 		})
@@ -219,8 +196,11 @@ func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) sqlbase.
 }
 
 func joinColumns(
-	joinType descpb.JoinType, left, right sqlbase.ResultColumns,
-) sqlbase.ResultColumns {
+	joinType descpb.JoinType, left, right colinfo.ResultColumns,
+) colinfo.ResultColumns {
+	if !joinType.ShouldIncludeLeftColsInOutput() {
+		return right
+	}
 	if !joinType.ShouldIncludeRightColsInOutput() {
 		return left
 	}
@@ -228,9 +208,9 @@ func joinColumns(
 }
 
 func projectCols(
-	input sqlbase.ResultColumns, ordinals []exec.NodeColumnOrdinal, colNames []string,
-) sqlbase.ResultColumns {
-	columns := make(sqlbase.ResultColumns, len(ordinals))
+	input colinfo.ResultColumns, ordinals []exec.NodeColumnOrdinal, colNames []string,
+) colinfo.ResultColumns {
+	columns := make(colinfo.ResultColumns, len(ordinals))
 	for i, ord := range ordinals {
 		columns[i] = input[ord]
 		if colNames != nil {
@@ -241,14 +221,14 @@ func projectCols(
 }
 
 func groupByColumns(
-	inputCols sqlbase.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
-) sqlbase.ResultColumns {
-	columns := make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations))
+	inputCols colinfo.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
+) colinfo.ResultColumns {
+	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	for _, col := range groupCols {
 		columns = append(columns, inputCols[col])
 	}
 	for _, agg := range aggregations {
-		columns = append(columns, sqlbase.ResultColumn{
+		columns = append(columns, colinfo.ResultColumn{
 			Name: agg.FuncName,
 			Typ:  agg.ResultType,
 		})
@@ -257,9 +237,9 @@ func groupByColumns(
 }
 
 func appendColumns(
-	input sqlbase.ResultColumns, others ...sqlbase.ResultColumn,
-) sqlbase.ResultColumns {
-	res := make(sqlbase.ResultColumns, len(input)+len(others))
+	input colinfo.ResultColumns, others ...colinfo.ResultColumn,
+) colinfo.ResultColumns {
+	res := make(colinfo.ResultColumns, len(input)+len(others))
 	copy(res, input)
 	copy(res[len(input):], others)
 	return res

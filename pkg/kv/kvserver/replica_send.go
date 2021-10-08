@@ -14,23 +14,81 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+)
+
+var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
+	"kv.concurrency.optimistic_eval_limited_scans.enabled",
+	"when true, limited scans are optimistically evaluated in the sense of not checking for "+
+		"conflicting latches or locks up front for the full key range of the scan, and instead "+
+		"subsequently checking for conflicts only over the key range that was read",
+	true,
 )
 
 // Send executes a command on this range, dispatching it to the
 // read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
+//
+// A rough schematic for the path requests take through a Replica
+// is presented below, with a focus on where requests may spend
+// most of their time (once they arrive at the Node.Batch endpoint).
+//
+//                                 DistSender (tenant)
+//                                      │
+//                                      ┆ (RPC)
+//                                      │
+//                                      ▼
+//                                 Node.Batch (host cluster)
+//                                      │
+//                                      ▼
+//                              Admission control
+//                                      │
+//                                      ▼
+//                                 Replica.Send
+//                                      │
+//                                      ▼
+//                      Replica.maybeBackpressureBatch (if Range too large)
+//                                      │
+//                                      ▼
+//               Replica.maybeRateLimitBatch (tenant rate limits)
+//                                      │
+//                                      ▼
+//                 Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
+//                                      │
+// read-write ◄─────────────────────────┴────────────────────────► read-only
+//     │                                                               │
+//     │                                                               │
+//     ├─────────────► executeBatchWithConcurrencyRetries ◄────────────┤
+//     │               (handles leases and txn conflicts)              │
+//     │                                                               │
+//     ▼                                                               │
+// executeReadWriteBatch                                               │
+//     │                                                               │
+//     ▼                                                               ▼
+// evalAndPropose         (turns the BatchRequest        executeReadOnlyBatch
+//     │                   into pebble WriteBatch)
+//     │
+//     ├──────────────────► (writes that can use async consensus do not
+//     │                     wait for replication and are done here)
+//     │
+//     ├──────────────────► maybeAcquireProposalQuota
+//     │                    (applies backpressure in case of
+//     │                     lagging Raft followers)
+//     │
+//     │
+//     ▼
+// handleRaftReady        (drives the Raft loop, first appending to the log
+//                         to commit the command, then signaling proposer and
+//                         applying the command)
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -49,7 +107,7 @@ func (r *Replica) Send(
 //
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
-	ctx context.Context, rangeID roachpb.RangeID, ba *roachpb.BatchRequest,
+	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
@@ -58,15 +116,11 @@ func (r *Replica) sendWithRangeID(
 
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
-	defer cleanup()
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
 
 	isReadOnly := ba.IsReadOnly()
-	useRaft := !isReadOnly && ba.IsWrite()
-
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -75,6 +129,9 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -92,13 +149,13 @@ func (r *Replica) sendWithRangeID(
 
 	// Differentiate between read-write, read-only, and admin.
 	var pErr *roachpb.Error
-	if useRaft {
-		log.Event(ctx, "read-write path")
-		fn := (*Replica).executeWriteBatch
-		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
-	} else if isReadOnly {
+	if isReadOnly {
 		log.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
+		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+	} else if ba.IsWrite() {
+		log.Event(ctx, "read-write path")
+		fn := (*Replica).executeWriteBatch
 		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
@@ -131,61 +188,124 @@ func (r *Replica) sendWithRangeID(
 	return br, pErr
 }
 
+// maybeCommitWaitBeforeCommitTrigger detects batches that are attempting to
+// commit a transaction with a commit trigger and that will need to perform a
+// commit-wait at some point. For reasons described below, transactions with
+// commit triggers need to perform their commit wait sleep before their trigger
+// runs, so this function eagerly performs that sleep before the batch moves on
+// to evaluation. The function guarantees that if the transaction ends up
+// committing with its current provisional commit timestamp, it will not need to
+// commit wait any further.
+func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) error {
+	args, hasET := ba.GetArg(roachpb.EndTxn)
+	if !hasET {
+		return nil
+	}
+	et := args.(*roachpb.EndTxnRequest)
+	if !et.Commit || et.InternalCommitTrigger == nil {
+		// Not committing with a commit trigger.
+		return nil
+	}
+	txn := ba.Txn
+	if txn.ReadTimestamp != txn.WriteTimestamp && !ba.CanForwardReadTimestamp {
+		// The commit can not succeed.
+		return nil
+	}
+
+	// A transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+	//
+	// If the transaction has a commit timestamp in the future of present time, it
+	// will need to commit-wait before acknowledging the client. Typically, this
+	// is performed in the TxnCoordSender after the transaction has committed and
+	// resolved its intents (see TxnCoordSender.maybeCommitWait). It is safe to
+	// wait after a future-time transaction has committed and resolved intents
+	// without compromising linearizability because the uncertainty interval of
+	// concurrent and later readers ensures atomic visibility of the effects of
+	// the transaction. In other words, all of the transaction's intents will
+	// become visible and will remain visible at once, which is sometimes called
+	// "monotonic reads". This is true even if the resolved intents are at a high
+	// enough timestamp such that they are not visible to concurrent readers
+	// immediately after they are resolved, but only become visible sometime
+	// during the writer's commit-wait sleep. This property is central to the
+	// correctness of non-blocking transactions. See:
+	//   https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200811_non_blocking_txns.md
+	//
+	// However, if a transaction has a commit trigger, the side-effects of the
+	// trigger will go into effect immediately after the EndTxn's Raft command is
+	// applied to the Raft state machine. This poses a problem, because we do not
+	// want part of a transaction's effects (e.g. its commit trigger) to become
+	// visible to onlookers before the rest of its effects do (e.g. its intent
+	// writes). To avoid this problem, we perform the commit-wait stage of a
+	// transaction with a commit trigger early, before its commit triggers fire.
+	// This results in the transaction waiting longer to commit and resolve its
+	// intents, but is otherwise safe and effective.
+	//
+	// NOTE: it would be easier to perform this wait during the evaluation of the
+	// corresponding EndTxn request instead of detecting the case here. However,
+	// we intentionally do not commit wait during evaluation because we do not
+	// want to sleep while holding latches and blocking other requests. So
+	// instead, we commit wait here and then assert that transactions with commit
+	// triggers do not need to commit wait further by the time they reach command
+	// evaluation.
+	//
+	// NOTE: just like in TxnCoordSender.maybeCommitWait, we only need to perform
+	// a commit-wait sleep if the commit timestamp is "synthetic". Otherwise, it
+	// is known not to be in advance of present time.
+	if !txn.WriteTimestamp.Synthetic {
+		return nil
+	}
+	if !r.Clock().Now().Less(txn.WriteTimestamp) {
+		return nil
+	}
+
+	waitUntil := txn.WriteTimestamp
+	before := r.Clock().PhysicalTime()
+	est := waitUntil.GoTime().Sub(before)
+	log.VEventf(ctx, 1, "performing server-side commit-wait sleep for ~%s", est)
+
+	if err := r.Clock().SleepUntil(ctx, waitUntil); err != nil {
+		return err
+	}
+
+	after := r.Clock().PhysicalTime()
+	log.VEventf(ctx, 1, "completed server-side commit-wait sleep, took %s", after.Sub(before))
+	r.store.metrics.CommitWaitsBeforeCommitTrigger.Inc(1)
+	return nil
+}
+
+// maybeAddRangeInfoToResponse populates br.RangeInfo if the client doesn't
+// have up-to-date info about the range's descriptor and lease.
 func (r *Replica) maybeAddRangeInfoToResponse(
 	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
-	if ba.ReturnRangeInfo {
-		desc, lease := r.GetDescAndLease(ctx)
-		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
-
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
-			// Also set the RangeInfo on the individual responses, for compatibility
-			// with 20.1.
-			for _, r := range br.Responses {
-				reply := r.GetInner()
-				header := reply.Header()
-				header.DeprecatedRangeInfos = br.RangeInfos
-				reply.SetHeader(header)
-			}
-		}
-	} else if ba.ClientRangeInfo != nil {
-		returnRangeInfoIfClientStale(ctx, br, r, *ba.ClientRangeInfo)
-	}
-}
-
-// returnRangeInfoIfClientStale populates br.RangeInfos if the client doesn't
-// have up-to-date info about the range's descriptor and lease.
-func returnRangeInfoIfClientStale(
-	ctx context.Context, br *roachpb.BatchResponse, r *Replica, cinfo roachpb.ClientRangeInfo,
-) {
-	desc, lease := r.GetDescAndLease(ctx)
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
-	needInfo := (cinfo.LeaseSequence < lease.Sequence) ||
-		(cinfo.DescriptorGeneration < desc.Generation)
+	cri := &ba.ClientRangeInfo
+	ri := r.GetRangeInfo(ctx)
+	needInfo := (cri.DescriptorGeneration < ri.Desc.Generation) ||
+		(cri.LeaseSequence < ri.Lease.Sequence) ||
+		(cri.ClosedTimestampPolicy != ri.ClosedTimestampPolicy)
 	if !needInfo {
 		return
 	}
 	log.VEventf(ctx, 3, "client had stale range info; returning an update")
-	br.RangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  desc,
-			Lease: lease,
-		},
-	}
+	br.RangeInfos = []roachpb.RangeInfo{ri}
 
 	// We're going to sometimes return info on the ranges coming right before or
 	// right after r, if it looks like r came from a range that has recently split
 	// and the client doesn't know about it. After a split, the client benefits
 	// from learning about both resulting ranges.
 
-	if cinfo.DescriptorGeneration >= desc.Generation {
+	if cri.DescriptorGeneration >= ri.Desc.Generation {
 		return
 	}
 
-	maybeAddRange := func(rr KeyRange) {
-		if rr.Desc().Generation != desc.Generation {
+	maybeAddRange := func(repl *Replica) {
+		if repl.Desc().Generation != ri.Desc.Generation {
 			// The next range does not look like it came from a split that produced
 			// both r and this next range. Of course, this has false negatives (e.g.
 			// if either the LHS or the RHS split multiple times since the client's
@@ -196,40 +316,22 @@ func returnRangeInfoIfClientStale(
 			return
 		}
 
-		var rangeInfo roachpb.RangeInfo
-		if rep, ok := rr.(*Replica); ok {
-			// Note that we return the lease even if it's expired. The kvclient can
-			// use it as it sees fit.
-			rangeInfo.Desc, rangeInfo.Lease = rep.GetDescAndLease(ctx)
-		} else {
-			rangeInfo.Desc = *rr.Desc()
-		}
-		br.RangeInfos = append(br.RangeInfos, rangeInfo)
+		// Note that we return the lease even if it's expired. The kvclient can
+		// use it as it sees fit.
+		br.RangeInfos = append(br.RangeInfos, repl.GetRangeInfo(ctx))
 	}
 
-	r.store.VisitReplicasByKey(ctx, roachpb.RKeyMin, desc.StartKey, DescendingKeyOrder, func(ctx context.Context, prevR KeyRange) bool {
-		if !prevR.Desc().EndKey.Equal(desc.StartKey) {
-			// The next range does not correspond to the range immediately preceding r.
-			return false
-		}
-		maybeAddRange(prevR)
-		return false
-	})
-
-	r.store.VisitReplicasByKey(ctx, desc.EndKey, roachpb.RKeyMax, AscendingKeyOrder, func(ctx context.Context, nextR KeyRange) bool {
-		if !nextR.Desc().StartKey.Equal(desc.EndKey) {
-			// The next range does not correspond to the range immediately after r.
-			return false
-		}
-		maybeAddRange(nextR)
-		return false
-	})
+	if repl := r.store.lookupPrecedingReplica(ri.Desc.StartKey); repl != nil {
+		maybeAddRange(repl)
+	}
+	if repl := r.store.LookupReplica(ri.Desc.EndKey); repl != nil {
+		maybeAddRange(repl)
+	}
 }
 
-// batchExecutionFn is a method on Replica that is able to execute a
-// BatchRequest. It is called with the batch, along with the status of
-// the lease that the batch is operating under and a guard for the
-// latches protecting the request.
+// batchExecutionFn is a method on Replica that executes a BatchRequest. It is
+// called with the batch, along with a guard for the latches protecting the
+// request.
 //
 // The function will return either a batch response or an error. The function
 // also has the option to pass ownership of the concurrency guard back to the
@@ -252,7 +354,7 @@ func returnRangeInfoIfClientStale(
 // the function returns one of these errors, it must also pass ownership of the
 // concurrency guard back to the caller.
 type batchExecutionFn func(
-	*Replica, context.Context, *roachpb.BatchRequest, kvserverpb.LeaseStatus, *concurrency.Guard,
+	*Replica, context.Context, *roachpb.BatchRequest, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
@@ -275,9 +377,18 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Determine the maximal set of key spans that the batch will operate on.
+	// This is used below to sequence the request in the concurrency manager.
+	latchSpans, lockSpans, requestEvalKind, err := r.collectSpans(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Handle load-based splitting.
+	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
+
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard
-	var latchSpans, lockSpans *spanset.SpanSet
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -288,41 +399,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
-		}
-
-		// Determine the lease under which to evaluate the request.
-		var status kvserverpb.LeaseStatus
-		if !ba.ReadConsistency.RequiresReadLease() {
-			// Get a clock reading for checkExecutionCanProceed.
-			status.Timestamp = r.Clock().Now()
-		} else if ba.IsSingleSkipLeaseCheckRequest() {
-			// For lease commands, use the provided previous lease for verification.
-			status.Lease = ba.GetPrevLeaseForLeaseRequest()
-			status.Timestamp = r.Clock().Now()
-		} else {
-			// If the request is a write or a consistent read, it requires the
-			// range lease or permission to serve via follower reads.
-			if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-				if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
-					return nil, nErr
-				}
-			}
-		}
-		// Limit the transaction's maximum timestamp using observed timestamps.
-		r.limitTxnMaxTimestamp(ctx, ba, status)
-
-		// Determine the maximal set of key spans that the batch will operate
-		// on. We only need to do this once and we make sure to do so after we
-		// have limited the transaction's maximum timestamp.
-		if latchSpans == nil {
-			var err error
-			latchSpans, lockSpans, err = r.collectSpans(ba)
-			if err != nil {
-				return nil, roachpb.NewError(err)
-			}
-
-			// Handle load-based splitting.
-			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until
@@ -336,10 +412,11 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Priority:        ba.UserPriority,
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
+			LockTimeout:     ba.LockTimeout,
 			Requests:        ba.Requests,
-			LatchSpans:      latchSpans,
-			LockSpans:       lockSpans,
-		})
+			LatchSpans:      latchSpans, // nil if g != nil
+			LockSpans:       lockSpans,  // nil if g != nil
+		}, requestEvalKind)
 		if pErr != nil {
 			return nil, pErr
 		} else if resp != nil {
@@ -347,14 +424,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			br.Responses = resp
 			return br, nil
 		}
+		latchSpans, lockSpans = nil, nil // ownership released
 
-		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
-			if pErr := filter(ctx, *ba); pErr != nil {
-				return nil, pErr
-			}
-		}
-
-		br, g, pErr = fn(r, ctx, ba, status, g)
+		br, g, pErr = fn(r, ctx, ba, g)
 		if pErr == nil {
 			// Success.
 			return br, nil
@@ -370,10 +442,18 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		if filter := r.store.cfg.TestingKnobs.TestingConcurrencyRetryFilter; filter != nil {
 			filter(ctx, *ba, pErr)
 		}
+
+		// Typically, retries are marked PessimisticEval. The one exception is a
+		// pessimistic retry immediately after an optimistic eval which failed
+		// when checking for conflicts, which is handled below. Note that an
+		// optimistic eval failure for any other reason will also retry as
+		// PessimisticEval.
+		requestEvalKind = concurrency.PessimisticEval
+
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
-			if g, pErr = r.handleWriteIntentError(ctx, ba, g, status.Lease, pErr, t); pErr != nil {
+			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 		case *roachpb.TransactionPushError:
@@ -383,20 +463,41 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		case *roachpb.IndeterminateCommitError:
 			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then launch a task to handle the indeterminate commit error.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+		case *roachpb.InvalidLeaseError:
+			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
+			r.concMgr.FinishReq(g)
+			g = nil
+			// Then attempt to acquire the lease if not currently held by any
+			// replica or redirect to the current leaseholder if currently held
+			// by a different replica.
+			if pErr = r.handleInvalidLeaseError(ctx, ba); pErr != nil {
+				return nil, pErr
+			}
 		case *roachpb.MergeInProgressError:
 			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+		case *roachpb.OptimisticEvalConflictsError:
+			// We are deliberately not dropping latches. Note that the latches are
+			// also optimistically acquired, in the sense of being inserted but not
+			// waited on. The next iteration will wait on these latches to ensure
+			// acquisition, and then pessimistically check for locks while holding
+			// these latches. If conflicting locks are found, the request will queue
+			// for those locks and release latches.
+			requestEvalKind = concurrency.PessimisticAfterFailedOptimisticEval
 		default:
 			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
@@ -405,11 +506,13 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 }
 
 // isConcurrencyRetryError returns whether or not the provided error is a
-// "server-side concurrency retry error" that will be captured and retried by
-// executeBatchWithConcurrencyRetries. Server-side concurrency retry errors are
-// handled by dropping a request's latches, waiting for and/or ensuring that the
-// condition which caused the error is handled, re-sequencing through the
-// concurrency manager, and executing the request again.
+// "concurrency retry error" that will be captured and retried by
+// executeBatchWithConcurrencyRetries. Most concurrency retry errors are
+// handled by dropping a request's latches, waiting for and/or ensuring that
+// the condition which caused the error is handled, re-sequencing through the
+// concurrency manager, and executing the request again. The one exception is
+// OptimisticEvalConflictsError, where there is no need to drop latches, and
+// the request can immediately proceed to retrying pessimistically.
 func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 	switch pErr.GetDetail().(type) {
 	case *roachpb.WriteIntentError:
@@ -427,24 +530,44 @@ func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 		// the pushee is aborted or committed, so the request must kick off the
 		// "transaction recovery procedure" to resolve this ambiguity before
 		// retrying.
+	case *roachpb.InvalidLeaseError:
+		// If a request hits an InvalidLeaseError, the replica it is being
+		// evaluated against does not have a valid lease under which it can
+		// serve the request. The request cannot proceed until a new lease is
+		// acquired. If the acquisition process determines that the lease now
+		// lives elsewhere, the request should be redirected (using a
+		// NotLeaseHolderError) to the new leaseholder.
 	case *roachpb.MergeInProgressError:
 		// If a request hits a MergeInProgressError, the replica it is being
-		// evaluted against is in the process of being merged into its left-hand
+		// evaluated against is in the process of being merged into its left-hand
 		// neighbor. The request cannot proceed until the range merge completes,
 		// either successfully or unsuccessfully, so it waits before retrying.
 		// If the merge does complete successfully, the retry will be rejected
 		// with an error that will propagate back to the client.
+	case *roachpb.OptimisticEvalConflictsError:
+		// Optimistic evaluation encountered a conflict. The request will
+		// immediately retry pessimistically.
 	default:
 		return false
 	}
 	return true
 }
 
+// maybeAttachLease is used to augment a concurrency retry error with
+// information about the lease that the operation which hit this error was
+// operating under.
+func maybeAttachLease(pErr *roachpb.Error, lease *roachpb.Lease) *roachpb.Error {
+	if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+		wiErr.LeaseSequence = lease.Sequence
+		return roachpb.NewErrorWithTxn(wiErr, pErr.GetTxn())
+	}
+	return pErr
+}
+
 func (r *Replica) handleWriteIntentError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
 	g *concurrency.Guard,
-	lease roachpb.Lease,
 	pErr *roachpb.Error,
 	t *roachpb.WriteIntentError,
 ) (*concurrency.Guard, *roachpb.Error) {
@@ -452,7 +575,7 @@ func (r *Replica) handleWriteIntentError(
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
-	return r.concMgr.HandleWriterIntentError(ctx, g, lease.Sequence, t)
+	return r.concMgr.HandleWriterIntentError(ctx, g, t.LeaseSequence, t)
 }
 
 func (r *Replica) handleTransactionPushError(
@@ -504,6 +627,18 @@ func (r *Replica) handleIndeterminateCommitError(
 	return nil
 }
 
+func (r *Replica) handleInvalidLeaseError(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) *roachpb.Error {
+	// On an invalid lease error, attempt to acquire a new lease. If in the
+	// process of doing so, we determine that the lease now lives elsewhere,
+	// redirect.
+	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
+	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
+	// will be retried.
+	return pErr
+}
+
 func (r *Replica) handleMergeInProgressError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
@@ -519,7 +654,23 @@ func (r *Replica) handleMergeInProgressError(
 		// Merge no longer in progress. Retry the command.
 		return nil
 	}
-	log.Event(ctx, "waiting on in-progress merge")
+	// Check to see if the request is a lease transfer. If so, reject it
+	// immediately instead of a waiting for the merge to complete. This is
+	// necessary because the merge may need to acquire a range lease in order to
+	// complete if it still needs to perform its Subsume request, which it
+	// likely will if this lease transfer revoked the leaseholder's existing
+	// range lease. Any concurrent lease acquisition attempt will be blocked on
+	// this lease transfer because a replica only performs a single lease
+	// operation at a time, so we reject to prevent a deadlock.
+	//
+	// NOTE: it would not be sufficient to check for an in-progress merge in
+	// AdminTransferLease because the range may notice the in-progress merge
+	// after the lease transfer is initiated but before the lease transfer
+	// acquires latches.
+	if ba.IsSingleTransferLeaseRequest() {
+		return roachpb.NewErrorf("cannot transfer lease while merge in progress")
+	}
+	log.Event(ctx, "waiting on in-progress range merge")
 	select {
 	case <-mergeCompleteCh:
 		// Merge complete. Retry the command.
@@ -544,26 +695,40 @@ func (r *Replica) executeAdminBatch(
 	}
 
 	args := ba.Requests[0].GetInner()
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		sp.SetOperationName(reflect.TypeOf(args).String())
 	}
 
-	// Admin commands always require the range lease.
-	status, pErr := r.redirectOnOrAcquireLease(ctx)
-	if pErr != nil {
-		return nil, pErr
-	}
-	// Note there is no need to limit transaction max timestamp on admin requests.
-
-	// Verify that the batch can be executed.
+	// Verify that the batch can be executed, which includes verifying that the
+	// current replica has the range lease.
 	// NB: we pass nil for the spanlatch guard because we haven't acquired
 	// latches yet. This is ok because each individual request that the admin
 	// request sends will acquire latches.
-	if err := r.checkExecutionCanProceed(ctx, ba, nil /* g */, &status); err != nil {
-		return nil, roachpb.NewError(err)
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		_, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
+		if err == nil {
+			break
+		}
+		switch {
+		case errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)):
+			// If the replica does not have the lease, attempt to acquire it, or
+			// redirect to the current leaseholder by returning an error.
+			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
+			if pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		default:
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	var resp roachpb.Response
+	var pErr *roachpb.Error
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
@@ -597,7 +762,7 @@ func (r *Replica) executeAdminBatch(
 		}
 
 	case *roachpb.AdminRelocateRangeRequest:
-		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.Targets)
+		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets)
 		pErr = roachpb.NewError(err)
 		resp = &roachpb.AdminRelocateRangeResponse{}
 
@@ -605,16 +770,6 @@ func (r *Replica) executeAdminBatch(
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
 		resp = &reply
-
-	case *roachpb.ImportRequest:
-		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, todoSpanSet),
-			Header:  ba.Header,
-			Args:    args,
-		}
-		var err error
-		resp, err = importCmdFn(ctx, cArgs)
-		pErr = roachpb.NewError(err)
 
 	case *roachpb.AdminScatterRequest:
 		reply, err := r.adminScatter(ctx, *tArgs)
@@ -647,7 +802,7 @@ func (r *Replica) executeAdminBatch(
 // TODO(tschottdorf): should check that request is contained in range and that
 // EndTxn only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
-	if ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.Timestamp.IsEmpty() {
 		// For transactional requests, Store.Send sets the timestamp. For non-
 		// transactional requests, the client sets the timestamp. Either way, we
 		// need to have a timestamp at this point.
@@ -668,8 +823,12 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 
 func (r *Replica) collectSpans(
 	ba *roachpb.BatchRequest,
-) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
-	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
+) (latchSpans, lockSpans *spanset.SpanSet, requestEvalKind concurrency.RequestEvalKind, _ error) {
+	latchSpans, lockSpans = spanset.New(), spanset.New()
+	r.mu.RLock()
+	desc := r.descRLocked()
+	liveCount := r.mu.state.Stats.LiveCount
+	r.mu.RUnlock()
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -681,15 +840,26 @@ func (r *Replica) collectSpans(
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
 	if ba.IsLocking() {
-		guess := len(ba.Requests)
+		latchGuess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 			// EndTxn declares a global write for each of its lock spans.
-			guess += len(et.(*roachpb.EndTxnRequest).LockSpans) - 1
+			latchGuess += len(et.(*roachpb.EndTxnRequest).LockSpans) - 1
 		}
-		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, latchGuess)
+		lockSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
 	} else {
 		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		lockSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	}
+
+	// Note that we are letting locking readers be considered for optimistic
+	// evaluation. This is correct, though not necessarily beneficial.
+	considerOptEval := ba.IsReadOnly() && ba.IsAllTransactional() && ba.Header.MaxSpanRequestKeys > 0 &&
+		optimisticEvalLimitedScans.Get(&r.ClusterSettings().SV)
+	// When considerOptEval, these are computed below and used to decide whether
+	// to actually do optimistic evaluation.
+	hasScans := false
+	numGets := 0
 
 	// For non-local, MVCC spans we annotate them with the request timestamp
 	// during declaration. This is the timestamp used during latch acquisitions.
@@ -698,14 +868,21 @@ func (r *Replica) collectSpans(
 	// than the request timestamp, and may have to retry at a higher timestamp.
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
-	desc := r.Desc()
 	batcheval.DeclareKeysForBatch(desc, ba.Header, latchSpans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, lockSpans)
+			if considerOptEval {
+				switch inner.(type) {
+				case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
+					hasScans = true
+				case *roachpb.GetRequest:
+					numGets++
+				}
+			}
 		} else {
-			return nil, nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, nil, concurrency.PessimisticEval, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
@@ -717,67 +894,89 @@ func (r *Replica) collectSpans(
 		// If any command gave us spans that are invalid, bail out early
 		// (before passing them to the spanlatch manager, which may panic).
 		if err := s.Validate(); err != nil {
-			return nil, nil, err
+			return nil, nil, concurrency.PessimisticEval, err
 		}
 	}
 
-	return latchSpans, lockSpans, nil
+	requestEvalKind = concurrency.PessimisticEval
+	if considerOptEval {
+		// Evaluate batches optimistically if they have a key limit which is less
+		// than the upper bound on number of keys that can be returned for this
+		// batch. For scans, the upper bound is the number of live keys on the
+		// Range. For gets, it is the minimum of he number of live keys on the
+		// Range and the number of gets. Ignoring write latches and locks can be
+		// beneficial because it can help avoid waiting on writes to keys that the
+		// batch will never actually need to read due to the overestimate of its
+		// key bounds. Only after it is clear exactly what spans were read do we
+		// verify whether there were any conflicts with concurrent writes.
+		//
+		// This case is not uncommon; for example, a Scan which requests the entire
+		// range but has a limit of 1 result. We want to avoid allowing overly broad
+		// spans from backing up the latch manager, or encountering too much contention
+		// in the lock table.
+		//
+		// The heuristic is upper bound = k * liveCount, where k <= 1. The use of
+		// k=1 below is an un-tuned setting.
+		//
+		// This heuristic is crude in that it looks at the live count for the
+		// whole range, which may be much wider than the spans requested.
+		// Additionally, it does not consider TargetBytes.
+		const k = 1
+		upperBoundKeys := k * liveCount
+		if !hasScans && int64(numGets) < upperBoundKeys {
+			upperBoundKeys = int64(numGets)
+		}
+		if ba.Header.MaxSpanRequestKeys < upperBoundKeys {
+			requestEvalKind = concurrency.OptimisticEval
+		}
+	}
+
+	return latchSpans, lockSpans, requestEvalKind, nil
 }
 
-// limitTxnMaxTimestamp limits the batch transaction's max timestamp
-// so that it respects any timestamp already observed on this node.
-// This prevents unnecessary uncertainty interval restarts caused by
-// reading a value written at a timestamp between txn.Timestamp and
-// txn.MaxTimestamp. The replica lease's start time is also taken into
-// consideration to ensure that a lease transfer does not result in
-// the observed timestamp for this node being inapplicable to data
-// previously written by the former leaseholder. To wit:
+// endCmds holds necessary information to end a batch after command processing,
+// either after a write request has achieved consensus and been applied to Raft
+// or after a read-only request has finished evaluation.
+type endCmds struct {
+	repl *Replica
+	g    *concurrency.Guard
+	st   kvserverpb.LeaseStatus // empty for follower reads
+}
+
+// move moves the endCmds into the return value, clearing and making a call to
+// done on the receiver a no-op.
+func (ec *endCmds) move() endCmds {
+	res := *ec
+	*ec = endCmds{}
+	return res
+}
+
+// done releases the latches acquired by the command and updates the timestamp
+// cache using the final timestamp of each command.
 //
-// 1. put(k on leaseholder n1), gateway chooses t=1.0
-// 2. begin; read(unrelated key on n2); gateway chooses t=0.98
-// 3. pick up observed timestamp for n2 of t=0.99
-// 4. n1 transfers lease for range with k to n2 @ t=1.1
-// 5. read(k) on leaseholder n2 at ReadTimestamp=0.98 should get
-//    ReadWithinUncertaintyInterval because of the write in step 1, so
-//    even though we observed n2's timestamp in step 3 we must expand
-//    the uncertainty interval to the lease's start time, which is
-//    guaranteed to be greater than any write which occurred under
-//    the previous leaseholder.
-func (r *Replica) limitTxnMaxTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, status kvserverpb.LeaseStatus,
+// No-op if the receiver has been zeroed out by a call to move. Idempotent and
+// is safe to call more than once.
+func (ec *endCmds) done(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
-	if ba.Txn == nil {
+	if ec.repl == nil {
+		// The endCmds were cleared.
 		return
 	}
-	// For calls that read data within a txn, we keep track of timestamps
-	// observed from the various participating nodes' HLC clocks. If we have
-	// a timestamp on file for this Node which is smaller than MaxTimestamp,
-	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
-	// ReadTimestamp, we effectively can't see uncertainty restarts anymore.
-	// TODO(nvanbenschoten): This should use the lease's node id.
-	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
-	if !ok {
-		return
+	defer ec.move() // clear
+
+	// Update the timestamp cache. Each request within the batch is considered
+	// in turn; only those marked as affecting the cache are processed. However,
+	// only do so if the request is consistent and was operating on the
+	// leaseholder under a valid range lease.
+	if ba.ReadConsistency == roachpb.CONSISTENT && ec.st.State == kvserverpb.LeaseState_VALID {
+		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
 	}
-	// If the lease is valid, we use the greater of the observed
-	// timestamp and the lease start time, up to the max timestamp. This
-	// ensures we avoid incorrect assumptions about when data was
-	// written, in absolute time on a different node, which held the
-	// lease before this replica acquired it.
-	// TODO(nvanbenschoten): Do we ever need to call this when
-	//   status.State != VALID?
-	if status.State == kvserverpb.LeaseState_VALID {
-		obsTS.Forward(status.Lease.Start)
-	}
-	if obsTS.Less(ba.Txn.MaxTimestamp) {
-		// Copy-on-write to protect others we might be sharing the Txn with.
-		txnClone := ba.Txn.Clone()
-		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
-		// is empty, there won't be any uncertainty restarts.
-		if obsTS.LessEq(ba.Txn.ReadTimestamp) {
-			log.Event(ctx, "read has no clock uncertainty")
-		}
-		txnClone.MaxTimestamp.Backward(obsTS)
-		ba.Txn = txnClone
+
+	// Release the latches acquired by the request and exit lock wait-queues.
+	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
+	// the Raft proposal has assumed responsibility for the request.
+	if ec.g != nil {
+		ec.repl.concMgr.FinishReq(ec.g)
 	}
 }

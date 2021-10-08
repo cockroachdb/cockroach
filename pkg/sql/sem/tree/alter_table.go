@@ -13,7 +13,9 @@ package tree
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
@@ -71,10 +73,11 @@ func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
+func (*AlterTableSetOnUpdate) alterTableCmd()        {}
+func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
-func (*AlterTablePartitionBy) alterTableCmd()        {}
+func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
-func (*AlterTableOwner) alterTableCmd()              {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -88,10 +91,11 @@ var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
+var _ AlterTableCmd = &AlterTableSetOnUpdate{}
+var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
-var _ AlterTableCmd = &AlterTablePartitionBy{}
+var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
-var _ AlterTableCmd = &AlterTableOwner{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -179,6 +183,7 @@ func (node *AlterTable) HoistAddColumnConstraints() {
 				}
 				normalizedCmds = append(normalizedCmds, constraint)
 				d.References.Table = nil
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 			}
 		}
 	}
@@ -236,7 +241,7 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.ToType.SQLString())
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
-		ctx.WriteString(node.Collation)
+		lex.EncodeLocaleName(&ctx.Buffer, node.Collation)
 	}
 	if node.Using != nil {
 		ctx.WriteString(" USING ")
@@ -254,6 +259,7 @@ type AlterTableAlterPrimaryKey struct {
 	Columns    IndexElemList
 	Interleave *InterleaveDef
 	Sharded    *ShardedIndexDef
+	Name       Name
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -405,6 +411,62 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 	}
 }
 
+// AlterTableSetOnUpdate represents an ALTER COLUMN ON UPDATE SET
+// or DROP ON UPDATE command.
+type AlterTableSetOnUpdate struct {
+	Column Name
+	Expr   Expr
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetOnUpdate) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableSetOnUpdate) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_on_update")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetOnUpdate) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	if node.Expr == nil {
+		ctx.WriteString(" DROP ON UPDATE")
+	} else {
+		ctx.WriteString(" SET ON UPDATE ")
+		ctx.FormatNode(node.Expr)
+	}
+}
+
+// AlterTableSetVisible represents an ALTER COLUMN SET VISIBLE or NOT VISIBLE command.
+type AlterTableSetVisible struct {
+	Column  Name
+	Visible bool
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetVisible) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableSetVisible) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_visible")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetVisible) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" SET ")
+	if !node.Visible {
+		ctx.WriteString("NOT ")
+	}
+	ctx.WriteString("VISIBLE")
+}
+
 // AlterTableSetNotNull represents an ALTER COLUMN SET NOT NULL
 // command.
 type AlterTableSetNotNull struct {
@@ -474,20 +536,20 @@ func (node *AlterTableDropStored) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP STORED")
 }
 
-// AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
-// command.
-type AlterTablePartitionBy struct {
-	*PartitionBy
+// AlterTablePartitionByTable represents an ALTER TABLE PARTITION [ALL]
+// BY command.
+type AlterTablePartitionByTable struct {
+	*PartitionByTable
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
-func (node *AlterTablePartitionBy) TelemetryCounter() telemetry.Counter {
+func (node *AlterTablePartitionByTable) TelemetryCounter() telemetry.Counter {
 	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "partition_by")
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTablePartitionBy) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.PartitionBy)
+func (node *AlterTablePartitionByTable) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.PartitionByTable)
 }
 
 // AuditMode represents a table audit mode
@@ -547,10 +609,30 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Stats)
 }
 
+// AlterTableLocality represents an ALTER TABLE LOCALITY command.
+type AlterTableLocality struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+	Locality *Locality
+}
+
+var _ Statement = &AlterTableLocality{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableLocality) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" SET ")
+	ctx.FormatNode(node.Locality)
+}
+
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
 type AlterTableSetSchema struct {
 	Name           *UnresolvedObjectName
-	Schema         string
+	Schema         Name
 	IfExists       bool
 	IsView         bool
 	IsMaterialized bool
@@ -573,23 +655,76 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	node.Name.Format(ctx)
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(node.Schema)
+	ctx.FormatNode(&node.Schema)
+}
+
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterTableSetSchema) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"set_schema")
 }
 
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
-	Owner string
+	Name *UnresolvedObjectName
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	Owner          security.SQLUsername
+	IfExists       bool
+	IsView         bool
+	IsMaterialized bool
+	IsSequence     bool
 }
 
-// TelemetryCounter implements the AlterTableCmd interface.
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
 func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "owner to")
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"owner_to",
+	)
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER")
+	if node.IsView {
+		if node.IsMaterialized {
+			ctx.WriteString(" MATERIALIZED")
+		}
+		ctx.WriteString(" VIEW ")
+	} else if node.IsSequence {
+		ctx.WriteString(" SEQUENCE ")
+	} else {
+		ctx.WriteString(" TABLE ")
+	}
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatUsername(node.Owner)
+}
+
+// GetTableType returns a string representing the type of table the command
+// is operating on.
+// It is assumed if the table is not a sequence or a view, then it is a
+// regular table.
+func GetTableType(isSequence bool, isView bool, isMaterialized bool) string {
+	tableType := "table"
+	if isSequence {
+		tableType = "sequence"
+	} else if isView {
+		if isMaterialized {
+			tableType = "materialized_view"
+		} else {
+			tableType = "view"
+		}
+	}
+
+	return tableType
 }

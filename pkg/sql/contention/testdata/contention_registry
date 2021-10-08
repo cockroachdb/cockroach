@@ -1,0 +1,366 @@
+use registry=a
+----
+
+ev tableid=1 indexid=1 key=key id=a duration=1
+----
+
+# Add an event on a non-SQL key.
+evnonsql key=key id=a duration=1
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 1ns
+    id=a count=1
+
+# Add another event to the same key contending with a different txn and ensure
+# correct aggregation.
+ev tableid=1 indexid=1 key=key id=b duration=3
+----
+
+# Add another event on the same non-SQL key contending with a different txn.
+evnonsql key=key id=b duration=3
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 2
+  cumulative contention time: 4ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=b count=1
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 2
+  cumulative contention time: 4ns
+    id=b count=1
+    id=a count=1
+
+# Add txn with an ID that was already encountered.
+ev tableid=1 indexid=1 key=key id=a duration=5
+----
+
+# Add txn with an ID that was already encountered by non-SQL key.
+evnonsql key=key id=a duration=5
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 3
+  cumulative contention time: 9ns
+    id=a count=2
+    id=b count=1
+
+# Add txn on another key.
+ev tableid=1 indexid=1 key=keyc id=a duration=11
+----
+
+# Add txn on another non-SQL key.
+evnonsql key=keyc id=a duration=11
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 4
+  cumulative contention time: 20ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 3
+  cumulative contention time: 9ns
+    id=a count=2
+    id=b count=1
+non-SQL key "\xff\x12keyc\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 11ns
+    id=a count=1
+
+# Ensure keys are in sorted order.
+ev tableid=1 indexid=1 key=keyb id=a duration=1
+----
+
+# Ensure non-SQL keys are in sorted order.
+evnonsql key=keyb id=a duration=1
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 3
+  cumulative contention time: 9ns
+    id=a count=2
+    id=b count=1
+non-SQL key "\xff\x12keyb\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 1ns
+    id=a count=1
+non-SQL key "\xff\x12keyc\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 11ns
+    id=a count=1
+
+# Add another index on the same table.
+evcheck tableid=1 indexid=2 key=key id=a duration=1
+----
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 3
+  cumulative contention time: 9ns
+    id=a count=2
+    id=b count=1
+non-SQL key "\xff\x12keyb\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 1ns
+    id=a count=1
+non-SQL key "\xff\x12keyc\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 11ns
+    id=a count=1
+
+# Add another table.
+evcheck tableid=2 indexid=1 key=key id=a duration=1
+----
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+tableID=2 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/2/1/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 3
+  cumulative contention time: 9ns
+    id=a count=2
+    id=b count=1
+non-SQL key "\xff\x12keyb\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 1ns
+    id=a count=1
+non-SQL key "\xff\x12keyc\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 11ns
+    id=a count=1
+
+# Test merging the serialized representation of registries.
+use registry=b
+----
+
+# Add an event that overlaps with an event in registry a.
+ev tableid=1 indexid=1 key=key id=b duration=2
+----
+
+# Add an event on non-SQL key that overlaps with an event in registry a.
+evnonsql key=key id=b duration=2
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 1
+  cumulative contention time: 2ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=b count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 2ns
+    id=b count=1
+
+# Add an event that overlaps with a key but not with a txnID in registry a.
+ev tableid=1 indexid=1 key=key id=c duration=3
+----
+
+# Add an event on non-SQL key that overlaps with a non-SQL key but not with a
+# txnID in registry a.
+evnonsql key=key id=c duration=3
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 2
+  cumulative contention time: 5ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 2
+  cumulative contention time: 5ns
+    id=c count=1
+    id=b count=1
+
+# Add an event that doesn't overlap with events in registry a.
+ev tableid=1 indexid=1 key=new_key id=b duration=4
+----
+
+# Add an event on non-SQL key that doesn't overlap with events in registry a.
+evnonsql key=new_key id=b duration=4
+----
+
+check
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 2
+  cumulative contention time: 5ns
+    id=c count=1
+    id=b count=1
+non-SQL key "\xff\x12new_key\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 4ns
+    id=b count=1
+
+# Add yet another table.
+evcheck tableid=3 indexid=3 key=key id=c duration=1
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=c count=1
+      id=b count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+tableID=3 indexID=3
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/3/3/"key" contending txns:
+      id=c count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 2
+  cumulative contention time: 5ns
+    id=c count=1
+    id=b count=1
+non-SQL key "\xff\x12new_key\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 4ns
+    id=b count=1
+
+merge first=a second=b
+----
+tableID=1 indexID=1
+  num contention events: 8
+  cumulative contention time: 30ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=2
+      id=c count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+    /Table/1/1/"new_key" contending txns:
+      id=b count=1
+tableID=2 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/2/1/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+tableID=3 indexID=3
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/3/3/"key" contending txns:
+      id=c count=1
+non-SQL key "\xff\x12key\x00\x01" contending txns:
+  num contention events: 5
+  cumulative contention time: 14ns
+    id=a count=2
+    id=b count=2
+    id=c count=1
+non-SQL key "\xff\x12keyb\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 1ns
+    id=a count=1
+non-SQL key "\xff\x12keyc\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 11ns
+    id=a count=1
+non-SQL key "\xff\x12new_key\x00\x01" contending txns:
+  num contention events: 1
+  cumulative contention time: 4ns
+    id=b count=1

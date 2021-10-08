@@ -351,7 +351,7 @@ func TestCovers(t *testing.T) {
 		{
 			"multiple MULTIPOLYGONs required to cover MULTIPOINTS",
 			"MULTIPOLYGON(((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)), ((1.0 0.0, 2.0 0.0, 2.0 1.0, 1.0 1.0, 1.0 0.0)))",
-			"MULTIPOINT((0.5 0.5), (1.5 0.5))'",
+			"MULTIPOINT((0.5 0.5), (1.5 0.5))",
 			true,
 		},
 		{

@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "streamingutils",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/sql/sem/tree",
+        "//pkg/streaming",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "streamingutils_test",
+    srcs = [
+        "main_test.go",
+        "utils_test.go",
+    ],
+    embed = [":streamingutils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/streamingccl/streamingest",
+        "//pkg/ccl/utilccl",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

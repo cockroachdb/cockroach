@@ -1,3 +1,6 @@
+# Note: this file does not contain tests for virtual computed columns; those
+# are in a separate test file.
+
 statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
@@ -13,6 +16,8 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                      a INT8 NULL,
                      b INT8 NULL,
                      c INT8 NULL AS (3:::INT8) STORED,
+                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                      FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -31,6 +36,8 @@ extra_parens  CREATE TABLE public.extra_parens (
               a INT8 NULL,
               b INT8 NULL,
               c INT8 NULL AS (3:::INT8) STORED,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
               FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -85,6 +92,8 @@ x  CREATE TABLE public.x (
    b INT8 NULL DEFAULT 7:::INT8,
    c INT8 NULL AS (a) STORED,
    d INT8 NULL AS (a + b) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, c, d, rowid)
 )
 
@@ -92,10 +101,10 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM x
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         3:::INT8        ·                      {}         false
-b            INT8       true         7:::INT8        ·                      {}         false
-c            INT8       true         NULL            a                      {}         false
-d            INT8       true         NULL            a + b                  {}         false
+a            INT8       true         3:::INT8        ·                      {primary}  false
+b            INT8       true         7:::INT8        ·                      {primary}  false
+c            INT8       true         NULL            a                      {primary}  false
+d            INT8       true         NULL            a + b                  {primary}  false
 rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement error cannot write directly to computed column "c"
@@ -261,20 +270,21 @@ DROP TABLE x
 # statement ok
 # DROP TABLE x
 
-statement error use AS \( <expr> \) STORED
+statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
   a INT AS 3 STORED
 )
 
-statement error use AS \( <expr> \) STORED
+statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
   a INT AS (3)
 )
 
-statement error at or near "virtual": syntax error: unimplemented
-CREATE TABLE y (
-  a INT AS (3) VIRTUAL
-)
+statement ok
+CREATE TABLE tmp (x INT)
+
+statement ok
+DROP TABLE tmp
 
 statement error expected computed column expression to have type int, but .* has type string
 CREATE TABLE y (
@@ -289,6 +299,17 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
+statement ok
+CREATE TABLE x (
+  a INT
+)
+
+statement error expected computed column expression to have type string, but .* has type int
+ALTER TABLE x ADD COLUMN err STRING AS (10::INT) STORED
+
+statement ok
+DROP TABLE x
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED
@@ -298,6 +319,27 @@ statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a STRING,
   b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
+)
+
+# Make sure the error has a hint that mentions parse_timestamp().
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*use parse_timestamp
+CREATE TABLE y (
+  a STRING,
+  b TIMESTAMP AS (a::TIMESTAMP) STORED
+)
+
+# Make sure the error has a hint that mentions AT TIME ZONE.
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+CREATE TABLE y (
+  a TIMESTAMPTZ,
+  b STRING AS (a::STRING) STORED
+)
+
+# Make sure the error has a hint that mentions AT TIME ZONE.
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+CREATE TABLE y (
+  a TIMESTAMPTZ,
+  b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
 statement error context-dependent operators are not allowed in computed column
@@ -312,7 +354,7 @@ CREATE TABLE y (
   a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
 )
 
-statement error computed columns cannot reference other computed columns
+statement error computed column expression cannot reference computed columns
 CREATE TABLE y (
   a INT AS (3) STORED,
   b INT AS (a) STORED
@@ -328,42 +370,95 @@ CREATE TABLE y (
   b INT AS (count(1)) STORED
 )
 
-statement error computed columns cannot have default values
+statement error computed column cannot have default values
 CREATE TABLE y (
   a INT AS (3) STORED DEFAULT 4
 )
 
-# TODO(justin,bram): this should be allowed.
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY)
 
-statement error computed columns cannot reference non-restricted FK columns
-CREATE TABLE y (
-  q INT REFERENCES x (a) ON UPDATE CASCADE,
-  r INT AS (q) STORED
-)
-
-statement error computed columns cannot reference non-restricted FK columns
-CREATE TABLE y (
-  q INT REFERENCES x (a) ON DELETE CASCADE,
-  r INT AS (q) STORED
-)
-
-statement error computed column "r" cannot be a foreign key reference
+statement error computed column "r" cannot reference a foreign key
 CREATE TABLE y (
   r INT AS (1) STORED REFERENCES x (a)
 )
 
-statement error computed column "r" cannot be a foreign key reference
+statement error computed column "r" cannot reference a foreign key
 CREATE TABLE y (
   r INT AS (1) STORED REFERENCES x
 )
 
-statement error computed column "r" cannot be a foreign key reference
+statement error computed column "r" cannot reference a foreign key
 CREATE TABLE y (
   a INT,
   r INT AS (1) STORED REFERENCES x
 )
+
+# Tests for computed columns that reference foreign key columns.
+subtest referencing_fks
+
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c_update (
+  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+  c_cascade INT AS (p_cascade + 100) STORED,
+  c_default INT AS (p_default) STORED,
+  c_null INT AS (p_null + 100) STORED
+)
+
+statement ok
+CREATE TABLE c_delete_cascade (
+  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+  c_cascade INT AS (p_cascade + 100) STORED
+)
+
+statement ok
+CREATE TABLE c_delete_set (
+  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON DELETE SET NULL,
+  c_default INT AS (p_default) STORED,
+  c_null INT AS (p_null + 100) STORED
+)
+
+statement ok
+INSERT INTO p VALUES (0), (1), (2), (3)
+
+statement ok
+INSERT INTO c_update VALUES (1, 1, 1), (2, 2, 2)
+
+statement ok
+UPDATE p SET p = 10 WHERE p = 1
+
+query IIIIII colnames,rowsort
+SELECT * FROM c_update
+----
+p_cascade  p_default  p_null  c_cascade  c_default  c_null
+2          2          2       102        2          102
+10         0          NULL    110        0          NULL
+
+statement ok
+INSERT INTO c_delete_cascade VALUES (2), (3);
+INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
+
+statement ok
+DELETE FROM p WHERE p = 3
+
+query II colnames,rowsort
+SELECT * FROM c_delete_cascade
+----
+p_cascade  c_cascade
+2          102
+
+query IIII colnames,rowsort
+SELECT * FROM c_delete_set
+----
+p_default  p_null  c_default  c_null
+0          NULL    0          NULL
+2          2       2          102
 
 # Regression test for #36036.
 statement ok
@@ -372,7 +467,7 @@ CREATE TABLE tt (i INT8 AS (1) STORED)
 statement error variable sub-expressions are not allowed in computed column
 ALTER TABLE tt ADD COLUMN c STRING AS ((SELECT NULL)) STORED
 
-statement error computed columns cannot reference other computed columns
+statement error computed column expression cannot reference computed columns
 ALTER TABLE tt ADD COLUMN c INT8 AS (i) STORED
 
 # Composite FK.
@@ -384,14 +479,14 @@ CREATE TABLE xx (
   UNIQUE (a, b)
 )
 
-statement error computed column "y" cannot be a foreign key reference
+statement error computed column "y" cannot reference a foreign key
 CREATE TABLE yy (
   x INT,
   y INT AS (3) STORED,
   FOREIGN KEY (x, y) REFERENCES xx (a, b)
 )
 
-statement error computed column "y" cannot be a foreign key reference
+statement error computed column "y" cannot reference a foreign key
 CREATE TABLE yy (
   x INT,
   y INT AS (3) STORED,
@@ -407,7 +502,7 @@ CREATE TABLE y (
   INDEX (r)
 )
 
-statement error computed column "r" cannot be a foreign key reference
+statement error computed column "r" cannot reference a foreign key
 ALTER TABLE y ADD FOREIGN KEY (r) REFERENCES x (a)
 
 statement ok
@@ -625,6 +720,8 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, rowid)
 )
 
@@ -648,6 +745,8 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    c INT8 NULL,
    b INT8 NULL AS (c) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (c, b, rowid)
 )
 
@@ -687,7 +786,9 @@ SHOW CREATE TABLE x
 x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a * 2:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    c INT8 NOT NULL AS (a + 4:::INT8) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, b, rowid, c)
 )
 
@@ -811,6 +912,116 @@ SHOW CREATE t42418
 ----
 t42418  CREATE TABLE public.t42418 (
         x INT8 NULL AS (1:::INT8) STORED,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         y INT8 NULL AS (1:::INT8) STORED,
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
         FAMILY "primary" (x, rowid, y)
 )
+
+# Tests for computed column rewrites.
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
+
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts_c (k, ts, c)
+)
+
+statement ok
+DROP TABLE trewrite
+
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
+
+statement ok
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts (k, ts, c)
+)
+
+statement ok
+SET experimental_computed_column_rewrites = ""
+
+statement ok
+CREATE TABLE trewrite_copy (LIKE trewrite INCLUDING ALL)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
+----
+CREATE TABLE public.trewrite_copy (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, ts, c)
+)
+
+statement ok
+DROP TABLE trewrite
+
+statement ok
+DROP TABLE trewrite_copy
+
+# Test multiple rewrites.
+statement ok
+SET experimental_computed_column_rewrites = "
+  (ts::STRING) -> ((ts AT TIME ZONE 'utc')::STRING),
+  (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
+  (str::TIMESTAMP) -> (parse_timestamp(str))
+"
+
+statement ok
+CREATE TABLE trewrite2(
+  k INT PRIMARY KEY,
+  ts TIMESTAMPTZ,
+  b BYTES,
+  str STRING,
+  c1 STRING AS (ts::STRING) STORED,
+  c2 TIMESTAMP AS (str::TIMESTAMP) STORED,
+  c3 INT AS (mod(fnv32(b::STRING), 4)) STORED,
+  FAMILY (k,ts,b,str,c1,c2,c3)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
+----
+CREATE TABLE public.trewrite2 (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   b BYTES NULL,
+   str STRING NULL,
+   c1 STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
+   c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
+)
+
+statement ok
+DROP TABLE trewrite2
+
+statement error invalid column rewrites expression
+SET experimental_computed_column_rewrites = "bad"
+
+statement error invalid column rewrites expression
+SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"

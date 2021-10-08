@@ -10,7 +10,11 @@
 
 package settings
 
-import "github.com/cockroachdb/errors"
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
 
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -47,6 +51,14 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
+// Default returns default value for setting.
+func (i *IntSetting) Default() int64 {
+	return i.defaultValue
+}
+
+// Defeat the linter.
+var _ = (*IntSetting).Default
+
 // Validate that a value conforms with the validation function.
 func (i *IntSetting) Validate(v int64) error {
 	if i.validateFn != nil {
@@ -61,84 +73,89 @@ func (i *IntSetting) Validate(v int64) error {
 // default value.
 //
 // For testing usage only.
-func (i *IntSetting) Override(sv *Values, v int64) {
-	sv.setInt64(i.slotIdx, v)
+func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
+	sv.setInt64(ctx, i.slotIdx, v)
 	sv.setDefaultOverrideInt64(i.slotIdx, v)
 }
 
-func (i *IntSetting) set(sv *Values, v int64) error {
+func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(i.slotIdx, v)
+	sv.setInt64(ctx, i.slotIdx, v)
 	return nil
 }
 
-func (i *IntSetting) setToDefault(sv *Values) {
+func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(i.slotIdx)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = i.set(sv, val)
+		_ = i.set(ctx, sv, val)
 		return
 	}
-	if err := i.set(sv, i.defaultValue); err != nil {
+	if err := i.set(ctx, sv, i.defaultValue); err != nil {
 		panic(err)
 	}
 }
 
-// Default returns the default value.
-func (i *IntSetting) Default() int64 {
-	return i.defaultValue
-}
-
-// RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterPublicIntSetting defines a new setting with type int and makes it public.
-func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	s := RegisterValidatedIntSetting(key, desc, defaultValue, nil)
-	s.SetVisibility(Public)
-	return s
-}
-
-// RegisterNonNegativeIntSetting defines a new setting with type int.
-func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterPositiveIntSetting defines a new setting with type int.
-func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 1 {
-			return errors.Errorf("cannot set %s to a value < 1: %d", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterValidatedIntSetting defines a new setting with type int with a
+// RegisterIntSetting defines a new setting with type int with a
 // validation function.
-func RegisterValidatedIntSetting(
-	key, desc string, defaultValue int64, validateFn func(int64) error,
+func RegisterIntSetting(
+	key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *IntSetting {
-	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
+	var composed func(int64) error
+	if len(validateFns) > 0 {
+		composed = func(v int64) error {
+			for _, validateFn := range validateFns {
+				if err := validateFn(v); err != nil {
+					return errors.Wrapf(err, "invalid value for %s", key)
+				}
+			}
+			return nil
+		}
+	}
+	if composed != nil {
+		if err := composed(defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
 		}
 	}
 	setting := &IntSetting{
 		defaultValue: defaultValue,
-		validateFn:   validateFn,
+		validateFn:   composed,
 	}
 	register(key, desc, setting)
 	return setting
+}
+
+// WithPublic sets public visibility and can be chained.
+func (i *IntSetting) WithPublic() *IntSetting {
+	i.SetVisibility(Public)
+	return i
+}
+
+// WithSystemOnly system-only usage and can be chained.
+func (i *IntSetting) WithSystemOnly() *IntSetting {
+	i.common.systemOnly = true
+	return i
+}
+
+// Defeat the linter.
+var _ = (*IntSetting).WithSystemOnly
+
+// PositiveInt can be passed to RegisterIntSetting
+func PositiveInt(v int64) error {
+	if v < 1 {
+		return errors.Errorf("cannot be set to a non-positive value: %d", v)
+	}
+	return nil
+}
+
+// NonNegativeInt can be passed to RegisterIntSetting.
+func NonNegativeInt(v int64) error {
+	if v < 0 {
+		return errors.Errorf("cannot be set to a negative value: %d", v)
+	}
+	return nil
 }

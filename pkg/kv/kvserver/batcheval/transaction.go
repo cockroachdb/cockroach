@@ -24,7 +24,7 @@ import (
 
 // ErrTransactionUnsupported is returned when a non-transactional command is
 // evaluated in the context of a transaction.
-var ErrTransactionUnsupported = errors.New("not supported within a transaction")
+var ErrTransactionUnsupported = errors.AssertionFailedf("not supported within a transaction")
 
 // VerifyTransaction runs sanity checks verifying that the transaction in the
 // header and the request are compatible.
@@ -32,10 +32,10 @@ func VerifyTransaction(
 	h roachpb.Header, args roachpb.Request, permittedStatuses ...roachpb.TransactionStatus,
 ) error {
 	if h.Txn == nil {
-		return errors.Errorf("no transaction specified to %s", args.Method())
+		return errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
-		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+		return errors.AssertionFailedf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
 	}
 	statusPermitted := false
 	for _, s := range permittedStatuses {
@@ -45,9 +45,12 @@ func VerifyTransaction(
 		}
 	}
 	if !statusPermitted {
-		return roachpb.NewTransactionStatusError(
-			fmt.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status),
-		)
+		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		if h.Txn.Status == roachpb.COMMITTED {
+			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+		}
+		return roachpb.NewTransactionStatusError(reason,
+			fmt.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status))
 	}
 	return nil
 }
@@ -128,7 +131,7 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) error {
 	// The transaction could not have written a transaction record previously
 	// with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
+	ok, minCommitTS, reason := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return roachpb.NewTransactionAbortedError(reason)
@@ -157,7 +160,9 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 // TxnMeta. Proceeding to KV reads or intent resolution without this
 // information would cause a partial rollback, if any, to be reverted
 // and yield inconsistent data.
-func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
+func SynthesizeTxnFromMeta(
+	ctx context.Context, rec EvalContext, txn enginepb.TxnMeta,
+) roachpb.Transaction {
 	synth := roachpb.TransactionRecord{
 		TxnMeta: txn,
 		Status:  roachpb.PENDING,
@@ -180,7 +185,7 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 	// Determine whether the record could ever be allowed to be written in the
 	// future. The transaction could not have written a transaction record
 	// previously with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
+	ok, minCommitTS, _ := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
 		// the transaction would be able to create a transaction record at.

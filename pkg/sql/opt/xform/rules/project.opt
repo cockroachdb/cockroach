@@ -1,0 +1,66 @@
+# =============================================================================
+# project.opt contains exploration rules for the Project operator.
+# =============================================================================
+
+# EliminateIndexJoinInsideProject discards an IndexJoin operator inside a
+# Project operator when the input of the IndexJoin produces all the columns
+# required by the Project.
+#
+# This rule is useful when using partial indexes. When generating partial index
+# scans, expressions can be removed from filters because they exactly match
+# expressions in partial index predicates and there is no need to apply the
+# filter after the scan. Columns referenced in the removed expressions may no
+# longer need to be fetched.
+#
+# Consider the example:
+#
+#   CREATE TABLE t (i INT, s STRING, INDEX (i) WHERE s = 'foo')
+#
+#   SELECT i FROM t WHERE s = 'foo'
+#
+# The normalized expression for the SELECT query is:
+#
+#   project
+#    ├── columns: i:1
+#    └── select
+#         ├── columns: i:1 s:2!null
+#         ├── scan t
+#         │    └── columns: i:1 s:2
+#         └── filters
+#              └── s:2 = 'foo'
+#
+# GeneratePartialIndexScans will generate this expression:
+#
+#   project
+#    ├── columns: i:1
+#    └── index-join t
+#         ├── columns: i:1 s:2!null
+#         └── scan t@secondary,partial
+#              └── columns: i:1 rowid:4!null
+#
+# The IndexJoin is created because the Select expression in the previous
+# expression required s in order to apply the (s = 'foo') filter. However,
+# because rows in the partial index are already filtered by (s = 'foo'), column
+# s does not need to be fetched. The IndexJoin can be eliminated, resulting in
+# the expression:
+#
+#   project
+#    ├── columns: i:1
+#    └── scan t@secondary,partial
+#         └── columns: i:1 rowid:4!null
+#
+[EliminateIndexJoinInsideProject, Explore]
+(Project
+    (IndexJoin $input:*)
+    $projections:*
+    $passthrough:* &
+        (ColsAreSubset
+            (UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+            (OutputCols $input)
+        )
+)
+=>
+(Project $input $projections $passthrough)

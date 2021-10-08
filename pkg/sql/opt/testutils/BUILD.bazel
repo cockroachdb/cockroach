@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testutils",
+    srcs = [
+        "build.go",
+        "scalar_vars.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "testutils_test",
+    size = "small",
+    srcs = ["scalar_vars_test.go"],
+    embed = [":testutils"],
+    deps = [
+        "//pkg/sql/opt",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

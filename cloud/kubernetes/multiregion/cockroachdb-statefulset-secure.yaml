@@ -5,7 +5,7 @@ metadata:
   labels:
     app: cockroachdb
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cockroachdb
@@ -20,7 +20,7 @@ rules:
   - create
   - get
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cockroachdb
@@ -36,7 +36,7 @@ rules:
   - get
   - watch
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cockroachdb
@@ -51,7 +51,7 @@ subjects:
   name: cockroachdb
   namespace: default
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cockroachdb
@@ -166,20 +166,21 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v20.1.4
+        image: cockroachdb/cockroach:v21.1.10
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
           name: grpc
         - containerPort: 8080
           name: http
-        livenessProbe:
-          httpGet:
-            path: "/health"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 30
-          periodSeconds: 5
+# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+#      livenessProbe:
+#        httpGet:
+#          path: "/health"
+#          port: http
+#          scheme: HTTPS
+#        initialDelaySeconds: 30
+#        periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"

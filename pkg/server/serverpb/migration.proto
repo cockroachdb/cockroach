@@ -1,0 +1,93 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "clusterversion/cluster_version.proto";
+import "roachpb/metadata.proto";
+
+// ValidateTargetClusterVersion is used to verify that the target node is
+// running a binary that's able to support the specified cluster version.
+message ValidateTargetClusterVersionRequest {
+   clusterversion.ClusterVersion cluster_version = 1;
+}
+
+// ValidateTargetClusterVersionResponse is the response to a
+// ValidateTargetClusterVersionRequest.
+message ValidateTargetClusterVersionResponse {
+}
+
+// BumpClusterVersionRequest is used to inform the target node of a cluster
+// version bump.
+message BumpClusterVersionRequest {
+   clusterversion.ClusterVersion cluster_version = 1;
+}
+
+// BumpClusterVersionResponse is the response to an BumpClusterVersionRequest.
+message BumpClusterVersionResponse { }
+
+// PurgeOutdatedReplicasRequest is used to instruct the target node to
+// purge all replicas with a version less than the one provided.
+message PurgeOutdatedReplicasRequest {
+   roachpb.Version version = 1;
+}
+
+// PurgeOutdatedReplicasResponse is the response to a
+// PurgeOutdatedReplicasRequest.
+message PurgeOutdatedReplicasResponse{}
+
+// SyncAllEnginesRequest is used to instruct the target node to sync all its
+// engines.
+message SyncAllEnginesRequest{}
+
+// SyncAllEnginesResponse is the response to a SyncAllEnginesRequest.
+message SyncAllEnginesResponse{}
+
+// DeprecateBaseEncryptionRegistryRequest is used to instruct the target node
+// to stop using the Base version monolithic encryption-at-rest registry.
+message DeprecateBaseEncryptionRegistryRequest {
+  roachpb.Version version = 1;
+}
+
+// DeprecateBaseEncryptionRegistryResponse is the response to a
+// DeprecateBaseEncryptionRegistryRequest.
+message DeprecateBaseEncryptionRegistryResponse{}
+
+service Migration {
+   // ValidateTargetClusterVersion is used to verify that the target node is
+   // running a binary that's able to support the specified cluster version.
+   // Specifically:
+   //
+   //   node's minimum supported version <= version <= node's binary version
+   rpc ValidateTargetClusterVersion(ValidateTargetClusterVersionRequest) returns (ValidateTargetClusterVersionResponse) { }
+
+   // BumpClusterVersion is used to inform a given node of a cluster version
+   // bump. The node is responsible for durably persisting the message and
+   // enabling the corresponding version gates.
+   //
+   // This RPC is typically used together with ValidateTargetClusterVersion,
+   // which checks to see that all nodes in the cluster are running binaries
+   // that would be able to support the intended version bump.
+   rpc BumpClusterVersion(BumpClusterVersionRequest) returns (BumpClusterVersionResponse) { }
+
+   // SyncAllEngines is used to instruct the target node to sync all its
+   // engines.
+   rpc SyncAllEngines (SyncAllEnginesRequest) returns (SyncAllEnginesResponse) { }
+
+   // PurgeOutdatedReplicas is used to instruct the target node to purge all
+   // replicas with a version less than the one provided.
+   rpc PurgeOutdatedReplicas (PurgeOutdatedReplicasRequest) returns (PurgeOutdatedReplicasResponse) { }
+
+   // DeprecateBaseRegistry is used to instruct the target node to stop
+   // using the Base version monolithic encryption-at-rest registry.
+   rpc DeprecateBaseEncryptionRegistry (DeprecateBaseEncryptionRegistryRequest) returns (DeprecateBaseEncryptionRegistryResponse) { }
+}

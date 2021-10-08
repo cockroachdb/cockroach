@@ -14,12 +14,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,10 +36,12 @@ type updateNode struct {
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run updateRun
 }
+
+var _ mutationPlanNode = &updateNode{}
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
@@ -56,14 +59,14 @@ type updateRun struct {
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []descpb.ColumnDescriptor
+	computedCols []catalog.Column
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
 	// iVarContainerForComputedCols is used as a temporary buffer that
 	// holds the updated values for every column in the source, to
 	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
+	iVarContainerForComputedCols schemaexpr.RowIndexedVarContainer
 
 	// sourceSlots is the helper that maps RHS expressions to LHS targets.
 	// This is necessary because there may be fewer RHS expressions than
@@ -102,7 +105,7 @@ type updateRun struct {
 	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
 	// This provides the inverse mapping of sourceSlots.
 	//
-	updateColsIdx map[descpb.ColumnID]int
+	updateColsIdx catalog.TableColMap
 
 	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
 	// columns in the resultRowBuffer. A value of -1 is used to indicate
@@ -117,12 +120,6 @@ type updateRun struct {
 	numPassthrough int
 }
 
-// maxUpdateBatchSize is the max number of entries in the KV batch for
-// the update operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxUpdateBatchSize = 10000
-
 func (u *updateNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -130,9 +127,10 @@ func (u *updateNode) startExec(params runParams) error {
 	if u.run.rowsNeeded {
 		u.run.tu.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
+			colinfo.ColTypeInfoFromResCols(u.columns),
+		)
 	}
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
+	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -150,8 +148,6 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	if u.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	u.run.tu.clearLastBatch(params.ctx)
@@ -179,7 +175,8 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if u.run.tu.currentBatchSize >= maxUpdateBatchSize {
+		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
+			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
 			break
 		}
 	}
@@ -195,6 +192,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := u.run.tu.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -203,10 +201,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		u.run.tu.tableDesc().ID,
-		u.run.tu.lastBatchSize,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), u.run.tu.lastBatchSize)
 
 	return u.run.tu.lastBatchSize > 0, nil
 }
@@ -257,8 +252,10 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// iVarContainerForComputedCols does this.
 		copy(u.run.iVarContainerForComputedCols.CurSourceRow, oldValues)
 		for i := range u.run.tu.ru.UpdateCols {
-			id := u.run.tu.ru.UpdateCols[i].ID
-			u.run.iVarContainerForComputedCols.CurSourceRow[u.run.tu.ru.FetchColIDtoRowIndex[id]] = u.run.updateValues[i]
+			id := u.run.tu.ru.UpdateCols[i].GetID()
+			idx := u.run.tu.ru.FetchColIDtoRowIndex.GetDefault(id)
+			u.run.iVarContainerForComputedCols.CurSourceRow[idx] = u.run.
+				updateValues[i]
 		}
 
 		// Now (re-)compute the computed columns.
@@ -269,9 +266,11 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
-				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
+				name := u.run.computedCols[i].GetName()
+				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&name)))
 			}
-			u.run.updateValues[u.run.updateColsIdx[u.run.computedCols[i].ID]] = d
+			idx := u.run.updateColsIdx.GetDefault(u.run.computedCols[i].GetID())
+			u.run.updateValues[idx] = d
 		}
 		params.EvalContext().PopIVarContainer()
 	}
@@ -298,12 +297,11 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Create a set of partial index IDs to not add entries or remove entries
 	// from.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
-		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
-		partialIndexVals := sourceVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
-		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+	if n := len(u.run.tu.tableDesc().PartialIndexes()); n > 0 {
+		offset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
+		partialIndexVals := sourceVals[offset:]
+		partialIndexPutVals := partialIndexVals[:n]
+		partialIndexDelVals := partialIndexVals[n : n*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {
@@ -373,6 +371,10 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
+func (u *updateNode) rowsWritten() int64 {
+	return u.run.tu.rowsWritten
+}
+
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }
@@ -394,7 +396,7 @@ type sourceSlot interface {
 }
 
 type scalarSlot struct {
-	column      descpb.ColumnDescriptor
+	column      catalog.Column
 	sourceIndex int
 }
 
@@ -405,7 +407,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckDatumTypeFitsColumnType(&ss.column, typ)
+	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
 // enforceLocalColumnConstraints asserts the column constraints that
@@ -420,13 +422,12 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescriptor) error {
-	for i := range cols {
-		col := &cols[i]
-		if !col.Nullable && row[i] == tree.DNull {
-			return sqlbase.NewNonNullViolationError(col.Name)
+func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
+	for i, col := range cols {
+		if !col.IsNullable() && row[i] == tree.DNull {
+			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
-		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
+		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
 		if err != nil {
 			return err
 		}

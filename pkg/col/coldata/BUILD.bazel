@@ -1,0 +1,72 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "coldata",
+    srcs = [
+        "batch.go",
+        "bytes.go",
+        "datum_vec.go",
+        "json.go",
+        "native_types.go",
+        "nulls.go",
+        "testutils.go",
+        "vec.go",
+        ":gen-vec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/memsize",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/duration",
+        "//pkg/util/json",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "coldata_test",
+    size = "small",
+    srcs = [
+        "batch_test.go",
+        "bytes_test.go",
+        "dep_test.go",
+        "main_test.go",
+        "nulls_test.go",
+        "vec_test.go",
+    ],
+    embed = [":coldata"],
+    deps = [
+        "//pkg/col/coldatatestutils",
+        "//pkg/sql/colconv",
+        "//pkg/sql/randgen",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-vec",
+    srcs = ["vec_tmpl.go"],
+    outs = ["vec.eg.go"],
+    cmd = """
+      $(location //pkg/sql/colexec/execgen/cmd/execgen) \
+        -fmt=false pkg/col/coldata/$@ > $@
+      $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+    """,
+    exec_tools = [
+        "//pkg/sql/colexec/execgen/cmd/execgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+    ],
+)

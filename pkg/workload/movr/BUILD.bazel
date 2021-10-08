@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "movr",
+    srcs = [
+        "movr.go",
+        "rand.go",
+        "workload.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/movr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/faker",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
+    ],
+)
+
+go_test(
+    name = "movr_test",
+    size = "small",
+    srcs = ["movr_test.go"],
+    embed = [":movr"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

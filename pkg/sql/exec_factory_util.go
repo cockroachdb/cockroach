@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -21,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +33,7 @@ func constructPlan(
 	subqueries []exec.Subquery,
 	cascades []exec.Cascade,
 	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
@@ -45,6 +47,7 @@ func constructPlan(
 		}
 	}
 	assignPlan(&res.main, root)
+	res.mainRowCount = rootRowCount
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
 		for i := range subqueries {
@@ -64,6 +67,7 @@ func constructPlan(
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
 			out.expanded = true
+			out.rowCount = in.RowCount
 			assignPlan(&out.plan, in.Root)
 		}
 	}
@@ -93,46 +97,29 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	// include (or not include). Note that when wantedColumns is non-empty,
 	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
-		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
+		wantedColumns:         make([]tree.ColumnID, 0, cols.Len()),
+		wantedColumnsOrdinals: make([]uint32, 0, cols.Len()),
+		visibility:            execinfra.ScanVisibilityPublicAndNotPublic,
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
-		if col.Kind() == cat.Virtual {
-			col = table.Column(col.InvertedSourceColumnOrdinal())
+		colOrd := ord
+		if col.Kind() == cat.Inverted {
+			typ := col.DatumType()
+			colOrd = col.InvertedSourceColumnOrdinal()
+			col = table.Column(colOrd)
+			colCfg.invertedColumn = &struct {
+				colID tree.ColumnID
+				typ   *types.T
+			}{
+				colID: tree.ColumnID(col.ColID()),
+				typ:   typ,
+			}
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
+		colCfg.wantedColumnsOrdinals = append(colCfg.wantedColumnsOrdinals, uint32(colOrd))
 	}
 	return colCfg
-}
-
-func constructExplainDistSQLOrVecNode(
-	options *tree.ExplainOptions, stmtType tree.StatementType, p *planComponents, planner *planner,
-) (exec.Node, error) {
-	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
-
-	if options.Flags[tree.ExplainFlagEnv] {
-		return nil, errors.New("ENV only supported with (OPT) option")
-	}
-
-	switch options.Mode {
-	case tree.ExplainDistSQL:
-		return &explainDistSQLNode{
-			options:  options,
-			plan:     *p,
-			analyze:  analyzeSet,
-			stmtType: stmtType,
-		}, nil
-
-	case tree.ExplainVec:
-		return &explainVecNode{
-			options: options,
-			plan:    *p,
-		}, nil
-
-	default:
-		panic(errors.AssertionFailedf("unsupported explain mode %v", options.Mode))
-	}
 }
 
 // getResultColumnsForSimpleProject populates result columns for a simple
@@ -145,9 +132,9 @@ func getResultColumnsForSimpleProject(
 	cols []exec.NodeColumnOrdinal,
 	colNames []string,
 	resultTypes []*types.T,
-	inputCols sqlbase.ResultColumns,
-) sqlbase.ResultColumns {
-	resultCols := make(sqlbase.ResultColumns, len(cols))
+	inputCols colinfo.ResultColumns,
+) colinfo.ResultColumns {
+	resultCols := make(colinfo.ResultColumns, len(cols))
 	for i, col := range cols {
 		if colNames == nil {
 			resultCols[i] = inputCols[col]
@@ -155,7 +142,7 @@ func getResultColumnsForSimpleProject(
 			// column since it indicates it's been explicitly selected.
 			resultCols[i].Hidden = false
 		} else {
-			resultCols[i] = sqlbase.ResultColumn{
+			resultCols[i] = colinfo.ResultColumn{
 				Name: colNames[i],
 				Typ:  resultTypes[i],
 			}
@@ -165,10 +152,10 @@ func getResultColumnsForSimpleProject(
 }
 
 func getEqualityIndicesAndMergeJoinOrdering(
-	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 ) (
 	leftEqualityIndices, rightEqualityIndices []exec.NodeColumnOrdinal,
-	mergeJoinOrdering sqlbase.ColumnOrdering,
+	mergeJoinOrdering colinfo.ColumnOrdering,
 	err error,
 ) {
 	n := len(leftOrdering)
@@ -185,7 +172,7 @@ func getEqualityIndicesAndMergeJoinOrdering(
 		rightEqualityIndices[i] = exec.NodeColumnOrdinal(rightColIdx)
 	}
 
-	mergeJoinOrdering = make(sqlbase.ColumnOrdering, n)
+	mergeJoinOrdering = make(colinfo.ColumnOrdering, n)
 	for i := 0; i < n; i++ {
 		// The mergeJoinOrdering "columns" are equality column indices.  Because of
 		// the way we constructed the equality indices, the ordering will always be
@@ -197,14 +184,14 @@ func getEqualityIndicesAndMergeJoinOrdering(
 }
 
 func getResultColumnsForGroupBy(
-	inputCols sqlbase.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
-) sqlbase.ResultColumns {
-	columns := make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations))
+	inputCols colinfo.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
+) colinfo.ResultColumns {
+	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	for _, col := range groupCols {
 		columns = append(columns, inputCols[col])
 	}
 	for _, agg := range aggregations {
-		columns = append(columns, sqlbase.ResultColumn{
+		columns = append(columns, colinfo.ResultColumn{
 			Name: agg.FuncName,
 			Typ:  agg.ResultType,
 		})
@@ -238,10 +225,13 @@ func constructVirtualScan(
 	if err != nil {
 		return nil, err
 	}
-	indexDesc := index.(*optVirtualIndex).desc
+	if !canQueryVirtualTable(p.EvalContext(), virtual) {
+		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	}
+	idx := index.(*optVirtualIndex).idx
 	columns, constructor := virtual.getPlanInfo(
 		table.(*optVirtualTable).desc,
-		indexDesc, params.IndexConstraint)
+		idx, params.IndexConstraint, p.execCfg.DistSQLPlanner.stopper)
 
 	n, err := delayedNodeCallback(&delayedNode{
 		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
@@ -293,18 +283,13 @@ func constructVirtualScan(
 	return n, nil
 }
 
-func collectSystemColumnsFromCfg(
-	colCfg *scanColumnsConfig,
-) (systemColumns []descpb.SystemColumnKind, systemColumnOrdinals []int) {
-	for i, id := range colCfg.wantedColumns {
-		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(descpb.ColumnID(id))
-		if sysColKind != descpb.SystemColumnKind_NONE {
-			// The scan is requested to produce a system column.
-			systemColumns = append(systemColumns, sysColKind)
-			systemColumnOrdinals = append(systemColumnOrdinals, i)
+func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
+	for _, id := range colCfg.wantedColumns {
+		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+			return true
 		}
 	}
-	return systemColumns, systemColumnOrdinals
+	return false
 }
 
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
@@ -313,4 +298,12 @@ func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
 		return nil, errors.AssertionFailedf("unexpected OpaqueMetadata object type %T", metadata)
 	}
 	return o.plan, nil
+}
+
+func convertFastIntSetToUint32Slice(colIdxs util.FastIntSet) []uint32 {
+	cols := make([]uint32, 0, colIdxs.Len())
+	for i, ok := colIdxs.Next(0); ok; i, ok = colIdxs.Next(i + 1) {
+		cols = append(cols, uint32(i))
+	}
+	return cols
 }

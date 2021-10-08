@@ -1,0 +1,23 @@
+# this file
+.npmignore
+
+# all things git
+.git*
+
+# source
+src/
+.jest
+.storybook
+enzyme.setup.js
+.eslintrc.json
+
+# source maps
+*/**/*.js.map
+
+# eslint
+.eslintignore
+.eslintrc
+
+# project configs
+*.config.js
+tsconfig.json

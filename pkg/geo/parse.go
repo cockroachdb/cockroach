@@ -16,14 +16,16 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/twpayne/go-geom"
+	"github.com/cockroachdb/errors"
+	"github.com/pierrre/geohash"
+	geom "github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/wkb"
 	"github.com/twpayne/go-geom/encoding/wkbcommon"
+	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
 // parseEWKBRaw creates a geopb.SpatialObject from an EWKB
@@ -70,7 +72,7 @@ func parseEWKBHex(
 		return geopb.SpatialObject{}, err
 	}
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -88,7 +90,7 @@ func parseEWKB(
 		return geopb.SpatialObject{}, err
 	}
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -101,7 +103,7 @@ func parseWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	adjustGeomSRID(t, defaultSRID)
+	AdjustGeomTSRID(t, defaultSRID)
 	return spatialObjectFromGeomT(t, soType)
 }
 
@@ -113,33 +115,13 @@ func parseGeoJSON(
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if t == nil {
+		return geopb.SpatialObject{}, errors.Newf("invalid GeoJSON input")
+	}
 	if defaultSRID != 0 && t.SRID() == 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
-}
-
-// adjustGeomSRID adjusts the SRID of a given geom.T.
-// Ideally SetSRID is an interface of geom.T, but that is not the case.
-func adjustGeomSRID(t geom.T, srid geopb.SRID) {
-	switch t := t.(type) {
-	case *geom.Point:
-		t.SetSRID(int(srid))
-	case *geom.LineString:
-		t.SetSRID(int(srid))
-	case *geom.Polygon:
-		t.SetSRID(int(srid))
-	case *geom.GeometryCollection:
-		t.SetSRID(int(srid))
-	case *geom.MultiPoint:
-		t.SetSRID(int(srid))
-	case *geom.MultiLineString:
-		t.SetSRID(int(srid))
-	case *geom.MultiPolygon:
-		t.SetSRID(int(srid))
-	default:
-		panic(fmt.Errorf("geo: unknown geom type: %v", t))
-	}
 }
 
 const sridPrefix = "SRID="
@@ -189,11 +171,12 @@ func parseEWKT(
 		}
 	}
 
-	ewkb, err := geos.WKTToEWKB(geopb.WKT(str), srid)
-	if err != nil {
-		return geopb.SpatialObject{}, err
+	g, wktUnmarshalErr := wkt.Unmarshal(string(str))
+	if wktUnmarshalErr != nil {
+		return geopb.SpatialObject{}, wktUnmarshalErr
 	}
-	return parseEWKBRaw(soType, ewkb)
+	AdjustGeomTSRID(g, srid)
+	return spatialObjectFromGeomT(g, soType)
 }
 
 // hasPrefixIgnoreCase returns whether a given str begins with a prefix, ignoring case.
@@ -208,4 +191,78 @@ func hasPrefixIgnoreCase(str string, prefix string) bool {
 		}
 	}
 	return true
+}
+
+// ParseGeometryPointFromGeoHash converts a GeoHash to a Geometry Point
+// using a Lng/Lat Point representation of the GeoHash.
+func ParseGeometryPointFromGeoHash(g string, precision int) (Geometry, error) {
+	box, err := parseGeoHash(g, precision)
+	if err != nil {
+		return Geometry{}, err
+	}
+	point := box.Center()
+	geom, gErr := MakeGeometryFromPointCoords(point.Lon, point.Lat)
+	if gErr != nil {
+		return Geometry{}, gErr
+	}
+	return geom, nil
+}
+
+// ParseCartesianBoundingBoxFromGeoHash converts a GeoHash to a CartesianBoundingBox.
+func ParseCartesianBoundingBoxFromGeoHash(g string, precision int) (CartesianBoundingBox, error) {
+	box, err := parseGeoHash(g, precision)
+	if err != nil {
+		return CartesianBoundingBox{}, err
+	}
+	return CartesianBoundingBox{
+		BoundingBox: geopb.BoundingBox{
+			LoX: box.Lon.Min,
+			HiX: box.Lon.Max,
+			LoY: box.Lat.Min,
+			HiY: box.Lat.Max,
+		},
+	}, nil
+}
+
+func parseGeoHash(g string, precision int) (geohash.Box, error) {
+	if len(g) == 0 {
+		return geohash.Box{}, errors.Newf("length of GeoHash must be greater than 0")
+	}
+
+	// If precision is more than the length of the geohash
+	// or if precision is less than 0 then set
+	// precision equal to length of geohash.
+	if precision > len(g) || precision < 0 {
+		precision = len(g)
+	}
+	box, err := geohash.Decode(g[:precision])
+	if err != nil {
+		return geohash.Box{}, err
+	}
+	return box, nil
+}
+
+// GeometryToEncodedPolyline turns the provided geometry and precision into a Polyline ASCII
+func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
+	gt, err := g.AsGeomT()
+	if err != nil {
+		return "", errors.Wrap(err, "error parsing input geometry")
+	}
+	if gt.SRID() != 4326 {
+		return "", errors.New("only SRID 4326 is supported")
+	}
+
+	return encodePolylinePoints(gt.FlatCoords(), p), nil
+}
+
+// ParseEncodedPolyline takes the encoded polyline ASCII and precision, decodes the points and returns them as a geometry
+func ParseEncodedPolyline(encodedPolyline string, precision int) (Geometry, error) {
+	flatCoords := decodePolylinePoints(encodedPolyline, precision)
+	ls := geom.NewLineStringFlat(geom.XY, flatCoords).SetSRID(4326)
+
+	g, err := MakeGeometryFromGeomT(ls)
+	if err != nil {
+		return Geometry{}, errors.Wrap(err, "parsing geography error")
+	}
+	return g, nil
 }

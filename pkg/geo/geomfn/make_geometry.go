@@ -12,21 +12,22 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
 
 // MakePolygon creates a Polygon geometry from linestring and optional inner linestrings.
 // Returns errors if geometries are not linestrings.
-func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry, error) {
+func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, error) {
 	layout := geom.XY
 	outerGeomT, err := outer.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	outerRing, ok := outerGeomT.(*geom.LineString)
 	if !ok {
-		return nil, errors.Newf("argument must be LINESTRING geometries")
+		return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
 	}
 	srid := outerRing.SRID()
 	coords := make([][]geom.Coord, len(interior)+1)
@@ -34,21 +35,35 @@ func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry,
 	for i, g := range interior {
 		interiorRingGeomT, err := g.AsGeomT()
 		if err != nil {
-			return nil, err
+			return geo.Geometry{}, err
 		}
 		interiorRing, ok := interiorRingGeomT.(*geom.LineString)
 		if !ok {
-			return nil, errors.Newf("argument must be LINESTRING geometries")
+			return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
 		}
 		if interiorRing.SRID() != srid {
-			return nil, errors.Newf("mixed SRIDs are not allowed")
+			return geo.Geometry{}, errors.Newf("mixed SRIDs are not allowed")
 		}
 		coords[i+1] = interiorRing.Coords()
 	}
 
 	polygon, err := geom.NewPolygon(layout).SetSRID(srid).SetCoords(coords)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
-	return geo.NewGeometryFromGeomT(polygon)
+	return geo.MakeGeometryFromGeomT(polygon)
+}
+
+// MakePolygonWithSRID is like MakePolygon but also sets the SRID, like ST_Polygon.
+func MakePolygonWithSRID(g geo.Geometry, srid int) (geo.Geometry, error) {
+	polygon, err := MakePolygon(g)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t, err := polygon.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	geo.AdjustGeomTSRID(t, geopb.SRID(srid))
+	return geo.MakeGeometryFromGeomT(t)
 }

@@ -159,6 +159,9 @@ func (s *Store) tryGetOrCreateReplica(
 	repl.creatingReplica = creatingReplica
 	repl.raftMu.Lock() // not unlocked
 
+	// Take out read-only lock. Not strictly necessary here, but follows the
+	// normal lock protocol for destroyStatus.Set().
+	repl.readOnlyCmdMu.Lock()
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
 	// locks.
@@ -180,6 +183,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// been set, not every code path which inspects the descriptor checks the
 	// destroy status.
 	repl.mu.state.Desc = uninitializedDesc
+
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
@@ -187,6 +191,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		repl.mu.Unlock()
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, errRetry
 	}
@@ -224,12 +229,14 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
-		s.unlinkReplicaByRangeIDLocked(rangeID)
+		s.unlinkReplicaByRangeIDLocked(ctx, rangeID)
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}
 	repl.mu.Unlock()
+	repl.readOnlyCmdMu.Unlock()
 	return repl, true, nil
 }
 
@@ -248,7 +255,7 @@ func fromReplicaIsTooOld(toReplica *Replica, fromReplica *roachpb.ReplicaDescrip
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
 // replicasByKey btree. Returns an error if a replica with
-// the same Range ID or a KeyRange that overlaps has already been added to
+// the same Range ID or an overlapping replica or placeholder exists in
 // this store. addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	if !repl.IsInitialized() {
@@ -259,35 +266,27 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 		return err
 	}
 
-	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, repl, exRange.Desc())
+	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
+		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, repl, it.Desc())
 	}
 
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
 		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
-			exRngItem.(KeyRange).startKey())
+			it.item.key())
 	}
 
 	return nil
-}
-
-// addPlaceholderLocked adds the specified placeholder. Requires that the
-// raftMu of the replica whose place is being held is locked.
-func (s *Store) addPlaceholder(placeholder *ReplicaPlaceholder) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.addPlaceholderLocked(placeholder)
 }
 
 // addPlaceholderLocked adds the specified placeholder. Requires that Store.mu
 // and the raftMu of the replica whose place is being held are locked.
 func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	rangeID := placeholder.Desc().RangeID
-	if exRng := s.mu.replicasByKey.ReplaceOrInsert(placeholder); exRng != nil {
-		return errors.Errorf("%s overlaps with existing KeyRange %s in replicasByKey btree", placeholder, exRng)
+	if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(context.Background(), placeholder); it.item != nil {
+		return errors.Errorf("%s overlaps with existing replicaOrPlaceholder %+v in replicasByKey btree", placeholder, it.item)
 	}
 	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
-		return errors.Errorf("%s has ID collision with existing KeyRange %s", placeholder, exRng)
+		return errors.Errorf("%s has ID collision with placeholder %+v", placeholder, exRng)
 	}
 	s.mu.replicaPlaceholders[rangeID] = placeholder
 	return nil
@@ -318,26 +317,31 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 // unintialized replica has become initialized so that the store can update its
 // internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
-func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Replica) error {
-	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to process uninitialized range %s", repl)
+func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
+	ctx context.Context, lockedRepl *Replica,
+) error {
+	desc := lockedRepl.descRLocked()
+	if !desc.IsInitialized() {
+		return errors.Errorf("attempted to process uninitialized range %s", desc)
 	}
 
-	rangeID := repl.RangeID
-
+	rangeID := lockedRepl.RangeID
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
 		return nil
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot initialize replica; range %s has overlapping range %s",
-			s, repl, exRange.Desc())
+	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+		return errors.Errorf("%s: cannot initialize replica; %s has overlapping range %s",
+			s, desc, it.Desc())
 	}
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
-		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).startKey())
+
+	// Copy of the start key needs to be set before inserting into replicasByKey.
+	lockedRepl.setStartKeyLocked(desc.StartKey)
+	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
+		return errors.Errorf("range for key %v already exists in replicasByKey btree: %+v",
+			it.item.key(), it)
 	}
 
 	// Add the range to metrics and maybe gossip on capacity change.

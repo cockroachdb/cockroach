@@ -13,12 +13,12 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
-func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	ok, _ := ScanPrivateCanProvide(
 		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
@@ -31,7 +31,7 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool {
+func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
 		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
@@ -47,7 +47,7 @@ func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool 
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
 func ScanPrivateCanProvide(
-	md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
+	md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 ) (ok bool, reverse bool) {
 	// Scan naturally orders according to scanned index's key columns. A scan can
 	// be executed either as a forward or as a reverse scan (unless it has a row
@@ -92,6 +92,11 @@ func ScanPrivateCanProvide(
 		}
 		reqCol := &required.Columns[right]
 		if !reqCol.Group.Contains(indexColID) {
+			if left < s.ExactPrefix {
+				// All columns in the exact prefix are constant and can be ignored.
+				left++
+				continue
+			}
 			return false, false
 		}
 		// The directions of the index column and the required column impose either
@@ -113,7 +118,7 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
-func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	scan := expr.(*memo.ScanExpr)
 	md := scan.Memo().Metadata()
 	index := md.Table(scan.Table).Index(scan.Index)
@@ -125,19 +130,21 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan
 	// (ignoring constant columns, in the case of constrained scans).
+	// We start the for loop at the exact prefix since all columns in the exact
+	// prefix are constant and can be ignored.
 	constCols := fds.ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
-	for i := 0; i < numCols; i++ {
+	for i := scan.ExactPrefix; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
-		if !scan.Cols.Contains(colID) {
-			// Column not in output; we are done.
-			break
-		}
 		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue
+		}
+		if !scan.Cols.Contains(colID) {
+			// Column not in output; we are done.
+			break
 		}
 		direction := (indexCol.Descending != reverse) // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
@@ -148,7 +155,7 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 
 func init() {
 	memo.ScanIsReverseFn = func(
-		md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
+		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {

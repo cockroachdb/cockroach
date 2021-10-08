@@ -47,16 +47,25 @@ func TestAggMetric(t *testing.T) {
 		Name: "foo_counter",
 	}, "tenant_id")
 	r.AddMetric(c)
+
 	g := aggmetric.NewGauge(metric.Metadata{
 		Name: "bar_gauge",
 	}, "tenant_id")
 	r.AddMetric(g)
+
+	f := aggmetric.NewGaugeFloat64(metric.Metadata{
+		Name: "baz_gauge",
+	}, "tenant_id")
+	r.AddMetric(f)
+
 	tenant2 := roachpb.MakeTenantID(2)
 	tenant3 := roachpb.MakeTenantID(3)
 	c2 := c.AddChild(tenant2.String())
 	c3 := c.AddChild(tenant3.String())
 	g2 := g.AddChild(tenant2.String())
 	g3 := g.AddChild(tenant3.String())
+	f2 := f.AddChild(tenant2.String())
+	f3 := f.AddChild(tenant3.String())
 
 	t.Run("basic", func(t *testing.T) {
 		c2.Inc(2)
@@ -64,10 +73,15 @@ func TestAggMetric(t *testing.T) {
 		g2.Inc(2)
 		g3.Inc(3)
 		g3.Dec(1)
+		f2.Update(1.5)
+		f3.Update(2.5)
 		require.Equal(t,
 			`bar_gauge 4
 bar_gauge{tenant_id="2"} 2
 bar_gauge{tenant_id="3"} 2
+baz_gauge 4
+baz_gauge{tenant_id="2"} 1.5
+baz_gauge{tenant_id="3"} 2.5
 foo_counter 6
 foo_counter{tenant_id="2"} 2
 foo_counter{tenant_id="3"} 4`,
@@ -77,9 +91,12 @@ foo_counter{tenant_id="3"} 4`,
 	t.Run("destroy", func(t *testing.T) {
 		g3.Destroy()
 		c2.Destroy()
+		f3.Destroy()
 		require.Equal(t,
 			`bar_gauge 2
 bar_gauge{tenant_id="2"} 2
+baz_gauge 1.5
+baz_gauge{tenant_id="2"} 1.5
 foo_counter 6
 foo_counter{tenant_id="3"} 4`,
 			writePrometheusMetrics(t))
@@ -98,10 +115,14 @@ foo_counter{tenant_id="3"} 4`,
 	t.Run("add after destroy", func(t *testing.T) {
 		g3 = g.AddChild(tenant3.String())
 		c2 = c.AddChild(tenant2.String())
+		f3 = f.AddChild(tenant3.String())
 		require.Equal(t,
 			`bar_gauge 2
 bar_gauge{tenant_id="2"} 2
 bar_gauge{tenant_id="3"} 0
+baz_gauge 1.5
+baz_gauge{tenant_id="2"} 1.5
+baz_gauge{tenant_id="3"} 0
 foo_counter 6
 foo_counter{tenant_id="2"} 0
 foo_counter{tenant_id="3"} 4`,

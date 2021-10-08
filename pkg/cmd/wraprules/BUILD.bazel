@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "wraprules_lib",
+    srcs = ["wraprules.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/wraprules",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_binary(
+    name = "wraprules",
+    embed = [":wraprules_lib"],
+    visibility = ["//visibility:public"],
+)

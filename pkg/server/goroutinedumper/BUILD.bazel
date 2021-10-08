@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "goroutinedumper",
+    srcs = ["goroutinedumper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/goroutinedumper",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/dumpstore",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "goroutinedumper_test",
+    size = "small",
+    srcs = ["goroutinedumper_test.go"],
+    embed = [":goroutinedumper"],
+    deps = [
+        "//pkg/server/dumpstore",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

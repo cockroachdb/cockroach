@@ -33,7 +33,7 @@ const (
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
 // associated Raft state (which must be written separately via
-// synthesizeRaftState before instantiating a Replica). The main task is to
+// SynthesizeRaftState before instantiating a Replica). The main task is to
 // persist a ReplicaState which does not start from zero but presupposes a few
 // entries already having applied. The supplied MVCCStats are used for the Stats
 // field after adjusting for persisting the state itself, and the updated stats
@@ -46,6 +46,7 @@ func WriteInitialReplicaState(
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	truncStateType TruncatedStateType,
+	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -60,7 +61,12 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
-	s.UsingAppliedStateKey = true
+	if (replicaVersion != roachpb.Version{}) {
+		s.Version = &replicaVersion
+	}
+	if truncStateType != TruncatedStateLegacyReplicatedAndNoAppliedKey {
+		s.UsingAppliedStateKey = true
+	}
 
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
@@ -70,8 +76,14 @@ func WriteInitialReplicaState(
 
 	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
-	} else if (*existingGCThreshold != hlc.Timestamp{}) {
-		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
+	} else if !existingGCThreshold.IsEmpty() {
+		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
+	}
+
+	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
+	} else if (existingVersion != roachpb.Version{}) {
+		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
 	newMS, err := rsl.Save(ctx, readWriter, s, truncStateType)
@@ -82,26 +94,44 @@ func WriteInitialReplicaState(
 	return newMS, nil
 }
 
-// WriteInitialState calls WriteInitialReplicaState followed by
-// SynthesizeRaftState. It is typically called during bootstrap. The supplied
-// MVCCStats are used for the Stats field after adjusting for persisting the
-// state itself, and the updated stats are returned.
-func WriteInitialState(
+// WriteInitialRangeState writes the initial range state. It's called during
+// bootstrap.
+func WriteInitialRangeState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
-	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
-	truncStateType TruncatedStateType,
-) (enginepb.MVCCStats, error) {
-	newMS, err := WriteInitialReplicaState(
-		ctx, readWriter, ms, desc, lease, gcThreshold, truncStateType)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
+	replicaVersion roachpb.Version,
+) error {
+	const initialTruncStateType = TruncatedStateUnreplicated
+	return WriteInitialRangeStateWithTruncatedState(ctx, readWriter, desc, replicaVersion, initialTruncStateType)
+}
+
+// WriteInitialRangeStateWithTruncatedState is the same as
+// WriteInitialRangeState, but allows the caller to override the truncated state
+// type.
+//
+// TODO(irfansharif): This can be removed in the v21.2 cycle after we no longer
+// need to test the truncated state migration.
+func WriteInitialRangeStateWithTruncatedState(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	desc roachpb.RangeDescriptor,
+	replicaVersion roachpb.Version,
+	truncState TruncatedStateType,
+) error {
+	initialLease := roachpb.Lease{}
+	initialGCThreshold := hlc.Timestamp{}
+	initialMS := enginepb.MVCCStats{}
+	initialTruncStateType := truncState
+
+	if _, err := WriteInitialReplicaState(
+		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
+		initialTruncStateType, replicaVersion,
+	); err != nil {
+		return err
 	}
 	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
-		return enginepb.MVCCStats{}, err
+		return err
 	}
-	return newMS, nil
+	return nil
 }

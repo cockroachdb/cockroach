@@ -1,0 +1,59 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "protoutil",
+    srcs = [
+        "clone.go",
+        "jsonpb_marshal.go",
+        "marshal.go",
+        "marshaler.go",
+    ],
+    embed = [":protoutil_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/protoutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+    ],
+)
+
+go_test(
+    name = "protoutil_test",
+    size = "small",
+    srcs = ["clone_test.go"],
+    deps = [
+        ":protoutil",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/storage/enginepb",
+        "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+proto_library(
+    name = "protoutil_proto",
+    srcs = ["clone.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "protoutil_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/protoutil",
+    proto = ":protoutil_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/uuid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)

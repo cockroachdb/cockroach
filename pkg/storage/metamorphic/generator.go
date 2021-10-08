@@ -36,26 +36,12 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestRocksDBEngine(path string, seed int64) (storage.Engine, error) {
-	cache := storage.NewRocksDBCache(1 << 20)
-	defer cache.Release()
-	cfg := storage.RocksDBConfig{
-		StorageConfig: makeStorageConfig(path),
-		ReadOnly:      false,
-	}
-
-	return storage.NewRocksDB(cfg, cache)
-}
-
 func createTestPebbleEngine(path string, seed int64) (storage.Engine, error) {
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
+	return storage.Open(
+		context.Background(),
+		storage.Filesystem(path),
+		storage.CacheSize(1<<20 /* 1 MiB */),
+		storage.Settings(cluster.MakeTestingClusterSettings()))
 }
 
 func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {
@@ -86,8 +72,7 @@ func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
 
 	rng := rand.New(rand.NewSource(seed))
 	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
-	opts.Experimental.FlushSplitBytes = 1 << rng.Intn(20)
-	opts.Experimental.L0SublevelCompactions = rng.Intn(2) == 0
+	opts.FlushSplitBytes = 1 << rng.Intn(20)
 	opts.LBaseMaxBytes = 1 << rngIntRange(rng, 8, 30)
 	opts.L0CompactionThreshold = int(rngIntRange(rng, 1, 10))
 	opts.L0StopWritesThreshold = int(rngIntRange(rng, 1, 32))
@@ -110,8 +95,6 @@ func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
 	opts.MaxOpenFiles = int(rngIntRange(rng, 20, 2000))
 	opts.MemTableSize = 1 << rngIntRange(rng, 10, 28)
 	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
-	opts.MinCompactionRate = int(rngIntRange(rng, 1<<8, 8<<20))
-	opts.MinFlushRate = int(rngIntRange(rng, 1<<8, 4<<20))
 	opts.MaxConcurrentCompactions = int(rngIntRange(rng, 1, 4))
 
 	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
@@ -136,7 +119,6 @@ func (e *engineImpl) String() string {
 	return e.name
 }
 
-var engineImplRocksDB = engineImpl{"rocksdb", createTestRocksDBEngine}
 var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
 var engineImplPebbleManySSTs = engineImpl{"pebble_many_ssts", createTestPebbleManySSTs}
 var engineImplPebbleVarOpts = engineImpl{"pebble_var_opts", createTestPebbleVarOpts}

@@ -42,6 +42,11 @@ CREATE TABLE product_information (
 								last_name
 							)
 	                    ) STORED,
+	virt_col            INT8
+	                    AS (
+							product_id
+							* 10
+	                    ) VIRTUAL,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (
 		supplier_id,

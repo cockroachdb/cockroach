@@ -15,14 +15,13 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -34,10 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/elastic/gosigar"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // Context defaults.
@@ -54,7 +55,7 @@ const (
 	defaultScanMinIdleTime   = 10 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
 
-	defaultStorePath = "cockroach-data"
+	DefaultStorePath = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -76,7 +77,7 @@ const (
 
 var productionSettingsWebpage = fmt.Sprintf(
 	"please see %s for more details",
-	base.DocsURL("recommended-production-settings.html"),
+	docs.URL("recommended-production-settings.html"),
 )
 
 // MaxOffsetType stores the configured MaxOffset.
@@ -111,6 +112,7 @@ type BaseConfig struct {
 	Settings *cluster.Settings
 	*base.Config
 
+	Tracer *tracing.Tracer
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
@@ -122,9 +124,24 @@ type BaseConfig struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// GoroutineDumpDirName is the directory name for goroutine dumps using
+	// goroutinedumper.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected.
+	HeapProfileDirName string
+
+	// CPUProfileDirName is the directory name for CPU profile dumps.
+	CPUProfileDirName string
+
+	// InflightTraceDirName is the directory name for job traces.
+	InflightTraceDirName string
+
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
-	// server testing knob.
+	// server testing knob. Whatever is installed here is in turn used to
+	// initialize stores, which need a default span config.
 	DefaultZoneConfig zonepb.ZoneConfig
 
 	// Locality is a description of the topography of the server.
@@ -134,14 +151,23 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
+	// Enables the use of the (experimental) span configs infrastructure.
+	//
+	// Environment Variable: COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
+	SpanConfigsEnabled bool
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+	if tr == nil {
+		panic("nil Tracer")
+	}
 	baseCfg := BaseConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Tracer:            tr,
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
@@ -172,8 +198,9 @@ type KVConfig struct {
 	// in zone configs.
 	Attrs string
 
-	// JoinList is a list of node addresses that act as bootstrap hosts for
-	// connecting to the gossip network.
+	// JoinList is a list of node addresses that is used to form a network of KV
+	// servers. Assuming a connected graph, it suffices to initialize any server
+	// in the network.
 	JoinList base.JoinListType
 
 	// JoinPreferSRVRecords, if set, causes the lookup logic for the
@@ -194,22 +221,14 @@ type KVConfig struct {
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
 
-	// GoroutineDumpDirName is the directory name for goroutine dumps using
-	// goroutinedumper.
-	GoroutineDumpDirName string
-
-	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler. If empty, no heap profiles will be collected.
-	HeapProfileDirName string
-
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes roachpb.Attributes
 
-	// GossipBootstrapResolvers is a list of gossip resolvers used
+	// GossipBootstrapAddresses is a list of gossip addresses used
 	// to find bootstrap nodes for connecting to the gossip network.
-	GossipBootstrapResolvers []resolver.Resolver
+	GossipBootstrapAddresses []util.UnresolvedAddr
 
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
@@ -271,6 +290,10 @@ type KVConfig struct {
 	// the Admin API's HTTP endpoints.
 	EnableWebSessionAuthentication bool
 
+	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
+	// which a feature unique to the demo shell.
+	EnableDemoLoginEndpoint bool
+
 	enginesCreated bool
 }
 
@@ -299,9 +322,6 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
-	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	LeaseManagerConfig *base.LeaseManagerConfig
-
 	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path.
 	SocketFile string
@@ -318,9 +338,6 @@ type SQLConfig struct {
 	// used by SQL clients to store row data in server RAM.
 	MemoryPoolSize int64
 
-	// AuditLogDirName is the target directory name for SQL audit logs.
-	AuditLogDirName *log.DirName
-
 	// TableStatCacheSize is the size (number of tables) of the table
 	// statistics cache.
 	TableStatCacheSize int
@@ -332,12 +349,6 @@ type SQLConfig struct {
 	//
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
-
-	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
-	// server's codec, but nothing else (e.g. its certs). Used for testing.
-	//
-	// Only applies when the SQL server is deployed individually.
-	TenantIDCodecOverride roachpb.TenantID
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
@@ -348,7 +359,6 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 		TableStatCacheSize: defaultSQLTableStatCacheSize,
 		QueryCacheSize:     defaultSQLQueryCacheSize,
 		TempStorageConfig:  tempStorageCfg,
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
 	}
 	return sqlCfg
 }
@@ -383,7 +393,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
-	storeSpec, err := base.NewStoreSpec(defaultStorePath)
+	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
 	if err != nil {
 		panic(err)
 	}
@@ -391,7 +401,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
-	baseCfg := MakeBaseConfig(st)
+	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	baseCfg := MakeBaseConfig(st, tr)
 	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{
@@ -417,6 +428,9 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	}
+	if cfg.SpanConfigsEnabled {
+		fmt.Fprintln(w, "span configs enabled\t", cfg.SpanConfigsEnabled)
 	}
 	_ = w.Flush()
 
@@ -462,22 +476,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
-
-	var details []string
-
-	var cache storage.RocksDBCache
-	var pebbleCache *pebble.Cache
-	if cfg.StorageEngine == enginepb.EngineTypeDefault ||
-		cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-		pebbleCache = pebble.NewCache(cfg.CacheSize)
-		defer pebbleCache.Unref()
-	}
-	if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-		cache = storage.NewRocksDBCache(cfg.CacheSize)
-		defer cache.Release()
-	}
+	details := []string{fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
+	pebbleCache := pebble.NewCache(cfg.CacheSize)
+	defer pebbleCache.Unref()
 
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
@@ -494,6 +495,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
+	disableSeparatedIntents := cfg.TestingKnobs.Store != nil &&
+		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).StorageKnobs.DisableSeparatedIntents
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
@@ -512,23 +515,46 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
 			if spec.StickyInMemoryEngineID != "" {
-				e, err := getOrCreateStickyInMemEngine(
-					ctx, spec.StickyInMemoryEngineID, cfg.StorageEngine, spec.Attributes, sizeInBytes,
-				)
+				if cfg.TestingKnobs.Server == nil {
+					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
+						"engine no server knobs available to get a registry. " +
+						"Please use Knobs.Server.StickyEngineRegistry to provide one.")
+				}
+				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+				if knobs.StickyEngineRegistry == nil {
+					return Engines{}, errors.Errorf("Could not create a sticky " +
+						"engine no registry available. Please use " +
+						"Knobs.Server.StickyEngineRegistry to provide one.")
+				}
+				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
 				if err != nil {
 					return Engines{}, err
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, cfg.StorageEngine, spec.Attributes, sizeInBytes))
-			}
-		} else {
-			if spec.Size.Percent > 0 {
-				fileSystemUsage := gosigar.FileSystemUsage{}
-				if err := fileSystemUsage.Get(spec.Path); err != nil {
+				e, err := storage.Open(ctx,
+					storage.InMemory(),
+					storage.Attributes(spec.Attributes),
+					storage.CacheSize(cfg.CacheSize),
+					storage.MaxSize(sizeInBytes),
+					storage.EncryptionAtRest(spec.EncryptionOptions),
+					storage.Settings(cfg.Settings),
+					storage.SetSeparatedIntents(disableSeparatedIntents))
+				if err != nil {
 					return Engines{}, err
 				}
-				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.Size.Percent / 100)
+				engines = append(engines, e)
+			}
+		} else {
+			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
+				return Engines{}, errors.Wrap(err, "creating store directory")
+			}
+			du, err := vfs.Default.GetDiskUsage(spec.Path)
+			if err != nil {
+				return Engines{}, errors.Wrap(err, "retrieving disk usage")
+			}
+			if spec.Size.Percent > 0 {
+				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
@@ -538,81 +564,33 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
-			var eng storage.Engine
-			var err error
 			storageConfig := base.StorageConfig{
-				Attrs:           spec.Attributes,
-				Dir:             spec.Path,
-				MaxSize:         sizeInBytes,
-				Settings:        cfg.Settings,
-				UseFileRegistry: spec.UseFileRegistry,
-				ExtraOptions:    spec.ExtraOptions,
+				Attrs:                   spec.Attributes,
+				Dir:                     spec.Path,
+				MaxSize:                 sizeInBytes,
+				BallastSize:             storage.BallastSizeBytes(spec, du),
+				Settings:                cfg.Settings,
+				UseFileRegistry:         spec.UseFileRegistry,
+				DisableSeparatedIntents: disableSeparatedIntents,
+				EncryptionOptions:       spec.EncryptionOptions,
 			}
-			if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeDefault {
-				pebbleConfig := storage.PebbleConfig{
-					StorageConfig: storageConfig,
-					Opts:          storage.DefaultPebbleOptions(),
-				}
-				pebbleConfig.Opts.Cache = pebbleCache
-				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				// If the spec contains Pebble options, set those too.
-				if len(spec.PebbleOptions) > 0 {
-					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
-					if err != nil {
-						return nil, err
-					}
-				}
-				if len(spec.RocksDBOptions) > 0 {
-					return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
-				}
-				eng, err = storage.NewPebble(ctx, pebbleConfig)
-			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
-				rocksDBConfig := storage.RocksDBConfig{
-					StorageConfig:           storageConfig,
-					MaxOpenFiles:            openFileLimitPerStore,
-					WarnLargeBatchThreshold: 500 * time.Millisecond,
-					RocksDBOptions:          spec.RocksDBOptions,
-				}
-				if len(spec.PebbleOptions) > 0 {
-					return nil, errors.Errorf("store %d: using RocksDB storage engine but StoreSpec provides Pebble options", i)
-				}
-				eng, err = storage.NewRocksDB(rocksDBConfig, cache)
-			} else {
-				// cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB
-				pebbleConfig := storage.PebbleConfig{
-					StorageConfig: storageConfig,
-					Opts:          storage.DefaultPebbleOptions(),
-				}
-				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
-				pebbleConfig.Opts.Cache = pebbleCache
-				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				// If the spec contains Pebble options, set those too.
-				if len(spec.PebbleOptions) > 0 {
-					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, nil)
-					if err != nil {
-						return nil, err
-					}
-				}
-				pebbleEng, err := storage.NewPebble(ctx, pebbleConfig)
+			pebbleConfig := storage.PebbleConfig{
+				StorageConfig: storageConfig,
+				Opts:          storage.DefaultPebbleOptions(),
+			}
+			pebbleConfig.Opts.Cache = pebbleCache
+			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+			// If the spec contains Pebble options, set those too.
+			if len(spec.PebbleOptions) > 0 {
+				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
 				if err != nil {
 					return nil, err
 				}
-
-				rocksDBConfig := storage.RocksDBConfig{
-					StorageConfig:           storageConfig,
-					MaxOpenFiles:            openFileLimitPerStore,
-					WarnLargeBatchThreshold: 500 * time.Millisecond,
-					RocksDBOptions:          spec.RocksDBOptions,
-				}
-				rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
-
-				rocksdbEng, err := storage.NewRocksDB(rocksDBConfig, cache)
-				if err != nil {
-					return nil, err
-				}
-
-				eng = storage.NewTee(ctx, rocksdbEng, pebbleEng)
 			}
+			if len(spec.RocksDBOptions) > 0 {
+				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
+			}
+			eng, err := storage.NewPebble(ctx, pebbleConfig)
 			if err != nil {
 				return Engines{}, err
 			}
@@ -630,45 +608,46 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	return enginesCopy, nil
 }
 
-// InitNode parses node attributes and initializes the gossip bootstrap
-// resolvers.
+// InitNode parses node attributes and bootstrap addresses.
 func (cfg *Config) InitNode(ctx context.Context) error {
 	cfg.readEnvironmentVariables()
 
 	// Initialize attributes.
 	cfg.NodeAttributes = parseAttributes(cfg.Attrs)
 
-	// Get the gossip bootstrap resolvers.
-	resolvers, err := cfg.parseGossipBootstrapResolvers(ctx)
+	// Get the gossip bootstrap addresses.
+	addresses, err := cfg.parseGossipBootstrapAddresses(ctx)
 	if err != nil {
 		return err
 	}
-	if len(resolvers) > 0 {
-		cfg.GossipBootstrapResolvers = resolvers
+	if len(addresses) > 0 {
+		cfg.GossipBootstrapAddresses = addresses
 	}
 
 	return nil
 }
 
-// FilterGossipBootstrapResolvers removes any gossip bootstrap resolvers which
+// FilterGossipBootstrapAddresses removes any gossip bootstrap addresses which
 // match either this node's listen address or its advertised host address.
-func (cfg *Config) FilterGossipBootstrapResolvers(
-	ctx context.Context, listen, advert net.Addr,
-) []resolver.Resolver {
-	filtered := make([]resolver.Resolver, 0, len(cfg.GossipBootstrapResolvers))
-	addrs := make([]string, 0, len(cfg.GossipBootstrapResolvers))
-	for _, r := range cfg.GossipBootstrapResolvers {
-		if r.Addr() == advert.String() || r.Addr() == listen.String() {
+func (cfg *Config) FilterGossipBootstrapAddresses(ctx context.Context) []util.UnresolvedAddr {
+	var listen, advert net.Addr
+	listen = util.NewUnresolvedAddr("tcp", cfg.Addr)
+	advert = util.NewUnresolvedAddr("tcp", cfg.AdvertiseAddr)
+	filtered := make([]util.UnresolvedAddr, 0, len(cfg.GossipBootstrapAddresses))
+	addrs := make([]string, 0, len(cfg.GossipBootstrapAddresses))
+
+	for _, addr := range cfg.GossipBootstrapAddresses {
+		if addr.String() == advert.String() || addr.String() == listen.String() {
 			if log.V(1) {
-				log.Infof(ctx, "skipping -join address %q, because a node cannot join itself", r.Addr())
+				log.Infof(ctx, "skipping -join address %q, because a node cannot join itself", addr)
 			}
 		} else {
-			filtered = append(filtered, r)
-			addrs = append(addrs, r.Addr())
+			filtered = append(filtered, addr)
+			addrs = append(addrs, addr.String())
 		}
 	}
 	if log.V(1) {
-		log.Infof(ctx, "initial resolvers: %v", addrs)
+		log.Infof(ctx, "initial addresses: %v", addrs)
 	}
 	return filtered
 }
@@ -683,53 +662,53 @@ func (cfg *Config) RequireWebSession() bool {
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
+	cfg.SpanConfigsEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_SPAN_CONFIGS", cfg.SpanConfigsEnabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
 
-// parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
-func (cfg *Config) parseGossipBootstrapResolvers(ctx context.Context) ([]resolver.Resolver, error) {
-	var bootstrapResolvers []resolver.Resolver
+// parseGossipBootstrapAddresses parses list of gossip bootstrap addresses.
+func (cfg *Config) parseGossipBootstrapAddresses(
+	ctx context.Context,
+) ([]util.UnresolvedAddr, error) {
+	var bootstrapAddresses []util.UnresolvedAddr
 	for _, address := range cfg.JoinList {
+		if address == "" {
+			continue
+		}
+
 		if cfg.JoinPreferSRVRecords {
 			// The following code substitutes the entry in --join by the
 			// result of SRV resolution, if suitable SRV records are found
 			// for that name.
 			//
-			// TODO(knz): Delay this lookup. The logic for "regular" resolvers
+			// TODO(knz): Delay this lookup. The logic for "regular" addresses
 			// is delayed until the point the connection is attempted, so that
 			// fresh DNS records are used for a new connection. This makes
 			// it possible to update DNS records without restarting the node.
 			// The SRV logic here does not have this property (yet).
-			srvAddrs, err := resolver.SRV(ctx, address)
+			srvAddrs, err := netutil.SRV(ctx, address)
 			if err != nil {
 				return nil, err
 			}
 
 			if len(srvAddrs) > 0 {
 				for _, sa := range srvAddrs {
-					resolver, err := resolver.NewResolver(sa)
-					if err != nil {
-						return nil, err
-					}
-					bootstrapResolvers = append(bootstrapResolvers, resolver)
+					bootstrapAddresses = append(bootstrapAddresses,
+						util.MakeUnresolvedAddrWithDefaults("tcp", sa, base.DefaultPort))
 				}
-
 				continue
 			}
 		}
 
 		// Otherwise, use the address.
-		resolver, err := resolver.NewResolver(address)
-		if err != nil {
-			return nil, err
-		}
-		bootstrapResolvers = append(bootstrapResolvers, resolver)
+		bootstrapAddresses = append(bootstrapAddresses,
+			util.MakeUnresolvedAddrWithDefaults("tcp", address, base.DefaultPort))
 	}
 
-	return bootstrapResolvers, nil
+	return bootstrapAddresses, nil
 }
 
 // parseAttributes parses a colon-separated list of strings,

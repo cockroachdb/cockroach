@@ -27,7 +27,7 @@ ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[4], 4),
   (ARRAY[5], 5)
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE xyz]
 ----
 start_key  end_key  replicas  lease_holder

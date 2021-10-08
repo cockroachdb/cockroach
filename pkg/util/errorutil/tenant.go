@@ -10,28 +10,20 @@
 
 package errorutil
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
 // UnsupportedWithMultiTenancy returns an error suitable for returning when an
 // operation could not be carried out due to the SQL server running in
 // multi-tenancy mode. In that mode, Gossip and other components of the KV layer
 // are not available.
-func UnsupportedWithMultiTenancy(issues ...int) error {
-	var buf strings.Builder
-	buf.WriteString("operation is unsupported in multi-tenancy mode")
-	if len(issues) > 0 {
-		buf.WriteString("; see:\n")
-		const prefix = "\nhttps://github.com/cockroachdb/cockroach/issues/"
-		for _, n := range issues {
-			fmt.Fprint(&buf, prefix, n)
-		}
-	}
-	// TODO(knz): This should be done in a different way,
-	// see: https://github.com/cockroachdb/cockroach/issues/48164
-	return errors.Newf("%s", buf.String())
+func UnsupportedWithMultiTenancy(issue int) error {
+	return unimplemented.NewWithIssue(issue, "operation is unsupported in multi-tenancy mode")
 }
+
+// FeatureNotAvailableToNonSystemTenantsIssue is to be used with the
+// Optional and related error interfaces when a feature is simply not
+// available to non-system tenants (i.e. we're not planning to change
+// this).
+// For all other multitenancy errors where there is a plan to
+// improve the situation, a specific issue should be created instead.
+const FeatureNotAvailableToNonSystemTenantsIssue = 54252

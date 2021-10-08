@@ -12,34 +12,39 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
 
-type tableEventType int
+type tableEventType uint64
 
 const (
-	tableEventTypeUnknown tableEventType = iota
-	tableEventTypeAddColumnNoBackfill
+	tableEventTypeUnknown             tableEventType = 0
+	tableEventTypeAddColumnNoBackfill tableEventType = 1 << (iota - 1)
 	tableEventTypeAddColumnWithBackfill
 	tableEventTypeDropColumn
 	tableEventTruncate
+	tableEventPrimaryKeyChange
+	tableEventLocalityRegionalByRowChange
 )
 
 var (
 	defaultTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   true,
-		tableEventTypeUnknown:               true,
+		tableEventTypeDropColumn:              false,
+		tableEventTypeAddColumnWithBackfill:   false,
+		tableEventTypeAddColumnNoBackfill:     true,
+		tableEventTypeUnknown:                 true,
+		tableEventPrimaryKeyChange:            false,
+		tableEventLocalityRegionalByRowChange: false,
 	}
 
 	columnChangeTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   false,
-		tableEventTypeUnknown:               true,
+		tableEventTypeDropColumn:              false,
+		tableEventTypeAddColumnWithBackfill:   false,
+		tableEventTypeAddColumnNoBackfill:     false,
+		tableEventTypeUnknown:                 true,
+		tableEventPrimaryKeyChange:            false,
+		tableEventLocalityRegionalByRowChange: false,
 	}
 
 	schemaChangeEventFilters = map[changefeedbase.SchemaChangeEventClass]tableEventFilter{
@@ -48,34 +53,76 @@ var (
 	}
 )
 
+// Contains returns true if the receiver includes the given event
+// types.
+func (e tableEventType) Contains(event tableEventType) bool {
+	return e&event == event
+}
+
+// Clear returns a new tableEventType with the given event types
+// cleared.
+func (e tableEventType) Clear(event tableEventType) tableEventType {
+	return e & (^event)
+}
+
 func classifyTableEvent(e TableEvent) tableEventType {
-	switch {
-	case newColumnBackfillComplete(e):
-		return tableEventTypeAddColumnWithBackfill
-	case newColumnNoBackfill(e):
-		return tableEventTypeAddColumnNoBackfill
-	case hasNewColumnDropBackfillMutation(e):
-		return tableEventTypeDropColumn
-	case tableTruncated(e):
-		return tableEventTruncate
-	default:
-		return tableEventTypeUnknown
+	et := tableEventTypeUnknown
+	if primaryKeyChanged(e) {
+		et = et | tableEventPrimaryKeyChange
 	}
+
+	if newColumnBackfillComplete(e) {
+		et = et | tableEventTypeAddColumnWithBackfill
+	}
+
+	if newColumnNoBackfill(e) {
+		et = et | tableEventTypeAddColumnNoBackfill
+	}
+
+	if hasNewColumnDropBackfillMutation(e) {
+		et = et | tableEventTypeDropColumn
+	}
+
+	if tableTruncated(e) {
+		et = et | tableEventTruncate
+	}
+
+	if regionalByRowChanged(e) {
+		et = et | tableEventLocalityRegionalByRowChange
+	}
+
+	return et
 }
 
 // typeFilters indicates whether a table event of a given type should be
 // permitted by the filter.
 type tableEventFilter map[tableEventType]bool
 
-func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool, error) {
+func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool, error) {
 	et := classifyTableEvent(e)
+
 	// Truncation events are not ignored and return an error.
-	if et == tableEventTruncate {
-		return false, errors.Errorf(`"%s" was truncated`, e.Before.Name)
+	if et.Contains(tableEventTruncate) {
+		return false, errors.Errorf(`"%s" was truncated`, e.Before.GetName())
 	}
-	shouldFilter, ok := b[et]
-	if !ok {
-		return false, errors.AssertionFailedf("policy does not specify how to handle event type %v", et)
+
+	if et == tableEventTypeUnknown {
+		shouldFilter, ok := filter[tableEventTypeUnknown]
+		if !ok {
+			return false, errors.AssertionFailedf("policy does not specify how to handle event type %v", et)
+		}
+		return shouldFilter, nil
+	}
+
+	shouldFilter := true
+	for filterEvent, filterPolicy := range filter {
+		if et.Contains(filterEvent) && !filterPolicy {
+			shouldFilter = false
+		}
+		et = et.Clear(filterEvent)
+	}
+	if et > 0 {
+		return false, errors.AssertionFailedf("policy does not specify how to handle event (unhandled event types: %v)", et)
 	}
 	return shouldFilter, nil
 }
@@ -83,13 +130,15 @@ func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool,
 func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 	// Make sure that the old descriptor *doesn't* have the same mutation to avoid adding
 	// the same scan boundary more than once.
-	return !dropMutationExists(e.Before) && dropMutationExists(e.After)
+	return !dropColumnMutationExists(e.Before) && dropColumnMutationExists(e.After)
 }
 
-func dropMutationExists(desc *sqlbase.ImmutableTableDescriptor) bool {
-	for _, m := range desc.Mutations {
-		if m.Direction == descpb.DescriptorMutation_DROP &&
-			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
+	for _, m := range desc.AllMutations() {
+		if m.AsColumn() == nil {
+			continue
+		}
+		if m.Dropped() && m.WriteAndDeleteOnly() {
 			return true
 		}
 	}
@@ -99,18 +148,18 @@ func dropMutationExists(desc *sqlbase.ImmutableTableDescriptor) bool {
 func newColumnBackfillComplete(e TableEvent) (res bool) {
 	// TODO(ajwerner): What is the case where the before has a backfill mutation
 	// and the After doesn't? What about other queued mutations?
-	return len(e.Before.Columns) < len(e.After.Columns) &&
+	return len(e.Before.PublicColumns()) < len(e.After.PublicColumns()) &&
 		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
 func newColumnNoBackfill(e TableEvent) (res bool) {
-	return len(e.Before.Columns) < len(e.After.Columns) &&
+	return len(e.Before.PublicColumns()) < len(e.After.PublicColumns()) &&
 		!e.Before.HasColumnBackfillMutation()
 }
 
-func pkChangeMutationExists(desc *sqlbase.ImmutableTableDescriptor) bool {
-	for _, m := range desc.Mutations {
-		if m.Direction == descpb.DescriptorMutation_ADD && m.GetPrimaryKeySwap() != nil {
+func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
+	for _, m := range desc.AllMutations() {
+		if m.Adding() && m.AsPrimaryKeySwap() != nil {
 			return true
 		}
 	}
@@ -121,5 +170,36 @@ func tableTruncated(e TableEvent) bool {
 	// A table was truncated if the primary index has changed, but an ALTER
 	// PRIMARY KEY statement was not performed. TRUNCATE operates by creating
 	// a new set of indexes for the table, including a new primary index.
-	return e.Before.PrimaryIndex.ID != e.After.PrimaryIndex.ID && !pkChangeMutationExists(e.Before)
+	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() && !pkChangeMutationExists(e.Before)
+}
+
+func primaryKeyChanged(e TableEvent) bool {
+	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() &&
+		pkChangeMutationExists(e.Before)
+}
+
+func regionalByRowChanged(e TableEvent) bool {
+	return e.Before.IsLocalityRegionalByRow() != e.After.IsLocalityRegionalByRow()
+}
+
+// IsPrimaryIndexChange returns true if the event corresponds to a change
+// in the primary index.
+func IsPrimaryIndexChange(e TableEvent) bool {
+	et := classifyTableEvent(e)
+	return et.Contains(tableEventPrimaryKeyChange)
+}
+
+// IsOnlyPrimaryIndexChange returns to true if the event corresponds
+// to a change in the primary index and _only_ a change in the primary
+// index.
+func IsOnlyPrimaryIndexChange(e TableEvent) bool {
+	et := classifyTableEvent(e)
+	return et == tableEventPrimaryKeyChange
+}
+
+// IsRegionalByRowChange returns true if the event corresponds to a
+// change in the table's locality to or from RegionalByRow.
+func IsRegionalByRowChange(e TableEvent) bool {
+	et := classifyTableEvent(e)
+	return et.Contains(tableEventLocalityRegionalByRowChange)
 }

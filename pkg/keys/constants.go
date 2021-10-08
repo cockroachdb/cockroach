@@ -22,9 +22,7 @@ import (
 // These constants are single bytes for performance. They allow single-byte
 // comparisons which are considerably faster than bytes.HasPrefix.
 const (
-	localPrefixByte  = '\x01'
-	localMaxByte     = '\x02'
-	meta1PrefixByte  = localMaxByte
+	meta1PrefixByte  = roachpb.LocalMaxByte
 	meta2PrefixByte  = '\x03'
 	metaMaxByte      = '\x04'
 	systemPrefixByte = metaMaxByte
@@ -42,18 +40,18 @@ var (
 	// MaxKey is the infinity marker which is larger than any other key.
 	MaxKey = roachpb.KeyMax
 
-	// localPrefix is the prefix for all local keys.
-	localPrefix = roachpb.Key{localPrefixByte}
-	// LocalMax is the end of the local key range. It is itself a global
-	// key.
-	LocalMax = roachpb.Key{localMaxByte}
+	// LocalPrefix is the prefix for all local keys.
+	LocalPrefix = roachpb.LocalPrefix
+	// LocalMax is the end of the local key range. It is itself a global key.
+	LocalMax = roachpb.LocalMax
 
 	// localSuffixLength specifies the length in bytes of all local
 	// key suffixes.
 	localSuffixLength = 4
 
-	// There are four types of local key data enumerated below: replicated
-	// range-ID, unreplicated range-ID, range local, and store-local keys.
+	// There are five types of local key data enumerated below: replicated
+	// range-ID, unreplicated range-ID, range local, store-local, and range lock
+	// keys.
 
 	// 1. Replicated Range-ID keys
 	//
@@ -63,10 +61,7 @@ var (
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
 	// case of AbortSpan entry.
-	//
-	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
-	// in storage/engine/rocksdb/db.cc.
-	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
+	LocalRangeIDPrefix = roachpb.RKey(makeKey(LocalPrefix, roachpb.Key("i")))
 	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
 	// keys will be sorted directly before the local unreplicated keys for the
@@ -79,8 +74,9 @@ var (
 	LocalAbortSpanSuffix = []byte("abc-")
 	// localRangeFrozenStatusSuffix is DEPRECATED and remains to prevent reuse.
 	localRangeFrozenStatusSuffix = []byte("fzn-")
-	// LocalRangeLastGCSuffix is the suffix for the last GC.
-	LocalRangeLastGCSuffix = []byte("lgc-")
+	// LocalRangeGCThresholdSuffix is the suffix for the GC threshold. It keeps
+	// the lgc- ("last GC") representation for backwards compatibility.
+	LocalRangeGCThresholdSuffix = []byte("lgc-")
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")
@@ -95,6 +91,11 @@ var (
 	// LocalLeaseAppliedIndexLegacySuffix is the suffix for the applied lease
 	// index.
 	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
+	// LocalRangePriorReadSummarySuffix is the suffix for a range's prior read
+	// summary.
+	LocalRangePriorReadSummarySuffix = []byte("rprs")
+	// LocalRangeVersionSuffix is the suffix for the range version.
+	LocalRangeVersionSuffix = []byte("rver")
 	// LocalRangeStatsLegacySuffix is the suffix for range statistics.
 	LocalRangeStatsLegacySuffix = []byte("stat")
 	// localTxnSpanGCThresholdSuffix is DEPRECATED and remains to prevent reuse.
@@ -134,34 +135,23 @@ var (
 	// specific sort of per-range metadata is identified by one of the
 	// suffixes listed below, along with potentially additional encoded
 	// key info, such as the txn ID in the case of a transaction record.
-	//
-	// NOTE: LocalRangePrefix must be kept in sync with the value in
-	// storage/engine/rocksdb/db.cc.
-	LocalRangePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("k")))
+	LocalRangePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
+	// LocalRangeProbeSuffix is the suffix for keys for probing.
+	LocalRangeProbeSuffix = roachpb.RKey("prbe")
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
-	// LocalRangeDescriptorJointSuffix is the suffix for keys storing
-	// range descriptors. The value is a struct of type RangeDescriptor.
-	//
-	// TODO(tbg): decide what to actually store here. This is still unused.
-	LocalRangeDescriptorJointSuffix = roachpb.RKey("rdjt")
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
-	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
 	// 4. Store local keys
 	//
-	// localStorePrefix is the prefix identifying per-store data.
-	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
-	// localStoreSuggestedCompactionSuffix stores suggested compactions to
-	// be aggregated and processed on the store.
-	localStoreSuggestedCompactionSuffix = []byte("comp")
+	// LocalStorePrefix is the prefix identifying per-store data.
+	LocalStorePrefix = makeKey(LocalPrefix, roachpb.Key("s"))
 	// localStoreClusterVersionSuffix stores the cluster-wide version
 	// information for this store, updated any time the operator
 	// updates the minimum cluster version.
@@ -175,6 +165,9 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStoreNodeTombstoneSuffix stores key value pairs that map
+	// nodeIDs to time of removal from cluster.
+	localStoreNodeTombstoneSuffix = []byte("ntmb")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
@@ -184,12 +177,38 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	// LocalStoreSuggestedCompactionsMin is the start of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
-	// LocalStoreSuggestedCompactionsMax is the end of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
+
+	// 5. Lock table keys
+	//
+	// LocalRangeLockTablePrefix specifies the key prefix for the lock
+	// table. It is immediately followed by the LockTableSingleKeyInfix,
+	// and then the key being locked.
+	//
+	// The lock strength and txn UUID are not in the part of the key that
+	// the keys package deals with. They are in the versioned part of the
+	// key (see EngineKey.Version). This permits the storage engine to use
+	// bloom filters when searching for all locks for a lockable key.
+	//
+	// Different lock strengths may use different value types. The exclusive
+	// lock strength uses MVCCMetadata as the value type, since it does
+	// double duty as a reference to a provisional MVCC value.
+	// TODO(sumeer): remember to adjust this comment when adding locks of
+	// other strengths, or range locks.
+	LocalRangeLockTablePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("z")))
+	LockTableSingleKeyInfix   = []byte("k")
+	// LockTableSingleKeyStart is the inclusive start key of the key range
+	// containing single key locks.
+	LockTableSingleKeyStart = roachpb.Key(makeKey(LocalRangeLockTablePrefix, LockTableSingleKeyInfix))
+	// LockTableSingleKeyEnd is the exclusive end key of the key range
+	// containing single key locks.
+	LockTableSingleKeyEnd = roachpb.Key(
+		makeKey(LocalRangeLockTablePrefix, roachpb.Key(LockTableSingleKeyInfix).PrefixEnd()))
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
@@ -230,7 +249,7 @@ var (
 	// NodeLivenessKeyMax is the maximum value for any node liveness key.
 	NodeLivenessKeyMax = NodeLivenessPrefix.PrefixEnd()
 	//
-	// BootstrapVersion is the key at which clusters bootstrapped with a version
+	// BootstrapVersionKey is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
 	//
@@ -265,11 +284,14 @@ var (
 	//
 	// TODO(nvanbenschoten): Figure out what to do with all of these. At a
 	// minimum, prefix them all with "System".
-	//
+
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = SystemSQLCodec.TablePrefix(0)
-	// TableDataMin is the end of the range of table data keys.
+	// TableDataMax is the end of the range of table data keys.
 	TableDataMax = SystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
+	// ScratchRangeMin is a key used in tests to write arbitrary data without
+	// overlapping with meta, system or tenant ranges.
+	ScratchRangeMin = TableDataMax
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
@@ -380,12 +402,22 @@ const (
 	ScheduledJobsTableID                = 37
 	TenantsRangesID                     = 38 // pseudo
 	SqllivenessID                       = 39
+	MigrationsID                        = 40
+	JoinTokensTableID                   = 41
+	StatementStatisticsTableID          = 42
+	TransactionStatisticsTableID        = 43
+	DatabaseRoleSettingsTableID         = 44
+	TenantUsageTableID                  = 45
+	SQLInstancesTableID                 = 46
+	SpanConfigurationsTableID           = 47
 
 	// CommentType is type for system.comments
-	DatabaseCommentType = 0
-	TableCommentType    = 1
-	ColumnCommentType   = 2
-	IndexCommentType    = 3
+	DatabaseCommentType   = 0
+	TableCommentType      = 1
+	ColumnCommentType     = 2
+	IndexCommentType      = 3
+	SchemaCommentType     = 4
+	ConstraintCommentType = 5
 )
 
 const (

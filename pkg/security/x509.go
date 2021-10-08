@@ -122,11 +122,11 @@ func GenerateServerCert(
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user string,
+	user SQLUsername,
 	hosts []string,
 ) ([]byte, error) {
 	// Create template for user.
-	template, err := newTemplate(user, lifetime)
+	template, err := newTemplate(user.Normalized(), lifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -243,16 +243,16 @@ func GenerateClientCert(
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user string,
+	user SQLUsername,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
-	if len(user) == 0 {
+	if user.Undefined() {
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
 	// Create template for user.
-	template, err := newTemplate(user, lifetime)
+	template, err := newTemplate(user.Normalized(), lifetime)
 	if err != nil {
 		return nil, err
 	}

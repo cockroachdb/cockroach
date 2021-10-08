@@ -1,0 +1,62 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "hlc",
+    srcs = [
+        "hlc.go",
+        "hlc_clock_device_linux.go",
+        "hlc_clock_device_stub.go",
+        "timestamp.go",
+    ],
+    cgo = True,
+    embed = [":hlc_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/hlc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "hlc_test",
+    size = "small",
+    srcs = [
+        "hlc_test.go",
+        "timestamp_test.go",
+    ],
+    embed = [":hlc"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "hlc_proto",
+    srcs = [
+        "legacy_timestamp.proto",
+        "timestamp.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "hlc_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/hlc",
+    proto = ":hlc_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)

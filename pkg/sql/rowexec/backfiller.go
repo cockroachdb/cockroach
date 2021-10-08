@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,12 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -46,9 +45,8 @@ type chunkBackfiller interface {
 	// once the backfill is complete.
 	runChunk(
 		ctx context.Context,
-		mutations []descpb.DescriptorMutation,
 		span roachpb.Span,
-		chunkSize int64,
+		chunkSize rowinfra.RowLimit,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
@@ -76,84 +74,37 @@ type backfiller struct {
 	processorID int32
 }
 
-// OutputTypes is part of the processor interface.
+// OutputTypes is part of the execinfra.Processor interface.
 func (*backfiller) OutputTypes() []*types.T {
 	// No output types.
 	return nil
 }
 
-func (b backfiller) getMutationsToProcess(
-	ctx context.Context,
-) ([]descpb.DescriptorMutation, error) {
-	var mutations []descpb.DescriptorMutation
-	desc := b.spec.Table
-	if len(desc.Mutations) == 0 {
-		return nil, errors.Errorf("no schema changes for table ID=%d", desc.ID)
-	}
-	const noNewIndex = -1
-	// The first index of a mutation in the mutation list that will be
-	// processed.
-	firstMutationIdx := noNewIndex
-	mutationID := desc.Mutations[0].MutationID
-	for i, m := range desc.Mutations {
-		if m.MutationID != mutationID {
-			break
-		}
-		if b.filter(m) {
-			mutations = append(mutations, m)
-			if firstMutationIdx == noNewIndex {
-				firstMutationIdx = i
-			}
-		}
-	}
-
-	if firstMutationIdx == noNewIndex ||
-		len(b.spec.Spans) == 0 {
-		return nil, errors.Errorf("completed processing all spans for %s backfill (%d, %d)", b.name, desc.ID, mutationID)
-	}
-	return mutations, nil
+// MustBeStreaming is part of the execinfra.Processor interface.
+func (*backfiller) MustBeStreaming() bool {
+	return false
 }
 
-// Run is part of the Processor interface.
+// Run is part of the execinfra.Processor interface.
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
-	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
+	if emitHelper(ctx, b.output, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}
 }
 
 func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	semaCtx := tree.MakeSemaContext()
-	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx(), b.output); err != nil {
+	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx()); err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
-	mutations, err := b.getMutationsToProcess(ctx)
+	finishedSpans, err := b.mainLoop(ctx)
 	if err != nil {
-		return &execinfrapb.ProducerMetadata{Err: err}
-	}
-	finishedSpans, err := b.mainLoop(ctx, mutations)
-	if err != nil {
-		return &execinfrapb.ProducerMetadata{Err: err}
-	}
-	st := b.flowCtx.Cfg.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicasTrigger) {
-		// There is a node of older version which could be the coordinator.
-		// So we communicate the finished work by writing to the jobs row.
-		err = WriteResumeSpan(
-			ctx,
-			b.flowCtx.Cfg.DB,
-			b.flowCtx.Codec(),
-			b.spec.Table.ID,
-			b.spec.Table.Mutations[0].MutationID,
-			b.filter,
-			finishedSpans,
-			b.flowCtx.Cfg.JobRegistry,
-		)
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
@@ -163,9 +114,7 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 
 // mainLoop invokes runChunk on chunks of rows.
 // It does not close the output.
-func (b *backfiller) mainLoop(
-	ctx context.Context, mutations []descpb.DescriptorMutation,
-) (roachpb.Spans, error) {
+func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 	if err := b.chunks.prepare(ctx); err != nil {
 		return nil, err
 	}
@@ -199,7 +148,7 @@ func (b *backfiller) mainLoop(
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, b.spec.ChunkSize, b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.RowLimit(b.spec.ChunkSize), b.spec.ReadAsOf)
 			if err != nil {
 				return nil, err
 			}
@@ -256,14 +205,12 @@ func GetResumeSpans(
 	// Find the index of the first mutation that is being worked on.
 	const noIndex = -1
 	mutationIdx := noIndex
-	if len(tableDesc.Mutations) > 0 {
-		for i, m := range tableDesc.Mutations {
-			if m.MutationID != mutationID {
-				break
-			}
-			if mutationIdx == noIndex && filter(m) {
-				mutationIdx = i
-			}
+	for i, m := range tableDesc.AllMutations() {
+		if m.MutationID() != mutationID {
+			break
+		}
+		if mutationIdx == noIndex && filter(m) {
+			mutationIdx = i
 		}
 	}
 
@@ -273,15 +220,15 @@ func GetResumeSpans(
 	}
 
 	// Find the job.
-	var jobID int64
-	if len(tableDesc.MutationJobs) > 0 {
+	var jobID jobspb.JobID
+	if len(tableDesc.GetMutationJobs()) > 0 {
 		// TODO (lucy): We need to get rid of MutationJobs. This is the only place
 		// where we need to get the job where it's not completely straightforward to
 		// remove the use of MutationJobs, since the backfiller doesn't otherwise
 		// know which job it's associated with.
-		for _, job := range tableDesc.MutationJobs {
+		for _, job := range tableDesc.GetMutationJobs() {
 			if job.MutationID == mutationID {
-				jobID = job.JobID
+				jobID = jobspb.JobID(job.JobID)
 				break
 			}
 		}
@@ -315,34 +262,5 @@ func SetResumeSpansInJob(
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	return job.WithTxn(txn).SetDetails(ctx, details)
-}
-
-// WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
-// origSpan is the span of keys that were assigned to be backfilled,
-// resume is the left over work from origSpan.
-func WriteResumeSpan(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	id descpb.ID,
-	mutationID descpb.MutationID,
-	filter backfill.MutationFilter,
-	finished roachpb.Spans,
-	jobsRegistry *jobs.Registry,
-) error {
-	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
-	defer tracing.FinishSpan(traceSpan)
-
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resumeSpans, job, mutationIdx, error := GetResumeSpans(
-			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
-		)
-		if error != nil {
-			return error
-		}
-
-		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-		return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
-	})
+	return job.SetDetails(ctx, txn, details)
 }

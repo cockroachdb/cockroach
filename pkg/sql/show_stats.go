@@ -14,16 +14,18 @@ import (
 	"context"
 	encjson "encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
-var showTableStatsColumns = sqlbase.ResultColumns{
+var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
 	{Name: "created", Typ: types.Timestamp},
@@ -33,7 +35,7 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 	{Name: "histogram_id", Typ: types.Int},
 }
 
-var showTableStatsJSONColumns = sqlbase.ResultColumns{
+var showTableStatsJSONColumns = colinfo.ResultColumns{
 	{Name: "statistics", Typ: types.Jsonb},
 }
 
@@ -57,12 +59,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	return &delayedNode{
 		name:    n.String(),
 		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, err error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
-			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			// TODO(yuzefovich): refactor the code to use the iterator API
+			// (currently it is not possible due to a panic-catcher below).
+			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 				ctx,
 				"read-table-stats",
 				p.txn,
@@ -77,7 +81,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				 FROM system.table_statistics
 				 WHERE "tableID" = $1
 				 ORDER BY "createdAt"`,
-				desc.ID,
+				desc.GetID(),
 			)
 			if err != nil {
 				return nil, err
@@ -95,6 +99,23 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				numCols
 			)
 
+			// Guard against crashes in the code below (e.g. #56356).
+			defer func() {
+				if r := recover(); r != nil {
+					// This code allows us to propagate internal errors without having to add
+					// error checks everywhere throughout the code. This is only possible
+					// because the code does not update shared state and does not manipulate
+					// locks.
+					if ok, e := errorutil.ShouldCatch(r); ok {
+						err = e
+					} else {
+						// Other panic objects can't be considered "safe" and thus are
+						// propagated as crashes that terminate the session.
+						panic(r)
+					}
+				}
+			}()
+
 			v := p.newContainerValuesNode(columns, 0)
 			if n.UsingJSON {
 				result := make([]stats.JSONStatistic, len(rows))
@@ -111,7 +132,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					for j, d := range colIDs {
 						result[i].Columns[j] = statColumnString(desc, d)
 					}
-					if err := result[i].DecodeAndSetHistogram(r[histogramIdx]); err != nil {
+					if err := result[i].DecodeAndSetHistogram(ctx, &p.semaCtx, r[histogramIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
 					}
@@ -170,12 +191,12 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	}, nil
 }
 
-func statColumnString(desc *ImmutableTableDescriptor, colID tree.Datum) string {
+func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) string {
 	id := descpb.ColumnID(*colID.(*tree.DInt))
-	colDesc, err := desc.FindColumnByID(id)
+	colDesc, err := desc.FindColumnWithID(id)
 	if err != nil {
 		// This can happen if a column was removed.
 		return "<unknown>"
 	}
-	return colDesc.Name
+	return colDesc.GetName()
 }

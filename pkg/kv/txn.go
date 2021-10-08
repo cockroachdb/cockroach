@@ -15,17 +15,34 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// asyncRollbackTimeout is the context timeout during rollback() for a client
+// who has already disconnected. This is needed to asynchronously clean up the
+// client's intents and txn record. If the intent resolver has spare async task
+// capacity, this timeout only needs to be long enough for the EndTxn request to
+// make it through Raft, but if the cleanup task is synchronous (to backpressure
+// clients) then cleanup will be abandoned when the timeout expires.
+//
+// We generally want to clean up if possible, so we set it high at 1 minute. If
+// the transaction is very large or cleanup is very costly (e.g. hits a slow
+// path for some reason), and the async pool is full (i.e. the system is
+// under load), then it makes sense to abandon the cleanup before too long.
+const asyncRollbackTimeout = time.Minute
 
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
@@ -73,6 +90,12 @@ type Txn struct {
 		// deadline.
 		deadline *hlc.Timestamp
 	}
+
+	// admissionHeader is used for admission control for work done in this
+	// transaction. Only certain paths initialize this properly, and the
+	// remaining just use the zero value. The set of code paths that initialize
+	// this are expected to expand over time.
+	admissionHeader roachpb.AdmissionHeader
 }
 
 // NewTxn returns a new RootTxn.
@@ -98,21 +121,28 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 			errors.AssertionFailedf("attempting to create txn with nil db"), ctx))
 	}
 
-	now := db.clock.Now()
+	now := db.clock.NowAsClockTimestamp()
 	kvTxn := roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		now,
+		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
 	)
 
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
 
-// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
+// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
+// that this initializes Txn.admissionHeader to specify that the source is
+// FROM_SQL.
 func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_FROM_SQL,
+	}
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -124,7 +154,7 @@ func NewTxnFromProto(
 	ctx context.Context,
 	db *DB,
 	gatewayNodeID roachpb.NodeID,
-	now hlc.Timestamp,
+	now hlc.ClockTimestamp,
 	typ TxnType,
 	proto *roachpb.Transaction,
 ) *Txn {
@@ -186,20 +216,31 @@ func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	return txn.mu.sender.Epoch()
 }
 
-// status returns the txn proto status field.
-func (txn *Txn) status() roachpb.TransactionStatus {
+// statusLocked returns the txn proto status field.
+func (txn *Txn) statusLocked() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
 // IsCommitted returns true iff the transaction has the committed status.
 func (txn *Txn) IsCommitted() bool {
-	return txn.status() == roachpb.COMMITTED
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.COMMITTED
+}
+
+// IsAborted returns true iff the transaction has the aborted status.
+func (txn *Txn) IsAborted() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.ABORTED
 }
 
 // IsOpen returns true iff the transaction is in the open state where
 // it can accept further commands.
 func (txn *Txn) IsOpen() bool {
-	return txn.status() == roachpb.PENDING
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.PENDING
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
@@ -301,6 +342,14 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.CommitTimestamp()
 }
 
+// CommitTimestampFixed returns true if the commit timestamp has
+// been fixed to the start timestamp and cannot be pushed forward.
+func (txn *Txn) CommitTimestampFixed() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.CommitTimestampFixed()
+}
+
 // ProvisionalCommitTimestamp returns the transaction's provisional
 // commit timestamp. This can evolve throughout a txn's lifecycle. See
 // the comment on the WriteTimestamp field of TxnMeta for details.
@@ -308,6 +357,14 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ProvisionalCommitTimestamp()
+}
+
+// RequiredFrontier returns the largest timestamp at which the transaction may
+// read values when performing a read-only operation.
+func (txn *Txn) RequiredFrontier() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.RequiredFrontier()
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
@@ -335,9 +392,7 @@ func (txn *Txn) SetSystemConfigTrigger(forSystemTenant bool) error {
 }
 
 // DisablePipelining instructs the transaction not to pipeline requests. It
-// should rarely be necessary to call this method. It is only recommended for
-// transactions that need extremely precise control over the request ordering,
-// like the transaction that merges ranges together.
+// should rarely be necessary to call this method.
 //
 // DisablePipelining must be called before any operations are performed on the
 // transaction.
@@ -353,19 +408,33 @@ func (txn *Txn) DisablePipelining() error {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn}
+	return &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key to not exist.
 //
-//   r, err := db.Get("a")
+//   r, err := txn.Get("a")
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
+	return getOneRow(txn.Run(ctx, b), b)
+}
+
+// GetForUpdate retrieves the value for a key, returning the retrieved key/value
+// or an error. An unreplicated, exclusive lock is acquired on the key, if it
+// exists. It is not considered an error for the key to not exist.
+//
+//   r, err := txn.GetForUpdate("a")
+//   // string(r.Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
+	b := txn.NewBatch()
+	b.GetForUpdate(key)
 	return getOneRow(txn.Run(ctx, b), b)
 }
 
@@ -560,14 +629,18 @@ func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
+// The returned []roachpb.Key will contain the keys deleted if the returnKeys
+// parameter is true, or will be nil if the parameter is false, and Result.Err
+// will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
+func (txn *Txn) DelRange(
+	ctx context.Context, begin, end interface{}, returnKeys bool,
+) ([]roachpb.Key, error) {
 	b := txn.NewBatch()
-	b.DelRange(begin, end, false)
-	return getOneErr(txn.Run(ctx, b), b)
+	b.DelRange(begin, end, returnKeys)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -582,15 +655,17 @@ func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(ctx context.Context, b *Batch) error {
-	tracing.AnnotateTrace()
-	defer tracing.AnnotateTrace()
-	if err := b.prepare(); err != nil {
+	if err := b.validate(); err != nil {
 		return err
 	}
 	return sendAndFill(ctx, txn.Send, b)
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
+	// A batch with only endTxnReq is not subject to admission control, in order
+	// to reduce contention by releasing locks. In multi-tenant settings, it
+	// will be subject to admission control, and the zero CreateTime will give
+	// it preference within the tenant.
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
@@ -612,7 +687,7 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called with nil error"), ctx))
 	}
 	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.IsAborted() {
 			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		} else {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -667,29 +742,76 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	return err
 }
 
-// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
-// current one (if any) and the passed value.
-//
-// The deadline cannot be lower than txn.ReadTimestamp.
-func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+// UpdateDeadline sets the transactions deadline to the passed deadline.
+// It may move the deadline to any timestamp above the current read timestamp.
+// If the deadline is below the current provisional commit timestamp (write timestamp),
+// then the transaction will fail with a deadline error during the commit.
+// The deadline cannot be lower than txn.ReadTimestamp and we make the assumption
+// the read timestamp will not change during execution, which is valid today.
+func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error {
 	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadlineMaybe() called on leaf txn"), ctx))
+		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadline() called on leaf txn"), ctx))
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		readTimestamp := txn.readTimestampLocked()
-		if deadline.Less(txn.readTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
-				deadline, readTimestamp)
-		}
-		txn.mu.deadline = new(hlc.Timestamp)
-		*txn.mu.deadline = deadline
-		return true
+
+	readTimestamp := txn.readTimestampLocked()
+	if deadline.Less(readTimestamp) {
+		return errors.AssertionFailedf("deadline below read timestamp is nonsensical; "+
+			"txn has would have no chance to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
+			deadline, readTimestamp, txn.mu.deadline)
 	}
-	return false
+	txn.mu.deadline = new(hlc.Timestamp)
+	*txn.mu.deadline = deadline
+	return nil
+}
+
+// DeadlineLikelySufficient returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current reading of the node's HLC clock. The second condition is a
+// conservative optimization to deal with the fact that the provisional
+// commit timestamp may not represent  the true commit timestamp; the
+// transaction may have been pushed but not yet discovered that fact.
+// Transactions that write from now on can still get pushed, versus
+// transactions which are done writing where it will be less clear
+// how those get pushed.
+// Deadlines, in general, should not commonly be at risk of expiring near
+// the current time, except in extraordinary circumstances. In cases where
+// considering it helps, it helps a lot. In cases where considering it
+// does not help, it does not hurt much.
+func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// Instead of using the current HLC clock we will
+	// use the current time with a fudge factor because:
+	// 1) The clocks are desynchronized, so we may have
+	//		been pushed above the current time.
+	// 2) There is a potential to race against concurrent pushes,
+	//    which a future timestamp will help against.
+	// 3) If we are writing to non-blocking ranges than any
+	//    push will be into the future.
+	getTargetTS := func() hlc.Timestamp {
+		now := txn.db.Clock().NowAsClockTimestamp()
+		maxClockOffset := txn.db.Clock().MaxOffset()
+		lagTargetDuration := closedts.TargetDuration.Get(sv)
+		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
+		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		return closedts.TargetForPolicy(now, maxClockOffset,
+			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
+			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+	}
+
+	return txn.mu.deadline != nil &&
+		!txn.mu.deadline.IsEmpty() &&
+		// Avoid trying to get get the txn mutex again by directly
+		// invoking ProvisionalCommitTimestamp versus calling
+		// ProvisionalCommitTimestampLocked on the Txn.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			// In case the transaction gets pushed and the push is not observed,
+			// we cautiously also indicate that the deadline maybe expired if
+			// the current HLC clock (with a fudge factor) exceeds the deadline.
+			txn.mu.deadline.Less(getTargetTS()))
 }
 
 // resetDeadlineLocked resets the deadline.
@@ -710,48 +832,58 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
-	sync := true
-	if ctx.Err() != nil {
-		sync = false
-	}
-	if sync {
+	// If the client has already disconnected, fall back to asynchronous cleanup
+	// below. Note that this is the common path when a client disconnects in the
+	// middle of an open transaction or during statement execution.
+	if ctx.Err() == nil {
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
 		}
-		// If ctx has been canceled, assume that caused the error and try again
-		// async below.
+		// If rollback errored and the ctx was canceled during rollback, assume
+		// ctx cancellation caused the error and try again async below.
 		if ctx.Err() == nil {
 			return pErr
 		}
 	}
 
-	// We don't have a client whose context we can attach to, but we do want to limit how
-	// long this request is going to be around or it could leak a goroutine (in case of a
-	// long-lived network partition).
+	// We don't have a client whose context we can attach to, but we do want to
+	// limit how long this request is going to be around for to avoid leaking a
+	// goroutine (in case of a long-lived network partition). If it gets through
+	// Raft, and the intent resolver has free async task capacity, the actual
+	// cleanup will be independent of this context.
 	stopper := txn.db.ctx.Stopper
 	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		defer cancel()
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
-			if _, pErr := txn.Send(ctx, ba); pErr != nil {
-				if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-					statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-					// A common cause of these async rollbacks failing is when they're
-					// triggered by a ctx canceled while a commit is in-flight (and it's too
-					// late for it to be canceled), and so the rollback finds the txn to be
-					// already committed. We don't spam the logs with those.
-					log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-				} else {
-					log.Infof(ctx, "async rollback failed: %s", pErr)
+		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
+			func(ctx context.Context) error {
+				if _, pErr := txn.Send(ctx, ba); pErr != nil {
+					if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+						statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+						// A common cause of these async rollbacks failing is when they're
+						// triggered by a ctx canceled while a commit is in-flight (and it's too
+						// late for it to be canceled), and so the rollback finds the txn to be
+						// already committed. We don't spam the logs with those.
+						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+					} else {
+						log.Infof(ctx, "async rollback failed: %s", pErr)
+					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	}); err != nil {
 		cancel()
 		return roachpb.NewError(err)
@@ -813,7 +945,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			if txn.status() != roachpb.COMMITTED {
+			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
@@ -912,6 +1044,20 @@ func (txn *Txn) Send(
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
+	// Requests with a bounded staleness header should use NegotiateAndSend.
+	if ba.BoundedStaleness != nil {
+		return nil, roachpb.NewError(errors.AssertionFailedf(
+			"bounded staleness header passed to Txn.Send: %s", ba.String()))
+	}
+
+	// Some callers have not initialized ba using a Batch constructed using
+	// Txn.NewBatch. So we fallback to partially overwriting here.
+	if ba.AdmissionHeader.CreateTime == 0 {
+		noMem := ba.AdmissionHeader.NoMemoryReservedAtSource
+		ba.AdmissionHeader = txn.AdmissionHeader()
+		ba.AdmissionHeader.NoMemoryReservedAtSource = noMem
+	}
+
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
 	sender := txn.mu.sender
@@ -946,6 +1092,157 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 	}
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
+}
+
+// NegotiateAndSend is a specialized version of Send that is capable of
+// orchestrating a bounded-staleness read through the transaction, given a
+// read-only BatchRequest with a min_timestamp_bound set in its Header.
+//
+// Bounded-staleness orchestration consists of two phases - negotiation and
+// execution. Negotiation determines the timestamp to run the query at in order
+// to ensure that the read will not block on replication or on conflicting
+// transactions. Execution then configures the transaction to use this timestamp
+// and runs the read request in the context of the transaction.
+//
+// The transaction must not have been used before. If the call returns
+// successfully, the transaction will have been given a fixed timestamp equal to
+// the timestamp that the read-only request was evaluated at.
+//
+// If the read-only request hits a key or byte limit and returns a resume span,
+// meaning that it was paginated and did not return all desired results, the
+// transaction's timestamp will have still been fixed to a timestamp that was
+// negotiated over the entire set of read spans in the provided batch. As such,
+// it is safe for callers to resume reading at the bounded-staleness timestamp
+// by using Send. Future calls to Send must not include a BoundedStaleness
+// header, but may still specify the same routing policy.
+//
+// The method accepts requests with min_timestamp_bound_strict set to either
+// true or false, which dictates whether a bounded staleness read whose
+// min_timestamp_bound cannot be satisfied by the first replica it visits
+// (subject to routing_policy) without blocking should be rejected with a
+// MinTimestampBoundUnsatisfiableError or will be redirected to the leaseholder
+// and permitted to block on conflicting transactions. If the flag is true,
+// blocking is never permitted and callers should be prepared to handle
+// MinTimestampBoundUnsatisfiableErrors. If the flag is false, blocking is
+// permitted and MinTimestampBoundUnsatisfiableErrors will never be returned.
+//
+// The method accepts requests with either a LEASEHOLDER or a NEAREST routing
+// policy, which dictates whether the request uses the leaseholder(s) of its
+// target range(s) to negotiate a timestamp and perform the read or whether it
+// uses the nearest replica(s) of its target range(s) to negotiate a timestamp
+// and perform the read. Callers can use this flexibility to trade off increased
+// staleness for reduced latency.
+func (txn *Txn) NegotiateAndSend(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	if err := txn.applyDeadlineToBoundedStaleness(ctx, ba.BoundedStaleness); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Attempt to hit the server-side negotiation fast-path. This fast-path
+	// allows a bounded staleness read request that lands on a single range
+	// to perform its negotiation phase and execution phase in a single RPC.
+	//
+	// The server-side negotiation fast-path provides two benefits:
+	// 1. it avoids two network hops in the common-case where a bounded
+	//    staleness read is targeting a single range. This in an important
+	//    performance optimization for single-row point lookups.
+	// 2. it provides stronger guarantees around minimizing staleness during
+	//    bounded staleness reads. Bounded staleness reads that hit the
+	//    server-side fast-path use their target replica's most up-to-date
+	//    resolved timestamp, so they are as fresh as possible. Bounded
+	//    staleness reads that miss the fast-path and perform explicit
+	//    negotiation (see below) consult a cache, so they may use an
+	//    out-of-date, suboptimal resolved timestamp, as long as it is fresh
+	//    enough to satisfy the staleness bound of the request.
+	//
+	// To achieve this, we issue the batch as a non-transactional request
+	// with a MinTimestampBound field set (enforced above). We send the
+	// request through the TxnSenderFactory's wrapped non-transactional
+	// sender, so that we not only avoid passing through our TxnCoordSender,
+	// but also through the CrossRangeTxnWrapperSender. If the request spans
+	// ranges, we want to hear about it.
+	br, pErr := txn.DB().GetFactory().NonTransactionalSender().Send(ctx, ba)
+	if pErr == nil {
+		// Fix the transaction's timestamp at the result of the server-side
+		// timestamp negotiation.
+		if err := txn.SetFixedTimestamp(ctx, br.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// Note that we do not need to inform the TxnCoordSender about the
+		// non-transactional reads that we issued on behalf of it. Now that the
+		// transaction's timestamp is fixed, it won't be able to refresh anyway.
+		return br, nil
+	}
+	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+		return nil, pErr
+	}
+
+	// The read spans ranges, so bounded-staleness orchestration will need to be
+	// performed in two distinct phases - negotiation and execution. First we'll
+	// use the BoundedStalenessNegotiator to determines the timestamp to perform
+	// the read at and fix the transaction's timestamp to this result. Then we'll
+	// issue the request through the transaction, which will use the negotiated
+	// read timestamp from the previous phase to execute the read.
+	//
+	// TODO(nvanbenschoten): implement this. #67554.
+
+	return nil, roachpb.NewError(unimplemented.NewWithIssue(67554,
+		"cross-range bounded staleness reads not yet implemented"))
+}
+
+// checks preconditions on BatchRequest and Txn for NegotiateAndSend.
+func (txn *Txn) checkNegotiateAndSendPreconditions(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (err error) {
+	assert := func(b bool, s string) {
+		if !b {
+			err = errors.CombineErrors(err,
+				errors.WithContextTags(errors.AssertionFailedf(
+					"%s: ba=%s, txn=%s", s, ba.String(), txn.String()), ctx),
+			)
+		}
+	}
+	if cfg := ba.BoundedStaleness; cfg == nil {
+		assert(false, "bounded_staleness configuration must be set")
+	} else {
+		assert(!cfg.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.Less(cfg.MaxTimestampBound),
+			"max_timestamp_bound, if set, must be greater than min_timestamp_bound")
+	}
+	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
+	assert(ba.Txn == nil, "txn must not be set")
+	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
+	assert(ba.IsReadOnly(), "batch must be read-only")
+	assert(!ba.IsLocking(), "batch must not be locking")
+	assert(txn.typ == RootTxn, "txn must be root")
+	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	return err
+}
+
+// applyDeadlineToBoundedStaleness modifies the bounded staleness header to
+// ensure that the negotiated timestamp respects the transaction deadline.
+func (txn *Txn) applyDeadlineToBoundedStaleness(
+	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
+) error {
+	d := txn.deadline()
+	if d == nil {
+		return nil
+	}
+	if d.LessEq(bs.MinTimestampBound) {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"transaction deadline %s equal to or below min_timestamp_bound %s",
+			*d, bs.MinTimestampBound), ctx)
+	}
+	if bs.MaxTimestampBound.IsEmpty() {
+		bs.MaxTimestampBound = *d
+	} else {
+		bs.MaxTimestampBound.Backward(*d)
+	}
+	return nil
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this
@@ -1040,7 +1337,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
 		log.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
 	}
 
@@ -1114,16 +1411,19 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 // This is used to support historical queries (AS OF SYSTEM TIME queries and
 // backups). This method must be called on every transaction retry (but note
 // that retries should be rare for read-only queries with no clock uncertainty).
-func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("SetFixedTimestamp() called on leaf txn"), ctx))
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"SetFixedTimestamp() called on leaf txn"), ctx)
 	}
 
 	if ts.IsEmpty() {
-		log.Fatalf(ctx, "empty timestamp is invalid for SetFixedTimestamp()")
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"empty timestamp is invalid for SetFixedTimestamp()"), ctx)
 	}
-	txn.mu.sender.SetFixedTimestamp(ctx, ts)
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
 // GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
@@ -1131,14 +1431,14 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.ReadTimestamp is racheted up to txn.Timestamp.
+// bumped to the extent that txn.ReadTimestamp is racheted up to txn.WriteTimestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	now := txn.db.clock.Now()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
+	now := txn.db.clock.NowAsClockTimestamp()
+	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg,
@@ -1147,7 +1447,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 			txn.debugNameLocked(),
 			nil, // baseKey
 			txn.mu.userPriority,
-			now,
+			now.ToTimestamp(),
 			txn.db.clock.MaxOffset().Nanoseconds(),
 		))
 }
@@ -1199,10 +1499,6 @@ func (txn *Txn) ManualRestart(ctx context.Context, ts hlc.Timestamp) {
 // operation (usually, but not exclusively, by a high-priority txn with
 // conflicting writes).
 func (txn *Txn) IsSerializablePushAndRefreshNotPossible() bool {
-	if txn.typ != RootTxn {
-		panic(
-			errors.AssertionFailedf("IsSerializablePushAndRefreshNotPossible() called on leaf txn"))
-	}
 	return txn.mu.sender.IsSerializablePushAndRefreshNotPossible()
 }
 
@@ -1246,10 +1542,6 @@ func (txn *Txn) Active() bool {
 // In step-wise execution, reads operate at a snapshot established at
 // the last step, instead of the latest write if not yet enabled.
 func (txn *Txn) Step(ctx context.Context) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("txn.Step() only allowed in RootTxn"), ctx)
-	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Step(ctx)
@@ -1258,10 +1550,6 @@ func (txn *Txn) Step(ctx context.Context) error {
 // ConfigureStepping configures step-wise execution in the
 // transaction.
 func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("txn.ConfigureStepping() only allowed in RootTxn"), ctx))
-	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ConfigureStepping(ctx, mode)
@@ -1297,4 +1585,55 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ReleaseSavepoint(ctx, s)
+}
+
+// ManualRefresh forces a refresh of the read timestamp of a transaction to
+// match that of its write timestamp. It is only recommended for transactions
+// that need extremely precise control over the request ordering, like the
+// transaction that merges ranges together. When combined with
+// DisablePipelining, this feature allows the range merge transaction to
+// prove that it will not be pushed between sending its SubsumeRequest and
+// committing. This enables that request to be pushed at earlier points in
+// its lifecycle.
+func (txn *Txn) ManualRefresh(ctx context.Context) error {
+	txn.mu.Lock()
+	sender := txn.mu.sender
+	txn.mu.Unlock()
+	return sender.ManualRefresh(ctx)
+}
+
+// DeferCommitWait defers the transaction's commit-wait operation, passing
+// responsibility of commit-waiting from the Txn to the caller of this
+// method. The method returns a function which the caller must eventually
+// run if the transaction completes without error. This function is safe to
+// call multiple times.
+//
+// WARNING: failure to run the returned function could lead to consistency
+// violations where a future, causally dependent transaction may fail to
+// observe the writes performed by this transaction.
+func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.DeferCommitWait(ctx)
+}
+
+// AdmissionHeader returns the admission header for work done in the context
+// of this transaction.
+func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
+	h := txn.admissionHeader
+	if txn.mu.sender.IsLocking() {
+		// Assign higher priority to requests by txns that are locking, so that
+		// they release locks earlier. Note that this is a crude approach, and is
+		// worse than priority inheritance used for locks in realtime systems. We
+		// do this because admission control does not have visibility into the
+		// exact locks held by waiters in the admission queue, and cannot compare
+		// that with priorities of waiting requests in the various lock table
+		// queues. This crude approach has shown some benefit in tpcc with 3000
+		// warehouses, where it halved the number of lock waiters, and increased
+		// the transaction throughput by 10+%. In that experiment 40% of the
+		// BatchRequests evaluated by KV had been assigned high priority due to
+		// locking.
+		h.Priority = int32(admission.HighPri)
+	}
+	return h
 }

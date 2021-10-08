@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/kr/text"
 )
 
@@ -40,7 +42,7 @@ type FlagInfo struct {
 	Description string
 }
 
-const usageIndentation = 8
+const usageIndentation = 1
 const wrapWidth = 79 - usageIndentation
 
 // wrapDescription wraps the text in a FlagInfo.Description.
@@ -78,7 +80,7 @@ func wrapDescription(s string) string {
 // * indentation
 // * env variable name (if set)
 func (f FlagInfo) Usage() string {
-	s := "\n" + wrapDescription(f.Description) + "\n"
+	s := "\n" + wrapDescription(f.Description)
 	if f.EnvVar != "" {
 		// Check that the environment variable name matches the flag name. Note: we
 		// don't want to automatically generate the name so that grepping for a flag
@@ -88,12 +90,12 @@ func (f FlagInfo) Usage() string {
 			panic(fmt.Sprintf("incorrect EnvVar %s for flag %s (should be %s)",
 				f.EnvVar, f.Name, correctName))
 		}
-		s = s + "Environment variable: " + f.EnvVar + "\n"
+		s = s + "\nEnvironment variable: " + f.EnvVar
 	}
 	// github.com/spf13/pflag appends the default value after the usage text. Add
-	// the correct indentation (7 spaces) here. This is admittedly fragile.
-	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
-		strings.Repeat(" ", usageIndentation-1)
+	// an additional indentation so the default is well-aligned with the
+	// rest of the text. This is admittedly fragile.
+	return text.Indent(s, strings.Repeat(" ", usageIndentation)) + "\n"
 }
 
 // Attrs and others store the static information for CLI flags.
@@ -113,17 +115,17 @@ specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 		Name: "locality",
 		Description: `
 An ordered, comma-separated list of key-value pairs that describe the topography
-of the machine. Topography might include country, datacenter or rack
-designations. Data is automatically replicated to maximize diversities of each
-tier. The order of tiers is used to determine the priority of the diversity, so
-the more inclusive localities like country should come before less inclusive
-localities like datacenter. The tiers and order must be the same on all nodes.
-Including more tiers is better than including fewer. For example:
+of the machine. Topography often includes cloud provider regions and availability
+zones, but can also refer to on-prem concepts like datacenter or rack. Data is
+automatically replicated to maximize diversities of each tier. The order of tiers
+is used to determine the priority of the diversity, so the more inclusive localities
+like region should come before less inclusive localities like availability zone. The
+tiers and order must be the same on all nodes. Including more tiers is better than
+including fewer. For example:
 <PRE>
 
-  --locality=country=us,region=us-west,datacenter=us-west-1b,rack=12
-  --locality=country=ca,region=ca-east,datacenter=ca-east-2,rack=4
-  --locality=planet=earth,province=manitoba,colo=secondary,power=3</PRE>`,
+  --locality=cloud=gce,region=us-west1,zone=us-west-1b
+  --locality=cloud=aws,region=us-east,zone=us-east-2</PRE>`,
 	}
 
 	Background = FlagInfo{
@@ -143,13 +145,6 @@ including prepared queries and intermediate data rows during query execution.
 Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
 percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% of
 physical memory.`,
-	}
-
-	SQLAuditLogDirName = FlagInfo{
-		Name: "sql-audit-dir",
-		Description: `
-If non-empty, create a SQL audit log in this drectory.
-`,
 	}
 
 	SQLTempStorage = FlagInfo{
@@ -235,10 +230,10 @@ What to dump. "schema" dumps the schema only. "data" dumps the data only.
 "both" (default) dumps the schema then the data.`,
 	}
 
-	DumpTime = FlagInfo{
+	ReadTime = FlagInfo{
 		Name: "as-of",
 		Description: `
-Dumps the data as of the specified timestamp. Formats supported are the same
+Reads the data as of the specified timestamp. Formats supported are the same
 as the timestamp type.`,
 	}
 
@@ -256,7 +251,20 @@ Execute the SQL statement(s) on the command line, then exit. This flag may be
 specified multiple times and each value may contain multiple semicolon
 separated statements. If an error occurs in any statement, the command exits
 with a non-zero status code and further statements are not executed. The
-results of each SQL statement are printed on the standard output.`,
+results of each SQL statement are printed on the standard output.
+
+This flag is incompatible with --file / -f.`,
+	}
+
+	File = FlagInfo{
+		Name:      "file",
+		Shorthand: "f",
+		Description: `
+Read and execute the SQL statement(s) from the specified file.
+The file is processed as if it has been redirected on the standard
+input of the shell.
+
+This flag is incompatible with --execute / -e.`,
 	}
 
 	Watch = FlagInfo{
@@ -281,6 +289,23 @@ issues. This echoes sent SQL, removes the database name and txn status
 from the prompt, and forces behavior to become independent on current
 transaction state. Equivalent to --echo-sql, \unset check_syntax and
 \set prompt1 %n@%M>.`,
+	}
+
+	EmbeddedMode = FlagInfo{
+		Name: "embedded",
+		Description: `
+Simplify and reduce the SQL CLI output to make it appropriate for
+embedding in a 'playground'-type environment.
+
+This causes the shell to omit informational message about
+aspects that can only be changed with command-line flags
+or environment variables: in an embedded environment, the user
+has no control over these and the messages would thus be
+confusing.
+
+It also causes the shell to omit informational messages about
+networking details (e.g. server address), as it is assumed
+that the embedding environment will report those instead.`,
 	}
 
 	SafeUpdates = FlagInfo{
@@ -537,6 +562,16 @@ is then ignored. This flag is intended for use to facilitate
 local testing without requiring certificate setups in web browsers.`,
 	}
 
+	AcceptSQLWithoutTLS = FlagInfo{
+		Name: "accept-sql-without-tls",
+		Description: `
+When specified, this node will accept SQL client connections that do not wish
+to negotiate a TLS handshake. Authentication is still otherwise required
+as per the HBA configuration and all other security mechanisms continue to
+apply. This flag is experimental.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -546,8 +581,8 @@ separated list of locality@address. Addresses can also include ports.
 For example:
 <PRE>
 
-  "region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
-  "region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"</PRE>`,
+  "region=us-west@127.0.0.1,zone=us-west-1b@127.0.0.1"
+  "region=us-west@127.0.0.1:26257,zone=us-west-1b@127.0.0.1:26258"</PRE>`,
 	}
 
 	ListenHTTPAddrAlias = FlagInfo{
@@ -603,18 +638,33 @@ the socket name programmatically. To use, for example:
 		Name:   "insecure",
 		EnvVar: "COCKROACH_INSECURE",
 		Description: `
-Connect to an insecure cluster. This is strongly discouraged for
-production usage.`,
+Connect to a cluster without using TLS nor authentication.
+This makes the client-server connection vulnerable to MITM attacks. Use with care.`,
 	}
 
 	ServerInsecure = FlagInfo{
 		Name: "insecure",
 		Description: `
-Start an insecure node, using unencrypted (non-TLS) connections,
-listening on all IP addresses (unless --listen-addr is provided) and
-disabling password authentication for all database users. This is
-strongly discouraged for production usage and should never be used on
-a public network without combining it with --listen-addr.`,
+Start a node with all security controls disabled.
+There is no encryption, no authentication and internal security
+checks are also disabled. This makes any client able to take
+over the entire cluster.
+<PRE>
+
+</PRE>
+This flag is only intended for non-production testing.
+<PRE>
+
+</PRE>
+Beware that using this flag on a public network without --listen-addr
+is likely to cause the entire host server to become compromised.
+<PRE>
+
+</PRE>
+To simply accept non-TLS connections for SQL clients while keeping
+the cluster secure, consider using --accept-sql-without-tls instead.
+Also see: ` + build.MakeIssueURL(53404) + `
+`,
 	}
 
 	ExternalIODisableHTTP = FlagInfo{
@@ -627,6 +677,11 @@ a public network without combining it with --listen-addr.`,
 		Description: `
 Disable use of implicit credentials when accessing external data.
 Instead, require the user to always specify access keys.`,
+	}
+	ExternalIODisabled = FlagInfo{
+		Name: "external-io-disabled",
+		Description: `
+Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal), or anything other than userfile.`,
 	}
 
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
@@ -661,6 +716,36 @@ Instead, require the user to always specify access keys.`,
 		Description: `Prompt for the new user's password.`,
 	}
 
+	InitToken = FlagInfo{
+		Name: "init-token",
+		Description: `Shared token for initialization of node TLS certificates.
+
+This flag is optional for the 'start' command. When omitted, the 'start'
+command expects the operator to prepare TLS certificates beforehand using
+the 'cert' command.
+
+This flag must be combined with --num-expected-initial-nodes.`,
+	}
+
+	NumExpectedInitialNodes = FlagInfo{
+		Name: "num-expected-initial-nodes",
+		Description: `Number of expected nodes during TLS certificate creation,
+including the node where the connect command is run.
+
+This flag must be combined with --init-token.`,
+	}
+
+	SingleNode = FlagInfo{
+		Name: "single-node",
+		Description: `Prepare the certificates for a subsequent 'start-single-node'
+command. The 'connect' command only runs cursory checks on the network
+configuration and does not wait for peers to auto-negotiate a common
+set of credentials.
+
+The --single-node flag is exclusive with the --init-num-peers and --init-token
+flags.`,
+	}
+
 	CertsDir = FlagInfo{
 		Name:        "certs-dir",
 		EnvVar:      "COCKROACH_CERTS_DIR",
@@ -686,7 +771,7 @@ such as "node" or "root"). If multiple mappings are provided for the same
 principal not specified in the map is passed through as-is via the identity
 function. A cert is allowed to authenticate a DB principal if the DB principal
 name is contained in the mapped CommonName or DNS-type SubjectAlternateName
-fields.
+fields. It is permissible for the <cert-principal> string to contain colons.
 `,
 	}
 
@@ -788,12 +873,9 @@ Also, if you use equal signs in the file path to a store, you must use the
 	StorageEngine = FlagInfo{
 		Name: "storage-engine",
 		Description: `
-Storage engine to use for all stores on this cockroach node. Options are default,
-rocksdb, or pebble.
-
-If default is specified, the storage engine last used to write to the first
-store directory is used (see --store). If the store directory is uninitialized
-and default is specified, rocksdb is used as the default storage engine.`,
+Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
+only present for backward compatibility.
+`,
 	}
 
 	Size = FlagInfo{
@@ -818,6 +900,12 @@ The size can be given in various ways:
   --size=20%             -> 20% of available space
   --size=0.2             -> 20% of available space
   --size=.2              -> 20% of available space</PRE>`,
+	}
+
+	Verbose = FlagInfo{
+		Name: "verbose",
+		Description: `
+Verbose output.`,
 	}
 
 	TempDir = FlagInfo{
@@ -867,9 +955,16 @@ The value "disabled" will disable all local file I/O.
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",
 		Description: `
-Connection URL, e.g. "postgresql://myuser@localhost:26257/mydb".
-If left empty, the connection flags are used (host, port, user,
-database, insecure, certs-dir).`,
+Connection URL, of the form:
+<PRE>
+   postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]
+</PRE>
+For example, postgresql://myuser@localhost:26257/mydb.
+<PRE>
+
+</PRE>
+If left empty, the discrete connection flags are used: host, port,
+user, database, insecure, certs-dir.`,
 	}
 
 	User = FlagInfo{
@@ -929,11 +1024,27 @@ If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
 
+	DecodeAsTable = FlagInfo{
+		Name: "decode-as-table",
+		Description: `
+Base64-encoded Descriptor to use as the table when decoding KVs.`,
+	}
+
+	FilterKeys = FlagInfo{
+		Name: "type",
+		Description: `
+Only show certain types of keys: values, intents, txns. If omitted all keys
+types are shown. Showing transactions will also implicitly limit key range
+to local keys if keys are not specified explicitly.`,
+	}
+
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `
-When non-zero, wait for the specified amount of time for the node to
-drain all active client connections and migrate away range leases.`,
+When non-zero, wait for at most the specified amount of time for the node to
+drain all active client connections and migrate away range leases.
+If zero, the command waits until the last client has disconnected and
+all range leases have been migrated away.`,
 	}
 
 	Wait = FlagInfo{
@@ -1015,6 +1126,20 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `Align the output.`,
 	}
 
+	DemoSQLPort = FlagInfo{
+		Name: "sql-port",
+		Description: `First port number for SQL servers.
+There should be as many TCP ports available as the value of --nodes
+starting at the specified value.`,
+	}
+
+	DemoHTTPPort = FlagInfo{
+		Name: "http-port",
+		Description: `First port number for HTTP servers.
+There should be as many TCP ports available as the value of --nodes
+starting at the specified value.`,
+	}
+
 	DemoNodes = FlagInfo{
 		Name:        "nodes",
 		Description: `How many in-memory nodes to create for the demo.`,
@@ -1044,6 +1169,11 @@ can also be specified (e.g. .25).`,
 		Description: `Run a demo workload against the pre-loaded database.`,
 	}
 
+	DemoWorkloadMaxQPS = FlagInfo{
+		Name:        "workload-max-qps",
+		Description: "The maximum QPS when a workload is running.",
+	}
+
 	DemoNodeLocality = FlagInfo{
 		Name: "demo-locality",
 		Description: `
@@ -1063,7 +1193,7 @@ availability zone to 3.
 
 	DemoGeoPartitionedReplicas = FlagInfo{
 		Name: "geo-partitioned-replicas",
-		Description: `
+		Description: fmt.Sprintf(`
 When used with the Movr dataset, create a 9 node cluster and automatically apply
 the geo-partitioned replicas topology across 3 virtual regions named us-east1,
 us-west1, and europe-west1. This command will fail with an error if an
@@ -1071,9 +1201,9 @@ enterprise license could not be acquired, or if the Movr dataset is not used.
 More information about the geo-partitioned replicas topology can be found at:
 <PRE>
 
-https://www.cockroachlabs.com/docs/v19.1/topology-geo-partitioned-replicas.html
+%s
 </PRE>
-		`,
+		`, docs.URL("topology-geo-partitioned-replicas.html")),
 	}
 
 	DemoNoLicense = FlagInfo{
@@ -1083,16 +1213,22 @@ If set, disable cockroach demo from attempting to obtain a temporary license.`,
 	}
 
 	UseEmptyDatabase = FlagInfo{
-		Name: "empty",
+		Name:        "empty",
+		Description: `Deprecated in favor of --no-example-database`,
+	}
+
+	NoExampleDatabase = FlagInfo{
+		Name:   "no-example-database",
+		EnvVar: "COCKROACH_NO_EXAMPLE_DATABASE",
 		Description: `
-Start with an empty database: avoid pre-loading a default dataset in
-the demo shell.`,
+Disable the creation of a default dataset in the demo shell.
+This makes 'cockroach demo' faster to start.`,
 	}
 
 	GeoLibsDir = FlagInfo{
-		Name: "geo-libs",
+		Name: "spatial-libs",
 		Description: `
-The location where all libraries for Geospatial operations is located.`,
+The location where all libraries for spatial operations is located.`,
 	}
 
 	Global = FlagInfo{
@@ -1100,35 +1236,6 @@ The location where all libraries for Geospatial operations is located.`,
 		Description: `
 Simulate a global cluster. This adds artificial latencies to nodes in different
 regions. This flag only works with the default node localities. This setting is experimental.`,
-	}
-
-	LogDir = FlagInfo{
-		Name: "log-dir",
-		Description: `
-If non-empty, write log files in this directory. If empty, write log files to
-<store-dir>/logs where <store-dir> is the directory of the first on disk store.
-`,
-	}
-
-	LogDirMaxSize = FlagInfo{
-		Name: "log-group-max-size",
-		Description: `
-Maximum combined size of all log files in a logging group.
-`,
-	}
-
-	LogFileMaxSize = FlagInfo{
-		Name: "log-file-max-size",
-		Description: `
-Maximum size of each log file.
-`,
-	}
-
-	LogFileVerbosity = FlagInfo{
-		Name: "log-file-verbosity",
-		Description: `
-Minimum verbosity of messages written to the log file.
-`,
 	}
 
 	WriteSize = FlagInfo{
@@ -1194,6 +1301,96 @@ list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
 
+	ZipIncludedFiles = FlagInfo{
+		Name: "include-files",
+		Description: `
+List of glob patterns that determine files that can be included
+in the output. The list can be specified as a comma-delimited
+list of patterns, or by using the flag multiple times.
+The patterns apply to the base name of the file, without
+a path prefix.
+The default is to include all files.
+<PRE>
+
+</PRE>
+This flag is applied before --exclude-files; for example,
+including '*.log' and then excluding '*foo*.log' will
+exclude 'barfoos.log'.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipExcludedFiles = FlagInfo{
+		Name: "exclude-files",
+		Description: `
+List of glob patterns that determine files that are to
+be excluded from the output. The list can be specified
+as a comma-delimited list of patterns, or by using the
+flag multiple times.
+The patterns apply to the base name of the file, without
+a path prefix.
+<PRE>
+
+</PRE>
+This flag is applied after --include-files; for example,
+including '*.log' and then excluding '*foo*.log' will
+exclude 'barfoos.log'.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipFilesFrom = FlagInfo{
+		Name: "files-from",
+		Description: `
+Limit file collection to those files modified after the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is 48 hours before now.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipFilesUntil = FlagInfo{
+		Name: "files-until",
+		Description: `
+Limit file collection to those files created before the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is some time beyond
+the current time, to ensure files created during
+the collection are also included.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
@@ -1212,6 +1409,14 @@ The zip command will block for the duration specified. Zero disables this featur
 `,
 	}
 
+	ZipConcurrency = FlagInfo{
+		Name: "concurrency",
+		Description: `
+The maximum number of nodes to request data from simultaneously.
+Can be set to 1 to ensure only one node is polled for data at a time.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
@@ -1220,5 +1425,208 @@ The zip command will block for the duration specified. Zero disables this featur
 	StmtDiagCancelAll = FlagInfo{
 		Name:        "all",
 		Description: `Cancel all outstanding requests.`,
+	}
+
+	ImportSkipForeignKeys = FlagInfo{
+		Name: "skip-foreign-keys",
+		Description: `
+Speed up data import by ignoring foreign key constraints in the dump file's DDL.
+Also enables importing individual tables that would otherwise fail due to
+dependencies on other tables.
+`,
+	}
+
+	ImportMaxRowSize = FlagInfo{
+		Name: "max-row-size",
+		Description: `
+Override limits on line size when importing Postgres dump files. This setting 
+may need to be tweaked if the Postgres dump file has extremely long lines.
+`,
+	}
+
+	ImportIgnoreUnsupportedStatements = FlagInfo{
+		Name: "ignore-unsupported-statements",
+		Description: `
+Ignore statements that are unsupported during an import from a PGDUMP file.
+`,
+	}
+
+	ImportLogIgnoredStatements = FlagInfo{
+		Name: "log-ignored-statements",
+		Description: `
+Log unsupported statements that are ignored during an import from a PGDUMP file to the specified
+destination. This flag should be used in conjunction with the ignore-unsupported-statements flag
+that ignores the unsupported statements during an import.
+`,
+	}
+
+	ImportRowLimit = FlagInfo{
+		Name: "row-limit",
+		Description: `
+Specify the number of rows that will be imported for each table during a PGDUMP or MYSQLDUMP import.
+This can be used to check schema and data correctness without running the entire import.
+`,
+	}
+
+	Log = FlagInfo{
+		Name: "log",
+		Description: `Logging configuration, expressed using YAML syntax.
+For example, you can change the default logging directory with:
+--log='file-defaults: {dir: ...}'.
+See the documentation for more options and details.
+
+To preview how the log configuration is applied, or preview the
+default configuration, you can use the 'cockroach debug check-log-config' sub-command.
+`,
+	}
+
+	LogConfigFile = FlagInfo{
+		Name: "log-config-file",
+		Description: `File name to read the logging configuration from.
+This has the same effect as passing the content of the file via
+the --log flag.`,
+	}
+
+	DeprecatedStderrThreshold = FlagInfo{
+		Name:        "logtostderr",
+		Description: `Write log messages beyond the specified severity to stderr.`,
+	}
+
+	DeprecatedFileThreshold = FlagInfo{
+		Name:        "log-file-verbosity",
+		Description: `Write log messages beyond the specified severity to files.`,
+	}
+
+	DeprecatedStderrNoColor = FlagInfo{
+		Name:        "no-color",
+		Description: `Avoid color in the stderr output.`,
+	}
+
+	DeprecatedRedactableLogs = FlagInfo{
+		Name:        "redactable-logs",
+		Description: `Request redaction markers.`,
+	}
+
+	DeprecatedLogFileMaxSize = FlagInfo{
+		Name:        "log-file-max-size",
+		Description: "Maximum size of a log file before switching to a new file.",
+	}
+
+	DeprecatedLogGroupMaxSize = FlagInfo{
+		Name:        "log-group-max-size",
+		Description: `Maximum size of a group of log files before old files are removed.`,
+	}
+
+	DeprecatedLogDir = FlagInfo{
+		Name:        "log-dir",
+		Description: `Override the logging directory.`,
+	}
+
+	DeprecatedSQLAuditLogDir = FlagInfo{
+		Name: "sql-audit-dir",
+		Description: `
+If non-empty, create a SQL audit log in this directory.
+`,
+	}
+
+	BuildTag = FlagInfo{
+		Name: "build-tag",
+		Description: `
+When set, the command prints only the build tag for the executable,
+without any other details.
+`,
+	}
+
+	ExportTableTarget = FlagInfo{
+		Name:        "table",
+		Description: `Select the table to export data from.`,
+	}
+
+	ExportDestination = FlagInfo{
+		Name: "destination",
+		Description: `
+The destination to export data. 
+If the export format is readable and this flag left unspecified,
+defaults to display the exported data in the terminal output.
+`,
+	}
+
+	ExportTableFormat = FlagInfo{
+		Name: "format",
+		Description: `
+Selects the format to export table rows from backups. 
+Only csv is supported at the moment.
+`,
+	}
+
+	ExportCSVNullas = FlagInfo{
+		Name:        "nullas",
+		Description: `The string that should be used to represent NULL values.`,
+	}
+
+	StartKey = FlagInfo{
+		Name: "start-key",
+		Description: `
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey. 
+The raw format supports escaped text. For example, "raw:\x01k" is
+the prefix for range local keys. 
+The bytekey format does not require table-key prefix.`,
+	}
+
+	MaxRows = FlagInfo{
+		Name:        "max-rows",
+		Description: `Maximum number of rows to return (Default 0 is unlimited).`,
+	}
+
+	ExportRevisions = FlagInfo{
+		Name:        "with-revisions",
+		Description: `Export revisions of data from a backup table since the last schema change.`,
+	}
+
+	ExportRevisionsUpTo = FlagInfo{
+		Name:        "up-to",
+		Description: `Export revisions of data from a backup table up to a specific timestamp.`,
+	}
+
+	Recursive = FlagInfo{
+		Name:      "recursive",
+		Shorthand: "r",
+		Description: `
+When set, the entire subtree rooted at the source directory will be uploaded to
+the destination. Every file in the subtree will be uploaded to the corresponding
+path under the destination; i.e. the relative path will be maintained. À la
+rsync, a trailing slash in the source will avoid creating an additional
+directory level under the destination. The destination can be expressed one of
+four ways: empty (not specified), a relative path, a well-formed URI with no
+host, or a full well-formed URI.
+<PRE>
+
+</PRE>
+If a destination is not specified, the default URI scheme and host will be used,
+and the basename from the source will be used as the destination directory.
+For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory' 
+<PRE>
+
+</PRE>
+If the destination is a relative path such as 'path/to/dir', the default
+userfile URI schema and host will be used
+('userfile://defaultdb.public.userfiles_$user/'), and the relative path will be
+appended to it.
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a well-formed URI with no host, such as
+'userfile:///path/to/dir/', the default userfile URI schema and host will be
+used ('userfile://defaultdb.public.userfiles_$user/').
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a full well-formed URI, such as
+'userfile://db.schema.tablename_prefix/path/to/dir', then it will be used
+verbatim.
+For example: 'userfile://foo.bar.baz_root/path/to/dir'
+`,
 	}
 )

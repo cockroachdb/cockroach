@@ -92,19 +92,23 @@ output row: [3 9]
 statement ok
 CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 
-query TTTTT colnames
+query T
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-tree       field                description         columns                              ordering
-·          distribution         local               ·                                    ·
-·          vectorized           false               ·                                    ·
-split      ·                    ·                   (key, pretty, split_enforced_until)  ·
- │         estimated row count  10 (missing stats)  ·                                    ·
- └── scan  ·                    ·                   (k1, k2)                             +k1
-·          estimated row count  3 (missing stats)   ·                                    ·
-·          table                s@primary           ·                                    ·
-·          spans                LIMITED SCAN        ·                                    ·
-·          limit                3                   ·                                    ·
+distribution: local
+vectorized: true
+·
+• split
+│ columns: (key, pretty, split_enforced_until)
+│ estimated row count: 10 (missing stats)
+│
+└── • scan
+      columns: (k1, k2)
+      ordering: +k1
+      estimated row count: 3 (missing stats)
+      table: s@primary
+      spans: LIMITED SCAN
+      limit: 3
 
 statement ok
 DROP TABLE t; DROP TABLE other
@@ -209,10 +213,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 fetched: /t/b_desc/2/2 -> NULL
 fetched: /t/b_desc/1/1 -> NULL
-fetched: /t/primary/2/b/c -> /2/2
 fetched: /t/primary/1/b/c -> /1/1
-output row: [2 2 2]
+fetched: /t/primary/2/b/c -> /2/2
 output row: [1 1 1]
+output row: [2 2 2]
 
 statement ok
 DROP table t
@@ -228,8 +232,6 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
   CREATE TABLE test_kvr3(k INT, v INT UNIQUE REFERENCES test_kv(v));
-  CREATE TABLE test_kvi1(k INT PRIMARY KEY) INTERLEAVE IN PARENT test_kv(k);
   CREATE TABLE test_kvi2(k INT PRIMARY KEY, v INT);
-  CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;

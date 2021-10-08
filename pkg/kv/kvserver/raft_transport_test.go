@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 const channelServerBrokenRangeMessage = "channelServer broken range"
@@ -363,7 +363,8 @@ func TestSendAndReceive(t *testing.T) {
 	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
-	// NB: proto.Equal will panic here since it doesn't know about `gogoproto.casttype`.
+	// NB: we can't use gogoproto's Equal() function here: it will panic
+	// here since it doesn't know about `gogoproto.casttype`.
 	if req := <-channels[toStoreID].ch; !reflect.DeepEqual(req, expReq) {
 		t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 	}

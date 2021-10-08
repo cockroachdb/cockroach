@@ -180,11 +180,11 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s", "Query": "SELECT b, 1 FROM tab3"}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
-Describe {"ObjectType": 80, "Name": "p"}
+Describe {"ObjectType": "P", "Name": "p"}
 Execute {"Portal": "p"}
 Sync
 ----
@@ -239,11 +239,11 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s2", "Query": "SELECT b FROM tab4"}
 Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
-Describe {"ObjectType": 80, "Name": "p2"}
+Describe {"ObjectType": "P", "Name": "p2"}
 Execute {"Portal": "p2"}
 Sync
 ----
@@ -300,18 +300,22 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+send crdb_only
 Query {"String": "SET enable_experimental_alter_column_type_general = true"}
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+send crdb_only
 Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE STRING"}
+----
+
+send noncrdb_only
+Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE TEXT"}
 ----
 
 until
@@ -323,11 +327,11 @@ ReadyForQuery
 # Ensure that after alter column type, the TableAttributeNumber stays consistent.
 # TableAttributeNumber of column b should stay as 2.
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s3", "Query": "SELECT b FROM tab3"}
 Bind {"DestinationPortal": "p3", "PreparedStatement": "s3"}
-Describe {"ObjectType": 80, "Name": "p3"}
+Describe {"ObjectType": "P", "Name": "p3"}
 Execute {"Portal": "p3"}
 Sync
 ----
@@ -341,7 +345,7 @@ BindComplete
 until noncrdb_only ignore_table_oids
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 
 until crdb_only
 RowDescription

@@ -26,7 +26,7 @@ func init() {
 }
 
 func declareKeysGC(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
@@ -45,10 +45,10 @@ func declareKeysGC(
 	// request first to bump the thresholds, and then another one that actually does work
 	// but can avoid declaring these keys below.
 	if !gcr.Threshold.IsEmpty() {
-		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 	}
 	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // GC iterates through the list of keys to garbage collect
@@ -66,18 +66,27 @@ func GC(
 	// safe because they can simply be re-collected later on the correct
 	// replica. Discrepancies here can arise from race conditions during
 	// range splitting.
-	keys := make([]roachpb.GCRequest_GCKey, 0, len(args.Keys))
+	globalKeys := make([]roachpb.GCRequest_GCKey, 0, len(args.Keys))
+	// Local keys are rarer, so don't pre-allocate slice. We separate the two
+	// kinds of keys since it is a requirement when calling MVCCGarbageCollect.
+	var localKeys []roachpb.GCRequest_GCKey
 	for _, k := range args.Keys {
 		if cArgs.EvalCtx.ContainsKey(k.Key) {
-			keys = append(keys, k)
+			if keys.IsLocal(k.Key) {
+				localKeys = append(localKeys, k)
+			} else {
+				globalKeys = append(globalKeys, k)
+			}
 		}
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	if err := storage.MVCCGarbageCollect(
-		ctx, readWriter, cArgs.Stats, keys, h.Timestamp,
-	); err != nil {
-		return result.Result{}, err
+	for _, gcKeys := range [][]roachpb.GCRequest_GCKey{localKeys, globalKeys} {
+		if err := storage.MVCCGarbageCollect(
+			ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp,
+		); err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	// Optionally bump the GC threshold timestamp.

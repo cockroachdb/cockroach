@@ -11,15 +11,22 @@ package colexec
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = coldataext.CompareDatum
+	_ tree.AggType
 )
 
 // vecComparator is a helper for the ordered synchronizer. It stores multiple
@@ -82,7 +89,7 @@ func (c *BoolVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -161,7 +168,7 @@ func (c *DecimalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx].Set(&v)
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -209,7 +216,7 @@ func (c *Int16VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -257,7 +264,7 @@ func (c *Int32VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -305,7 +312,7 @@ func (c *Int64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -361,7 +368,7 @@ func (c *Float64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -405,7 +412,7 @@ func (c *TimestampVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx in
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -442,7 +449,55 @@ func (c *IntervalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
+	}
+}
+
+type JSONVecComparator struct {
+	vecs  []*coldata.JSONs
+	nulls []*coldata.Nulls
+}
+
+func (c *JSONVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int {
+	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
+	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
+	if n1 && n2 {
+		return 0
+	} else if n1 {
+		return -1
+	} else if n2 {
+		return 1
+	}
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
+	var cmp int
+
+	var err error
+	cmp, err = left.Compare(right)
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+
+	return cmp
+}
+
+func (c *JSONVecComparator) setVec(idx int, vec coldata.Vec) {
+	c.vecs[idx] = vec.JSON()
+	c.nulls[idx] = vec.Nulls()
+}
+
+func (c *JSONVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
+	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
+		c.nulls[dstVecIdx].SetNull(dstIdx)
+	} else {
+		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
+		// moved around), we use CopySlice to accept the performance hit.
+		// Specifically, this is a performance hit because we are overwriting the
+		// variable number of bytes in `dstVecIdx`, so we will have to either shift
+		// the bytes after that element left or right, depending on how long the
+		// source bytes slice is. Refer to the CopySlice comment for an example.
+		c.vecs[dstVecIdx].CopySlice(c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 	}
 }
 
@@ -465,7 +520,7 @@ func (c *DatumVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
-	cmp = left.(*coldataext.Datum).CompareDatum(c.vecs[vecIdx1], right)
+	cmp = coldataext.CompareDatum(left, c.vecs[vecIdx1], right)
 
 	return cmp
 }
@@ -560,6 +615,15 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &JSONVecComparator{
+				vecs:  make([]*coldata.JSONs, numVecs),
+				nulls: make([]*coldata.Nulls, numVecs),
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -570,7 +634,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 			}
 		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+	colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -17,7 +17,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,52 +37,6 @@ func TestFormatStatement(t *testing.T) {
 		f        tree.FmtFlags
 		expected string
 	}{
-		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimple,
-			`CREATE USER 'foo' WITH PASSWORD *****`},
-		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
-			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
-
-		{`CREATE TABLE foo (x INT8)`, tree.FmtAnonymize,
-			`CREATE TABLE _ (_ INT8)`},
-		{`INSERT INTO foo(x) TABLE bar`, tree.FmtAnonymize,
-			`INSERT INTO _(_) TABLE _`},
-		{`UPDATE foo SET x = y`, tree.FmtAnonymize,
-			`UPDATE _ SET _ = _`},
-		{`DELETE FROM foo`, tree.FmtAnonymize,
-			`DELETE FROM _`},
-		{`TRUNCATE foo`, tree.FmtAnonymize,
-			`TRUNCATE TABLE _`},
-		{`ALTER TABLE foo RENAME TO bar`, tree.FmtAnonymize,
-			`ALTER TABLE _ RENAME TO _`},
-		{`SHOW COLUMNS FROM foo`, tree.FmtAnonymize,
-			`SHOW COLUMNS FROM _`},
-		{`SHOW CREATE TABLE foo`, tree.FmtAnonymize,
-			`SHOW CREATE _`},
-		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
-			`GRANT SELECT ON TABLE _ TO _`},
-
-		{`INSERT INTO a VALUES (-2, +3)`,
-			tree.FmtHideConstants,
-			`INSERT INTO a VALUES (_, _)`},
-
-		{`INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)`,
-			tree.FmtHideConstants,
-			`INSERT INTO a VALUES (_), (__more5__)`},
-		{`INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)`,
-			tree.FmtHideConstants,
-			`INSERT INTO a VALUES (_, _, __more4__)`},
-		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])`,
-			tree.FmtHideConstants,
-			`INSERT INTO a VALUES (ARRAY[_, _, __more5__])`},
-		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
-			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
-			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])`,
-			tree.FmtHideConstants,
-			`INSERT INTO a VALUES (ARRAY[_, _, __more30__])`},
-
-		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, tree.FmtHideConstants,
-			`SELECT (_ + COALESCE(_, _, x)) - ARRAY[_]`},
-
 		// This here checks encodeSQLString on non-tree.DString strings also
 		// calls encodeSQLString with the right formatter.
 		// See TestFormatExprs below for the test on DStrings.
@@ -144,10 +101,12 @@ func TestFormatTableName(t *testing.T) {
 		// `GRANT SELECT ON xoxoxo TO foo`},
 	}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.SetReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
-		ctx.WriteString("xoxoxo")
-	})
+	f := tree.NewFmtCtx(
+		tree.FmtSimple,
+		tree.FmtReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
+			ctx.WriteString("xoxoxo")
+		}),
+	)
 
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
@@ -295,6 +254,36 @@ func TestFormatExpr(t *testing.T) {
 func TestFormatExpr2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	enumMembers := []string{"hi", "hello"}
+	enumType := types.MakeEnum(typedesc.TypeIDToOID(500), typedesc.TypeIDToOID(100500))
+	enumType.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Schema: "test",
+			Name:   "greeting",
+		},
+		EnumData: &types.EnumMetadata{
+			LogicalRepresentations: enumMembers,
+			// The physical representations don't matter in this case, but the
+			// enum related code in tree expects that the length of
+			// PhysicalRepresentations is equal to the length of
+			// LogicalRepresentations.
+			PhysicalRepresentations: [][]byte{
+				{0x42, 0x1},
+				{0x42},
+			},
+			IsMemberReadOnly: make([]bool, len(enumMembers)),
+		},
+	}
+	enumHi, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	enumHello, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// This tests formatting from an expr AST. Suitable for use if your input
 	// isn't easily creatable from a string without running an Eval.
 	testData := []struct {
@@ -304,12 +293,16 @@ func TestFormatExpr2(t *testing.T) {
 	}{
 		{tree.NewDOidWithName(tree.DInt(10), types.RegClass, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regclass(10,'foo'):::REGCLASS`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegProc, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegType, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
 		{tree.NewDOidWithName(tree.DInt(10), types.RegNamespace, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegProc, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegProcedure, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regprocedure(10,'foo'):::REGPROCEDURE`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegRole, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regrole(10,'foo'):::REGROLE`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegType, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
 
 		// Ensure that nulls get properly type annotated when printed in an
 		// enclosing tuple that has a type for their position within the tuple.
@@ -317,7 +310,7 @@ func TestFormatExpr2(t *testing.T) {
 			types.MakeTuple([]*types.T{types.Int, types.String}),
 			tree.DNull, tree.NewDString("foo")),
 			tree.FmtParsable,
-			`(NULL::INT8, 'foo':::STRING)`,
+			`(NULL:::INT8, 'foo':::STRING)`,
 		},
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{types.Unknown, types.String}),
@@ -333,8 +326,27 @@ func TestFormatExpr2(t *testing.T) {
 			tree.FmtParsable,
 			`ARRAY[NULL,NULL]:::INT8[]`,
 		},
+		{tree.NewDTuple(
+			types.MakeTuple([]*types.T{enumType, enumType}),
+			tree.DNull, enumHi),
+			tree.FmtParsable,
+			`(NULL:::greeting, 'hi':::greeting)`,
+		},
 
-		// Ensure that nulls get properly type annotated when printed in an
+		// Ensure that enums get properly type annotated when printed in an
+		// enclosing tuple for serialization purposes.
+		{tree.NewDTuple(
+			types.MakeTuple([]*types.T{enumType, enumType}),
+			enumHi, enumHello),
+			tree.FmtSerializable,
+			`(x'4201':::@100500, x'42':::@100500)`,
+		},
+		{tree.NewDTuple(
+			types.MakeTuple([]*types.T{enumType, enumType}),
+			tree.DNull, enumHi),
+			tree.FmtSerializable,
+			`(NULL:::@100500, x'4201':::@100500)`,
+		},
 	}
 
 	ctx := context.Background()
@@ -392,7 +404,9 @@ func TestFormatPgwireText(t *testing.T) {
 		{`ARRAY[e'\U00002001☃']`, `{ ☃}`},
 	}
 	ctx := context.Background()
-	var evalCtx tree.EvalContext
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
 			expr, err := parser.ParseExpr(test.expr)
@@ -420,7 +434,17 @@ func TestFormatPgwireText(t *testing.T) {
 // 1000 random statements.
 func BenchmarkFormatRandomStatements(b *testing.B) {
 	// Generate a bunch of random statements.
-	yBytes, err := ioutil.ReadFile(filepath.Join("..", "..", "parser", "sql.y"))
+	var runfile string
+	if bazel.BuiltWithBazel() {
+		var err error
+		runfile, err = bazel.Runfile("pkg/sql/parser/sql.y")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		runfile = filepath.Join("..", "..", "parser", "sql.y")
+	}
+	yBytes, err := ioutil.ReadFile(runfile)
 	if err != nil {
 		b.Fatalf("error reading grammar: %v", err)
 	}

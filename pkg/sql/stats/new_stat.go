@@ -108,6 +108,11 @@ func InsertNewStat(
 
 // GossipTableStatAdded causes the statistic caches for this table to be
 // invalidated.
+//
+// Note that we no longer use gossip to keep the cache up-to-date, but we still
+// send the updates for mixed-version clusters during upgrade.
+//
+// TODO(radu): remove this in 22.1.
 func GossipTableStatAdded(g *gossip.Gossip, tableID descpb.ID) error {
 	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
 	// around forever (we would need the stat cache to evict old entries

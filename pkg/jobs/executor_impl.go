@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -57,7 +57,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 	// Also, performing this under the same transaction as the scan loop is not ideal
 	// since a single failure would result in rollback for all of the changes.
 	_, err := cfg.InternalExecutor.ExecEx(ctx, "inline-exec", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		sqlArgs.Statement,
 	)
 
@@ -72,8 +72,9 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 // NotifyJobTermination implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	ctx context.Context,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
+	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	ex sqlutil.InternalExecutor,
@@ -81,7 +82,7 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 ) error {
 	// For now, only interested in failed status.
 	if jobStatus == StatusFailed {
-		DefaultHandleFailedRun(schedule, jobID, nil)
+		DefaultHandleFailedRun(schedule, "job %d failed", jobID)
 	}
 	return nil
 }
@@ -89,6 +90,16 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 // Metrics implements ScheduledJobExecutor interface
 func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (e *inlineScheduledJobExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 func init() {

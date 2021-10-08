@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -78,7 +79,7 @@ const (
 	ConnAny = ConnHostAny | ConnLocal
 )
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (t ConnType) String() string {
 	switch t {
 	case ConnLocal:
@@ -90,11 +91,11 @@ func (t ConnType) String() string {
 	case ConnHostAny:
 		return "host"
 	default:
-		panic("unimplemented")
+		panic(errors.Newf("unimplemented conn type: %v", int(t)))
 	}
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (c Conf) String() string {
 	if len(c.Entries) == 0 {
 		return "# (empty configuration)\n"
@@ -137,7 +138,7 @@ func (c Conf) String() string {
 // the "Address" field.
 type AnyAddr struct{}
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (AnyAddr) String() string { return "all" }
 
 // GetOption returns the value of option name if there is exactly one
@@ -211,12 +212,12 @@ func (h Entry) ConnMatches(clientConn ConnType, ip net.IP) (bool, error) {
 // The provided username must be normalized already.
 // The function assumes the entry was normalized to contain only
 // one user and its username normalized. See ParseAndNormalize().
-func (h Entry) UserMatches(userName string) bool {
+func (h Entry) UserMatches(userName security.SQLUsername) bool {
 	if h.User == nil {
 		return true
 	}
 	for _, u := range h.User {
-		if u.Value == userName {
+		if u.Value == userName.Normalized() {
 			return true
 		}
 	}
@@ -289,7 +290,7 @@ func (h Entry) OptionsString() string {
 	return sb.String()
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (h Entry) String() string {
 	return Conf{Entries: []Entry{h}}.String()
 }
@@ -300,7 +301,7 @@ type String struct {
 	Quoted bool
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (s String) String() string {
 	if s.Quoted {
 		return `"` + s.Value + `"`

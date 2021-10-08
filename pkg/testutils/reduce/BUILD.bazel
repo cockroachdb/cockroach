@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "reduce",
+    srcs = [
+        "datadriven.go",
+        "pass.go",
+        "reduce.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/reduce",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "reduce_test",
+    size = "small",
+    srcs = ["reduce_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [":reduce"],
+)

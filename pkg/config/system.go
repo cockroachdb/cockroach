@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -148,7 +149,7 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		// configs through proper channels.
 		//
 		// Getting here outside tests is impossible.
-		desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{}).DescriptorProto()
+		desc := tabledesc.NewBuilder(&descpb.TableDescriptor{}).BuildImmutable().DescriptorProto()
 		var val roachpb.Value
 		if err := val.SetProto(desc); err != nil {
 			panic(err)
@@ -291,6 +292,18 @@ func (s *SystemConfig) GetLargestObjectID(
 // responsibility to ensure that the range does not need to be split.
 func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*zonepb.ZoneConfig, error) {
 	return s.getZoneConfigForKey(DecodeKeyIntoZoneIDAndSuffix(key))
+}
+
+// GetSpanConfigForKey looks of the span config for the given key. It's part of
+// spanconfig.StoreReader interface.
+func (s *SystemConfig) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	zone, err := s.GetZoneConfigForKey(key)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	return zone.AsSpanConfig(), nil
 }
 
 // DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.
@@ -536,7 +549,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 				return nil
 			}
 
-			zoneVal := s.GetValue(MakeZoneKey(id))
+			zoneVal := s.GetValue(MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 			if zoneVal == nil {
 				continue
 			}
@@ -696,7 +709,7 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id SystemTenantObjectID) 
 		shouldSplit = true
 	} else {
 		desc := s.getSystemTenantDesc(keys.SystemSQLCodec.DescMetadataKey(uint32(id)))
-		shouldSplit = desc != nil && sqlbase.ShouldSplitAtDesc(desc)
+		shouldSplit = desc != nil && systemschema.ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
 	s.mu.Lock()

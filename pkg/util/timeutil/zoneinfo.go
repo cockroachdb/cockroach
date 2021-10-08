@@ -13,35 +13,34 @@ package timeutil
 import (
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/errors"
+	// embed tzdata in case system tzdata is not available.
+	_ "time/tzdata"
 )
 
-var errTZDataNotFound = errors.New("timezone data cannot be found")
+//go:generate go run gen/main.go
 
 // LoadLocation returns the time.Location with the given name.
 // The name is taken to be a location name corresponding to a file
 // in the IANA Time Zone database, such as "America/New_York".
 //
-// We do not use Go's time.LoadLocation() directly because:
-// 1) it maps "Local" to the local time zone, whereas we want UTC.
-// 2) when a tz is not found, it reports some garbage message
-// related to zoneinfo.zip, which we don't ship, instead
-// of a more useful message like "the tz file with such name
-// is not present in one of the standard tz locations".
+// We do not use Go's time.LoadLocation() directly because it maps
+// "Local" to the local time zone, whereas we want UTC.
 func LoadLocation(name string) (*time.Location, error) {
-	switch strings.ToLower(name) {
+	loweredName := strings.ToLower(name)
+	switch loweredName {
 	case "local", "default":
-		name = "UTC"
-	case "utc":
-		// TODO(knz): See #36864. This code is a crutch, and should be
-		// removed in favor of a cache of available locations with
-		// case-insensitive lookup.
+		loweredName = "utc"
 		name = "UTC"
 	}
-	l, err := time.LoadLocation(name)
-	if err != nil && strings.Contains(err.Error(), "zoneinfo.zip") {
-		err = errTZDataNotFound
+	// If we know this is a lowercase name in tzdata, use the uppercase form.
+	if v, ok := lowercaseTimezones[loweredName]; ok {
+		// If this location is not found, we may have a case where the tzdata names
+		// have different values than the system tz names.
+		// If this is the case, allback onto the default logic, where the name is read
+		// off other sources before tzdata.
+		if loc, err := time.LoadLocation(v); err == nil {
+			return loc, nil
+		}
 	}
-	return l, err
+	return time.LoadLocation(name)
 }

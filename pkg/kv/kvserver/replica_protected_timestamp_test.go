@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -62,14 +61,15 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 		{
 			name: "lease started after",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
-				r.mu.state.Lease.Start = r.store.Clock().Now()
+				r.mu.state.Lease.Start = r.store.Clock().NowAsClockTimestamp()
 				l, _ := r.GetLease()
-				aliveAt := l.Start.Prev()
+				aliveAt := l.Start.ToTimestamp().Prev()
 				ts := aliveAt.Prev()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReaason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReaason)
 			},
 		},
 		// If the GC threshold is already newer than the timestamp we want to
@@ -82,9 +82,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				ts := thresh.Prev().Prev()
 				aliveAt := ts.Next()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
+				require.Regexp(t, fmt.Sprintf("protected ts: %s is less than equal to the GCThreshold: %s"+
+					" for the range /Min - /Max", ts.String(), thresh.String()), doesNotApplyReason)
 			},
 		},
 		// If the GC threshold we're about to protect is newer than the timestamp
@@ -98,9 +100,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				ts := thresh.Prev().Prev()
 				aliveAt := ts.Next()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
+				require.Regexp(t, fmt.Sprintf("protected ts: %s is less than the pending GCThreshold: %s"+
+					" for the range /Min - /Max", ts.String(), thresh.String()), doesNotApplyReason)
 			},
 		},
 		// If the timestamp at which the record is known to be alive is newer than
@@ -122,21 +126,113 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 						Timestamp: ts,
 						Spans: []roachpb.Span{
 							{
-								Key:    roachpb.Key(r.startKey()),
-								EndKey: roachpb.Key(r.startKey().Next()),
+								Key:    roachpb.Key(r.Desc().StartKey),
+								EndKey: roachpb.Key(r.Desc().StartKey.Next()),
 							},
 						},
 					})
 					mt.asOf = refreshTo.Next()
 					return nil
 				}
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
 				require.Equal(t,
 					fmt.Sprintf("cannot set gc threshold to %v because read at %v < min %v",
 						ts.Next(), ts, aliveAt.Next()),
 					r.markPendingGC(ts, ts.Next()).Error())
+			},
+		},
+		// If the timestamp of a record is updated then a verify request must see
+		// the correct version of the record. If the request finds the version of
+		// the record with the older timestamp then it must refresh the cache and
+		// attempt to verify again.
+		{
+			name: "find correct record on timestamp update",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now()
+				mt.asOf = ts.Prev()
+				id := uuid.MakeV4()
+				// Insert a record.
+				oldTimestamp := ts
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        id,
+					Timestamp: oldTimestamp,
+					Spans: []roachpb.Span{
+						{
+							Key:    roachpb.Key(r.Desc().StartKey),
+							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
+						},
+					},
+				})
+				// Assume the record has an updated timestamp that we are trying to
+				// verify.
+				updatedTimestamp := ts.Next()
+				aliveAt := ts.Next().Next()
+				args := makeArgs(r, updatedTimestamp, aliveAt)
+				args.RecordID = id
+
+				var cacheIsRefreshed bool
+				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
+					cacheIsRefreshed = true
+					require.Equal(t, refreshTo, aliveAt)
+					// Update the record timestamp so that post cache refresh we see the
+					// record with the updated timestamp.
+					mt.records[0].Timestamp = updatedTimestamp
+					mt.asOf = refreshTo.Next()
+					return nil
+				}
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
+				require.True(t, cacheIsRefreshed)
+				require.True(t, willApply)
+				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
+			},
+		},
+		{
+			name: "find correct record on multiple timestamp update",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now()
+				mt.asOf = ts.Prev()
+				id := uuid.MakeV4()
+				// Insert a record.
+				oldTimestamp := ts
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        id,
+					Timestamp: oldTimestamp,
+					Spans: []roachpb.Span{
+						{
+							Key:    roachpb.Key(r.Desc().StartKey),
+							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
+						},
+					},
+				})
+				// Assume the record has an updated timestamp that we are trying to
+				// verify.
+				updatedTimestamp := ts.Next()
+				aliveAt := ts.Next().Next()
+				args := makeArgs(r, updatedTimestamp, aliveAt)
+				args.RecordID = id
+
+				var cacheIsRefreshed bool
+				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
+					cacheIsRefreshed = true
+					require.Equal(t, refreshTo, aliveAt)
+					// Assume that there was a second timestamp update while the
+					// verification for the first was inflight.
+					// Verification of the first update should still pass since the cache
+					// sees a record with a later timestamp than the one we are verifying.
+					anotherUpdateTimestamp := updatedTimestamp.Next()
+					mt.records[0].Timestamp = anotherUpdateTimestamp
+					mt.asOf = refreshTo.Next()
+					return nil
+				}
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
+				require.True(t, cacheIsRefreshed)
+				require.True(t, willApply)
+				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// If the timestamp at which the record is known to be alive is older than
@@ -150,9 +246,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				aliveAt := ts.Next()
 				mt.asOf = aliveAt.Next()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
+				require.Regexp(t, "protected ts record has been removed", doesNotApplyReason)
 			},
 		},
 		// If we see the record then we know we're good.
@@ -173,9 +270,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 						},
 					},
 				})
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// Ensure that a failure to Refresh propagates.
@@ -189,9 +287,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					return errors.New("boom")
 				}
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.EqualError(t, err, "boom")
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// Ensure NLE propagates.
@@ -212,9 +311,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				aliveAt := ts.Prev().Prev()
 				mt.asOf = ts.Prev()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
+				require.Error(t, err)
 				require.Regexp(t, "NotLeaseHolderError", err.Error())
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// Ensure NLE after performing a refresh propagates.
@@ -238,9 +339,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					return nil
 				}
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
+				require.Error(t, err)
 				require.Regexp(t, "NotLeaseHolderError", err.Error())
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// If refresh succeeds but the timestamp of the cache does not advance as
@@ -255,10 +358,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					return nil
 				}
 				args := makeArgs(r, ts, aliveAt)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.EqualError(t, err, "cache was not updated after being refreshed")
 				require.True(t, errors.IsAssertionFailure(err), "%v", err)
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// If a request header is for a key span which is not owned by this replica,
@@ -271,9 +375,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				mt.asOf = ts.Prev()
 				args := makeArgs(r, ts, aliveAt)
 				r.mu.state.Desc.StartKey = roachpb.RKey(keys.TableDataMax)
-				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
+				require.Error(t, err)
 				require.Regexp(t, "key range /Min-/Max outside of bounds of range /Table/Max-/Max", err.Error())
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 	} {
@@ -302,8 +408,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	makePolicy := func(ttlSec int32) zonepb.GCPolicy {
-		return zonepb.GCPolicy{TTLSeconds: ttlSec}
+	makeTTLDuration := func(ttlSec int32) time.Duration {
+		return time.Duration(ttlSec) * time.Second
 	}
 	for _, testCase := range []struct {
 		name string
@@ -314,8 +420,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 		{
 			name: "lease is too new",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
-				r.mu.state.Lease.Start = r.store.Clock().Now()
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				r.mu.state.Lease.Start = r.store.Clock().NowAsClockTimestamp()
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
 				require.False(t, canGC)
 				require.Zero(t, gcTimestamp)
 			},
@@ -337,7 +443,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				})
 				// We should allow gc to proceed with the normal new threshold if that
 				// threshold is earlier than all of the records.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
 				require.True(t, canGC)
 				require.Equal(t, mt.asOf, gcTimestamp)
 			},
@@ -362,8 +468,9 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// protected timestamp. This means we expect a GC timestamp 10 seconds
 				// after ts.Prev() given the policy.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
 				require.True(t, canGC)
+				require.False(t, newThreshold.Equal(oldThreshold))
 				require.Equal(t, ts.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
 			},
 		},
@@ -386,11 +493,14 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				// We should not allow GC if the threshold is already the predecessor
-				// of the earliest valid record.
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
-				require.False(t, canGC)
-				require.Zero(t, gcTimestamp)
+				// We should allow GC even if the threshold is already the
+				// predecessor of the earliest valid record. However, the GC
+				// queue does not enqueue ranges in such cases, so this is only
+				// applicable to manually enqueued ranges.
+				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.True(t, canGC)
+				require.True(t, newThreshold.Equal(oldThreshold))
+				require.Equal(t, th.Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
 			},
 		},
 		{
@@ -411,7 +521,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
 				require.True(t, canGC)
 				require.Equal(t, mt.asOf, gcTimestamp)
 			},

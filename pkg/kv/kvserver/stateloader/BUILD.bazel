@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "stateloader",
+    srcs = [
+        "initial.go",
+        "stateloader.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)
+
+go_test(
+    name = "stateloader_test",
+    size = "small",
+    srcs = ["initial_test.go"],
+    embed = [":stateloader"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)

@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -38,7 +38,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 
 		// We use the raw_config_sql from the partition_lookup result to get the
 		// official zone config for the partition, and use the full_config_sql from the zones table
-		// which is the result of looking up the partition's inherited zone configuraion.
+		// which is the result of looking up the partition's inherited zone configuration.
 		const showTablePartitionsQuery = `
 		SELECT
 			tables.database_name,
@@ -65,11 +65,13 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 				AND partition_lookup.index_name = table_indexes.index_name
 				AND partition_lookup.partition_name = partitions.name
 		WHERE
-			tables.name = %[1]s AND tables.database_name = %[2]s;
+			tables.name = %[1]s AND tables.database_name = %[2]s
+		ORDER BY
+			1, 2, 3, 4, 5, 6, 7, 8, 9;
 		`
 		return parse(fmt.Sprintf(showTablePartitionsQuery,
-			lex.EscapeSQLString(resName.Table()),
-			lex.EscapeSQLString(resName.Catalog()),
+			lexbase.EscapeSQLString(resName.Table()),
+			lexbase.EscapeSQLString(resName.Catalog()),
 			resName.CatalogName.String()))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
@@ -100,10 +102,10 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		WHERE
 			tables.database_name = %[2]s
 		ORDER BY
-			tables.name, partitions.name;
+			tables.name, partitions.name, 1, 4, 5, 6, 7, 8, 9;
 		`
 		// Note: n.Database.String() != string(n.Database)
-		return parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lex.EscapeSQLString(string(n.Database))))
+		return parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lexbase.EscapeSQLString(string(n.Database))))
 	}
 
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
@@ -113,7 +115,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	if tn.ObjectName == "" {
 		err := errors.New("no table specified")
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index")
+		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index.")
 		return nil, err
 	}
 
@@ -158,11 +160,13 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			AND partition_lookup.index_name = table_indexes.index_name
 			AND partition_lookup.partition_name = partitions.name
 	WHERE
-		table_indexes.index_name = %[1]s AND tables.name = %[2]s;
+		table_indexes.index_name = %[1]s AND tables.name = %[2]s
+	ORDER BY
+		1, 2, 3, 4, 5, 6, 7, 8, 9;
 	`
 	return parse(fmt.Sprintf(showIndexPartitionsQuery,
-		lex.EscapeSQLString(n.Index.Index.String()),
-		lex.EscapeSQLString(resName.Table()),
+		lexbase.EscapeSQLString(n.Index.Index.String()),
+		lexbase.EscapeSQLString(resName.Table()),
 		resName.Table(),
 		n.Index.Index.String(),
 		// note: CatalogName.String() != Catalog()

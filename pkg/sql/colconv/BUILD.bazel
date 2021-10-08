@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# TODO(irfansharif): The dependency tree for *.eg.go needs
+# sorting out. It depends on execgen+templates from elsewhere. Look towards
+# colexec for how this should be done. For now we just lazily depend on the
+# already generated+checked in file.
+#
+# keep
+go_library(
+    name = "colconv",
+    srcs = [
+        "batch.go",  # keep
+        "datum_to_vec.eg.go",
+        "vec_to_datum.eg.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colconv",
+    visibility = ["//visibility:public"],
+    # Pin dependencies used by auto-generated code.
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",  # keep
+        "//pkg/util/json",  # keep
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",  # keep
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "colconv_test",
+    srcs = ["batch_test.go"],
+    embed = [":colconv"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

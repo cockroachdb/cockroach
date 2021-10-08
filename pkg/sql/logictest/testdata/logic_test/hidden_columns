@@ -1,0 +1,127 @@
+statement ok
+CREATE TABLE t (x INT NOT VISIBLE);
+CREATE TABLE kv (
+    k INT PRIMARY KEY NOT VISIBLE,
+    v INT NOT VISIBLE
+  )
+
+# Verify that hidden columns can be explicitly inserted into.
+
+statement ok
+INSERT INTO t(x) VALUES (123)
+
+statement ok
+INSERT INTO kv(k,v) VALUES (123,456);
+
+# Verify that hidden columns cannot be implicitly inserted into
+
+statement error INSERT has more expressions than target columns, 1 expressions for 0 targets
+INSERT INTO t VALUES (123)
+
+statement error INSERT has more expressions than target columns, 2 expressions for 0 targets
+INSERT INTO kv VALUES (111, 222)
+
+# Verify the right columns are hidden.
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   x INT8 NOT VISIBLE NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that stars expand to no columns.
+
+query I
+SELECT 42, * FROM t
+----
+42
+
+query I
+SELECT 42, * FROM kv
+----
+42
+
+# Check that the hidden column can be selected explicitly.
+
+query II
+SELECT 42, x FROM t
+----
+42  123
+
+# Check that the hidden column can be renamed
+
+statement ok
+ALTER TABLE kv RENAME COLUMN v to x;
+
+query I
+SELECT x FROM t
+----
+123
+
+# Verify indexes can be created on hidden columns
+
+statement ok
+CREATE INDEX ON kv(x);
+
+# Check that the hidden column can be droped
+
+statement ok
+ALTER TABLE kv DROP COLUMN x;
+
+statement error column "x" does not exist
+SELECT x FROM kv;
+
+# adding a foreign key constraint on a hidden column
+
+statement ok
+CREATE TABLE t1(a INT, b INT, c INT NOT VISIBLE , PRIMARY KEY(b));
+CREATE TABLE t2(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d));
+CREATE TABLE t5(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d), FOREIGN KEY(b) REFERENCES t1(b));
+
+query TTTTB
+SHOW CONSTRAINTS FROM t2
+----
+t2 primary PRIMARY KEY PRIMARY KEY (d ASC) true
+
+statement ok
+ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
+
+query TTTTB
+SHOW CONSTRAINTS FROM t2
+----
+t2 fk_b_ref_t2 FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d) true
+t2 primary     PRIMARY KEY  PRIMARY KEY (d ASC)              true
+
+# adding a foreign key constraint that references a hidden column
+
+statement ok
+CREATE TABLE t3(a INT, b INT NOT NULL, c INT NOT VISIBLE, PRIMARY KEY(c));
+CREATE TABLE t4(c INT, d INT, e INT NOT NULL NOT VISIBLE, PRIMARY KEY(d));
+CREATE TABLE t6(c INT, d INT, e INT NOT NULL NOT VISIBLE, PRIMARY KEY(d), FOREIGN KEY(c) REFERENCES t3(c));
+
+# ALTER PRIMARY KEY on a primary key with hidden columns
+
+statement ok
+ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS(b);
+
+query TTTTB
+SHOW CONSTRAINTS FROM t3
+----
+t3 primary PRIMARY KEY PRIMARY KEY (b ASC) true
+
+query TTTTB
+SHOW CONSTRAINTS FROM t4
+----
+t4 primary PRIMARY KEY PRIMARY KEY (d ASC) true
+
+statement ok
+ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
+
+query TTTTB
+SHOW CONSTRAINTS FROM t4
+----
+t4 t4_d_key UNIQUE UNIQUE (d ASC) true

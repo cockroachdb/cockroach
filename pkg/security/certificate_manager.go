@@ -19,11 +19,13 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 var (
@@ -102,6 +104,8 @@ type CertificateManager struct {
 	tenantIdentifier uint64
 	CertsLocator
 
+	tlsSettings TLSSettings
+
 	// The metrics struct is initialized at init time and metrics do their
 	// own locking.
 	certMetrics CertificateMetrics
@@ -119,7 +123,7 @@ type CertificateManager struct {
 	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
 	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[string]*CertInfo
+	clientCerts    map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
 	tenantClientCACert, tenantClientCert *CertInfo
@@ -150,7 +154,9 @@ type CertificateMetrics struct {
 	TenantClientExpiration   *metric.Gauge
 }
 
-func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager {
+func makeCertificateManager(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) *CertificateManager {
 	var o cmOptions
 	for _, fn := range opts {
 		fn(&o)
@@ -159,6 +165,7 @@ func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager
 	return &CertificateManager{
 		CertsLocator:     MakeCertsLocator(certsDir),
 		tenantIdentifier: o.tenantIdentifier,
+		tlsSettings:      tlsSettings,
 		certMetrics: CertificateMetrics{
 			CAExpiration:             metric.NewGauge(metaCAExpiration),
 			ClientCAExpiration:       metric.NewGauge(metaClientCAExpiration),
@@ -191,8 +198,10 @@ func ForTenant(tenantIdentifier uint64) Option {
 }
 
 // NewCertificateManager creates a new certificate manager.
-func NewCertificateManager(certsDir string, opts ...Option) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir, opts...)
+func NewCertificateManager(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, tlsSettings, opts...)
 	return cm, cm.LoadCertificates()
 }
 
@@ -200,8 +209,10 @@ func NewCertificateManager(certsDir string, opts ...Option) (*CertificateManager
 // The certsDir is created if it does not exist.
 // This should only be called when generating certificates, the server has
 // no business creating the certs directory.
-func NewCertificateManagerFirstRun(certsDir string, opts ...Option) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir, opts...)
+func NewCertificateManagerFirstRun(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, tlsSettings, opts...)
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
 		return nil, err
 	}
@@ -217,18 +228,20 @@ func (cm *CertificateManager) Metrics() CertificateMetrics {
 // RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
 // refresh of the certificates directory on notification.
 func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
+	ctx := context.Background()
 	go func() {
 		ch := sysutil.RefreshSignaledChan()
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			case sig := <-ch:
-				log.Infof(context.Background(), "received signal %q, triggering certificate reload", sig)
+				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
 				if err := cm.LoadCertificates(); err != nil {
-					log.Warningf(context.Background(), "could not reload certificates: %v", err)
+					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
+					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: false, ErrorMessage: err.Error()})
 				} else {
-					log.Info(context.Background(), "successfully reloaded certificates")
+					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: true})
 				}
 			}
 		}
@@ -250,8 +263,22 @@ func (cl CertsLocator) CACertPath() string {
 	return filepath.Join(cl.certsDir, CACertFilename())
 }
 
+// EnsureCertsDirectory ensures that the certs directory exists by
+// creating it if does not exist yet.
+func (cl CertsLocator) EnsureCertsDirectory() error {
+	return os.MkdirAll(cl.certsDir, 0700)
+}
+
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
+
+// CAKeyPath returns the expected file path for the CA certificate.
+func (cl CertsLocator) CAKeyPath() string {
+	return filepath.Join(cl.certsDir, CAKeyFilename())
+}
+
+// CAKeyFilename returns the expected file name for the CA certificate.
+func CAKeyFilename() string { return "ca" + keyExtension }
 
 // TenantClientCACertPath returns the expected file path for the Tenant client CA
 // certificate.
@@ -271,15 +298,51 @@ func (cl CertsLocator) ClientCACertPath() string {
 	return filepath.Join(cl.certsDir, "ca-client"+certExtension)
 }
 
+// ClientCAKeyPath returns the expected file path for the CA key
+// used to sign client certificates.
+func (cl CertsLocator) ClientCAKeyPath() string {
+	return filepath.Join(cl.certsDir, "ca-client"+keyExtension)
+}
+
+// ClientNodeCertPath returns the expected file path for the certificate used
+// by other nodes to verify outgoing RPCs from this node.
+func (cl CertsLocator) ClientNodeCertPath() string {
+	return filepath.Join(cl.certsDir, "client.node"+certExtension)
+}
+
+// ClientNodeKeyPath returns the expected file path for the key used
+// to sign outgoing RPCs.
+func (cl CertsLocator) ClientNodeKeyPath() string {
+	return filepath.Join(cl.certsDir, "client.node"+keyExtension)
+}
+
 // UICACertPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICACertPath() string {
 	return filepath.Join(cl.certsDir, "ca-ui"+certExtension)
 }
 
+// UICAKeyPath returns the expected file path for the CA certificate
+// used to verify Admin UI certificates.
+func (cl CertsLocator) UICAKeyPath() string {
+	return filepath.Join(cl.certsDir, "ca-ui"+keyExtension)
+}
+
 // NodeCertPath returns the expected file path for the node certificate.
 func (cl CertsLocator) NodeCertPath() string {
 	return filepath.Join(cl.certsDir, NodeCertFilename())
+}
+
+// HasNodeCert returns true iff the node certificate file already exists.
+func (cl CertsLocator) HasNodeCert() (bool, error) {
+	_, err := os.Stat(cl.NodeCertPath())
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // NodeCertFilename returns the expected file name for the node certificate.
@@ -328,20 +391,116 @@ func TenantClientKeyFilename(tenantIdentifier string) string {
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
-func (cl CertsLocator) ClientCertPath(user string) string {
+func (cl CertsLocator) ClientCertPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientCertFilename(user))
 }
 
 // ClientCertFilename returns the expected file name for the user's certificate.
-func ClientCertFilename(user string) string { return "client." + user + certExtension }
+func ClientCertFilename(user SQLUsername) string {
+	return "client." + user.Normalized() + certExtension
+}
 
 // ClientKeyPath returns the expected file path for the user's key.
-func (cl CertsLocator) ClientKeyPath(user string) string {
+func (cl CertsLocator) ClientKeyPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientKeyFilename(user))
 }
 
 // ClientKeyFilename returns the expected file name for the user's key.
-func ClientKeyFilename(user string) string { return "client." + user + keyExtension }
+func ClientKeyFilename(user SQLUsername) string {
+	return "client." + user.Normalized() + keyExtension
+}
+
+// SQLServiceCertPath returns the expected file path for the
+// SQL service certificate
+func (cl CertsLocator) SQLServiceCertPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCertFilename())
+}
+
+// SQLServiceCertFilename returns the expected file name for the SQL service
+// certificate
+func SQLServiceCertFilename() string {
+	return "service.sql" + certExtension
+}
+
+// SQLServiceKeyPath returns the expected file path for the SQL service key
+func (cl CertsLocator) SQLServiceKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceKeyFilename())
+}
+
+// SQLServiceKeyFilename returns the expected file name for the SQL service
+// certificate
+func SQLServiceKeyFilename() string {
+	return "service.sql" + keyExtension
+}
+
+// SQLServiceCACertPath returns the expected file path for the
+// SQL CA certificate
+func (cl CertsLocator) SQLServiceCACertPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCACertFilename())
+}
+
+// SQLServiceCACertFilename returns the expected file name for the SQL CA
+// certificate
+func SQLServiceCACertFilename() string {
+	return "service.ca.sql" + certExtension
+}
+
+// SQLServiceCAKeyPath returns the expected file path for the SQL CA key
+func (cl CertsLocator) SQLServiceCAKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServiceCAKeyFilename())
+}
+
+// SQLServiceCAKeyFilename returns the expected file name for the SQL CA
+// certificate
+func SQLServiceCAKeyFilename() string {
+	return "service.ca.sql" + keyExtension
+}
+
+// RPCServiceCertPath returns the expected file path for the
+// RPC service certificate
+func (cl CertsLocator) RPCServiceCertPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCertFilename())
+}
+
+// RPCServiceCertFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCertFilename() string {
+	return "service.rpc" + certExtension
+}
+
+// RPCServiceKeyPath returns the expected file path for the RPC service key
+func (cl CertsLocator) RPCServiceKeyPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceKeyFilename())
+}
+
+// RPCServiceKeyFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceKeyFilename() string {
+	return "service.rpc" + keyExtension
+}
+
+// RPCServiceCACertPath returns the expected file path for the
+// RPC service certificate
+func (cl CertsLocator) RPCServiceCACertPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCACertFilename())
+}
+
+// RPCServiceCACertFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCACertFilename() string {
+	return "service.ca.rpc" + certExtension
+}
+
+// RPCServiceCAKeyPath returns the expected file path for the RPC service key
+func (cl CertsLocator) RPCServiceCAKeyPath() string {
+	return filepath.Join(cl.certsDir, RPCServiceCAKeyFilename())
+}
+
+// RPCServiceCAKeyFilename returns the expected file name for the RPC service
+// certificate
+func RPCServiceCAKeyFilename() string {
+	return "service.ca.rpc" + keyExtension
+}
 
 // CACert returns the CA cert. May be nil.
 // Callers should check for an internal Error field.
@@ -393,7 +552,7 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 
 // ClientCerts returns the Client certs.
 // Callers should check for internal Error fields.
-func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
+func (cm *CertificateManager) ClientCerts() map[SQLUsername]*CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.clientCerts
@@ -432,7 +591,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
 	var tenantClientCACert, tenantClientCert *CertInfo
-	clientCerts := make(map[string]*CertInfo)
+	clientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
 		case CAPem:
@@ -459,8 +618,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
-			clientCerts[ci.Name] = ci
-			if ci.Name == NodeUser {
+			username := MakeSQLUsernameFromPreNormalizedString(ci.Name)
+			clientCerts[username] = ci
+			if username.IsNodeUser() {
 				nodeClientCert = ci
 			}
 		default:
@@ -630,6 +790,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	}
 
 	cfg, err := newServerTLSConfig(
+		cm.tlsSettings,
 		nodeCert.FileContents,
 		nodeCert.KeyFileContents,
 		ca.FileContents,
@@ -675,6 +836,7 @@ func (cm *CertificateManager) getEmbeddedUIServerTLSConfig(
 	}
 
 	cfg, err := newUIServerTLSConfig(
+		cm.tlsSettings,
 		uiCert.FileContents,
 		uiCert.KeyFileContents)
 	if err != nil {
@@ -750,7 +912,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 // getClientCertLocked returns the client cert/key for the specified user,
 // or an error if not found.
 // cm.mu must be held.
-func (cm *CertificateManager) getClientCertLocked(user string) (*CertInfo, error) {
+func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, error) {
 	ci := cm.clientCerts[user]
 	if err := checkCertIsValid(ci); err != nil {
 		return nil, makeErrorf(err, "problem with client cert for user %s", user)
@@ -820,6 +982,7 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 	}
 
 	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
 		tenantClientCert.FileContents,
 		tenantClientCert.KeyFileContents,
 		ca.FileContents)
@@ -834,7 +997,7 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 // GetClientTLSConfig returns the most up-to-date client tls.Config.
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
-func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, error) {
+func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -844,13 +1007,14 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 		return nil, err
 	}
 
-	if user != NodeUser {
+	if !user.IsNodeUser() {
 		clientCert, err := cm.getClientCertLocked(user)
 		if err != nil {
 			return nil, err
 		}
 
 		cfg, err := newClientTLSConfig(
+			cm.tlsSettings,
 			clientCert.FileContents,
 			clientCert.KeyFileContents,
 			ca.FileContents)
@@ -873,6 +1037,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	}
 
 	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
 		clientCert.FileContents,
 		clientCert.KeyFileContents,
 		ca.FileContents)
@@ -897,7 +1062,7 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	cfg, err := newUIClientTLSConfig(uiCA.FileContents)
+	cfg, err := newUIClientTLSConfig(cm.tlsSettings, uiCA.FileContents)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,33 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.tracing;
+option go_package = "tracingservicepb";
+
+import "gogoproto/gogo.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
+
+message GetSpanRecordingsRequest {
+  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+}
+
+message GetSpanRecordingsResponse {
+  message Recording {
+    repeated tracing.tracingpb.RecordedSpan recorded_spans = 1 [(gogoproto.nullable) = false];
+  }
+  repeated Recording recordings = 1 [(gogoproto.nullable) = false];
+}
+
+service Tracing {
+  // GetSpanRecordings contacts a nodes' inflight span registry to return the
+  // tracing.Recordings for each root span with a matching TraceID.
+  rpc GetSpanRecordings(GetSpanRecordingsRequest) returns (GetSpanRecordingsResponse) {}
+}

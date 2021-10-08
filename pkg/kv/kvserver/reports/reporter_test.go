@@ -43,9 +43,10 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	// Under stressrace, replication changes seem to hit 1m deadline errors and
 	// don't make progress.
 	skip.UnderStressRace(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	ctx := context.Background()
-	tc := serverutils.StartTestCluster(t, 5, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
 			1: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
@@ -122,7 +123,7 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
-	tc := serverutils.StartTestCluster(t, 6, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 6, base.TestClusterArgs{
 		// We're going to do our own replication.
 		// All the system ranges will start with a single replica on node 1.
 		ReplicationMode: base.ReplicationManual,
@@ -304,7 +305,7 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := serverutils.StartTestCluster(t, 4, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		// We're going to do our own replication.
 		// All the system ranges will start with a single replica on node 1.
 		ReplicationMode: base.ReplicationManual,
@@ -562,7 +563,7 @@ func TestZoneChecker(t *testing.T) {
 	}
 	keyScanner := keysutils.MakePrettyScannerForNamedTables(
 		map[string]int{"t1": t1ID} /* tableNameToID */, nil /* idxNameToID */)
-	rngs, err := processSplits(keyScanner, splits)
+	rngs, err := processSplits(keyScanner, splits, nil /* stores */)
 	require.NoError(t, err)
 
 	var zc zoneResolver

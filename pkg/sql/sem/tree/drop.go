@@ -19,6 +19,11 @@
 
 package tree
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+)
+
 // DropBehavior represents options for dropping schema elements.
 type DropBehavior int
 
@@ -128,6 +133,15 @@ func (node *DropView) Format(ctx *FmtCtx) {
 	}
 }
 
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *DropView) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeDropCounter(
+		GetTableType(
+			false /* isSequence */, true, /* isView */
+			node.IsMaterialized))
+}
+
 // DropSequence represents a DROP SEQUENCE statement.
 type DropSequence struct {
 	Names        TableNames
@@ -198,7 +212,7 @@ func (node *DropType) Format(ctx *FmtCtx) {
 
 // DropSchema represents a DROP SCHEMA command.
 type DropSchema struct {
-	Names        []string
+	Names        ObjectNamePrefixList
 	IfExists     bool
 	DropBehavior DropBehavior
 }
@@ -211,12 +225,7 @@ func (node *DropSchema) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	for i := range node.Names {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNameP(&node.Names[i])
-	}
+	ctx.FormatNode(&node.Names)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteString(" ")
 		ctx.WriteString(node.DropBehavior.String())

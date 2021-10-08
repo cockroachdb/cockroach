@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,49 +35,65 @@ func TestExpandDataSourceGlob(t *testing.T) {
 	exec("CREATE TABLE c (x INT)")
 
 	testCases := []struct {
-		pattern  tree.TablePattern
-		expected string
+		pattern       tree.TablePattern
+		expectedNames string
+		expectedIDs   string
+		expectedError string
 	}{
 		{
-			pattern:  tree.NewTableName("t", "a"),
-			expected: `[t.public.a]`,
+			pattern:       tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a"),
+			expectedNames: `[t.public.a]`,
+			expectedIDs:   `[53]`,
 		},
 		{
-			pattern:  tree.NewTableName("t", "z"),
-			expected: `error: no data source matches prefix: "t.public.z"`,
+			pattern:       tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "z"),
+			expectedError: `error: no data source matches prefix: "t.public.z"`,
 		},
 		{
-			pattern:  &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{}},
-			expected: `[t.public.a t.public.b t.public.c]`,
+			pattern:       &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{}},
+			expectedNames: `[t.public.a t.public.b t.public.c]`,
+			expectedIDs:   `[53 54 55]`,
 		},
 		{
 			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "t", ExplicitSchema: true,
 			}},
-			expected: `[t.public.a t.public.b t.public.c]`,
+			expectedNames: `[t.public.a t.public.b t.public.c]`,
+			expectedIDs:   `[53 54 55]`,
 		},
 		{
 			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "z", ExplicitSchema: true,
 			}},
-			expected: `error: target database or schema does not exist`,
+			expectedError: `error: target database or schema does not exist`,
 		},
 	}
 
 	for _, tc := range testCases {
-		var res string
-		names, err := cat.ExpandDataSourceGlob(ctx, testcat, cat.Flags{}, tc.pattern)
+		var namesRes string
+		var errRes string
+		var IDsRes string
+		names, IDs, err := cat.ExpandDataSourceGlob(ctx, testcat, cat.Flags{}, tc.pattern)
 		if err != nil {
-			res = fmt.Sprintf("error: %v", err)
+			errRes = fmt.Sprintf("error: %v", err)
 		} else {
-			var r []string
-			for _, n := range names {
-				r = append(r, n.FQString())
+			var namesArr []string
+			var IDsArr []descpb.ID
+			for i := range names {
+				namesArr = append(namesArr, names[i].FQString())
+				IDsArr = append(IDsArr, IDs[i])
 			}
-			res = fmt.Sprintf("%v", r)
+			namesRes = fmt.Sprintf("%v", namesArr)
+			IDsRes = fmt.Sprintf("%v", IDsArr)
 		}
-		if res != tc.expected {
-			t.Errorf("pattern: %v  expected: %s  got: %s", tc.pattern, tc.expected, res)
+		if len(tc.expectedError) > 0 && errRes != tc.expectedError {
+			t.Errorf("pattern: %v  expectedError: %s  got: %s", tc.pattern, tc.expectedError, errRes)
+		}
+		if len(tc.expectedNames) > 0 && namesRes != tc.expectedNames {
+			t.Errorf("pattern: %v  expectedNames: %s  got: %s", tc.pattern, tc.expectedNames, namesRes)
+		}
+		if len(tc.expectedIDs) > 0 && IDsRes != tc.expectedIDs {
+			t.Errorf("pattern: %v  expectedIDs: %s  got: %s", tc.pattern, tc.expectedIDs, IDsRes)
 		}
 	}
 }
@@ -101,14 +118,14 @@ func TestResolveTableIndex(t *testing.T) {
 		// Both table name and index are set.
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 				Index: "idx1",
 			},
 			expected: `t.public.a@idx1`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 				Index: "idx2",
 			},
 			expected: `error: index "idx2" does not exist`,
@@ -117,19 +134,19 @@ func TestResolveTableIndex(t *testing.T) {
 		// Only table name is set.
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 			},
 			expected: `t.public.a@primary`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("z", "a"),
+				Table: tree.MakeTableNameWithSchema("z", tree.PublicSchemaName, "a"),
 			},
 			expected: `error: no data source matches prefix: "z.public.a"`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "z"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "z"),
 			},
 			expected: `error: no data source matches prefix: "t.public.z"`,
 		},
@@ -143,7 +160,7 @@ func TestResolveTableIndex(t *testing.T) {
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", ""),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, ""),
 				Index: "idx1",
 			},
 			expected: `t.public.a@idx1`,
@@ -162,7 +179,7 @@ func TestResolveTableIndex(t *testing.T) {
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("z", ""),
+				Table: tree.MakeTableNameWithSchema("z", tree.PublicSchemaName, ""),
 				Index: "idx1",
 			},
 			expected: `error: target database or schema does not exist`,

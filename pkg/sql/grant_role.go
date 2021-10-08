@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -28,8 +28,8 @@ import (
 // GrantRoleNode creates entries in the system.role_members table.
 // This is called from GRANT <ROLE>
 type GrantRoleNode struct {
-	roles       tree.NameList
-	members     tree.NameList
+	roles       []security.SQLUsername
+	members     []security.SQLUsername
 	adminOption bool
 
 	run grantRoleRun
@@ -48,7 +48,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	sqltelemetry.IncIAMGrantCounter(n.AdminOption)
 
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -59,15 +59,33 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range n.Roles {
+
+	inputRoles := make([]security.SQLUsername, len(n.Roles))
+	inputMembers := make([]security.SQLUsername, len(n.Members))
+	for i, role := range n.Roles {
+		normalizedRole, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		inputRoles[i] = normalizedRole
+	}
+	for i, member := range n.Members {
+		normalizedMember, err := security.MakeSQLUsernameFromUserInput(string(member), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		inputMembers[i] = normalizedMember
+	}
+
+	for _, r := range inputRoles {
 		// If the user is an admin, don't check if the user is allowed to add/drop
 		// roles in the role. However, if the role being modified is the admin role, then
 		// make sure the user is an admin with the admin option.
-		if hasAdminRole && string(r) != security.AdminRole {
+		if hasAdminRole && !r.IsAdminRole() {
 			continue
 		}
-		if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-			if string(r) == security.AdminRole {
+		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
+			if r.IsAdminRole() {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s is not a role admin for role %s", p.User(), r)
 			}
@@ -87,21 +105,23 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// NOTE: membership manipulation involving the "public" pseudo-role fails with
 	// "role public does not exist". This matches postgres behavior.
 
-	for _, r := range n.Roles {
-		if _, ok := roles[string(r)]; !ok {
+	for _, r := range inputRoles {
+		if _, ok := roles[r]; !ok {
+			maybeOption := strings.ToUpper(r.Normalized())
 			for name := range roleoption.ByName {
-				if uppercase := strings.ToUpper(string(r)); uppercase == name {
+				if maybeOption == name {
 					return nil, errors.WithHintf(
-						pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r),
-						"%s is a role option, try using ALTER ROLE to change a role's options.", uppercase)
+						pgerror.Newf(pgcode.UndefinedObject,
+							"role/user %s does not exist", r),
+						"%s is a role option, try using ALTER ROLE to change a role's options.", maybeOption)
 				}
 			}
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
 		}
 	}
 
-	for _, m := range n.Members {
-		if _, ok := roles[string(m)]; !ok {
+	for _, m := range inputMembers {
+		if _, ok := roles[m]; !ok {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
 		}
 	}
@@ -110,9 +130,8 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// means checking whether we have an expanded relationship (grant.Role ∈ ... ∈ grant.Member)
 	// For each grant.Role, we lookup all the roles it is a member of.
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
-	allRoleMemberships := make(map[string]map[string]bool)
-	for _, rawR := range n.Roles {
-		r := string(rawR)
+	allRoleMemberships := make(map[security.SQLUsername]map[security.SQLUsername]bool)
+	for _, r := range inputRoles {
 		allRoles, err := p.MemberOfWithAdminOption(ctx, r)
 		if err != nil {
 			return nil, err
@@ -122,10 +141,8 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 
 	// Since we perform no queries here, check all role/member pairs for cycles.
 	// Only if there are no errors do we proceed to write them.
-	for _, rawR := range n.Roles {
-		r := string(rawR)
-		for _, rawM := range n.Members {
-			m := string(rawM)
+	for _, r := range inputRoles {
+		for _, m := range inputMembers {
 			if r == m {
 				// self-cycle.
 				return nil, pgerror.Newf(pgcode.InvalidGrantOperation, "%s cannot be a member of itself", m)
@@ -139,15 +156,15 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 			}
 			// Add the new membership. We don't care about the actual bool value.
 			if _, ok := allRoleMemberships[m]; !ok {
-				allRoleMemberships[m] = make(map[string]bool)
+				allRoleMemberships[m] = make(map[security.SQLUsername]bool)
 			}
 			allRoleMemberships[m][r] = false
 		}
 	}
 
 	return &GrantRoleNode{
-		roles:       n.Roles,
-		members:     n.Members,
+		roles:       inputRoles,
+		members:     inputMembers,
 		adminOption: n.AdminOption,
 	}, nil
 }
@@ -172,9 +189,9 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				memberStmt,
-				r, m, n.adminOption,
+				r.Normalized(), m.Normalized(), n.adminOption,
 			)
 			if err != nil {
 				return err

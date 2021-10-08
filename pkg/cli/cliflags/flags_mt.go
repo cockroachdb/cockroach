@@ -23,4 +23,88 @@ var (
 		EnvVar:      "COCKROACH_KV_ADDRS",
 		Description: `A comma-separated list of KV endpoints (load balancers allowed).`,
 	}
+
+	DenyList = FlagInfo{
+		Name:        "denylist-file",
+		Description: "Denylist file to limit access to IP addresses and tenant ids.",
+	}
+
+	ProxyListenAddr = FlagInfo{
+		Name:        "listen-addr",
+		Description: "Listen address for incoming connections.",
+	}
+
+	TokenBucketPeriod = FlagInfo{
+		Name:        "token-bucket-period",
+		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
+	}
+
+	TokenBucketSize = FlagInfo{
+		Name:        "token-bucket-size",
+		Description: "Size of the token bucket used to throttle connection attempts.",
+	}
+
+	ListenCert = FlagInfo{
+		Name:        "listen-cert",
+		Description: "File containing PEM-encoded x509 certificate for listen address.",
+	}
+
+	ListenKey = FlagInfo{
+		Name:        "listen-key",
+		Description: "File containing PEM-encoded x509 key for listen address.",
+	}
+
+	ListenMetrics = FlagInfo{
+		Name:        "listen-metrics",
+		Description: "Listen address for incoming connections for metrics retrieval.",
+	}
+
+	RoutingRule = FlagInfo{
+		Name: "routing-rule",
+		Description: `
+Routing rule for incoming connections. Use '{{clusterName}}' for substitution.
+This rule must include the port of the SQL pod.`,
+	}
+
+	DirectoryAddr = FlagInfo{
+		Name:        "directory",
+		Description: "Directory address of the service doing resolution from backend id to IP.",
+	}
+
+	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be
+	// set internally for testing, rather than being exposed to consumers.
+	SkipVerify = FlagInfo{
+		Name:        "skip-verify",
+		Description: "If true, skip identity verification of backend. For testing only.",
+	}
+
+	InsecureBackend = FlagInfo{
+		Name:        "insecure",
+		Description: "If true, use insecure connection to the backend.",
+	}
+
+	RatelimitBaseDelay = FlagInfo{
+		Name:        "ratelimit-base-delay",
+		Description: "Initial backoff after a failed login attempt. Set to 0 to disable rate limiting.",
+	}
+
+	ValidateAccessInterval = FlagInfo{
+		Name:        "validate-access-interval",
+		Description: "Time interval between validation that current connections are still valid.",
+	}
+
+	PollConfigInterval = FlagInfo{
+		Name:        "poll-config-interval",
+		Description: "Polling interval changes in config file.",
+	}
+
+	DrainTimeout = FlagInfo{
+		Name:        "drain-timeout",
+		Description: "Close DRAINING connections idle for this duration.",
+	}
+
+	TestDirectoryListenPort = FlagInfo{
+		Name:        "port",
+		Description: "Test directory server binds and listens on this port.",
+	}
 )

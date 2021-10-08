@@ -54,9 +54,9 @@ const (
 // caPEM and caClientPEMs can be equal to caPEM (shared CA) or nil (use system CA
 // pool).
 func newServerTLSConfig(
-	certPEM, keyPEM, caPEM []byte, caClientPEMs ...[]byte,
+	settings TLSSettings, certPEM, keyPEM, caPEM []byte, caClientPEMs ...[]byte,
 ) (*tls.Config, error) {
-	cfg, err := newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM)
+	cfg, err := newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, caPEM)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +85,8 @@ func newServerTLSConfig(
 // It needs:
 // - the server certificate (should be signed by the CA used by HTTP clients to the admin UI)
 // - the private key for the certificate
-func newUIServerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
-	cfg, err := newBaseTLSConfigWithCertificate(certPEM, keyPEM, nil)
+func newUIServerTLSConfig(settings TLSSettings, certPEM, keyPEM []byte) (*tls.Config, error) {
+	cfg, err := newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -103,25 +103,27 @@ func newUIServerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
 // - the certificate of this client (should be signed by the CA),
 // - the private key of this client.
 // - the certificate of the cluster CA (use system cert pool if nil)
-func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
-	return newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM)
+func newClientTLSConfig(settings TLSSettings, certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+	return newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, caPEM)
 }
 
 // newUIClientTLSConfig creates a client TLSConfig to talk to the Admin UI.
 // It does not include client certificates and takes an optional CA certificate.
-func newUIClientTLSConfig(caPEM []byte) (*tls.Config, error) {
-	return newBaseTLSConfig(caPEM)
+func newUIClientTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
+	return newBaseTLSConfig(settings, caPEM)
 }
 
 // newBaseTLSConfigWithCertificate returns a tls.Config initialized with the
 // passed-in certificate and optional CA certificate.
-func newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+func newBaseTLSConfigWithCertificate(
+	settings TLSSettings, certPEM, keyPEM, caPEM []byte,
+) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := newBaseTLSConfig(caPEM)
+	cfg, err := newBaseTLSConfig(settings, caPEM)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +133,7 @@ func newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM []byte) (*tls.Config
 }
 
 // newBaseTLSConfig returns a tls.Config. If caPEM != nil, it is set in RootCAs.
-func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
+func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caPEM != nil {
 		certPool = x509.NewCertPool()
@@ -143,6 +145,8 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 
 	return &tls.Config{
 		RootCAs: certPool,
+
+		VerifyPeerCertificate: makeOCSPVerifier(settings),
 
 		// This is Go's default list of cipher suites (as of go 1.8.3),
 		// with the following differences:

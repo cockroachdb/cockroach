@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geoproj",
+    srcs = [
+        "geoproj.go",
+        "proj.cc",
+        "proj.h",
+    ],
+    # Depend on libproj. All the necessary linker+include directive are
+    # automatically generated through usage of go_library, so we pin
+    # clinkopts/cppopts to not let gazelle look towards the cgo directives when
+    # autogenerating them.
+    #
+    # keep
+    cdeps = ["@cockroach//c-deps:libproj"],
+    cgo = True,
+    # keep
+    clinkopts = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-lrt -lm -lpthread",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-lrt -lm -lpthread",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "-lshlwapi -lrpcrt4",
+        ],
+        "//conditions:default": [],
+    }),
+    # keep
+    cppopts = [],
+    cxxopts = ["-std=c++14"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geoproj",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geoprojbase",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "geoproj_test",
+    size = "small",
+    srcs = ["geoproj_test.go"],
+    embed = [":geoproj"],
+    deps = [
+        "//pkg/geo/geoprojbase",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

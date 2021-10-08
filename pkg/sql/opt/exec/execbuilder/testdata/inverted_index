@@ -46,7 +46,7 @@ InitPut /Table/53/2/Arr/7/1/0 -> /BYTES/
 query T kvtrace
 DELETE FROM d WHERE a=1
 ----
-Scan /Table/53/1/1{-/#}
+Scan /Table/53/1/1/0
 Del /Table/53/2/Arr/0/1/0
 Del /Table/53/2/Arr/7/1/0
 Del /Table/53/1/1/0
@@ -77,7 +77,7 @@ CPut /Table/53/1/4/0 -> /TUPLE/
 query T kvtrace
 UPDATE d SET b='[1]' WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/
 InitPut /Table/53/2/Arr/1/4/0 -> /BYTES/
 
@@ -85,7 +85,7 @@ InitPut /Table/53/2/Arr/1/4/0 -> /BYTES/
 query T kvtrace
 UPDATE d SET b=NULL WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/
 Del /Table/53/2/Arr/1/4/0
 
@@ -93,27 +93,29 @@ Del /Table/53/2/Arr/1/4/0
 query T kvtrace
 DELETE FROM d WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Del /Table/53/1/4/0
 
 # Tests for array inverted indexes.
 
-# Make sure that duplicate entries do not get emitted more than once, and that
-# null keys don't get emitted.
+# Make sure that duplicate entries do not get emitted more than once.
+# Null keys should also get emitted once.
 query T kvtrace
 INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
 ----
 CPut /Table/54/1/0/0 -> /TUPLE/
+InitPut /Table/54/2/NULL/0/0 -> /BYTES/
 InitPut /Table/54/2/0/0/0 -> /BYTES/
 InitPut /Table/54/2/1/0/0 -> /BYTES/
 InitPut /Table/54/2/7/0/0 -> /BYTES/
 InitPut /Table/54/2/10/0/0 -> /BYTES/
 
-# Make sure that empty arrays do not emit any keys at all.
+# Make sure that empty arrays emit a key.
 query T kvtrace
 INSERT INTO e VALUES(1, ARRAY[])
 ----
 CPut /Table/54/1/1/0 -> /TUPLE/
+InitPut /Table/54/2/[]/1/0 -> /BYTES/
 
 # Make sure that NULL arrays do not emit any keys at all.
 query T kvtrace
@@ -121,11 +123,12 @@ INSERT INTO e VALUES(2, NULL)
 ----
 CPut /Table/54/1/2/0 -> /TUPLE/
 
-# Make sure that NULL entries within an array don't emit any keys.
+# Make sure that NULL entries within an array emit keys.
 query T kvtrace
 INSERT INTO e VALUES(3, ARRAY[NULL])
 ----
 CPut /Table/54/1/3/0 -> /TUPLE/
+InitPut /Table/54/2/NULL/3/0 -> /BYTES/
 
 # Test that array inverted indexes work okay with decimals (a type with
 # composite encoding). Also, make sure that the composite encoding is
@@ -144,6 +147,7 @@ query T kvtrace
 INSERT INTO f VALUES(1, ARRAY[])
 ----
 CPut /Table/55/1/1/0 -> /TUPLE/
+InitPut /Table/55/2/[]/1/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(2, NULL)
@@ -156,466 +160,1240 @@ CPut /Table/55/1/2/0 -> /TUPLE/
 query T kvtrace
 UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
-Scan /Table/55/1/0{-/#}
+Scan /Table/55/1/0/0
 Put /Table/55/1/0/0 -> /TUPLE/
 Del /Table/55/2/1/0/0
 InitPut /Table/55/2/15/0/0 -> /BYTES/
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
-·           distribution         local                        ·       ·
-·           vectorized           true                         ·       ·
-index join  ·                    ·                            (a, b)  ·
- │          estimated row count  111 (missing stats)          ·       ·
- │          table                d@primary                    ·       ·
- │          key columns          a                            ·       ·
- └── scan   ·                    ·                            (a)     ·
-·           estimated row count  110 (missing stats)          ·       ·
-·           table                d@foo_inv                    ·       ·
-·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ----
-·           distribution         local                                    ·       ·
-·           vectorized           true                                     ·       ·
-index join  ·                    ·                                        (a, b)  ·
- │          estimated row count  111 (missing stats)                      ·       ·
- │          table                d@primary                                ·       ·
- │          key columns          a                                        ·       ·
- └── scan   ·                    ·                                        (a)     ·
-·           estimated row count  110 (missing stats)                      ·       ·
-·           table                d@foo_inv                                ·       ·
-·           spans                /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ----
-·           distribution         local                                            ·       ·
-·           vectorized           true                                             ·       ·
-index join  ·                    ·                                                (a, b)  ·
- │          estimated row count  111 (missing stats)                              ·       ·
- │          table                d@primary                                        ·       ·
- │          key columns          a                                                ·       ·
- └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  110 (missing stats)                              ·       ·
-·           table                d@foo_inv                                        ·       ·
-·           spans                /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ----
-·           distribution         local                         ·       ·
-·           vectorized           true                          ·       ·
-index join  ·                    ·                             (a, b)  ·
- │          estimated row count  111 (missing stats)           ·       ·
- │          table                d@primary                     ·       ·
- │          key columns          a                             ·       ·
- └── scan   ·                    ·                             (a)     ·
-·           estimated row count  110 (missing stats)           ·       ·
-·           table                d@foo_inv                     ·       ·
-·           spans                /"a"/"b"/True-/"a"/"b"/False  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"/True-/"a"/"b"/False
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ----
-·           distribution         local                    ·       ·
-·           vectorized           true                     ·       ·
-index join  ·                    ·                        (a, b)  ·
- │          estimated row count  111 (missing stats)      ·       ·
- │          table                d@primary                ·       ·
- │          key columns          a                        ·       ·
- └── scan   ·                    ·                        (a)     ·
-·           estimated row count  110 (missing stats)      ·       ·
-·           table                d@foo_inv                ·       ·
-·           spans                /Arr/1-/Arr/1/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /Arr/1-/Arr/1/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ----
-·           distribution         local                                            ·       ·
-·           vectorized           true                                             ·       ·
-index join  ·                    ·                                                (a, b)  ·
- │          estimated row count  111 (missing stats)                              ·       ·
- │          table                d@primary                                        ·       ·
- │          key columns          a                                                ·       ·
- └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  110 (missing stats)                              ·       ·
-·           table                d@foo_inv                                        ·       ·
-·           spans                /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd
 
-query TTTTT
+# TODO(rytaft): Fix the stats so we don't choose an inverted index scan here
+# (see #56870).
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (a, b)  ·
- │         estimated row count  111 (missing stats)   ·       ·
- │         filter               b @> '[]'             ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                d@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /[]-/{} /???-/???
 
 
-query TTTTT
+# TODO(rytaft): Fix the stats so we don't choose an inverted index scan here
+# (see #56870).
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (a, b)  ·
- │         estimated row count  111 (missing stats)   ·       ·
- │         filter               b @> '{}'             ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                d@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /{}-/{}/PrefixEnd /???-/[]
 
-
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
-·           distribution         local                        ·       ·
-·           vectorized           true                         ·       ·
-index join  ·                    ·                            (a, b)  ·
- │          estimated row count  111 (missing stats)          ·       ·
- │          table                d@primary                    ·       ·
- │          key columns          a                            ·       ·
- └── scan   ·                    ·                            (a)     ·
-·           estimated row count  110 (missing stats)          ·       ·
-·           table                d@foo_inv                    ·       ·
-·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' = '"b"'
 ----
-·           distribution         local                                ·       ·
-·           vectorized           true                                 ·       ·
-index join  ·                    ·                                    (a, b)  ·
- │          estimated row count  111 (missing stats)                  ·       ·
- │          table                d@primary                            ·       ·
- │          key columns          a                                    ·       ·
- └── scan   ·                    ·                                    (a)     ·
-·           estimated row count  110 (missing stats)                  ·       ·
-·           table                d@foo_inv                            ·       ·
-·           spans                /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
 ----
-·       distribution  local  ·       ·
-·       vectorized    true   ·       ·
-norows  ·             ·      (a, b)  ·
+distribution: local
+vectorized: true
+·
+• norows
+  columns: (a, b)
 
-query TTTTT
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '"b"'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/"b"-/"a"/"b"/PrefixEnd /"a"/Arr/"b"-/"a"/Arr/"b"/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' @> '"b"'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd /"a"/"c"/Arr/"b"-/"a"/"c"/Arr/"b"/PrefixEnd
+
+# TODO(angelazxu): The {} span does not need to be scanned here, but is
+# included when finding spans contained by {"a": "b"} (see #63184).
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a' <@ '"b"'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: (b->'a') <@ '"b"'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' <@ '"b"'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: ((b->'a')->'c') <@ '"b"'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 3
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/{}-/"a"/{}/PrefixEnd /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '[1, 2]'
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: (b->'a') @> '[1, 2]'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '[1, 2]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: (b->'a') <@ '[1, 2]'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 6
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/1-/"a"/1/PrefixEnd /"a"/2-/"a"/2/PrefixEnd /"a"/[]-/"a"/{} /"a"/Arr/1-/"a"/Arr/1/PrefixEnd /"a"/Arr/2-/"a"/Arr/2/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '{"d": 2}'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"d"/2-/"a"/"d"/2/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '{"d": 2}'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: (b->'a') <@ '{"d": 2}'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 3
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/{}-/"a"/{}/PrefixEnd /"a"/"d"/2-/"a"/"d"/2/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where '"b"' <@ b->'a'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '"b"' <@ (b->'a')
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: d@primary
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where '[1, 2]' @> b->'a'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '[1, 2]' @> (b->'a')
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 6
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/1-/"a"/1/PrefixEnd /"a"/2-/"a"/2/PrefixEnd /"a"/[]-/"a"/{} /"a"/Arr/1-/"a"/Arr/1/PrefixEnd /"a"/Arr/2-/"a"/Arr/2/PrefixEnd
+
+query T
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
-·           distribution         local                        ·       ·
-·           vectorized           true                         ·       ·
-index join  ·                    ·                            (a, b)  ·
- │          estimated row count  111 (missing stats)          ·       ·
- │          table                d@primary                    ·       ·
- │          key columns          a                            ·       ·
- └── scan   ·                    ·                            (a)     ·
-·           estimated row count  110 (missing stats)          ·       ·
-·           table                d@foo_inv                    ·       ·
-·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: d@foo_inv
+      spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
 # Make sure that querying for NULL equality doesn't use the inverted index.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (a, b)  ·
- │         estimated row count  10 (missing stats)    ·       ·
- │         filter               b IS NULL             ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                d@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 10 (missing stats)
+│ filter: b IS NULL
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: d@primary
+      spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         b @> '{"a": []}'
- └── scan  ·              ·
-·          missing stats  ·
-·          table          d@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• index join
+│ table: d@primary
+│
+└── • sort
+    │ order: +a
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: d@foo_inv
+              spans: 2 spans
 
-query TTT
+query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         b @> '{"a": {}}'
- └── scan  ·              ·
-·          missing stats  ·
-·          table          d@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• index join
+│ table: d@primary
+│
+└── • sort
+    │ order: +a
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: d@foo_inv
+              spans: 2 spans
 
 # Multi-path contains queries. Should create zigzag joins.
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                    distribution           local                               ·       ·
-·                    vectorized             true                                ·       ·
-lookup join (inner)  ·                      ·                                   (a, b)  ·
- │                   estimated row count    12 (missing stats)                  ·       ·
- │                   table                  d@primary                           ·       ·
- │                   equality               (a) = (a)                           ·       ·
- │                   equality cols are key  ·                                   ·       ·
- │                   pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag join     ·                      ·                                   (a)     ·
-·                    estimated row count    12 (missing stats)                  ·       ·
-·                    left table             d@foo_inv                           ·       ·
-·                    left columns           (a)                                 ·       ·
-·                    left fixed values      1 column                            ·       ·
-·                    right table            d@foo_inv                           ·       ·
-·                    right columns          ()                                  ·       ·
-·                    right fixed values     1 column                            ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                    distribution           local                                         ·       ·
-·                    vectorized             true                                          ·       ·
-lookup join (inner)  ·                      ·                                             (a, b)  ·
- │                   estimated row count    1 (missing stats)                             ·       ·
- │                   table                  d@primary                                     ·       ·
- │                   equality               (a) = (a)                                     ·       ·
- │                   equality cols are key  ·                                             ·       ·
- │                   pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag join     ·                      ·                                             (a)     ·
-·                    estimated row count    12 (missing stats)                            ·       ·
-·                    left table             d@foo_inv                                     ·       ·
-·                    left columns           (a)                                           ·       ·
-·                    left fixed values      1 column                                      ·       ·
-·                    right table            d@foo_inv                                     ·       ·
-·                    right columns          ()                                            ·       ·
-·                    right fixed values     1 column                                      ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                    distribution           local                              ·       ·
-·                    vectorized             true                               ·       ·
-lookup join (inner)  ·                      ·                                  (a, b)  ·
- │                   estimated row count    12 (missing stats)                 ·       ·
- │                   table                  d@primary                          ·       ·
- │                   equality               (a) = (a)                          ·       ·
- │                   equality cols are key  ·                                  ·       ·
- │                   pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag join     ·                      ·                                  (a)     ·
-·                    estimated row count    12 (missing stats)                 ·       ·
-·                    left table             d@foo_inv                          ·       ·
-·                    left columns           (a)                                ·       ·
-·                    left fixed values      1 column                           ·       ·
-·                    right table            d@foo_inv                          ·       ·
-·                    right columns          ()                                 ·       ·
-·                    right fixed values     1 column                           ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
 statement ok
 SET enable_zigzag_join = true
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                    distribution           local                               ·       ·
-·                    vectorized             true                                ·       ·
-lookup join (inner)  ·                      ·                                   (a, b)  ·
- │                   estimated row count    12 (missing stats)                  ·       ·
- │                   table                  d@primary                           ·       ·
- │                   equality               (a) = (a)                           ·       ·
- │                   equality cols are key  ·                                   ·       ·
- │                   pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag join     ·                      ·                                   (a)     ·
-·                    estimated row count    12 (missing stats)                  ·       ·
-·                    left table             d@foo_inv                           ·       ·
-·                    left columns           (a)                                 ·       ·
-·                    left fixed values      1 column                            ·       ·
-·                    right table            d@foo_inv                           ·       ·
-·                    right columns          ()                                  ·       ·
-·                    right fixed values     1 column                            ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                    distribution           local                                         ·       ·
-·                    vectorized             true                                          ·       ·
-lookup join (inner)  ·                      ·                                             (a, b)  ·
- │                   estimated row count    1 (missing stats)                             ·       ·
- │                   table                  d@primary                                     ·       ·
- │                   equality               (a) = (a)                                     ·       ·
- │                   equality cols are key  ·                                             ·       ·
- │                   pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag join     ·                      ·                                             (a)     ·
-·                    estimated row count    12 (missing stats)                            ·       ·
-·                    left table             d@foo_inv                                     ·       ·
-·                    left columns           (a)                                           ·       ·
-·                    left fixed values      1 column                                      ·       ·
-·                    right table            d@foo_inv                                     ·       ·
-·                    right columns          ()                                            ·       ·
-·                    right fixed values     1 column                                      ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                    distribution           local                              ·       ·
-·                    vectorized             true                               ·       ·
-lookup join (inner)  ·                      ·                                  (a, b)  ·
- │                   estimated row count    12 (missing stats)                 ·       ·
- │                   table                  d@primary                          ·       ·
- │                   equality               (a) = (a)                          ·       ·
- │                   equality cols are key  ·                                  ·       ·
- │                   pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag join     ·                      ·                                  (a)     ·
-·                    estimated row count    12 (missing stats)                 ·       ·
-·                    left table             d@foo_inv                          ·       ·
-·                    left columns           (a)                                ·       ·
-·                    left fixed values      1 column                           ·       ·
-·                    right table            d@foo_inv                          ·       ·
-·                    right columns          ()                                 ·       ·
-·                    right fixed values     1 column                           ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: d@foo_inv
+      left columns: (a)
+      left fixed values: 1 column
+      right table: d@foo_inv
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+# TODO(rytaft): A better plan is probably to just scan the index with the span
+# from `b @> '{"b": 2}'` and apply `b @> '{"a": {}}'` as a remaining filter
+# (see #56868).
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
-·                distribution         local                     ·       ·
-·                vectorized           true                      ·       ·
-filter           ·                    ·                         (a, b)  ·
- │               estimated row count  12 (missing stats)        ·       ·
- │               filter               b @> '{"a": {}, "b": 2}'  ·       ·
- └── index join  ·                    ·                         (a, b)  ·
-      │          estimated row count  110 (missing stats)       ·       ·
-      │          table                d@primary                 ·       ·
-      │          key columns          a                         ·       ·
-      └── scan   ·                    ·                         (a)     ·
-·                estimated row count  110 (missing stats)       ·       ·
-·                table                d@foo_inv                 ·       ·
-·                spans                /"b"/2-/"b"/2/PrefixEnd   ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 3
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/2-/"b"/2/PrefixEnd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
-·          distribution         local                      ·       ·
-·          vectorized           true                       ·       ·
-filter     ·                    ·                          (a, b)  ·
- │         estimated row count  12 (missing stats)         ·       ·
- │         filter               b @> '{"a": {}, "b": {}}'  ·       ·
- └── scan  ·                    ·                          (a, b)  ·
-·          estimated row count  1000 (missing stats)       ·       ·
-·          table                d@primary                  ·       ·
-·          spans                FULL SCAN                  ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@primary
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/{}-/"b"/{}/PrefixEnd /???-/???
+
+# Filter with a fully-specified array. This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[1, 2]'
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+
+# Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
+# This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> '[1]') AND (b @> '[2]')
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+
+# Filter with a nested array. This index expression is not tight.
+# This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[[1, 2]]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[[1, 2]]'
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
 
 subtest array
 
 # Tests for array inverted indexes.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ----
-·           distribution         local                ·       ·
-·           vectorized           true                 ·       ·
-index join  ·                    ·                    (a, b)  ·
- │          estimated row count  333 (missing stats)  ·       ·
- │          table                e@primary            ·       ·
- │          key columns          a                    ·       ·
- └── scan   ·                    ·                    (a)     ·
-·           estimated row count  110 (missing stats)  ·       ·
-·           table                e@e_b_idx            ·       ·
-·           spans                /1-/2                ·       ·
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 110 (missing stats)
+│ table: e@primary
+│ key columns: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 111 (missing stats)
+      table: e@e_b_idx
+      spans: /1-/2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (a, b)  ·
- │         estimated row count  333 (missing stats)   ·       ·
- │         filter               b @> ARRAY[]          ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                e@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 330 (missing stats)
+│ filter: b @> ARRAY[]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@primary
+      spans: FULL SCAN
 
 # Test that searching for a NULL element using the inverted index.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
-·            distribution         local                ·       ·
-·            vectorized           true                 ·       ·
-index join   ·                    ·                    (a, b)  ·
- │           estimated row count  333 (missing stats)  ·       ·
- │           table                e@primary            ·       ·
- │           key columns          a                    ·       ·
- └── norows  ·                    ·                    (a)     ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 0
+│ filter: b @> ARRAY[NULL]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
 ----
-·       distribution  local  ·       ·
-·       vectorized    true   ·       ·
-norows  ·             ·      (a, b)  ·
+distribution: local
+vectorized: true
+·
+• norows
+  columns: (a, b)
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (a, b)  ·
- │         estimated row count  10 (missing stats)    ·       ·
- │         filter               b IS NULL             ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                e@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 10 (missing stats)
+│ filter: b IS NULL
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@primary
+      spans: FULL SCAN
 
-query TTTTT
+# This should use a zigzag join.
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                    distribution           local                ·       ·
-·                    vectorized             true                 ·       ·
-lookup join (inner)  ·                      ·                    (a, b)  ·
- │                   estimated row count    333 (missing stats)  ·       ·
- │                   table                  e@primary            ·       ·
- │                   equality               (a) = (a)            ·       ·
- │                   equality cols are key  ·                    ·       ·
- │                   pred                   b @> ARRAY[1,2]      ·       ·
- └── zigzag join     ·                      ·                    (a)     ·
-·                    estimated row count    12 (missing stats)   ·       ·
-·                    left table             e@e_b_idx            ·       ·
-·                    left columns           (a)                  ·       ·
-·                    left fixed values      1 column             ·       ·
-·                    right table            e@e_b_idx            ·       ·
-·                    right columns          ()                   ·       ·
-·                    right fixed values     1 column             ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: e@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> ARRAY[1,2]
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: e@e_b_idx
+      left columns: (a)
+      left fixed values: 1 column
+      right table: e@e_b_idx
+      right columns: ()
+      right fixed values: 1 column
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
-·                    distribution           local                                ·       ·
-·                    vectorized             true                                 ·       ·
-lookup join (inner)  ·                      ·                                    (a, b)  ·
- │                   estimated row count    111 (missing stats)                  ·       ·
- │                   table                  e@primary                            ·       ·
- │                   equality               (a) = (a)                            ·       ·
- │                   equality cols are key  ·                                    ·       ·
- │                   pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
- └── zigzag join     ·                      ·                                    (a)     ·
-·                    estimated row count    12 (missing stats)                   ·       ·
-·                    left table             e@e_b_idx                            ·       ·
-·                    left columns           (a)                                  ·       ·
-·                    left fixed values      1 column                             ·       ·
-·                    right table            e@e_b_idx                            ·       ·
-·                    right columns          ()                                   ·       ·
-·                    right fixed values     1 column                             ·       ·
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: e@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: (b @> ARRAY[1]) AND (b @> ARRAY[2])
+│
+└── • zigzag join
+      columns: (a)
+      estimated row count: 12 (missing stats)
+      left table: e@e_b_idx
+      left columns: (a)
+      left fixed values: 1 column
+      right table: e@e_b_idx
+      right columns: ()
+      right fixed values: 1 column
+
+# Test that queries with the contained by <@ operator use the inverted index.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[]
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: e@e_b_idx
+          spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,2]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[0,1,2]
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[NULL]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[NULL]
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: e@e_b_idx
+          spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,NULL]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[0,1,NULL]
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/2
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ '[]'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: d@foo_inv
+          spans: /[]-/{}
+
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[1, 2]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ '[1, 2]'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 5
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /1-/1/PrefixEnd /2-/2/PrefixEnd /[]-/{} /Arr/1-/Arr/1/PrefixEnd /Arr/2-/Arr/2/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{}'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ '{}'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: d@foo_inv
+          spans: /{}-/{}/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ '{"a": "b"}'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]'
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 8
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
@@ -638,29 +1416,41 @@ CREATE TABLE geo_table(
   INVERTED INDEX geom_index(geom)
 )
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-·                                    distribution         local                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ·                       ·
-·                                    vectorized           false                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ·                       ·
-project                              ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k)                     ·
- │                                   estimated row count  333 (missing stats)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ·                       ·
- └── filter                          ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)               ·
-      │                              estimated row count  333 (missing stats)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ·                       ·
-      │                              filter               st_intersects('010100000000000000000008400000000000000840', geom)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·                       ·
-      └── index join                 ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)               ·
-           │                         estimated row count  111 (missing stats)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ·                       ·
-           │                         table                geo_table@primary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·                       ·
-           │                         key columns          k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·                       ·
-           └── project               ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k)                     ·
-                │                    estimated row count  111 (missing stats)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ·                       ·
-                └── inverted filter  ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom_inverted_key)  ·
-                     │               inverted column      geom_inverted_key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·                       ·
-                     │               num spans            31                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     ·                       ·
-                     └── scan        ·                    ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom_inverted_key)  ·
-·                                    estimated row count  111 (missing stats)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ·                       ·
-·                                    table                geo_table@geom_index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ·                       ·
-·                                    spans                /1152921504606846976-/1152921504606846977 /1152921573326323712-/1152921573326323713 /1152921574400065536-/1152921574400065537 /1152921574668500992-/1152921574668500993 /1152921574735609856-/1152921574735609857 /1152921574739804160-/1152921574739804161 /1152921574740066304-/1152921574740066305 /1152921574740070400-/1152921574740070401 /1152921574740070464-/1152921574740070465 /1152921574740070468-/1152921574740070469 /1152921574740070469-/1152921574740070470 /1152921574740070480-/1152921574740070481 /1152921574740070656-/1152921574740070657 /1152921574740071424-/1152921574740071425 /1152921574740082688-/1152921574740082689 /1152921574740131840-/1152921574740131841 /1152921574740852736-/1152921574740852737 /1152921574752387072-/1152921574752387073 /1152921577621291008-/1152921577621291009 /1152921590506192896-/1152921590506192897 /1152921779484753920-/1152921779484753921 /1152922604118474752-/1152922604118474753 /1152925902653358080-/1152925902653358081 /1152939096792891392-/1152939096792891393 /1152991873351024640-/1152991873351024641 /1153202979583557632-/1153202979583557633 /1154047404513689600-/1154047404513689601 /1157425104234217472-/1157425104234217473 /1170935903116328960-/1170935903116328961 /1224979098644774912-/1224979098644774913 /1441151880758558720-/1441151880758558721  ·                       ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k)
+│ estimated row count: 110 (missing stats)
+│
+└── • filter
+    │ columns: (k, geom)
+    │ estimated row count: 110 (missing stats)
+    │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+    │
+    └── • index join
+        │ columns: (k, geom)
+        │ estimated row count: 111 (missing stats)
+        │ table: geo_table@primary
+        │ key columns: k
+        │
+        └── • project
+            │ columns: (k)
+            │ estimated row count: 111 (missing stats)
+            │
+            └── • inverted filter
+                │ columns: (k, geom_inverted_key)
+                │ inverted column: geom_inverted_key
+                │ num spans: 31
+                │
+                └── • scan
+                      columns: (k, geom_inverted_key)
+                      estimated row count: 111 (missing stats)
+                      table: geo_table@geom_index
+                      spans: /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x02" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x04"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x05" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x10"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x11" /"B\xfd\x10\x00\x00\x00\x00\x00\x00@"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00A" /"B\xfd\x10\x00\x00\x00\x00\x00\x01\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x01\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x04\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x04\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x10\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x10\x01" /"B\xfd\x10\x00\x00\x00\x00\x00@\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00@\x01" /"B\xfd\x10\x00\x00\x00\x00\x01\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x01\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x04\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x04\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x10\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x10\x00\x01" /"B\xfd\x10\x00\x00\x00\x00@\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00@\x00\x01" /"B\xfd\x10\x00\x00\x00\x01\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x01\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x04\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x04\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x10\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x10\x00\x00\x01" /"B\xfd\x10\x00\x00\x00@\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00@\x00\x00\x01" /"B\xfd\x10\x00\x00\x01\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x01\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x04\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x04\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x10\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x10\x00\x00\x00\x01" /"B\xfd\x10\x00\x00@\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00@\x00\x00\x00\x01" /"B\xfd\x10\x00\x01\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x01\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x04\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x04\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x10\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x10\x00\x00\x00\x00\x01" /"B\xfd\x10\x00@\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00@\x00\x00\x00\x00\x01" /"B\xfd\x10\x01\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x01\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x04\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x04\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x10\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x10\x00\x00\x00\x00\x00\x01" /"B\xfd\x10@\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10@\x00\x00\x00\x00\x00\x01" /"B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x11\x00\x00\x00\x00\x00\x00\x01" /"B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x14\x00\x00\x00\x00\x00\x00\x01"
 
 statement ok
 CREATE TABLE geo_table2(
@@ -673,69 +1463,234 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
 ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 inner-join (lookup geo_table)
- ├── columns: k:1 geom:2 k:4 geom:5
- ├── key columns: [4] = [4]
+ ├── columns: k:1 geom:2 k:5 geom:6
+ ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=10000]
- ├── cost: 112480.05
- ├── key: (1,4)
- ├── fd: (1)-->(2), (4)-->(5)
- ├── prune: (1,4)
- ├── inner-join (inverted-lookup geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:4
+ ├── stats: [rows=9801]
+ ├── cost: 112704.87
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── prune: (1,5)
+ ├── inner-join (inverted geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:5)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(4)=999.956829, null(4)=0]
- │    ├── cost: 41780.03
- │    ├── key: (1,4)
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
+ │    ├── cost: 41804.84
+ │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
- │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    │    ├── cost: 1080.02
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+ │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1-3)
+ │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
  └── filters
-      └── st_intersects(geo_table2.geom:2, geo_table.geom:5) [outer=(2,5), immutable]
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
 ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
-·                        distribution           local                                   ·                                ·
-·                        vectorized             true                                    ·                                ·
-lookup join (inner)      ·                      ·                                       (k, geom, k, geom)               ·
- │                       estimated row count    10000 (missing stats)                   ·                                ·
- │                       table                  geo_table@primary                       ·                                ·
- │                       equality               (k) = (k)                               ·                                ·
- │                       equality cols are key  ·                                       ·                                ·
- │                       pred                   st_intersects(geom, geom)               ·                                ·
- └── project             ·                      ·                                       (k, geom, k)                     ·
-      │                  estimated row count    10000 (missing stats)                   ·                                ·
-      └── inverted join  ·                      ·                                       (k, geom, k, geom_inverted_key)  ·
-           │             table                  geo_table@geom_index                    ·                                ·
-           │             inverted expr          st_intersects(geom, geom_inverted_key)  ·                                ·
-           └── scan      ·                      ·                                       (k, geom)                        ·
-·                        estimated row count    1000 (missing stats)                    ·                                ·
-·                        table                  geo_table2@primary                      ·                                ·
-·                        spans                  FULL SCAN                               ·                                ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k, geom, k, geom)
+│ estimated row count: 9,801 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (k, geom, k, k, geom)
+    │ table: geo_table@primary
+    │ equality: (k) = (k)
+    │ equality cols are key
+    │ pred: st_intersects(geom, geom)
+    │
+    └── • project
+        │ columns: (k, geom, k)
+        │ estimated row count: 10,000 (missing stats)
+        │
+        └── • inverted join (inner)
+            │ columns: (k, geom, k, geom_inverted_key)
+            │ table: geo_table@geom_index
+            │ inverted expr: st_intersects(geom, geom_inverted_key)
+            │
+            └── • scan
+                  columns: (k, geom)
+                  estimated row count: 1,000 (missing stats)
+                  table: geo_table2@primary
+                  spans: FULL SCAN
 
 # Do not use the index when using a _ prefixed builtin.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE _ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-·               distribution         local                                                               ·          ·
-·               vectorized           true                                                                ·          ·
-project         ·                    ·                                                                   (k)        ·
- │              estimated row count  333 (missing stats)                                                 ·          ·
- └── filter     ·                    ·                                                                   (k, geom)  ·
-      │         estimated row count  333 (missing stats)                                                 ·          ·
-      │         filter               _st_intersects('010100000000000000000008400000000000000840', geom)  ·          ·
-      └── scan  ·                    ·                                                                   (k, geom)  ·
-·               estimated row count  1000 (missing stats)                                                ·          ·
-·               table                geo_table@primary                                                   ·          ·
-·               spans                FULL SCAN                                                           ·          ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k)
+│ estimated row count: 330 (missing stats)
+│
+└── • filter
+    │ columns: (k, geom)
+    │ estimated row count: 330 (missing stats)
+    │ filter: _st_intersects('010100000000000000000008400000000000000840', geom)
+    │
+    └── • scan
+          columns: (k, geom)
+          estimated row count: 1,000 (missing stats)
+          table: geo_table@primary
+          spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 LEFT JOIN geo_table@geom_index
+ON ST_Intersects(geo_table2.geom, geo_table.geom)
+----
+left-join (lookup geo_table)
+ ├── columns: k:1 geom:2 k:5 geom:6
+ ├── key columns: [11] = [5]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── stats: [rows=10000]
+ ├── cost: 112904.87
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── prune: (1,5)
+ ├── left-join (inverted geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── inverted-expr
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
+ │    ├── cost: 42004.84
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── scan geo_table2
+ │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    │    ├── cost: 1104.82
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── unfiltered-cols: (1-4)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE EXISTS (SELECT * FROM geo_table@geom_index
+WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
+----
+semi-join (lookup geo_table)
+ ├── columns: k:1 geom:2
+ ├── key columns: [11] = [5]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── stats: [rows=10]
+ ├── cost: 112704.87
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1)
+ ├── inner-join (inverted geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── inverted-expr
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
+ │    ├── cost: 42004.84
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── scan geo_table2
+ │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+ │    │    ├── cost: 1104.82
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-4)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE NOT EXISTS (SELECT * FROM geo_table@geom_index
+WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
+----
+anti-join (lookup geo_table)
+ ├── columns: k:1 geom:2
+ ├── key columns: [11] = [5]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── stats: [rows=990]
+ ├── cost: 112704.87
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1)
+ ├── left-join (inverted geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
+ │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── inverted-expr
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
+ │    ├── cost: 42004.84
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── scan geo_table2
+ │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    │    ├── cost: 1104.82
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── unfiltered-cols: (1-4)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Tests for multi-column inverted indexes.
+subtest multi_column
+
+statement ok
+CREATE TABLE m (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    j JSON,
+    INVERTED INDEX i1 (a, j),
+    INVERTED INDEX i2 (a, b, j)
+)
+
+# Combine a single constraint span with the inverted constraint.
+query T kvtrace
+SELECT k FROM m@i1 WHERE a = 10 AND j @> '{"a": "b"}'
+----
+Scan /Table/59/2/10/"a"/"b"{-/PrefixEnd}
+
+# Combine multiple constraint spans with the inverted constraint.
+query T kvtrace
+SELECT k FROM m@i1 WHERE a IN (10, 20) AND j @> '{"a": "b"}'
+----
+Scan /Table/59/2/10/"a"/"b"{-/PrefixEnd}, /Table/59/2/20/"a"/"b"{-/PrefixEnd}
+
+# Combine multiple constraint spans with multiple columns with the inverted
+# constraint.
+query T kvtrace
+SELECT k FROM m@i2 WHERE a = 10 AND b IN (15, 25) AND j @> '{"a": "b"}'
+----
+Scan /Table/59/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/59/3/10/25/"a"/"b"{-/PrefixEnd}
+
+# Combine multiple constraint spans with multiple columns with the inverted
+# constraint.
+query T kvtrace
+SELECT k FROM m@i2 WHERE a IN (10, 20) AND b IN (15, 25) AND j @> '{"a": "b"}'
+----
+Scan /Table/59/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/59/3/10/25/"a"/"b"{-/PrefixEnd}, /Table/59/3/20/15/"a"/"b"{-/PrefixEnd}, /Table/59/3/20/25/"a"/"b"{-/PrefixEnd}

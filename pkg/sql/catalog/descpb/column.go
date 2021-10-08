@@ -12,6 +12,8 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -35,6 +37,11 @@ func (desc *ColumnDescriptor) HasDefault() bool {
 	return desc.DefaultExpr != nil
 }
 
+// HasOnUpdate returns true if the column has an on update expression.
+func (desc *ColumnDescriptor) HasOnUpdate() bool {
+	return desc.OnUpdateExpr != nil
+}
+
 // IsComputed returns true if this is a computed column.
 func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil
@@ -45,11 +52,44 @@ func (desc *ColumnDescriptor) ColName() tree.Name {
 	return tree.Name(desc.Name)
 }
 
-// CheckCanBeFKRef returns whether the given column is computed.
-func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
+// CheckCanBeOutboundFKRef returns whether the given column can be on the
+// referencing (origin) side of a foreign key relation.
+func (desc *ColumnDescriptor) CheckCanBeOutboundFKRef() error {
+	if desc.Inaccessible {
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot reference a foreign key",
+			desc.Name,
+		)
+	}
+	if desc.Virtual {
+		return unimplemented.NewWithIssuef(
+			59671, "virtual column %q cannot reference a foreign key",
+			desc.Name,
+		)
+	}
 	if desc.IsComputed() {
 		return unimplemented.NewWithIssuef(
-			46672, "computed column %q cannot be a foreign key reference",
+			46672, "computed column %q cannot reference a foreign key",
+			desc.Name,
+		)
+	}
+	return nil
+}
+
+// CheckCanBeInboundFKRef returns whether the given column can be on the
+// referenced (target) side of a foreign key relation.
+func (desc *ColumnDescriptor) CheckCanBeInboundFKRef() error {
+	if desc.Inaccessible {
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot be referenced by a foreign key",
+			desc.Name,
+		)
+	}
+	if desc.Virtual {
+		return unimplemented.NewWithIssuef(
+			59671, "virtual column %q cannot be referenced by a foreign key",
 			desc.Name,
 		)
 	}

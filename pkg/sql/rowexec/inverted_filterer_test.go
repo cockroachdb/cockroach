@@ -18,25 +18,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func intToEncodedInvertedVal(v int64) []byte {
-	dint := tree.DInt(v)
-	encoded, err := sqlbase.EncodeTableKey(nil, &dint, encoding.Ascending)
-	if err != nil {
-		panic("unable to encode int")
-	}
-	return encoded
+	return encoding.EncodeVarintAscending(nil, v)
 }
 
-func intSpanToEncodedSpan(start, end int64) invertedexpr.SpanExpressionProto_Span {
-	return invertedexpr.SpanExpressionProto_Span{
+func intSpanToEncodedSpan(start, end int64) inverted.SpanExpressionProto_Span {
+	return inverted.SpanExpressionProto_Span{
 		Start: intToEncodedInvertedVal(start),
 		End:   intToEncodedInvertedVal(end),
 	}
@@ -50,6 +44,7 @@ func TestInvertedFilterer(t *testing.T) {
 	// done in helpers called by invertedFilterer that have their own
 	// comprehensive tests. The intersection intersects the spans for the
 	// inverted column values 1 and 3.
+	// TODO(yuzefovich): add some unit tests that prefiltering works.
 	testCases := []ProcessorTestCase{
 		{
 			Name: "simple-intersection-and-onexpr",
@@ -67,7 +62,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{3, 50},
 					{3, 51},
 				},
-				Types: sqlbase.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -75,7 +70,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{nil, 41},
 					{nil, 50},
 				},
-				Types: sqlbase.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{},
@@ -92,14 +87,14 @@ func TestInvertedFilterer(t *testing.T) {
 					{12, 3, 41},
 					{14, 3, 43},
 				},
-				Types: sqlbase.MakeIntCols(3),
+				Types: types.MakeIntCols(3),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{12, nil, 41},
 					{14, nil, 43},
 				},
-				Types: sqlbase.MakeIntCols(3),
+				Types: types.MakeIntCols(3),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{
@@ -110,16 +105,16 @@ func TestInvertedFilterer(t *testing.T) {
 	}
 	for i := range testCases {
 		// Add the intersection InvertedExpr.
-		testCases[i].ProcessorCore.InvertedFilterer.InvertedExpr = invertedexpr.SpanExpressionProto{
-			Node: invertedexpr.SpanExpressionProto_Node{
-				Operator: invertedexpr.SetIntersection,
-				Left: &invertedexpr.SpanExpressionProto_Node{
-					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+		testCases[i].ProcessorCore.InvertedFilterer.InvertedExpr = inverted.SpanExpressionProto{
+			Node: inverted.SpanExpressionProto_Node{
+				Operator: inverted.SetIntersection,
+				Left: &inverted.SpanExpressionProto_Node{
+					FactoredUnionSpans: []inverted.SpanExpressionProto_Span{
 						intSpanToEncodedSpan(1, 2),
 					},
 				},
-				Right: &invertedexpr.SpanExpressionProto_Node{
-					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+				Right: &inverted.SpanExpressionProto_Node{
+					FactoredUnionSpans: []inverted.SpanExpressionProto_Span{
 						intSpanToEncodedSpan(3, 4),
 					},
 				},
@@ -133,7 +128,7 @@ func TestInvertedFilterer(t *testing.T) {
 	testConfig := DefaultProcessorTestConfig()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, testConfig.FlowCtx.Cfg.Settings)
 	defer diskMonitor.Stop(ctx)
-	testConfig.FlowCtx.Cfg.DiskMonitor = diskMonitor
+	testConfig.FlowCtx.DiskMonitor = diskMonitor
 	testConfig.FlowCtx.Txn = kv.NewTxn(ctx, server.DB(), server.NodeID())
 	test := MakeProcessorTest(testConfig)
 

@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "smithtest_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/smithtest",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/internal/sqlsmith",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_github//github",
+        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_lib_pq//:pq",
+        "@com_github_pkg_browser//:browser",
+    ],
+)
+
+go_binary(
+    name = "smithtest",
+    embed = [":smithtest_lib"],
+    visibility = ["//visibility:public"],
+)

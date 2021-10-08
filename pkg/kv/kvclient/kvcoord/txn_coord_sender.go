@@ -15,17 +15,14 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -122,6 +119,12 @@ type TxnCoordSender struct {
 		// userPriority is the txn's priority. Used when restarting the transaction.
 		// This field is only populated on rootTxns.
 		userPriority roachpb.UserPriority
+
+		// commitWaitDeferred is set to true when the transaction commit-wait
+		// state is deferred and should not be run automatically. Instead, the
+		// caller of DeferCommitWait has assumed responsibility for performing
+		// the commit-wait.
+		commitWaitDeferred bool
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -247,7 +250,7 @@ func newRootTxnCoordSender(
 		// Various interceptors below rely on sequence number allocation,
 		// so the sequence number allocator is near the top of the stack.
 		&tcs.interceptorAlloc.txnSeqNumAllocator,
-		// The pipelinger sits above the span refresher because it will
+		// The pipeliner sits above the span refresher because it will
 		// never generate transaction retry errors that could be avoided
 		// with a refresh.
 		&tcs.interceptorAlloc.txnPipeliner,
@@ -283,8 +286,10 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		riGen.ds = ds
 	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
-		st:    tcf.st,
-		riGen: riGen,
+		st:                     tcf.st,
+		riGen:                  riGen,
+		txnMetrics:             &tc.metrics,
+		condensedIntentsEveryN: &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
 	}
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
@@ -299,6 +304,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		refreshFail:                   tc.metrics.RefreshFail,
 		refreshFailWithCondensedSpans: tc.metrics.RefreshFailWithCondensedSpans,
 		refreshMemoryLimitExceeded:    tc.metrics.RefreshMemoryLimitExceeded,
+		refreshAutoRetries:            tc.metrics.RefreshAutoRetries,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,
@@ -412,32 +418,42 @@ func generateTxnDeadlineExceededErr(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
 
-// commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
-// cheaper than, sending an EndTxnRequest. A read-only txn doesn't have a
-// transaction record, so there's no need to send any request to the server. An
-// EndTxnRequest for a read-only txn is elided by the txnCommitter interceptor.
-// However, calling this and short-circuting even earlier is even more efficient
-// (and shows in benchmarks).
+// finalizeNonLockingTxnLocked finalizes a non-locking txn, either marking it as
+// committed or aborted. It is equivalent, but cheaper than, sending an
+// EndTxnRequest. A non-locking txn doesn't have a transaction record, so
+// there's no need to send any request to the server. An EndTxnRequest for a
+// non-locking txn is elided by the txnCommitter interceptor. However, calling
+// this and short-circuting even earlier is even more efficient (and shows in
+// benchmarks).
 // TODO(nvanbenschoten): we could have this call into txnCommitter's
 // sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
-func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
+func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
-	deadline := ba.Requests[0].GetEndTxn().Deadline
-	if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
-		txn := tc.mu.txn.Clone()
-		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
-		// We need to bump the epoch and transform this retriable error.
-		ba.Txn = txn
-		return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+	et := ba.Requests[0].GetEndTxn()
+	if et.Commit {
+		deadline := et.Deadline
+		if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
+			txn := tc.mu.txn.Clone()
+			pErr := generateTxnDeadlineExceededErr(txn, *deadline)
+			// We need to bump the epoch and transform this retriable error.
+			ba.Txn = txn
+			return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+		}
+		// Mark the transaction as committed so that, in case this commit is done by
+		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
+		// Also so that the correct metric gets incremented.
+		tc.mu.txn.Status = roachpb.COMMITTED
+	} else {
+		tc.mu.txn.Status = roachpb.ABORTED
 	}
-	tc.mu.txnState = txnFinalized
-	// Mark the transaction as committed so that, in case this commit is done by
-	// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
-	// Also so that the correct metric gets incremented.
-	tc.mu.txn.Status = roachpb.COMMITTED
-	tc.cleanupTxnLocked(ctx)
+	tc.finalizeAndCleanupTxnLocked(ctx)
+	if et.Commit {
+		if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
+			return roachpb.NewError(err)
+		}
+	}
 	return nil
 }
 
@@ -459,10 +475,8 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
-		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
+		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
-
-	startNs := tc.clock.PhysicalNow()
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
@@ -471,12 +485,12 @@ func (tc *TxnCoordSender) Send(
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	if !tracing.IsBlackHoleSpan(sp) {
+	if sp.IsVerbose() {
 		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
-	}
-	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
-	if log.V(2) {
-		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
+		ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
+		if log.V(2) {
+			ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
+		}
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
@@ -503,17 +517,14 @@ func (tc *TxnCoordSender) Send(
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
 	if req, ok := ba.GetArg(roachpb.EndTxn); ok {
-		etReq := req.(*roachpb.EndTxnRequest)
-		if etReq.Commit {
-			if pErr == nil {
-				tc.mu.txnState = txnFinalized
-				tc.cleanupTxnLocked(ctx)
-				tc.maybeSleepForLinearizable(ctx, br, startNs)
+		et := req.(*roachpb.EndTxnRequest)
+		if (et.Commit && pErr == nil) || !et.Commit {
+			tc.finalizeAndCleanupTxnLocked(ctx)
+			if et.Commit {
+				if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
+					return nil, roachpb.NewError(err)
+				}
 			}
-		} else {
-			// Rollbacks always move us to txnFinalized.
-			tc.mu.txnState = txnFinalized
-			tc.cleanupTxnLocked(ctx)
 		}
 	}
 
@@ -528,29 +539,101 @@ func (tc *TxnCoordSender) Send(
 	return br, nil
 }
 
-// maybeSleepForLinearizable sleeps if the linearizable flag is set. We want to
-// make sure that all the clocks in the system are past the commit timestamp of
-// the transaction. This is guaranteed if either:
-// - the commit timestamp is MaxOffset behind startNs
-// - MaxOffset ns were spent in this function when returning to the
-// client.
-// Below we choose the option that involves less waiting, which is likely the
-// first one unless a transaction commits with an odd timestamp.
-func (tc *TxnCoordSender) maybeSleepForLinearizable(
-	ctx context.Context, br *roachpb.BatchResponse, startNs int64,
-) {
-	if tsNS := br.Txn.WriteTimestamp.WallTime; startNs > tsNS {
-		startNs = tsNS
+// maybeCommitWait performs a "commit-wait" sleep, if doing so is deemed
+// necessary for consistency.
+//
+// By default, commit-wait is only necessary for transactions that commit
+// with a future-time timestamp that leads the local HLC clock. This is
+// because CockroachDB's consistency model depends on all transactions
+// waiting until their commit timestamp is below their gateway clock. In
+// doing so, transactions ensure that at the time that they complete, all
+// other clocks in the system (i.e. on all possible gateways) will be no
+// more than the max_offset below the transaction's commit timestamp. This
+// property ensures that all causally dependent transactions will have an
+// uncertainty interval (see GlobalUncertaintyLimit) that exceeds the
+// original transaction's commit timestamp, preventing stale reads. Without
+// the wait, it would be possible for a read-write transaction to write a
+// future-time value and then for a causally dependent transaction to read
+// below that future-time value, violating "read your writes".
+//
+// The property must also hold for read-only transactions, which may have a
+// commit timestamp in the future due to an uncertainty restart after
+// observing a future-time value in their uncertainty interval. In such
+// cases, the property that the transaction must wait for the local HLC
+// clock to exceed its commit timestamp is not necessary to prevent stale
+// reads, but it is necessary to ensure monotonic reads. Without the wait,
+// it would be possible for a read-only transaction coordinated on a gateway
+// with a fast clock to return a future-time value and then for a causally
+// dependent read-only transaction coordinated on a gateway with a slow
+// clock to read below that future-time value, violating "monotonic reads".
+//
+// In practice, most transactions do not need to wait at all, because their
+// commit timestamps were pulled from an HLC clock (i.e. are not synthetic)
+// and so they will be guaranteed to lead the local HLC's clock, assuming
+// proper HLC time propagation. Only transactions whose commit timestamps
+// were pushed into the future will need to wait, like those who wrote to a
+// global_read range and got bumped by the closed timestamp or those who
+// conflicted (write-read or write-write) with an existing future-time
+// value.
+//
+// However, CockroachDB also supports a stricter model of consistency
+// through its "linearizable" flag. When in linearizable mode (also known as
+// "strict serializable" mode), all writing transactions (but not read-only
+// transactions) must wait an additional max_offset after committing to
+// ensure that their commit timestamp is below the current HLC clock time of
+// any other node in the system. In doing so, all causally dependent
+// transactions are guaranteed to start with higher timestamps, regardless
+// of the gateway they use. This ensures that all causally dependent
+// transactions commit with higher timestamps, even if their read and writes
+// sets do not conflict with the original transaction's. This obviates the
+// need for uncertainty intervals and prevents the "causal reverse" anamoly
+// which can be observed by a third, concurrent transaction.
+//
+// For more, see https://www.cockroachlabs.com/blog/consistency-model/ and
+// docs/RFCS/20200811_non_blocking_txns.md.
+func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) error {
+	if tc.mu.txn.Status != roachpb.COMMITTED {
+		log.Fatalf(ctx, "maybeCommitWait called when not committed")
 	}
-	sleepNS := tc.clock.MaxOffset() -
-		time.Duration(tc.clock.PhysicalNow()-startNs)
+	if tc.mu.commitWaitDeferred && !deferred {
+		// If this is an automatic commit-wait call and the user of this
+		// transaction has opted to defer the commit-wait and handle it
+		// externally, there's nothing to do yet.
+		return nil
+	}
 
-	if tc.linearizable && sleepNS > 0 {
-		// TODO(andrei): perhaps we shouldn't sleep with the lock held.
-		log.VEventf(ctx, 2, "%v: waiting %s on EndTxn for linearizability",
-			br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
-		time.Sleep(sleepNS)
+	commitTS := tc.mu.txn.WriteTimestamp
+	readOnly := tc.mu.txn.Sequence == 0
+	linearizable := tc.linearizable
+	needWait := commitTS.Synthetic || (linearizable && !readOnly)
+	if !needWait {
+		// No need to wait. If !Synthetic then we know the commit timestamp
+		// leads the local HLC clock, and since that's all we'd need to wait
+		// for, we can short-circuit.
+		return nil
 	}
+
+	waitUntil := commitTS
+	if linearizable && !readOnly {
+		waitUntil = waitUntil.Add(tc.clock.MaxOffset().Nanoseconds(), 0)
+	}
+
+	before := tc.clock.PhysicalTime()
+	est := waitUntil.GoTime().Sub(before)
+	log.VEventf(ctx, 2, "performing commit-wait sleep for ~%s", est)
+
+	// NB: unlock while sleeping to avoid holding the lock for commit-wait.
+	tc.mu.Unlock()
+	err := tc.clock.SleepUntil(ctx, waitUntil)
+	tc.mu.Lock()
+	if err != nil {
+		return err
+	}
+
+	after := tc.clock.PhysicalTime()
+	log.VEventf(ctx, 2, "completed commit-wait sleep, took %s", after.Sub(before))
+	tc.metrics.CommitWaits.Inc(1)
+	return nil
 }
 
 // maybeRejectClientLocked checks whether the transaction is in a state that
@@ -562,11 +645,16 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if ba != nil && ba.IsSingleAbortTxnRequest() {
+	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
 		// example, when the context was canceled while txn.Rollback() was running).
+		//
+		// However, we reject this if we know that the transaction has been
+		// committed, to avoid sending the rollback concurrently with the
+		// txnCommitter asynchronously making the commit explicit. See:
+		// https://github.com/cockroachdb/cockroach/issues/68643
 		return nil
 	}
 
@@ -581,7 +669,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
+		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		if tc.mu.txn.Status == roachpb.COMMITTED {
+			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+		}
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
 	}
 
 	// Check the transaction proto state, along with any finalized transaction
@@ -608,7 +700,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
 		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.Message, tc.mu.txn.ID, newTxn))
+			abortedErr.String(), tc.mu.txn.ID, newTxn))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
@@ -617,6 +709,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// All good.
 	}
 	return nil
+}
+
+// finalizeAndCleanupTxnLocked marks the transaction state as finalized and
+// closes all interceptors.
+func (tc *TxnCoordSender) finalizeAndCleanupTxnLocked(ctx context.Context) {
+	tc.mu.txnState = txnFinalized
+	tc.cleanupTxnLocked(ctx)
 }
 
 // cleanupTxnLocked closes all the interceptors.
@@ -663,6 +762,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsSerializable.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
+		case roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED:
+			tc.metrics.RestartsCommitDeadlineExceeded.Inc()
 		default:
 			tc.metrics.RestartsUnknown.Inc()
 		}
@@ -687,7 +788,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
-		pErr.Message,
+		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
 
@@ -747,7 +848,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		return nil
 	}
 
-	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() != roachpb.TransactionRestart_NONE {
 		if tc.typ == kv.LeafTxn {
 			// Leaves handle retriable errors differently than roots. The leaf
 			// transaction is not supposed to be used any more after a retriable
@@ -782,7 +883,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// rollback), but some errors are safe to allow continuing (in particular
 	// ConditionFailedError). In particular, SQL can recover by rolling back to a
 	// savepoint.
-	if roachpb.ErrPriority(pErr.GetDetail()) != roachpb.ErrorScoreUnambiguousError {
+	if roachpb.ErrPriority(pErr.GoError()) != roachpb.ErrorScoreUnambiguousError {
 		tc.mu.txnState = txnError
 		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
 			PrevError: pErr.String(),
@@ -918,17 +1019,35 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 }
 
 // SetFixedTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	// The transaction must not have already been used in this epoch.
+	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"cannot set fixed timestamp, txn %s already performed reads", tc.mu.txn), ctx)
+	}
+	if tc.mu.txn.Sequence != 0 {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"cannot set fixed timestamp, txn %s already performed writes", tc.mu.txn), ctx)
+	}
+
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
-	tc.mu.txn.MaxTimestamp = ts
+	tc.mu.txn.GlobalUncertaintyLimit = ts
 	tc.mu.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
 	tc.mu.txn.MinTimestamp.Backward(ts)
+	return nil
+}
+
+// RequiredFrontier is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.RequiredFrontier()
 }
 
 // ManualRestart is part of the client.TxnSender interface.
@@ -971,7 +1090,16 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 
 // Epoch is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	return tc.mu.txn.Epoch
+}
+
+// IsLocking is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) IsLocking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.IsLocking()
 }
 
 // IsTracking returns true if the heartbeat loop is running.
@@ -1121,10 +1249,6 @@ func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string)
 
 // Step is part of the TxnSender interface.
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
-	if tc.typ != kv.RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("cannot call Step() in leaf txn"), ctx)
-	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
@@ -1134,10 +1258,6 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 func (tc *TxnCoordSender) ConfigureStepping(
 	ctx context.Context, mode kv.SteppingMode,
 ) (prevMode kv.SteppingMode) {
-	if tc.typ != kv.RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("cannot call ConfigureStepping() in leaf txn"), ctx))
-	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnSeqNumAllocator.configureSteppingLocked(mode)
@@ -1150,4 +1270,45 @@ func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.Stepp
 		curMode = kv.SteppingEnabled
 	}
 	return curMode
+}
+
+// ManualRefresh is part of the TxnSender interface.
+func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	// Hijack the pre-emptive refresh code path to perform the refresh but
+	// provide the force flag to ensure that the refresh occurs unconditionally.
+	// We provide an empty BatchRequest - maybeRefreshPreemptivelyLocked just
+	// needs the transaction proto. The function then returns a BatchRequest
+	// with the updated transaction proto. We use this updated proto to call
+	// into updateStateLocked directly.
+	var ba roachpb.BatchRequest
+	ba.Txn = tc.mu.txn.Clone()
+	const force = true
+	refreshedBa, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
+	if pErr != nil {
+		pErr = tc.updateStateLocked(ctx, ba, nil, pErr)
+	} else {
+		var br roachpb.BatchResponse
+		br.Txn = refreshedBa.Txn
+		pErr = tc.updateStateLocked(ctx, ba, &br, nil)
+	}
+	return pErr.GoError()
+}
+
+// DeferCommitWait is part of the TxnSender interface.
+func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.mu.commitWaitDeferred = true
+	return func(ctx context.Context) error {
+		tc.mu.Lock()
+		defer tc.mu.Unlock()
+		if tc.mu.txn.Status != roachpb.COMMITTED {
+			// If transaction has not committed, there's nothing to do.
+			return nil
+		}
+		return tc.maybeCommitWait(ctx, true /* deferred */)
+	}
 }

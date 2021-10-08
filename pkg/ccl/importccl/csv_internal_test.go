@@ -50,6 +50,14 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: `this IMPORT format does not support foreign keys`,
 		},
 		{
+			stmt:  "create table a (i int, j int as (i + 10) virtual)",
+			error: `to import into a table with virtual computed columns, use IMPORT INTO`,
+		},
+		{
+			stmt:  "create table a (i int, index ((i + 1)))",
+			error: `to import into a table with expression indexes, use IMPORT INTO`,
+		},
+		{
 			stmt: `create table a (
 				i int check (i > 0),
 				b int default 1,
@@ -75,7 +83,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, defaultCSVParentID, keys.PublicSchemaID, defaultCSVTableID, NoFKs, 0)
+			_, err = MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, defaultCSVParentID, keys.PublicSchemaID, defaultCSVTableID, NoFKs, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}

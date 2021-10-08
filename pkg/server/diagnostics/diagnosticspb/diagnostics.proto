@@ -1,0 +1,142 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.diagnostics.diagnosticspb;
+option go_package = "diagnosticspb";
+
+import "build/info.proto";
+import "config/zonepb/zone.proto";
+import "gogoproto/gogo.proto";
+import "roachpb/app_stats.proto";
+import "sql/catalog/descpb/structured.proto";
+import "roachpb/metadata.proto";
+
+message DiagnosticReport {
+  NodeInfo node = 1 [(gogoproto.nullable) = false];
+  repeated StoreInfo stores = 2  [(gogoproto.nullable) = false];
+  repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
+  repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
+  map<string, string> altered_settings = 6;
+  map<int64, config.zonepb.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
+  map<string, int32> feature_usage = 9 [(gogoproto.nullable) = false];
+  SQLInstanceInfo sql = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQL"];
+  Environment env = 11 [(gogoproto.nullable) = false];
+
+  // These fields are no longer used by CRDB, but are used by the Registration
+  // Service to parse reports from older versions of CRDB.
+  // These fields are now passed as part of the FeatureUsage field.
+
+  map<string, int64> legacy_unimplemented_errors = 5;
+  map<string, int64> legacy_error_counts = 7;
+}
+
+// NodeInfo describes the CRDB node which is reporting diagnostics. NodeInfo
+// will be set to its empty value (e.g. NodeID = 0) when the report is generated
+// by a SQL-only instance.
+message NodeInfo {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int64 bytes = 2;
+  int64 key_count = 3;
+  int64 range_count = 4;
+  // Uptime is the number of seconds since the CRDB node was started.
+  int64 uptime = 9;
+
+  // These fields are no longer used by CRDB, but are used by the Registration
+  // Service to parse reports from older versions of CRDB.
+  // The following fields are replaced by the DiagnosticsReport.Env field.
+
+  roachpb.Locality legacy_locality = 5 [(gogoproto.nullable) = false];
+  HardwareInfo legacy_hardware = 6 [(gogoproto.nullable) = false];
+  OSInfo legacy_os = 7 [(gogoproto.nullable) = false];
+  build.Info legacy_build = 8 [(gogoproto.nullable) = false];
+  string legacy_license_type = 10;
+  TopologyInfo legacy_topology = 11 [(gogoproto.nullable) = false];
+}
+
+message StoreInfo {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  int64 bytes = 3;
+  int64 key_count = 4;
+  int64 range_count = 5;
+
+  int64 capacity  = 6;
+  int64 available = 7;
+  int64 used = 8;
+
+  int64 encryption_algorithm = 9;
+
+  // Want: sync times, observed read/write speeds
+}
+
+// SQLInstanceInfo describes the SQL instance which is reporting diagnostics.
+// This is always set, even for full CRDB nodes running both KV and SQL.
+message SQLInstanceInfo {
+  // SQLInstanceID is the ephemeral identifier for the SQL instance which is
+  // reporting diagnostics. This is unique across all running SQL instances in
+  // the cluster (physical or tenant).
+  int32 sql_instance_id = 1 [(gogoproto.customname) = "SQLInstanceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+  // Uptime is the number of seconds since the SQL instance was started.
+  int64 uptime = 2;
+}
+
+// Environment describes the context in which the CRDB node or SQL instance is
+// running.
+message Environment {
+  // Locality is an ordered set of key/value tiers that describe the location of
+  // this CRDB node or SQL instance.
+  roachpb.Locality locality = 1 [(gogoproto.nullable) = false];
+  // Hardware describes the physical machine, virtual machine, or Linux
+  // container on which CRDB is running.
+  HardwareInfo hardware = 2 [(gogoproto.nullable) = false];
+  // OS describes the operating system software that hosts CRDB.
+  OSInfo os = 3 [(gogoproto.nullable) = false];
+  // Build describes the running CockroachDB binary.
+  build.Info build = 4 [(gogoproto.nullable) = false];
+  // LicenseType describes the license that is in effect (OSS, Enterprise, etc).
+  string license_type = 5;
+  // Topology provides the cloud provider and region name that is hosting CRDB.
+  TopologyInfo topology = 6 [(gogoproto.nullable) = false];
+}
+
+message CPUInfo {
+  int32 numcpu = 1; // go's reported runtime.NUMCPU()
+  int32 sockets = 2; // number of cpus reported
+  int32 cores = 3;  // gopsutil's reported cores for first cpu
+  string model = 4; // reported model name e.g. `Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz`
+  float mhz = 5;  // speed of first cpu e.g. 3100
+  repeated string features = 6; // cpu feature flags for first cpu
+}
+
+message HardwareInfo {
+  string virtualization = 1;
+  CPUInfo cpu = 2 [(gogoproto.nullable) = false];
+  MemInfo mem = 3 [(gogoproto.nullable) = false];
+  float loadavg15 = 4;
+  string provider = 5;
+  string instance_class = 6;
+}
+
+message OSInfo {
+  string family = 1;
+  string platform = 2;
+  string version = 3;
+}
+
+message MemInfo {
+  uint64 total = 1;
+  uint64 available = 2;
+}
+
+message TopologyInfo {
+  string provider = 1;
+  string region = 2;
+}

@@ -22,13 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -40,16 +42,23 @@ import (
 
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReporterInterval = settings.RegisterPublicNonNegativeDurationSetting(
+var ReporterInterval = settings.RegisterDurationSetting(
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
 	time.Minute,
-)
+	settings.NonNegativeDuration,
+).WithPublic()
 
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
 // replication_stats_report and replication_critical_localities.
+//
+// TODO(irfansharif): After #67679 these replication reports will be the last
+// remaining use of the system config span in KV. Strawman: we could hoist all
+// this code above KV and run it for each tenant. We'd have to expose a view
+// into node liveness and store descriptors, and instead of using the system
+// config span we could consult the tenant-scoped system.zones directly.
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
@@ -59,7 +68,7 @@ type Reporter struct {
 	latestConfig *config.SystemConfig
 
 	db        *kv.DB
-	liveness  *kvserver.NodeLiveness
+	liveness  *liveness.NodeLiveness
 	settings  *cluster.Settings
 	storePool *kvserver.StorePool
 	executor  sqlutil.InternalExecutor
@@ -77,7 +86,7 @@ func NewReporter(
 	localStores *kvserver.Stores,
 	storePool *kvserver.StorePool,
 	st *cluster.Settings,
-	liveness *kvserver.NodeLiveness,
+	liveness *liveness.NodeLiveness,
 	executor sqlutil.InternalExecutor,
 ) *Reporter {
 	r := Reporter{
@@ -102,7 +111,7 @@ func (stats *Reporter) reportInterval() (time.Duration, <-chan struct{}) {
 
 // Start the periodic calls to Update().
 func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
-	ReporterInterval.SetOnChange(&stats.settings.SV, func() {
+	ReporterInterval.SetOnChange(&stats.settings.SV, func(ctx context.Context) {
 		stats.frequencyMu.Lock()
 		defer stats.frequencyMu.Unlock()
 		// Signal the current waiter (if any), and prepare the channel for future
@@ -112,7 +121,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 		stats.frequencyMu.changeCh = make(chan struct{})
 		stats.frequencyMu.interval = ReporterInterval.Get(&stats.settings.SV)
 	})
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "stats-reporter", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		ctx = logtags.AddTag(ctx, "replication-reporter", nil /* value */)
@@ -179,13 +188,13 @@ func (stats *Reporter) update(
 	var getStoresFromGossip StoreResolver = func(
 		r *roachpb.RangeDescriptor,
 	) []roachpb.StoreDescriptor {
-		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
+		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().VoterDescriptors()))
 		// We'll return empty descriptors for stores that gossip doesn't have a
 		// descriptor for. These stores will be considered to satisfy all
 		// constraints.
 		// TODO(andrei): note down that some descriptors were missing from gossip
 		// somewhere in the report.
-		for i, repl := range r.Replicas().Voters() {
+		for i, repl := range r.Replicas().VoterDescriptors() {
 			storeDescs[i] = allStores[repl.StoreID]
 		}
 		return storeDescs
@@ -255,14 +264,14 @@ func (stats *Reporter) update(
 // range or nil if none of the node's stores are holding the Meta1 lease.
 func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Store {
 	const meta1RangeID = roachpb.RangeID(1)
-	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
+	repl, store, err := stats.localStores.GetReplicaForRangeID(ctx, meta1RangeID)
 	if roachpb.IsRangeNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
 		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
-	if repl.OwnsValidLease(ctx, store.Clock().Now()) {
+	if repl.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 		return store
 	}
 	return nil
@@ -434,7 +443,7 @@ func visitAncestors(
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, descpb.ID(id)))
+	descVal := cfg.GetValue(catalogkeys.MakeDescMetadataKey(keys.TODOSQLCodec, descpb.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.
@@ -447,7 +456,7 @@ func visitAncestors(
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err
 	}
-	tableDesc := sqlbase.TableFromDescriptor(&desc, descVal.Timestamp)
+	tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
 		return visitDefaultZone(ctx, cfg, visitor), nil
@@ -486,7 +495,7 @@ func visitDefaultZone(
 func getZoneByID(
 	id config.SystemTenantObjectID, cfg *config.SystemConfig,
 ) (*zonepb.ZoneConfig, error) {
-	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
+	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil
 	}
@@ -601,7 +610,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.Errorf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)
@@ -783,7 +792,7 @@ func getReportGenerationTime(
 		ctx,
 		"get-previous-timestamp",
 		txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		"select generated from system.reports_meta where id = $1",
 		rid,
 	)

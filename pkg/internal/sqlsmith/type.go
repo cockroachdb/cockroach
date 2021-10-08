@@ -14,17 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
-func (s *Smither) typeFromName(name string) (*types.T, error) {
-	typRef, err := parser.ParseType(name)
+func (s *Smither) typeFromSQLTypeSyntax(typeStr string) (*types.T, error) {
+	typRef, err := parser.GetTypeFromValidSQLSyntax(typeStr)
 	if err != nil {
-		return nil, errors.AssertionFailedf("failed to parse type: %v", name)
+		return nil, errors.AssertionFailedf("failed to parse type: %v", typeStr)
 	}
 	typ, err := tree.ResolveType(context.Background(), typRef, s)
 	if err != nil {
@@ -41,7 +41,7 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 		typ = s.randType()
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.AnyFamily {
-			typ = sqlbase.RandArrayContentsType(s.rnd)
+			typ = randgen.RandArrayContentsType(s.rnd)
 		}
 	}
 	return typ
@@ -54,17 +54,17 @@ func (s *Smither) randScalarType() *types.T {
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
-	return sqlbase.RandTypeFromSlice(s.rnd, scalarTypes)
+	return randgen.RandTypeFromSlice(s.rnd, scalarTypes)
 }
 
 func (s *Smither) randType() *types.T {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	seedTypes := sqlbase.SeedTypes
+	seedTypes := randgen.SeedTypes
 	if s.types != nil {
 		seedTypes = s.types.seedTypes
 	}
-	return sqlbase.RandTypeFromSlice(s.rnd, seedTypes)
+	return randgen.RandTypeFromSlice(s.rnd, seedTypes)
 }
 
 func (s *Smither) makeDesiredTypes() []*types.T {
@@ -79,7 +79,7 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        map[types.UserDefinedTypeName]*types.T
+	udts        map[tree.TypeName]*types.T
 	seedTypes   []*types.T
 	scalarTypes []*types.T
 }
@@ -88,10 +88,7 @@ type typeInfo struct {
 func (s *Smither) ResolveType(
 	_ context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	key := types.UserDefinedTypeName{
-		Name:   name.Object(),
-		Schema: name.Schema(),
-	}
+	key := tree.MakeSchemaQualifiedTypeName(name.Schema(), name.Object())
 	res, ok := s.types.udts[key]
 	if !ok {
 		return nil, errors.Newf("type name %s not found by smither", name.Object())

@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fuzzystrmatch",
+    srcs = [
+        "leven.go",
+        "soundex.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "fuzzystrmatch_test",
+    size = "small",
+    srcs = [
+        "leven_test.go",
+        "soundex_test.go",
+    ],
+    embed = [":fuzzystrmatch"],
+)

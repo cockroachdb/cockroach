@@ -25,6 +25,7 @@ import "sql/execinfrapb/processors_sql.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
+import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 
 // Each processor has the following components:
@@ -72,6 +73,17 @@ message ProcessorSpec {
   // processors.
   optional int32 processor_id = 6 [(gogoproto.nullable) = false,
                                   (gogoproto.customname) = "ProcessorID"];
+
+  // Schema for the rows produced by this processor (after post-processing has
+  // been applied, if there is any).
+  //
+  // This can be aliased with InputSyncSpec.ColumnTypes, so it must not be
+  // modified in-place during planning.
+  repeated sql.sem.types.T result_types = 7;
+
+  // estimated_row_count contains the number of rows that the optimizer expects
+  // will be emitted from this processor, or 0 if the estimate wasn't populated.
+  optional uint64 estimated_row_count = 8 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
@@ -92,7 +104,7 @@ message ProcessorCoreUnion {
   optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
-  optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
+  reserved 17;
   optional MetadataTestSenderSpec metadataTestSender = 18;
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
@@ -108,6 +120,9 @@ message ProcessorCoreUnion {
   optional BackupDataSpec backupData = 31;
   optional SplitAndScatterSpec splitAndScatter = 32;
   optional RestoreDataSpec restoreData = 33;
+  optional FiltererSpec filterer = 34;
+  optional StreamIngestionDataSpec streamIngestionData = 35;
+  optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
 
   reserved 6, 12;
 }
@@ -126,9 +141,9 @@ message NoopCoreSpec {
 // planNodes. See LocalProcessors and LocalProcessorIndexes on
 // distsqlplan.PhysicalPlan.
 message LocalPlanNodeSpec {
-  optional uint32 RowSourceIdx = 1;
-  optional uint32 NumInputs = 2;
-  optional string Name = 3;
+  optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
+  optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
+  optional string Name = 3 [(gogoproto.nullable) = false];
 }
 
 message MetadataTestSenderSpec {

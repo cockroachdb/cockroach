@@ -16,10 +16,13 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 type booleanAggTmplInfo struct {
+	aggTmplInfoBase
 	IsAnd bool
 }
 
@@ -30,7 +33,7 @@ func (b booleanAggTmplInfo) AssignBoolOp(target, l, r string) string {
 	case false:
 		return fmt.Sprintf("%s = %s || %s", target, l, r)
 	default:
-		colexecerror.InternalError("unsupported boolean agg type")
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported boolean agg type"))
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
 	}
@@ -57,7 +60,7 @@ var (
 	_ = booleanAggTmplInfo{}.DefaultVal
 )
 
-const boolAggTmpl = "pkg/sql/colexec/bool_and_or_agg_tmpl.go"
+const boolAggTmpl = "pkg/sql/colexec/colexecagg/bool_and_or_agg_tmpl.go"
 
 func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
@@ -66,20 +69,32 @@ func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 4)
-	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" . "HasNulls" $4}}`)
+	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 5)
+	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
 
 	assignBoolRe := makeFunctionRegex("_ASSIGN_BOOL_OP", 3)
 	s = assignBoolRe.ReplaceAllString(s, makeTemplateFunctionCall(`AssignBoolOp`, 3))
+
+	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("bool_and_or_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, []booleanAggTmplInfo{{IsAnd: true}, {IsAnd: false}})
+	return tmpl.Execute(wr, []booleanAggTmplInfo{
+		{
+			aggTmplInfoBase: aggTmplInfoBase{canonicalTypeFamily: types.BoolFamily},
+			IsAnd:           true,
+		},
+		{
+			aggTmplInfoBase: aggTmplInfoBase{canonicalTypeFamily: types.BoolFamily},
+			IsAnd:           false,
+		},
+	})
 }
 
 func init() {
-	registerAggGenerator(genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl)
+	registerAggGenerator(
+		genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl, true /* genWindowVariant */)
 }

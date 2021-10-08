@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -57,7 +57,7 @@ type splitQueue struct {
 }
 
 // newSplitQueue returns a new instance of splitQueue.
-func newSplitQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *splitQueue {
+func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 	var purgChan <-chan time.Time
 	if c := store.TestingKnobs().SplitQueuePurgatoryChan; c != nil {
 		purgChan = c
@@ -72,7 +72,7 @@ func newSplitQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *splitQueue {
 		loadBasedCount: telemetry.GetCounter("kv.split.load"),
 	}
 	sq.baseQueue = newBaseQueue(
-		"split", sq, store, gossip,
+		"split", sq, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       splitQueueConcurrency,
@@ -95,9 +95,9 @@ func shouldSplitRange(
 	ms enginepb.MVCCStats,
 	maxBytes int64,
 	shouldBackpressureWrites bool,
-	sysCfg *config.SystemConfig,
+	confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
-	if sysCfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey) {
+	if confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true
@@ -134,10 +134,10 @@ func shouldSplitRange(
 // prefix or if the range's size in bytes exceeds the limit for the zone,
 // or if the range has too much load on it.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), sysCfg)
+		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(timeutil.Now()); splitKey != nil {
@@ -159,16 +159,16 @@ var _ purgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
-	processed, err = sq.processAttempt(ctx, r, sysCfg)
+	processed, err = sq.processAttempt(ctx, r, confReader)
 	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
 		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
-		sq.MaybeAddAsync(ctx, r, sq.store.Clock().Now())
+		sq.MaybeAddAsync(ctx, r, sq.store.Clock().NowAsClockTimestamp())
 		return false, nil
 	}
 
@@ -176,11 +176,11 @@ func (sq *splitQueue) process(
 }
 
 func (sq *splitQueue) processAttempt(
-	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
 	desc := r.Desc()
-	// First handle the case of splitting due to zone config maps.
-	if splitKey := sysCfg.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
+	// First handle the case of splitting due to span config maps.
+	if splitKey := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
@@ -192,7 +192,7 @@ func (sq *splitQueue) processAttempt(
 			},
 			desc,
 			false, /* delayable */
-			"zone config",
+			"span config",
 		); err != nil {
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
@@ -231,13 +231,13 @@ func (sq *splitQueue) processAttempt(
 		// Add a small delay (default of 5m) to any subsequent attempt to merge
 		// this range split away. While the merge queue does takes into account
 		// load to avoids merging ranges that would be immediately re-split due
-		// to load-based splitting, it doesn't take into account historical
-		// load. So this small delay is the only thing that prevents split
-		// points created due to load from being immediately merged away after
-		// load is stopped, which can be a problem for benchmarks where data is
-		// first imported and then the workload begins after a small delay.
+		// to load-based splitting, it did not used to take into account historical
+		// load. This has since been fixed by #64201, but we keep this small manual
+		// delay for compatibility reasons.
+		// TODO(nvanbenschoten): remove this entirely in v22.1 when it is no longer
+		// needed.
 		var expTime hlc.Timestamp
-		if expDelay := SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
+		if expDelay := kvserverbase.SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
 			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
 		}
 		if _, pErr := r.adminSplitWithDescriptor(
@@ -259,7 +259,7 @@ func (sq *splitQueue) processAttempt(
 		telemetry.Inc(sq.loadBasedCount)
 
 		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset()
+		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 	return false, nil

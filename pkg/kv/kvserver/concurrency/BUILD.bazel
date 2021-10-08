@@ -1,0 +1,91 @@
+load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "concurrency",
+    srcs = [
+        "concurrency_control.go",
+        "concurrency_manager.go",
+        "latch_manager.go",
+        "lock_table.go",
+        "lock_table_waiter.go",
+        "metrics.go",
+        ":lockstate_interval_btree.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/intentresolver",
+        "//pkg/kv/kvserver/spanlatch",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/kv/kvserver/txnwait",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "concurrency_test",
+    size = "large",
+    srcs = [
+        "concurrency_manager_test.go",
+        "datadriven_util_test.go",
+        "lock_table_test.go",
+        "lock_table_waiter_test.go",
+        ":lockstate_interval_btree_test.go",  # keep
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":concurrency"],
+    deps = [
+        "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/intentresolver",
+        "//pkg/kv/kvserver/spanlatch",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/kv/kvserver/txnwait",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings/cluster",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uint128",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_maruel_panicparse//stack",
+        "@com_github_petermattis_goid//:goid",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_x_exp//rand",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+gen_interval_btree(
+    name = "lockstate_interval_btree",
+    package = "concurrency",
+    type = "*lockState",
+)

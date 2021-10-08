@@ -14,35 +14,47 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
 type dropTypeNode struct {
-	n  *tree.DropType
-	td map[descpb.ID]*sqlbase.MutableTypeDescriptor
+	n      *tree.DropType
+	toDrop map[descpb.ID]*typedesc.Mutable
 }
 
 // Use to satisfy the linter.
 var _ planNode = &dropTypeNode{n: nil}
 
 func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"DROP TYPE",
+	); err != nil {
+		return nil, err
+	}
+
 	node := &dropTypeNode{
-		n:  n,
-		td: make(map[descpb.ID]*sqlbase.MutableTypeDescriptor),
+		n:      n,
+		toDrop: make(map[descpb.ID]*typedesc.Mutable),
 	}
 	if n.DropBehavior == tree.DropCascade {
 		return nil, unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported")
 	}
 	for _, name := range n.Names {
 		// Resolve the desired type descriptor.
-		typeDesc, err := p.ResolveMutableTypeDescriptor(ctx, name, !n.IfExists)
+		_, typeDesc, err := p.ResolveMutableTypeDescriptor(ctx, name, !n.IfExists)
 		if err != nil {
 			return nil, err
 		}
@@ -50,16 +62,28 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 			continue
 		}
 		// If we've already seen this type, then skip it.
-		if _, ok := node.td[typeDesc.ID]; ok {
+		if _, ok := node.toDrop[typeDesc.ID]; ok {
 			continue
 		}
-		// The implicit array types are not directly droppable.
-		if typeDesc.Kind == descpb.TypeDescriptor_ALIAS {
+		switch typeDesc.Kind {
+		case descpb.TypeDescriptor_ALIAS:
+			// The implicit array types are not directly droppable.
 			return nil, pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"%q is an implicit array type and cannot be modified",
 				name,
 			)
+		case descpb.TypeDescriptor_MULTIREGION_ENUM:
+			// Multi-region enums are not directly droppable.
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"%q is a multi-region enum and cannot be modified directly",
+					name,
+				),
+				"try ALTER DATABASE DROP REGION %s", name)
+		case descpb.TypeDescriptor_ENUM:
+			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
 		}
 
 		// Check if we can drop the type.
@@ -76,32 +100,23 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		if err := p.canDropTypeDesc(ctx, mutArrayDesc, n.DropBehavior); err != nil {
 			return nil, err
 		}
-
 		// Record these descriptors for deletion.
-		node.td[typeDesc.ID] = typeDesc
-		node.td[mutArrayDesc.ID] = mutArrayDesc
+		node.toDrop[typeDesc.ID] = typeDesc
+		node.toDrop[mutArrayDesc.ID] = mutArrayDesc
 	}
 	return node, nil
 }
 
 func (p *planner) canDropTypeDesc(
-	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior,
 ) error {
 	if err := p.canModifyType(ctx, desc); err != nil {
 		return err
 	}
 	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		var dependentNames []string
-		for _, id := range desc.ReferencingDescriptorIDs {
-			desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
-			if err != nil {
-				return errors.Wrapf(err, "type has dependent objects")
-			}
-			fqName, err := p.getQualifiedTableName(ctx, desc)
-			if err != nil {
-				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
-			}
-			dependentNames = append(dependentNames, fqName.FQString())
+		dependentNames, err := p.getFullyQualifiedTableNamesFromIDs(ctx, desc.ReferencingDescriptorIDs)
+		if err != nil {
+			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
 		}
 		return pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
@@ -114,23 +129,23 @@ func (p *planner) canDropTypeDesc(
 }
 
 func (n *dropTypeNode) startExec(params runParams) error {
-	for _, typ := range n.td {
-		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), true /* queueJob */); err != nil {
+	for _, typeDesc := range n.toDrop {
+		typeFQName, err := getTypeNameFromTypeDescriptor(
+			oneAtATimeSchemaResolver{params.ctx, params.p},
+			typeDesc,
+		)
+		if err != nil {
 			return err
 		}
+		err = params.p.dropTypeImpl(params.ctx, typeDesc, "dropping type "+typeFQName.FQString(), true /* queueJob */)
+		if err != nil {
+			return err
+		}
+		event := &eventpb.DropType{
+			TypeName: typeFQName.FQString(),
+		}
 		// Log a Drop Type event.
-		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			params.ctx,
-			params.p.txn,
-			EventLogDropType,
-			int32(typ.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TypeName  string
-				Statement string
-				User      string
-			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.SessionData().User},
-		); err != nil {
+		if err := params.p.logEvent(params.ctx, typeDesc.ID, event); err != nil {
 			return err
 		}
 	}
@@ -156,21 +171,31 @@ func (p *planner) addTypeBackReference(
 	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
 }
 
-func (p *planner) removeTypeBackReference(
-	ctx context.Context, typeID, ref descpb.ID, jobDesc string,
+func (p *planner) removeTypeBackReferences(
+	ctx context.Context, typeIDs []descpb.ID, ref descpb.ID, jobDesc string,
 ) error {
-	mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
-	if err != nil {
-		return err
+	for _, typeID := range typeIDs {
+		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return err
+		}
+		mutDesc.RemoveReferencingDescriptorID(ref)
+		if err := p.writeTypeSchemaChange(ctx, mutDesc, jobDesc); err != nil {
+			return err
+		}
 	}
-	mutDesc.RemoveReferencingDescriptorID(ref)
-	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
+	return nil
 }
 
 func (p *planner) addBackRefsFromAllTypesInTable(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
 		if err != nil {
 			return nil, err
@@ -190,9 +215,14 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 }
 
 func (p *planner) removeBackRefsFromAllTypesInTable(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
 		if err != nil {
 			return nil, err
@@ -202,18 +232,13 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 	if err != nil {
 		return err
 	}
-	for _, id := range typeIDs {
-		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, desc.ID)
-		if err := p.removeTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
-			return err
-		}
-	}
-	return nil
+	jobDesc := fmt.Sprintf("updating type back references %v for table %d", typeIDs, desc.ID)
+	return p.removeTypeBackReferences(ctx, typeIDs, desc.ID, jobDesc)
 }
 
 // dropTypeImpl does the work of dropping a type and everything that depends on it.
 func (p *planner) dropTypeImpl(
-	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string, queueJob bool,
+	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string, queueJob bool,
 ) error {
 	if typeDesc.Dropped() {
 		return errors.Errorf("type %q is already being dropped", typeDesc.Name)
@@ -227,7 +252,7 @@ func (p *planner) dropTypeImpl(
 	})
 
 	// Actually mark the type as dropped.
-	typeDesc.State = descpb.TypeDescriptor_DROP
+	typeDesc.State = descpb.DescriptorState_DROP
 	if queueJob {
 		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
 	}

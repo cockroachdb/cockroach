@@ -23,8 +23,8 @@ import (
 )
 
 func Example_nodelocal() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	file, cleanUp := createTestFile("test.csv", "content")
 	defer cleanUp()
@@ -33,7 +33,7 @@ func Example_nodelocal() {
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file2.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/../../file1.csv", file))
-	c.Run(fmt.Sprintf("nodelocal upload notexist.csv /test/file1.csv"))
+	c.Run("nodelocal upload notexist.csv /test/file1.csv")
 
 	// Output:
 	// nodelocal upload test.csv /test/file1.csv
@@ -49,8 +49,8 @@ func Example_nodelocal() {
 }
 
 func Example_nodelocal_disabled() {
-	c := newCLITest(cliTestParams{noNodelocal: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{NoNodelocal: true})
+	defer c.Cleanup()
 
 	file, cleanUp := createTestFile("test.csv", "non-empty-file")
 	defer cleanUp()
@@ -71,8 +71,8 @@ func Example_nodelocal_disabled() {
 func TestNodeLocalFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()

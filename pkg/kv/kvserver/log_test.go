@@ -276,11 +276,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA, kvserverpb.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_VOTER, kvserverpb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -296,7 +296,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add_voter.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -348,7 +348,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that one remove replica event was logged.
 	rows, err = sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_remove.String(),
+		kvserverpb.RangeLogEventType_remove_voter.String(),
 	)
 	if err != nil {
 		t.Fatal(err)

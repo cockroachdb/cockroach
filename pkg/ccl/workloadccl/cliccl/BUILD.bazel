@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cliccl",
+    srcs = ["fixtures.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/workloadccl",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/cli",
+        "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
+    ],
+)

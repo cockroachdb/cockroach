@@ -1,0 +1,115 @@
+@import "src/core/index.module";
+@import "src/sortedtable/tableHead/tableHead.module";
+
+.crl-table-wrapper {
+  :global(.ant-table) {
+    color: $colors--primary-text;
+  }
+
+  // Table header
+  :global(.ant-table-thead) {
+    @include table-header-text;
+    background-color: $colors--neutral-0;
+  }
+
+  :global(.ant-table-thead) > tr > th {
+    color: $colors--neutral-7;
+    background-color: $colors--neutral-0;
+    padding: $spacing-smaller $spacing-smaller;
+    height: $line-height--x-large;
+    &, span {
+      @include table-header-text;
+    }
+    :global{
+      .ant-table-header-column .ant-table-column-sorters:hover::before {
+        background-color: $colors--neutral-0;
+      }
+    }
+  }
+  // END: Table header
+
+  // Table Column
+  .column--align-right {
+    text-align: end;
+  }
+
+  :global(.column-title) {
+    border-bottom: 1px dashed $colors--neutral-5;
+  }
+  // END: Table Column
+
+  // Expand/Collapse icon
+  :global(.ant-table-row-expand-icon) {
+    border: none;
+    background-color: transparent;
+  }
+
+  :global(.ant-table-row-collapsed)::after {
+    content: '▶';
+    font-size: 8px;
+  }
+
+  :global(.ant-table-row-expanded)::after {
+    content: '▼';
+    font-size: 8px;
+  }
+  // END: Expand/Collapse icon
+
+  // Table row
+  :global(.ant-table-row) {
+    @include text--body;
+    height: $line-height--xxx-large;
+  }
+
+  :global(.ant-table-row) .cell--show-on-hover {
+    visibility: hidden;
+  }
+
+  :global(.ant-table-row):hover .cell--show-on-hover {
+    visibility: visible;
+  }
+  // END: Table row
+
+  // Table cell
+  :global(.ant-table-tbody) > tr > td {
+    padding: $spacing-smaller $spacing-smaller;
+    border-bottom-color: $colors--neutral-3;
+  }
+
+  // Increase right padding for columns aligned by right
+  :global(.ant-table-tbody) > tr > td.column--align-right {
+    padding-right: $spacing-mid-large;
+  }
+
+  // show column with right border
+  :global(.ant-table-tbody) > tr > td.column--border-right {
+    border-right: $colors--neutral-3 solid 1px;
+  }
+  // END: Table cell
+
+  // Table cell on hover
+  :global {
+    .ant-table-thead > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+    .ant-table-tbody > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+    .ant-table-thead > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+    .ant-table-tbody > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td {
+      background: $colors--neutral-1;
+    }
+  }
+  // END: Table cell on hover
+
+  :global(.ant-table-placeholder) {
+    border: $colors--neutral-1 solid 1px;
+  }
+
+  .empty-table__message {
+    @include text--body;
+    text-align: center;
+  }
+
+  &__empty {
+    :global(.ant-table-placeholder) {
+      border: none;
+    }
+  }
+}

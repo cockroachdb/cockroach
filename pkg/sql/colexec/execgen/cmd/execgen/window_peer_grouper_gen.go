@@ -22,7 +22,7 @@ type windowPeerGrouperTmplInfo struct {
 	String       string
 }
 
-const windowPeerGrouperOpsTmpl = "pkg/sql/colexec/window_peer_grouper_tmpl.go"
+const windowPeerGrouperOpsTmpl = "pkg/sql/colexec/colexecwindow/window_peer_grouper_tmpl.go"
 
 func genWindowPeerGrouperOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_PEER_GROUPER_STRING", "{{.String}}")

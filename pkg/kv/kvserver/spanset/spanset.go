@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,6 +85,35 @@ type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]Span
 }
 
+var spanSetPool = sync.Pool{
+	New: func() interface{} { return new(SpanSet) },
+}
+
+// New creates a new empty SpanSet.
+func New() *SpanSet {
+	return spanSetPool.Get().(*SpanSet)
+}
+
+// Release releases the SpanSet and its underlying slices. The receiver should
+// not be used after being released.
+func (s *SpanSet) Release() {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			// Recycle slice if capacity below threshold.
+			const maxRecycleCap = 8
+			var recycle []Span
+			if sl := s.spans[sa][ss]; cap(sl) <= maxRecycleCap {
+				for i := range sl {
+					sl[i] = Span{}
+				}
+				recycle = sl[:0]
+			}
+			s.spans[sa][ss] = recycle
+		}
+	}
+	spanSetPool.Put(s)
+}
+
 // String prints a string representation of the SpanSet.
 func (s *SpanSet) String() string {
 	var buf strings.Builder
@@ -114,10 +144,38 @@ func (s *SpanSet) Empty() bool {
 	return s.Len() == 0
 }
 
+// Copy copies the SpanSet.
+func (s *SpanSet) Copy() *SpanSet {
+	n := New()
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			n.spans[sa][ss] = append(n.spans[sa][ss], s.spans[sa][ss]...)
+		}
+	}
+	return n
+}
+
+// Iterate iterates over a SpanSet, calling the given function.
+func (s *SpanSet) Iterate(f func(SpanAccess, SpanScope, Span)) {
+	if s == nil {
+		return
+	}
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			for _, span := range s.spans[sa][ss] {
+				f(sa, ss, span)
+			}
+		}
+	}
+}
+
 // Reserve space for N additional spans.
 func (s *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
 	existing := s.spans[access][scope]
-	s.spans[access][scope] = make([]Span, len(existing), n+cap(existing))
+	if n <= cap(existing)-len(existing) {
+		return
+	}
+	s.spans[access][scope] = make([]Span, len(existing), n+len(existing))
 	copy(s.spans[access][scope], existing)
 }
 
@@ -153,7 +211,7 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 func (s *SpanSet) SortAndDedup() {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			s.spans[sa][ss], _ /* distinct */ = mergeSpans(s.spans[sa][ss])
+			s.spans[sa][ss], _ /* distinct */ = mergeSpans(&s.spans[sa][ss])
 		}
 	}
 }
@@ -176,24 +234,6 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 		}
 	}
 	return boundary
-}
-
-// MaxProtectedTimestamp returns the maximum timestamp that is protected across
-// all MVCC spans in the SpanSet. ReadWrite spans are protected from their
-// declared timestamp forward, so they have no maximum protect timestamp.
-// However, ReadOnly are protected only up to their declared timestamp and
-// are not protected at later timestamps.
-func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
-	maxTS := hlc.MaxTimestamp
-	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-		for _, cur := range s.GetSpans(SpanReadOnly, ss) {
-			curTS := cur.Timestamp
-			if !curTS.IsEmpty() {
-				maxTS.Backward(curTS)
-			}
-		}
-	}
-	return maxTS
 }
 
 // Intersects returns true iff the span set denoted by `other` has any

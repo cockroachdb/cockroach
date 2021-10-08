@@ -13,22 +13,36 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
-func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
-	filterProps := src.ScalarProps()
-	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
-		colType := c.f.Metadata().ColumnMeta(i).Type
-		if sqlbase.HasCompositeKeyEncoding(colType) {
-			return false
-		}
+func (c *CustomFuncs) CanMapOnSetOp(filter *memo.FiltersItem) bool {
+	if memo.CanBeCompositeSensitive(c.mem.Metadata(), filter) {
+		// In general, it is not safe to remap a composite-sensitive filter.
+		// For example:
+		//  - the set operation is Except
+		//  - the left side has the decimal 1.0
+		//  - the right side has the decimal 1.00
+		//  - the filter is d::string != '1.00'
+		//
+		// If we push the filter to the right side, we will incorrectly remove 1.00,
+		// causing the overall Except operation to return a result.
+		//
+		// TODO(radu): we can do better on a case-by-case basis. For example, it is
+		// OK to push the filter for Union, and it is OK to push it to the left side
+		// of an Except.
+		return false
 	}
-	return !filterProps.HasCorrelatedSubquery
+
+	if filter.ScalarProps().HasCorrelatedSubquery {
+		// If the filter has a correlated subquery, we want to try to hoist it up as
+		// much as possible to decorrelate it.
+		return false
+	}
+	return true
 }
 
 // MapSetOpFilterLeft maps the filter onto the left expression by replacing
@@ -221,21 +235,50 @@ func (c *CustomFuncs) mergeSortedAnds(left, right opt.ScalarExpr) opt.ScalarExpr
 		nextRight = and.Right
 	}
 
-	if nextLeft.ID() == nextRight.ID() {
+	if nextLeft == nextRight {
 		// Eliminate duplicates.
 		return c.mergeSortedAnds(left, remainingRight)
 	}
-	if nextLeft.ID() < nextRight.ID() {
+	if nextLeft.Rank() < nextRight.Rank() {
 		return c.f.ConstructAnd(c.mergeSortedAnds(left, remainingRight), nextRight)
 	}
 	return c.f.ConstructAnd(c.mergeSortedAnds(remainingLeft, right), nextLeft)
 }
 
+// HasDuplicateFilters returns true if there are duplicate filters in f.
+func (c *CustomFuncs) HasDuplicateFilters(f memo.FiltersExpr) bool {
+	for i := 0; i < len(f); i++ {
+		for j := i + 1; j < len(f); j++ {
+			if f[i].Condition == f[j].Condition {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// DeduplicateFilters returns the input filters with duplicates removed.
+func (c *CustomFuncs) DeduplicateFilters(f memo.FiltersExpr) memo.FiltersExpr {
+	// Here we sort the filters by their scalar rank, though we don't really
+	// care that they are fully sorted. To remove duplicates we only care that
+	// duplicate expressions are grouped together, which they will be since
+	// their scalar rank must be equal.
+	result := c.SortFilters(f)
+	j := 1
+	for i := 1; i < len(result); i++ {
+		if result[i].Condition != result[i-1].Condition {
+			result[j] = result[i]
+			j++
+		}
+	}
+	return result[0:j]
+}
+
 // AreFiltersSorted determines whether the expressions in a FiltersExpr are
-// ordered by their expression IDs.
+// ordered by their expression ranks.
 func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
-	for i, n := 0, f.ChildCount(); i < n-1; i++ {
-		if f.Child(i).Child(0).(opt.ScalarExpr).ID() > f.Child(i+1).Child(0).(opt.ScalarExpr).ID() {
+	for i := 1; i < len(f); i++ {
+		if f[i-1].Condition.Rank() > f[i].Condition.Rank() {
 			return false
 		}
 	}
@@ -247,10 +290,7 @@ func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
 // in a different order.
 func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
 	result := make(memo.FiltersExpr, len(f))
-	for i, n := 0, f.ChildCount(); i < n; i++ {
-		fi := f.Child(i).(*memo.FiltersItem)
-		result[i] = *fi
-	}
+	copy(result, f)
 	result.Sort()
 	return result
 }
@@ -305,6 +345,18 @@ func (c *CustomFuncs) IsUnsimplifiableOr(item *memo.FiltersItem) bool {
 	return or.Left.Op() != opt.NullOp && or.Right.Op() != opt.NullOp
 }
 
+// IsUnsimplifiableIs returns true if this is an IS where the right side is not
+// True or False. SimplifyFilters simplifies an IS expression with True or False
+// as the right input to its left input. This function serves a similar purpose
+// to IsUnsimplifiableOr.
+func (c *CustomFuncs) IsUnsimplifiableIs(item *memo.FiltersItem) bool {
+	is, ok := item.Condition.(*memo.IsExpr)
+	if !ok {
+		return false
+	}
+	return is.Right.Op() != opt.TrueOp && is.Right.Op() != opt.FalseOp
+}
+
 // addConjuncts recursively walks a scalar expression as long as it continues to
 // find nested And operators. It adds any conjuncts (ignoring True operators) to
 // the given FiltersExpr and returns true. If it finds a False or Null operator,
@@ -335,6 +387,24 @@ func (c *CustomFuncs) addConjuncts(
 		} else if t.Right.Op() == opt.NullOp {
 			filters = append(filters, c.f.ConstructFiltersItem(t.Left))
 		} else {
+			filters = append(filters, c.f.ConstructFiltersItem(t))
+		}
+
+	case *memo.IsExpr:
+		// Attempt to replace <expr> IS (True | False) with the left input. Note
+		// that this replacement may cause Null to be returned where the original
+		// expression returned False, because IS (True | False) returns False on a
+		// Null input. However, in this case the replacement is valid because Select
+		// and Join operators treat False and Null filter conditions the same way
+		// (no rows returned).
+		if t.Right.Op() == opt.TrueOp {
+			// <expr> IS True => <expr>
+			filters = append(filters, c.f.ConstructFiltersItem(t.Left))
+		} else if t.Right.Op() == opt.FalseOp {
+			// <expr> IS False => NOT <expr>
+			filters = append(filters, c.f.ConstructFiltersItem(c.f.ConstructNot(t.Left)))
+		} else {
+			// No replacement possible.
 			filters = append(filters, c.f.ConstructFiltersItem(t))
 		}
 

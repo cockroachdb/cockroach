@@ -12,9 +12,7 @@ package server_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -41,20 +39,20 @@ var strA = settings.RegisterValidatedStringSetting(strKey, "desc", "<default>", 
 	}
 	return nil
 })
-var intA = settings.RegisterValidatedIntSetting(intKey, "desc", 1, func(v int64) error {
+var intA = settings.RegisterIntSetting(intKey, "desc", 1, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
 	}
 	return nil
 
 })
-var durationA = settings.RegisterValidatedDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
+var durationA = settings.RegisterDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
 	}
 	return nil
 })
-var byteSizeA = settings.RegisterValidatedByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
+var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
 	}
@@ -258,41 +256,6 @@ func TestSettingsSetAndShow(t *testing.T) {
 	)
 
 	db.ExpectErr(t, `invalid integer value '7' for enum setting`, fmt.Sprintf(setQ, enumKey, "7"))
-
-	db.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User("testuser"))
-	defer cleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer testuser.Close()
-
-	if _, err := testuser.Exec(`SET CLUSTER SETTING foo = 'bar'`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SET CLUSTER SETTING`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW CLUSTER SETTING foo`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTING`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW ALL CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SELECT * FROM crdb_internal.cluster_settings`); !testutils.IsError(err,
-		`only users with the admin role are allowed to read crdb_internal.cluster_settings`,
-	) {
-		t.Fatal(err)
-	}
 }
 
 func TestSettingsShowAll(t *testing.T) {

@@ -12,26 +12,29 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft"
+	"github.com/cockroachdb/redact"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -63,27 +66,46 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
-	// TODO(nvanbenschoten): unlike on the read-path (executeReadOnlyBatch), we
-	// don't synchronize with r.readOnlyCmdMu here. Is that ok? What if the
-	// replica is destroyed concurrently with a write? We won't be able to
-	// successfully propose as the lease will presumably have changed, but what
-	// if we hit an error during evaluation (e.g. a ConditionFailedError)?
+	// Even though we're not a read-only operation by definition, we have to
+	// take out a read lock on readOnlyCmdMu while performing any reads during
+	// pre-Raft evaluation (e.g. conditional puts), otherwise we can race with
+	// replica removal and get evaluated on an empty replica. We must release
+	// this lock before Raft execution, to avoid deadlocks.
+	r.readOnlyCmdMu.RLock()
 
 	// Verify that the batch can be executed.
-	// NB: we only need to check that the request is in the Range's key bounds
-	// at proposal time, not at application time, because the spanlatch manager
-	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
-	// cause this condition to change.
-	if err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
+	st, err := r.checkExecutionCanProceed(ctx, ba, g)
+	if err != nil {
+		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(err)
 	}
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	defer untrack(ctx, 0, 0, 0) // covers all error returns below
+	// Compute the transaction's local uncertainty limit using observed
+	// timestamps, which can help avoid uncertainty restarts.
+	localUncertaintyLimit := observedts.ComputeLocalUncertaintyLimit(ba.Txn, st)
+
+	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
+	// of request that needs to obey the closed timestamp). The act of tracking
+	// also gives us a closed timestamp, which we must ensure to evaluate above
+	// of. We're going to pass in minTS to applyTimestampCache(), which bumps us
+	// accordingly if necessary. We need to start tracking this request before we
+	// know the final write timestamp at which this request will evaluate because
+	// we need to atomically read the closed timestamp and start to be tracked.
+	// TODO(andrei): The timestamp cache might bump us above the timestamp at which
+	// we're registering with the proposalBuf. In that case, this request will be
+	// tracked at an unnecessarily low timestamp which can block the closing of
+	// this low timestamp for no reason. We should refactor such that the request
+	// starts being tracked after we apply the timestamp cache.
+	var minTS hlc.Timestamp
+	var tok TrackedRequestToken
+	if ba.IsIntentWrite() {
+		minTS, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
+	}
+	defer tok.DoneIfNotMoved(ctx)
 
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
@@ -111,56 +133,29 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
-	}
-
-	// Check that the lease is still valid before proposing to avoid discovering
-	// this after replication and potentially missing out on the chance to retry
-	// if the request is using AsyncConsensus. This is best-effort, but can help
-	// in cases where the request waited arbitrarily long for locks acquired by
-	// other transactions to be released while sequencing in the concurrency
-	// manager.
-	if curLease, _ := r.GetLease(); curLease.Sequence > st.Lease.Sequence {
-		curLeaseCpy := curLease // avoid letting curLease escape
-		err := newNotLeaseHolderError(&curLeaseCpy, r.store.StoreID(), r.Desc())
-		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, roachpb.NewError(err)
+		r.readOnlyCmdMu.RUnlock()
+		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, &st.Lease)
+	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
-		if maxLeaseIndex != 0 {
-			log.Fatalf(
-				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
-				maxLeaseIndex, ba, pErr,
-			)
+		r.readOnlyCmdMu.RUnlock()
+		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			// This exits with a fatal error, but returns in tests.
+			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
 		}
 		return nil, g, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
-	// A max lease index of zero is returned when no proposal was made or a lease
-	// was proposed. In case no proposal was made or a lease was proposed, we
-	// don't need to communicate a MLAI. Furthermore, for lease proposals we
-	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI
-	// explicitly as a side effect of stepping up as leaseholder.
-	if maxLeaseIndex != 0 {
-		if r.mergeInProgress() {
-			// The correctness of range merges relies on the invariant that the
-			// LeaseAppliedIndex of the range is not bumped while a range is in its
-			// subsumed state. If this invariant is ever violated, the follower
-			// replicas of the subsumed range (RHS) are free to activate any future
-			// closed timestamp updates even before the merge completes. This would be
-			// a serializability violation.
-			//
-			// See comment block in Subsume() in cmd_subsume.go for details.
-			log.Fatalf(ctx, "lease applied index bumped while the range was subsumed")
-		}
-		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
-	}
+	// We are done with pre-Raft evaluation at this point, and have to release the
+	// read-only command lock to avoid deadlocks during Raft evaluation.
+	r.readOnlyCmdMu.RUnlock()
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
@@ -194,39 +189,124 @@ func (r *Replica) executeWriteBatch(
 			// resolution is semi-synchronous in that there is a limited number of
 			// outstanding asynchronous resolution tasks allowed after which
 			// further calls will block.
-			if len(propResult.EncounteredIntents) > 0 {
-				// TODO(peter): Re-proposed and canceled (but executed) commands can
-				// both leave intents to GC that don't hit this code path. No good
-				// solution presents itself at the moment and such intents will be
-				// resolved on reads.
-				if err := r.store.intentResolver.CleanupIntentsAsync(
-					ctx, propResult.EncounteredIntents, true, /* allowSync */
-				); err != nil {
-					log.Warningf(ctx, "%v", err)
-				}
-			}
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "%v", err)
+					log.Warningf(ctx, "transaction cleanup failed: %v", err)
 				}
 			}
+			if len(propResult.EncounteredIntents) > 0 {
+				if err := r.store.intentResolver.CleanupIntentsAsync(
+					ctx, propResult.EncounteredIntents, true, /* allowSync */
+				); err != nil {
+					log.Warningf(ctx, "intent cleanup failed: %v", err)
+				}
+			}
+			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
+				// Migrate is special since it wants commands to be durably
+				// applied on all peers, which we achieve via waitForApplication.
+				//
+				// We don't have to worry about extant snapshots creating
+				// replicas that start at an index before this Migrate request.
+				// Snapshots that don't include the recipient (as specified by
+				// replicaID and descriptor in the snap vs. the replicaID of the
+				// raft instance) are discarded by the recipient, and we're
+				// already checking against all replicas in the descriptor below
+				// (which include learner replicas currently in the process of
+				// receiving snapshots). Snapshots are also discarded unless
+				// they move the LAI forward, so we're not worried about old
+				// snapshots (with indexes preceding the MLAI here)
+				// instantiating pre-migrated state in anyway. We also have a
+				// separate mechanism to ensure replicas with older versions are
+				// purged from the system[1]. This is driven by a higher-level
+				// orchestration layer[2], these are the replicas that we don't
+				// have a handle on here as they're eligible for GC (but may
+				// still hit replica evaluation code paths with pre-migrated
+				// state, unless explicitly purged).
+				//
+				// It's possible that between the proposal returning and the
+				// call to r.Desc() below, the descriptor has already changed.
+				// But the only thing that matters is that r.Desc() is at least
+				// as up to date as the descriptor the command applied on
+				// previously. If a replica got removed - fine,
+				// waitForApplication will fail; we will have to cope with that.
+				// If one got added - it was likely already a learner when we
+				// migrated (in which case waitForApplication will know about
+				// it). If that's not the case, we'll note that the Migrate
+				// command also declares a read latch on the range descriptor.
+				// The replication change will have thus serialized after the
+				// migration, and so the snapshot will also include the
+				// post-migration state.
+				//
+				// TODO(irfansharif): In a cluster that is constantly changing
+				// its replica sets, it's possible to get into a situation
+				// where a Migrate command never manages to complete - all it
+				// takes is a single range in each attempt to throw things off.
+				// Perhaps an error in waitForApplication should lead to a retry
+				// of just the one RPC instead of propagating an error for the
+				// entire migrate invocation.
+				//
+				// [1]: See PurgeOutdatedReplicas from the Migration service.
+				// [2]: pkg/migration
+				desc := r.Desc()
+				// NB: waitForApplication already has a timeout.
+				applicationErr := waitForApplication(
+					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().Descriptors(),
+					// We wait for an index >= that of the migration command.
+					r.GetLeaseAppliedIndex())
+				propResult.Err = roachpb.NewError(applicationErr)
+			}
 			return propResult.Reply, nil, propResult.Err
+
 		case <-slowTimer.C:
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
-			log.Errorf(ctx, "range unavailable: %v",
-				rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-					r.RaftStatus(), ba, timeutil.Since(startPropTime)))
+			var s redact.StringBuilder
+			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+				r.RaftStatus(), ba, timeutil.Since(startPropTime))
+			log.Errorf(ctx, "range unavailable: %v", s)
+
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
+			//
+			// If the batch contained an EndTxnRequest, asynchronously wait
+			// around for the result for a while and try to clean up after the
+			// txn. If the resolver's async task pool is full, just skip cleanup
+			// by setting allowSync=false, since we won't be able to
+			// backpressure clients.
+			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+				const taskName = "async txn cleanup"
+				_ = r.store.stopper.RunAsyncTask(
+					r.AnnotateCtx(context.Background()),
+					taskName,
+					func(ctx context.Context) {
+						err := contextutil.RunWithTimeout(ctx, taskName, 20*time.Second,
+							func(ctx context.Context) error {
+								select {
+								case propResult := <-ch:
+									if len(propResult.EndTxns) > 0 {
+										return r.store.intentResolver.CleanupTxnIntentsAsync(ctx,
+											r.RangeID, propResult.EndTxns, false /* allowSync */)
+									}
+								case <-shouldQuiesce:
+								case <-ctx.Done():
+								}
+								return ctx.Err()
+							})
+						if err != nil {
+							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+							r.store.intentResolver.Metrics.FinalizedTxnCleanupFailed.Inc(1)
+						}
+					})
+			}
 			abandon()
 			log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
 			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
+
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
 			// to the caller that the command may have executed.
@@ -239,25 +319,28 @@ func (r *Replica) executeWriteBatch(
 }
 
 func rangeUnavailableMessage(
+	s *redact.StringBuilder,
 	desc *roachpb.RangeDescriptor,
-	lm IsLiveMap,
+	lm liveness.IsLiveMap,
 	rs *raft.Status,
 	ba *roachpb.BatchRequest,
 	dur time.Duration,
-) string {
-	cpy := *desc
-	desc = &cpy
-	desc.StartKey, desc.EndKey = nil, nil // scrub PII
-
+) {
 	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
-	for _, rDesc := range desc.Replicas().All() {
+	for _, rDesc := range desc.Replicas().Descriptors() {
 		if lm[rDesc.NodeID].IsLive {
 			liveReplicas = append(liveReplicas, rDesc)
 		} else {
 			otherReplicas = append(otherReplicas, rDesc)
 		}
 	}
-	return fmt.Sprintf(`have been waiting %.2fs for proposing command %s.
+
+	// Ensure that these are going to redact nicely.
+	var _ redact.SafeFormatter = ba
+	var _ redact.SafeFormatter = desc
+	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
+
+	s.Printf(`have been waiting %.2fs for proposing command %s.
 This range is likely unavailable.
 Please submit this message to Cockroach Labs support along with the following information:
 
@@ -276,9 +359,9 @@ support contract. Otherwise, please open an issue at:
 		dur.Seconds(),
 		ba,
 		desc,
-		roachpb.MakeReplicaDescriptors(liveReplicas),
-		roachpb.MakeReplicaDescriptors(otherReplicas),
-		rs,
+		roachpb.MakeReplicaSet(liveReplicas),
+		roachpb.MakeReplicaSet(otherReplicas),
+		redact.Safe(rs), // raft status contains no PII
 		desc.RangeID,
 	)
 }
@@ -287,9 +370,9 @@ support contract. Otherwise, please open an issue at:
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
 	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
-) (bool, *roachpb.Error) {
+) bool {
 	if !isOnePhaseCommit(ba) {
-		return false, nil
+		return false
 	}
 
 	if ba.Timestamp != ba.Txn.WriteTimestamp {
@@ -299,19 +382,33 @@ func (r *Replica) canAttempt1PCEvaluation(
 
 	// The EndTxn checks whether the txn record can be created, but we're
 	// eliding the EndTxn. So, we'll do the check instead.
-	ok, minCommitTS, reason := r.CanCreateTxnRecord(ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	//
+	// Note that the returned reason does not distinguish between an existing
+	// record (which should fall back to non-1PC EndTxn evaluation) and a
+	// finalized record (which should return an error), so we ignore it here and
+	// let EndTxn return an error as appropriate. This lets us avoid a disk read
+	// to check for an existing record.
+	ok, minCommitTS, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
-		newTxn := ba.Txn.Clone()
-		newTxn.Status = roachpb.ABORTED
-		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(reason), newTxn)
+		return false
 	}
 	if ba.Timestamp.Less(minCommitTS) {
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read
 		// timestamp.
-		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans), nil
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans)
 	}
-	return true, nil
+	return true
+}
+
+// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
+// but 1PC evaluation was not possible for one reason or another.
+type OnePCNotAllowedError struct{}
+
+var _ error = OnePCNotAllowedError{}
+
+func (OnePCNotAllowedError) Error() string {
+	return "could not commit in one phase as requested"
 }
 
 // evaluateWriteBatch evaluates the supplied batch.
@@ -327,7 +424,8 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	latchSpans *spanset.SpanSet,
+	lul hlc.Timestamp,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	log.Event(ctx, "executing read-write batch")
 
@@ -338,12 +436,8 @@ func (r *Replica) evaluateWriteBatch(
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba, latchSpans)
-	if pErr != nil {
-		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
-	}
-	if ok {
-		res := r.evaluate1PC(ctx, idKey, ba, latchSpans)
+	if r.canAttempt1PCEvaluation(ctx, ba, latchSpans) {
+		res := r.evaluate1PC(ctx, idKey, ba, latchSpans, lockSpans)
 		switch res.success {
 		case onePCSucceeded:
 			return res.batch, res.stats, res.br, res.res, nil
@@ -353,13 +447,28 @@ func (r *Replica) evaluateWriteBatch(
 			}
 			return nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
+			// Fallthrough to transactional evaluation.
 		}
+	} else {
+		// Deal with the Require1PC flag here, so that lower layers don't need to
+		// care about it. Note that the point of Require1PC is that we don't want to
+		// leave locks behind in case of retriable errors, so it's better to
+		// terminate this request early.
+		arg, ok := ba.GetArg(roachpb.EndTxn)
+		if ok && arg.(*roachpb.EndTxnRequest).Require1PC {
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(OnePCNotAllowedError{})
+		}
+	}
+
+	if ba.Require1PC() {
+		log.Fatalf(ctx,
+			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 
 	ms := new(enginepb.MVCCStats)
 	rec := NewReplicaEvalContext(r, latchSpans)
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, latchSpans, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, lul, latchSpans, lockSpans, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -374,6 +483,8 @@ const (
 	onePCFailed
 	// onePCFallbackToTransactionalEvaluation means that 1PC evaluation failed, but
 	// regular transactional evaluation should be attempted.
+	//
+	// Batches with the Require1PC flag set do not return this status.
 	onePCFallbackToTransactionalEvaluation
 )
 
@@ -400,7 +511,7 @@ func (r *Replica) evaluate1PC(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	latchSpans *spanset.SpanSet,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 
@@ -418,6 +529,9 @@ func (r *Replica) evaluate1PC(
 	strippedBa.Txn = nil
 	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
+	// The request is non-transactional, so there's no uncertainty.
+	localUncertaintyLimit := hlc.Timestamp{}
+
 	rec := NewReplicaEvalContext(r, latchSpans)
 	var br *roachpb.BatchResponse
 	var res result.Result
@@ -425,25 +539,27 @@ func (r *Replica) evaluate1PC(
 
 	arg, _ := ba.GetArg(roachpb.EndTxn)
 	etArg := arg.(*roachpb.EndTxnRequest)
-	canFwdTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
 
 	// Evaluate strippedBa. If the transaction allows, permit refreshes.
 	ms := new(enginepb.MVCCStats)
-	if canFwdTimestamp {
+	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, latchSpans, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, localUncertaintyLimit, latchSpans, lockSpans, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, latchSpans)
+			ctx, idKey, rec, ms, &strippedBa, localUncertaintyLimit, latchSpans, lockSpans)
 	}
 
-	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
+	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
 		if pErr != nil {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
 		} else {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution; the batch was pushed")
+		}
+		if etArg.Require1PC {
+			return onePCResult{success: onePCFailed, pErr: pErr}
 		}
 		return onePCResult{success: onePCFallbackToTransactionalEvaluation}
 	}
@@ -470,7 +586,7 @@ func (r *Replica) evaluate1PC(
 		if err != nil {
 			return onePCResult{
 				success: onePCFailed,
-				pErr:    roachpb.NewErrorf("failed to run commit trigger: %s", err),
+				pErr:    roachpb.NewError(errors.Wrap(err, "failed to run commit trigger")),
 			}
 		}
 		if err := res.MergeAndDestroy(innerResult); err != nil {
@@ -521,7 +637,8 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	latchSpans *spanset.SpanSet,
+	lul hlc.Timestamp,
+	latchSpans, lockSpans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
@@ -535,7 +652,8 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, latchSpans)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
+			ctx, idKey, rec, ms, ba, lul, latchSpans, lockSpans)
 
 		var success bool
 		if pErr == nil {
@@ -563,10 +681,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	latchSpans *spanset.SpanSet,
+	lul hlc.Timestamp,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	batch, opLogger := r.newBatchedEngine(latchSpans)
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
+	batch, opLogger := r.newBatchedEngine(ba, latchSpans, lockSpans)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, lul, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
 			res.LogicalOpLog = &kvserverpb.LogicalOpLog{
@@ -581,8 +700,15 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(
+	ba *roachpb.BatchRequest, latchSpans, lockSpans *spanset.SpanSet,
+) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
+	if !batch.ConsistentIterators() {
+		// This is not currently needed for correctness, but future optimizations
+		// may start relying on this, so we assert here.
+		panic("expected consistent iterators")
+	}
 	var opLogger *storage.OpLoggerBatch
 	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
@@ -621,6 +747,40 @@ func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *stor
 		batch = opLogger
 	}
 	if util.RaceEnabled {
+		// To account for separated intent accesses, we translate the lock spans
+		// to lock table spans.
+		spans := latchSpans.Copy()
+		addLockTableSpan := func(sa spanset.SpanAccess, span spanset.Span) {
+			ltKey, _ := keys.LockTableSingleKey(span.Key, nil)
+			var ltEndKey roachpb.Key
+			if span.EndKey != nil {
+				ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
+			}
+			spans.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
+		}
+		lockSpans.Iterate(func(sa spanset.SpanAccess, _ spanset.SpanScope, span spanset.Span) {
+			addLockTableSpan(sa, span)
+		})
+		// The lock spans are insufficient for ranged intent resolution, which
+		// does not declare lock spans and directly calls
+		// spanSetBatch.NewEngineIterator.
+		//
+		// TODO(sumeer): we can't keep adding additional cases here -- come up
+		// with something cleaner.
+		for _, union := range ba.Requests {
+			inner := union.GetInner()
+			switch req := inner.(type) {
+			case *roachpb.ResolveIntentRangeRequest:
+				span := req.Span()
+				addLockTableSpan(spanset.SpanReadWrite, spanset.Span{Span: span})
+			case *roachpb.EndTxnRequest:
+				// EndTxnRequest does local intent resolution. We don't know the
+				// spans up front so we just allow everything.
+				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.LockTableSingleKeyStart, EndKey: keys.LockTableSingleKeyEnd})
+			}
+		}
+
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp

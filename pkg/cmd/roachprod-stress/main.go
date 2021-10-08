@@ -37,7 +37,7 @@ import (
 
 var (
 	flags       = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	flagP       = flags.Int("p", runtime.NumCPU(), "run `N` processes in parallel")
+	flagP       = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
 	flagTimeout = flags.Duration("timeout", 0, "timeout each process after `duration`")
 	_           = flags.Bool("kill", true, "kill timed out processes if true, otherwise just print pid (to attach with gdb)")
 	flagFailure = flags.String("failure", "", "fail only if output matches `regexp`")
@@ -136,6 +136,16 @@ func run() error {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return err
+	}
+
+	const localLibDir = "lib.docker_amd64/"
+	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
+		cmd = exec.Command("roachprod", "put", cluster, localLibDir, "lib")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
 	}
 
 	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)

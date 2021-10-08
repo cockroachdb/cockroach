@@ -197,19 +197,18 @@ allows embedding a `trace.EventLog` in a `Context` ; events go to that
 `EventLog` automatically unless a span is also embedded in the
 context.
 
-There’s also `SET TRACING = on` that uses “snowball tracing” for
+There’s also `SET TRACING = on` that enables verbose tracing for
 collecting the distributed trace of one query and displaying it as SQL
-result rows. Snowball tracing is trace mode where trace information is
-stored in-memory, instead of being sent to a trace collector, so that
-the application can inspect its own trace later; this is the
-mechanism used by session tracing to present the execution
+result rows. In verbose tracing, the span picks up a number of messages
+as it traverses the system, which are propagated back to the root span;
+this is the mechanism used by session tracing to present the execution
 trace back to the SQL client.
 
 There’s also the
 `COCKROACH_TRACE_SQL` env var, which causes the distributed traces
 of all queries taking longer than a set time to be collected in memory
 and then dumped into the
-logs. This is expensive because it enables snowball tracing for all queries,
+logs. This is expensive because it enables verbose tracing for all queries,
 and may flood the logs. As of 03/2017, I (Andrei) am working on a new
 mechanism allowing a user to enable/disable tracing on a SQL session
 by issuing special SQL statements, and then making the collected
@@ -353,11 +352,8 @@ env var.
 Besides LightStep, CockroachDB also has its own tracer which, together
 with custom code around our RPC boundaries, enables marshalling spans
 from an RPC server to the RPC client by serializing them in the gRPC
-response protos. We call this **“snowball tracing”** (a high-level
-client enables it by marking a request as “traced”, and then lower
-level rpc clients propagate this marker with their calls, and the
-trace grows like a snowball… Or something.). This mechanism enables
-session tracing and all the other trace collection features.
+response protos. This mechanism enables session tracing and all the
+other trace collection features.
 
 If the Lightstep integration is enabled, crdb uses both the Lightstep
 and the internal tracers simultaneously - through a

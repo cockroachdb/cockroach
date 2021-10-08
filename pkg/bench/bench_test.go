@@ -22,10 +22,15 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
@@ -398,6 +403,122 @@ func BenchmarkSQL(b *testing.B) {
 			})
 		}
 	})
+}
+
+// BenchmarkTracing measures the overhead of tracing and sampled statements. It also
+// reports the memory utilization.
+func BenchmarkTracing(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	type clusterCreationFn func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper)
+	type clusterSpec struct {
+		name   string
+		create clusterCreationFn
+	}
+	for _, cluster := range []clusterSpec{
+		{
+			name: "1node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+					UseDatabase: "bench",
+					Tracer:      tr,
+				})
+				sqlRunner := sqlutils.MakeSQLRunner(db)
+				return sqlRunner, s.Stopper()
+			},
+		},
+		{
+			name: "3node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				tc := testcluster.StartTestCluster(b, 3,
+					base.TestClusterArgs{
+						ReplicationMode: base.ReplicationAuto,
+						ServerArgs: base.TestServerArgs{
+							UseDatabase: "bench",
+							Tracer:      tr,
+						},
+					})
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				return sqlRunner, tc.Stopper()
+			},
+		},
+	} {
+		b.Run(cluster.name, func(b *testing.B) {
+			ctx := context.Background()
+
+			type benchmark struct {
+				name string
+				fn   func(b *testing.B, db *sqlutils.SQLRunner)
+			}
+			for _, bench := range []benchmark{
+				{
+					name: "scan",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkScan(b, db, 1, 1)
+					},
+				},
+				{
+					name: "insert",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkInsert(b, db, 1)
+					},
+				},
+			} {
+				b.Run(bench.name, func(b *testing.B) {
+					type testSpec struct {
+						// alwaysTrace causes the Tracer to always create spans. Note
+						// "verbose tracing" (collection of log messages) is not enabled.
+						alwaysTrace bool
+						// sqlTraceRatio, when > 0, causes sql.txn_stats.sample_rate to be
+						// set to the respective ratio. Some SQL statements will have
+						// contention events generated and their traces will be collected.
+						//
+						// Note that there's a difference between alwaysTrace and
+						// sqlTraceRatio=1. Both will end up creating tracing spans (for
+						// everything going on in the cluster in the former case, for traces
+						// of SQL statements in the latter case), but the latter includes
+						// the generation of structured events. The latter seems to be much
+						// more expensive.
+						sqlTraceRatio float64
+					}
+					for _, test := range []testSpec{
+						{alwaysTrace: false},
+						{sqlTraceRatio: 0.01},
+						{sqlTraceRatio: 1.0},
+						{alwaysTrace: true},
+					} {
+						if test.alwaysTrace && test.sqlTraceRatio != 0 {
+							panic("invalid test")
+						}
+
+						var name strings.Builder
+						name.WriteString("trace=")
+						if test.alwaysTrace {
+							name.WriteString("on")
+						} else if test.sqlTraceRatio == 0 {
+							name.WriteString("off")
+						} else {
+							percent := int(test.sqlTraceRatio * 100)
+							name.WriteString(fmt.Sprintf("%d%%", percent))
+						}
+						b.Run(name.String(), func(b *testing.B) {
+							tr := tracing.NewTracerWithOpt(ctx,
+								tracing.WithTestingKnobs(tracing.TracerTestingKnobs{ForceRealSpans: test.alwaysTrace}))
+							sqlRunner, stop := cluster.create(tr)
+							defer stop.Stop(ctx)
+
+							sqlRunner.Exec(b, `CREATE DATABASE bench`)
+							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.txn_stats.sample_rate = $1`, test.sqlTraceRatio)
+
+							b.ReportAllocs()
+							bench.fn(b, sqlRunner)
+						})
+					}
+				})
+			}
+		})
+	}
 }
 
 // runBenchmarkUpdate benchmarks updating count random rows in a table.
@@ -996,6 +1117,7 @@ func runBenchmarkWideTable(b *testing.B, db *sqlutils.SQLRunner, count int, bigC
 // BenchmarkVecSkipScan benchmarks the vectorized engine's performance
 // when skipping unneeded key values in the decoding process.
 func BenchmarkVecSkipScan(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		create := `
 CREATE TABLE bench.scan(
@@ -1060,6 +1182,7 @@ func BenchmarkWideTableIgnoreColumns(b *testing.B) {
 // benchmark (and get memory allocation statistics for) the planning process.
 func BenchmarkPlanning(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		db.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 

@@ -33,6 +33,6 @@ func MakeTestRouter(
 		return nil, err
 	}
 	r.init(ctx, flowCtx, types)
-	r.Start(ctx, wg, nil /* ctxCancel */)
+	r.Start(ctx, wg, nil /* flowCtxCancel */)
 	return r, nil
 }

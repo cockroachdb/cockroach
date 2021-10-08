@@ -12,13 +12,13 @@ package jobs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,8 +39,9 @@ type ScheduledJobExecutor interface {
 	// Modifications to the ScheduledJob object will be persisted.
 	NotifyJobTermination(
 		ctx context.Context,
-		jobID int64,
+		jobID jobspb.JobID,
 		jobStatus Status,
+		details jobspb.Details,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
 		ex sqlutil.InternalExecutor,
@@ -49,42 +50,108 @@ type ScheduledJobExecutor interface {
 
 	// Metrics returns optional metric.Struct object for this executor.
 	Metrics() metric.Struct
+
+	// GetCreateScheduleStatement returns a `CREATE SCHEDULE` statement that is
+	// functionally equivalent to the statement that led to the creation of
+	// the passed in `schedule`.
+	GetCreateScheduleStatement(ctx context.Context, env scheduledjobs.JobSchedulerEnv, txn *kv.Txn,
+		schedule *ScheduledJob, ex sqlutil.InternalExecutor) (string, error)
+}
+
+// ScheduledJobController is an interface describing hooks that will execute
+// when controlling a scheduled job.
+type ScheduledJobController interface {
+	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
+	// SCHEDULE` query.
+	OnDrop(ctx context.Context, scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+		env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn) error
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
 type ScheduledJobExecutorFactory = func() (ScheduledJobExecutor, error)
 
-var registeredExecutorFactories = make(map[string]ScheduledJobExecutorFactory)
+var executorRegistry struct {
+	syncutil.Mutex
+	factories map[string]ScheduledJobExecutorFactory
+	executors map[string]ScheduledJobExecutor
+}
 
 // RegisterScheduledJobExecutorFactory registers callback for creating ScheduledJobExecutor
 // with the specified name.
 func RegisterScheduledJobExecutorFactory(name string, factory ScheduledJobExecutorFactory) {
-	if _, ok := registeredExecutorFactories[name]; ok {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+	if executorRegistry.factories == nil {
+		executorRegistry.factories = make(map[string]ScheduledJobExecutorFactory)
+	}
+
+	if _, ok := executorRegistry.factories[name]; ok {
 		panic("executor " + name + " already registered")
 	}
-	registeredExecutorFactories[name] = factory
+	executorRegistry.factories[name] = factory
 }
 
-// NewScheduledJobExecutor creates new ScheduledJobExecutor.
-func NewScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
-	if factory, ok := registeredExecutorFactories[name]; ok {
+// newScheduledJobExecutor creates new instance of ScheduledJobExecutor.
+func newScheduledJobExecutorLocked(name string) (ScheduledJobExecutor, error) {
+	if factory, ok := executorRegistry.factories[name]; ok {
 		return factory()
 	}
 	return nil, errors.Newf("executor %q is not registered", name)
 }
 
+// GetScheduledJobExecutor returns a singleton instance of
+// ScheduledJobExecutor and a flag indicating if that instance was just created.
+func GetScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+	return getScheduledJobExecutorLocked(name)
+}
+
+func getScheduledJobExecutorLocked(name string) (ScheduledJobExecutor, error) {
+	if executorRegistry.executors == nil {
+		executorRegistry.executors = make(map[string]ScheduledJobExecutor)
+	}
+	if ex, ok := executorRegistry.executors[name]; ok {
+		return ex, nil
+	}
+	ex, err := newScheduledJobExecutorLocked(name)
+	if err != nil {
+		return nil, err
+	}
+	executorRegistry.executors[name] = ex
+	return ex, nil
+}
+
+// RegisterExecutorsMetrics registered the metrics updated by each executor.
+func RegisterExecutorsMetrics(registry *metric.Registry) error {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+
+	for executorType := range executorRegistry.factories {
+		ex, err := getScheduledJobExecutorLocked(executorType)
+		if err != nil {
+			return err
+		}
+		if m := ex.Metrics(); m != nil {
+			registry.AddMetricStruct(m)
+		}
+	}
+
+	return nil
+}
+
 // DefaultHandleFailedRun is a default implementation for handling failed run
 // (either system.job failure, or perhaps error processing the schedule itself).
-func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
+func DefaultHandleFailedRun(schedule *ScheduledJob, fmtOrMsg string, args ...interface{}) {
 	switch schedule.ScheduleDetails().OnError {
 	case jobspb.ScheduleDetails_RETRY_SOON:
-		schedule.AddScheduleChangeReason("retrying job %d due to failure: %v", jobID, err)
+		schedule.SetScheduleStatus("retrying: "+fmtOrMsg, args...)
 		schedule.SetNextRun(schedule.env.Now().Add(retryFailedJobAfter)) // TODO(yevgeniy): backoff
 	case jobspb.ScheduleDetails_PAUSE_SCHED:
-		schedule.Pause(fmt.Sprintf("schedule paused due job %d failure: %v", jobID, err))
-	default:
-		// Nothing: ScheduleDetails_RETRY_SCHED already handled since
-		// the next run was set when we started running scheduled job.
+		schedule.Pause()
+		schedule.SetScheduleStatus("schedule paused: "+fmtOrMsg, args...)
+	case jobspb.ScheduleDetails_RETRY_SCHED:
+		schedule.SetScheduleStatus("reschedule: "+fmtOrMsg, args...)
 	}
 }
 
@@ -98,8 +165,9 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
 func NotifyJobTermination(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
+	jobDetails jobspb.Details,
 	scheduleID int64,
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
@@ -112,13 +180,13 @@ func NotifyJobTermination(
 	if err != nil {
 		return err
 	}
-	executor, err := NewScheduledJobExecutor(schedule.ExecutorType())
+	executor, err := GetScheduledJobExecutor(schedule.ExecutorType())
 	if err != nil {
 		return err
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, env, schedule, ex, txn)
+	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, jobDetails, env, schedule, ex, txn)
 	if err != nil {
 		return err
 	}

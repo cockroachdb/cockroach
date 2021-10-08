@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "test",
+    srcs = ["test_interface.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/logger",
+        "//pkg/util/version",
+    ],
+)

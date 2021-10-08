@@ -1,0 +1,3 @@
+drop_schema_stmt ::=
+	'DROP' 'SCHEMA' schema_name_list ( 'CASCADE' | 'RESTRICT' |  )
+	| 'DROP' 'SCHEMA' 'IF' 'EXISTS' schema_name_list ( 'CASCADE' | 'RESTRICT' |  )

@@ -1,0 +1,46 @@
+# The test output for error cases can sometimes be different for
+# different RaceEnabled settings, because of extra error checking
+# when RaceEnabled=true. This file contains the output when
+# RaceEnabled=false
+
+# Error case: Multiple intents for a key
+define
+locks
+meta k=a ts=10 txn=1
+meta k=b ts=20 txn=2
+meta k=b ts=20 txn=4
+meta k=c ts=30 txn=4
+mvcc
+value k=a ts=10 v=a10
+value k=b ts=20 v=b20
+value k=c ts=30 v=c30
+----
+
+# We don't catch the error immediately on forward iteration, since unnecessary
+# key comparisons are elided (except for RaceEnabled=true). Which is why the
+# intent for k=b is returned twice. But continued forward iteration eventually
+# catches it.
+iter lower=a upper=d
+seek-ge k=a
+next
+next
+next
+next
+next
+seek-lt k=d
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=20.000000000,0 txn=4
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: meta k=b ts=20.000000000,0 txn=2
+next: output: err: intentIter at intent, but iter not at provisional value
+seek-lt "d"/0,0: output: value k=c ts=30.000000000,0 v=c30
+prev: output: meta k=c ts=30.000000000,0 txn=4
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: meta k=b ts=20.000000000,0 txn=2
+prev: output: err: intentIter should not be after iter

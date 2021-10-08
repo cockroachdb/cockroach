@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "azure",
+    srcs = [
+        "auth.go",
+        "azure.go",
+        "doc.go",
+        "flags.go",
+        "ids.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/vm",
+        "//pkg/cmd/roachprod/vm/flagstub",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_azure_azure_sdk_for_go//profiles/latest/compute/mgmt/compute",
+        "@com_github_azure_azure_sdk_for_go//profiles/latest/network/mgmt/network",
+        "@com_github_azure_azure_sdk_for_go//profiles/latest/resources/mgmt/resources",
+        "@com_github_azure_azure_sdk_for_go//profiles/latest/resources/mgmt/subscriptions",
+        "@com_github_azure_azure_sdk_for_go//services/compute/mgmt/2019-07-01/compute",
+        "@com_github_azure_go_autorest_autorest//:autorest",
+        "@com_github_azure_go_autorest_autorest_azure_auth//:auth",
+        "@com_github_azure_go_autorest_autorest_to//:to",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

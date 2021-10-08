@@ -730,13 +730,15 @@ func TestUpdateAbortSpan(t *testing.T) {
 				skip.IgnoreLint(t, "invalid test case")
 			}
 
-			db := storage.NewDefaultInMem()
+			db := storage.NewDefaultInMemForTesting()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()
+			st := makeClusterSettingsUsingEngineIntentsSetting(db)
 			evalCtx := &MockEvalCtx{
-				Desc:      &desc,
-				AbortSpan: as,
+				ClusterSettings: st,
+				Desc:            &desc,
+				AbortSpan:       as,
 				CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 					return true, hlc.Timestamp{}, 0
 				},

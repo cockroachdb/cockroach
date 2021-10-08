@@ -14,14 +14,17 @@
 package main
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/leaktestcall"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
+	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
 	"golang.org/x/tools/go/analysis/passes/assign"
 	"golang.org/x/tools/go/analysis/passes/atomic"
@@ -49,18 +52,23 @@ import (
 )
 
 func main() {
-	unitchecker.Main(
-		// First-party analyzers:
-		descriptormarshal.Analyzer,
+	var as []*analysis.Analyzer
+	// First-party analyzers:
+	as = append(as, forbiddenmethod.Analyzers...)
+	as = append(as,
 		hash.Analyzer,
+		leaktestcall.Analyzer,
 		nocopy.Analyzer,
 		returnerrcheck.Analyzer,
 		timer.Analyzer,
 		unconvert.Analyzer,
 		fmtsafe.Analyzer,
 		errcmp.Analyzer,
+		nilness.CRDBAnalyzer,
+	)
 
-		// Standard go vet analyzers:
+	// Standard go vet analyzers:
+	as = append(as,
 		asmdecl.Analyzer,
 		assign.Analyzer,
 		atomic.Analyzer,
@@ -83,8 +91,12 @@ func main() {
 		unreachable.Analyzer,
 		unsafeptr.Analyzer,
 		unusedresult.Analyzer,
+	)
 
-		// Additional analyzers:
+	// Additional analyzers:
+	as = append(as,
 		shadow.Analyzer,
 	)
+
+	unitchecker.Main(as...)
 }

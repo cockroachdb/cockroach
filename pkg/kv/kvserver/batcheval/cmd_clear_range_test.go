@@ -29,18 +29,18 @@ import (
 
 type wrappedBatch struct {
 	storage.Batch
-	clearCount      int
+	clearIterCount  int
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) Clear(key storage.MVCCKey) error {
-	wb.clearCount++
-	return wb.Batch.Clear(key)
+func (wb *wrappedBatch) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+	wb.clearIterCount++
+	return wb.Batch.ClearIterRange(iter, start, end)
 }
 
-func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
+func (wb *wrappedBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 	wb.clearRangeCount++
-	return wb.Batch.ClearRange(start, end)
+	return wb.Batch.ClearMVCCRangeAndIntents(start, end)
 }
 
 // TestCmdClearRangeBytesThreshold verifies that clear range resorts to
@@ -64,24 +64,24 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	overFull := ClearRangeBytesThreshold/len(valueStr) + 1
 	tests := []struct {
 		keyCount           int
-		expClearCount      int
+		expClearIterCount  int
 		expClearRangeCount int
 	}{
 		{
 			keyCount:           1,
-			expClearCount:      1,
+			expClearIterCount:  1,
 			expClearRangeCount: 0,
 		},
 		// More than a single key, but not enough to use ClearRange.
 		{
 			keyCount:           halfFull,
-			expClearCount:      halfFull,
+			expClearIterCount:  1,
 			expClearRangeCount: 0,
 		},
 		// With key sizes requiring additional space, this will overshoot.
 		{
 			keyCount:           overFull,
-			expClearCount:      0,
+			expClearIterCount:  0,
 			expClearRangeCount: 1,
 		},
 	}
@@ -89,7 +89,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			eng := storage.NewDefaultInMem()
+			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 
 			var stats enginepb.MVCCStats
@@ -131,8 +131,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			}
 
 			// Verify we see the correct counts for Clear and ClearRange.
-			if a, e := batch.clearCount, test.expClearCount; a != e {
-				t.Errorf("expected %d clears; got %d", e, a)
+			if a, e := batch.clearIterCount, test.expClearIterCount; a != e {
+				t.Errorf("expected %d iter range clears; got %d", e, a)
 			}
 			if a, e := batch.clearRangeCount, test.expClearRangeCount; a != e {
 				t.Errorf("expected %d clear ranges; got %d", e, a)
@@ -142,11 +142,9 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			if err := batch.Commit(true /* commit */); err != nil {
 				t.Fatal(err)
 			}
-			if err := eng.Iterate(startKey, endKey,
-				func(kv storage.MVCCKeyValue) (bool, error) {
-					return true, errors.New("expected no data in underlying engine")
-				},
-			); err != nil {
+			if err := eng.MVCCIterate(startKey, endKey, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+				return errors.New("expected no data in underlying engine")
+			}); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -157,7 +155,7 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var stats enginepb.MVCCStats

@@ -17,11 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,6 +68,35 @@ func TestCastFromNull(t *testing.T) {
 		res, err := castExpr.Eval(nil)
 		require.NoError(t, err)
 		require.Equal(t, tree.DNull, res)
+	}
+}
+
+// TestStringConcat checks every tuple and scalar type can be concatenated with
+// a string.
+func TestStringConcat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+	for _, typ := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
+		// Strings and Bytes are handled specially.
+		if typ == types.String || typ == types.Bytes {
+			continue
+		}
+		d := randgen.RandDatum(rng, typ, false /* nullOk */)
+		expected, err := tree.PerformCast(&evalCtx, d, types.String)
+		require.NoError(t, err)
+		concatOp := tree.MakeBinaryOperator(tree.Concat)
+		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
+		resLeft, err := concatExprLeft.Eval(&evalCtx)
+		require.NoError(t, err)
+		require.Equal(t, expected, resLeft)
+		concatExprRight := tree.NewTypedBinaryExpr(concatOp, d, tree.NewDString(""), types.String)
+		resRight, err := concatExprRight.Eval(&evalCtx)
+		require.NoError(t, err)
+		require.Equal(t, expected, resRight)
 	}
 }
 

@@ -1,0 +1,87 @@
+statement ok
+CREATE SCHEMA s;
+CREATE TYPE s.typ AS ENUM ();
+CREATE USER testuser2
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER TYPE s.typ OWNER TO fake_user
+
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema.
+statement error pq: user testuser does not have CREATE privilege on schema s
+ALTER TYPE s.typ OWNER TO testuser
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s TO testuser, testuser2
+
+statement ok
+ALTER TYPE s.typ OWNER TO testuser
+
+statement ok
+ALTER TYPE s.typ OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of type typ
+ALTER TYPE s.typ OWNER TO testuser
+
+# other users must be owner to alter the owner to the current owner again
+statement error must be owner of type typ
+ALTER TYPE s.typ OWNER TO root
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER TYPE s.typ OWNER TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER TYPE s.typ OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER TYPE s.typ OWNER TO testuser2
+
+# Ensure testuser2 is owner.
+user root
+
+query T
+SELECT pg_get_userbyid(typowner) FROM pg_type WHERE typname = 'typ';
+----
+testuser2
+
+# Ensure admins who don't have explicit CREATE privilege on a schema can
+# still become the owner.
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA s2
+
+statement ok
+CREATE TYPE s2.typ AS ENUM ()
+
+user root
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+# This should succeed despite root not having explicit CREATE privilege on s2.
+statement ok
+ALTER TYPE s2.typ OWNER TO root

@@ -21,22 +21,22 @@ import (
 
 // Transform projects a given Geometry from a given Proj4Text to another Proj4Text.
 func Transform(
-	g *geo.Geometry, from geoprojbase.Proj4Text, to geoprojbase.Proj4Text, newSRID geopb.SRID,
-) (*geo.Geometry, error) {
+	g geo.Geometry, from geoprojbase.Proj4Text, to geoprojbase.Proj4Text, newSRID geopb.SRID,
+) (geo.Geometry, error) {
 	if from.Equal(to) {
 		return g.CloneWithSRID(newSRID)
 	}
 
 	t, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	newT, err := transform(t, from, to, newSRID)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
-	return geo.NewGeometryFromGeomT(newT)
+	return geo.MakeGeometryFromGeomT(newT)
 }
 
 // transform performs the projection operation on a geom.T object.

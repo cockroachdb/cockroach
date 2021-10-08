@@ -19,11 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -193,7 +194,7 @@ func (n FiltersExpr) IsFalse() bool {
 
 // OuterCols returns the set of outer columns needed by any of the filter
 // condition expressions.
-func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
+func (n FiltersExpr) OuterCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		colSet.UnionWith(n[i].ScalarProps().OuterCols)
@@ -201,10 +202,10 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
-// Sort sorts the FilterItems in n by the IDs of the expression.
+// Sort sorts the FilterItems in n by the ranks of the expressions.
 func (n *FiltersExpr) Sort() {
 	sort.Slice(*n, func(i, j int) bool {
-		return (*n)[i].Condition.(opt.ScalarExpr).ID() < (*n)[j].Condition.(opt.ScalarExpr).ID()
+		return (*n)[i].Condition.Rank() < (*n)[j].Condition.Rank()
 	})
 }
 
@@ -246,23 +247,26 @@ func (n FiltersExpr) RemoveFiltersItem(search *FiltersItem) FiltersExpr {
 	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
 }
 
-// RemoveCommonFilters removes the filters found in other from n.
-func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
-	// TODO(ridwanmsharif): Faster intersection using a map
-	common := (*n)[:0]
-	for _, filter := range *n {
+// Difference returns a new list of filters containing the filters of n that are
+// not in other. If other is empty, n is returned.
+func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
+	if len(other) == 0 {
+		return n
+	}
+	newFilters := make(FiltersExpr, 0, len(n))
+	for i := range n {
 		found := false
-		for _, otherFilter := range other {
-			if filter.Condition == otherFilter.Condition {
+		for j := range other {
+			if n[i].Condition == other[j].Condition {
 				found = true
 				break
 			}
 		}
 		if !found {
-			common = append(common, filter)
+			newFilters = append(newFilters, n[i])
 		}
 	}
-	*n = common
+	return newFilters
 }
 
 // OutputCols returns the set of columns constructed by the Aggregations
@@ -346,56 +350,111 @@ type ScanFlags struct {
 	// this table.
 	NoIndexJoin bool
 
+	// NoZigzagJoin disallows use of a zigzag join for scanning this table.
+	NoZigzagJoin bool
+
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex bool
-	Direction  tree.Direction
-	Index      int
+	ForceIndex  bool
+	ForceZigzag bool
+	Direction   tree.Direction
+	Index       int
+
+	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
+	// ForceZigzag must also be true.
+	ZigzagIndexes util.FastIntSet
 }
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.ForceIndex
+	return *sf == ScanFlags{}
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
-// hints for a join specified in the query (see tree.JoinTableExpr).
-// It is a bitfield where a bit is 1 if a certain type of join is allowed. The
-// value 0 is special and indicates that any join is allowed.
-type JoinFlags uint8
+// hints for a join specified in the query (see tree.JoinTableExpr).  It is a
+// bitfield where each bit indicates if a certain type of join is disallowed or
+// preferred.
+//
+// The zero value indicates that any join is allowed and there are no special
+// preferences.
+type JoinFlags uint16
 
-// Each flag indicates if a certain type of join is allowed. The JoinFlags are
-// an OR of these flags, with the special case that the value 0 means anything
-// is allowed.
+// Each flag indicates if a certain type of join is disallowed.
 const (
-	// AllowHashJoinStoreLeft corresponds to a hash join where the left side is
+	// DisallowHashJoinStoreLeft corresponds to a hash join where the left side is
 	// stored into the hashtable. Note that execution can override the stored side
 	// if it finds that the other side is smaller (up to a certain size).
-	AllowHashJoinStoreLeft JoinFlags = (1 << iota)
+	DisallowHashJoinStoreLeft JoinFlags = (1 << iota)
 
-	// AllowHashJoinStoreRight corresponds to a hash join where the right side is
-	// stored into the hashtable. Note that execution can override the stored side
-	// if it finds that the other side is smaller (up to a certain size).
-	AllowHashJoinStoreRight
+	// DisallowHashJoinStoreRight corresponds to a hash join where the right side
+	// is stored into the hashtable. Note that execution can override the stored
+	// side if it finds that the other side is smaller (up to a certain size).
+	DisallowHashJoinStoreRight
 
-	// AllowMergeJoin corresponds to a merge join.
-	AllowMergeJoin
+	// DisallowMergeJoin corresponds to a merge join.
+	DisallowMergeJoin
 
-	// AllowLookupJoinIntoLeft corresponds to a lookup join where the lookup
+	// DisallowLookupJoinIntoLeft corresponds to a lookup join where the lookup
 	// table is on the left side.
-	AllowLookupJoinIntoLeft
+	DisallowLookupJoinIntoLeft
 
-	// AllowLookupJoinIntoRight corresponds to a lookup join where the lookup
+	// DisallowLookupJoinIntoRight corresponds to a lookup join where the lookup
 	// table is on the right side.
-	AllowLookupJoinIntoRight
+	DisallowLookupJoinIntoRight
+
+	// DisallowInvertedJoinIntoLeft corresponds to an inverted join where the
+	// inverted index is on the left side.
+	DisallowInvertedJoinIntoLeft
+
+	// DisallowInvertedJoinIntoRight corresponds to an inverted join where the
+	// inverted index is on the right side.
+	DisallowInvertedJoinIntoRight
+
+	// PreferLookupJoinIntoLeft reduces the cost of a lookup join where the lookup
+	// table is on the left side.
+	PreferLookupJoinIntoLeft
+
+	// PreferLookupJoinIntoRight reduces the cost of a lookup join where the
+	// lookup table is on the right side.
+	PreferLookupJoinIntoRight
+)
+
+const (
+	disallowAll JoinFlags = (DisallowHashJoinStoreLeft |
+		DisallowHashJoinStoreRight |
+		DisallowMergeJoin |
+		DisallowLookupJoinIntoLeft |
+		DisallowLookupJoinIntoRight |
+		DisallowInvertedJoinIntoLeft |
+		DisallowInvertedJoinIntoRight)
+
+	// AllowOnlyHashJoinStoreRight has all "disallow" flags set except
+	// DisallowHashJoinStoreRight.
+	AllowOnlyHashJoinStoreRight JoinFlags = disallowAll ^ DisallowHashJoinStoreRight
+
+	// AllowOnlyLookupJoinIntoRight has all "disallow" flags set except
+	// DisallowLookupJoinIntoRight.
+	AllowOnlyLookupJoinIntoRight JoinFlags = disallowAll ^ DisallowLookupJoinIntoRight
+
+	// AllowOnlyInvertedJoinIntoRight has all "disallow" flags set except
+	// DisallowInvertedJoinIntoRight.
+	AllowOnlyInvertedJoinIntoRight JoinFlags = disallowAll ^ DisallowInvertedJoinIntoRight
+
+	// AllowOnlyMergeJoin has all "disallow" flags set except DisallowMergeJoin.
+	AllowOnlyMergeJoin JoinFlags = disallowAll ^ DisallowMergeJoin
 )
 
 var joinFlagStr = map[JoinFlags]string{
-	AllowHashJoinStoreLeft:   "hash join (store left side)",
-	AllowHashJoinStoreRight:  "hash join (store right side)",
-	AllowMergeJoin:           "merge join",
-	AllowLookupJoinIntoLeft:  "lookup join (into left side)",
-	AllowLookupJoinIntoRight: "lookup join (into right side)",
+	DisallowHashJoinStoreLeft:     "hash join (store left side)",
+	DisallowHashJoinStoreRight:    "hash join (store right side)",
+	DisallowMergeJoin:             "merge join",
+	DisallowLookupJoinIntoLeft:    "lookup join (into left side)",
+	DisallowLookupJoinIntoRight:   "lookup join (into right side)",
+	DisallowInvertedJoinIntoLeft:  "inverted join (into left side)",
+	DisallowInvertedJoinIntoRight: "inverted join (into right side)",
+
+	PreferLookupJoinIntoLeft:  "lookup join (into left side)",
+	PreferLookupJoinIntoRight: "lookup join (into right side)",
 }
 
 // Empty returns true if this is the default value (where all join types are
@@ -406,7 +465,7 @@ func (jf JoinFlags) Empty() bool {
 
 // Has returns true if the given flag is set.
 func (jf JoinFlags) Has(flag JoinFlags) bool {
-	return jf.Empty() || jf&flag != 0
+	return jf&flag != 0
 }
 
 func (jf JoinFlags) String() string {
@@ -414,25 +473,42 @@ func (jf JoinFlags) String() string {
 		return "no flags"
 	}
 
-	// Special cases for prettier results.
-	switch jf {
-	case AllowHashJoinStoreLeft | AllowHashJoinStoreRight:
-		return "force hash join"
-	case AllowLookupJoinIntoLeft | AllowLookupJoinIntoRight:
-		return "force lookup join"
+	prefer := jf & (PreferLookupJoinIntoLeft | PreferLookupJoinIntoRight)
+	disallow := jf ^ prefer
+
+	// Special cases with prettier results for common cases.
+	var b strings.Builder
+	switch disallow {
+	case AllowOnlyHashJoinStoreRight:
+		b.WriteString("force hash join (store right side)")
+	case AllowOnlyLookupJoinIntoRight:
+		b.WriteString("force lookup join (into right side)")
+	case AllowOnlyInvertedJoinIntoRight:
+		b.WriteString("force inverted join (into right side)")
+	case AllowOnlyMergeJoin:
+		b.WriteString("force merge join")
+
+	default:
+		for disallow != 0 {
+			flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(disallow))))
+			if b.Len() == 0 {
+				b.WriteString("disallow ")
+			} else {
+				b.WriteString(" and ")
+			}
+			b.WriteString(joinFlagStr[flag])
+			disallow ^= flag
+		}
 	}
 
-	var b strings.Builder
-	b.WriteString("force ")
-	first := true
-	for jf != 0 {
-		flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(jf))))
-		if !first {
-			b.WriteString(" or ")
+	for prefer != 0 {
+		flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(prefer))))
+		if b.Len() > 0 {
+			b.WriteString("; ")
 		}
-		first = false
+		b.WriteString("prefer ")
 		b.WriteString(joinFlagStr[flag])
-		jf ^= flag
+		prefer ^= flag
 	}
 	return b.String()
 }
@@ -520,6 +596,11 @@ type WindowFrame struct {
 	FrameExclusion tree.WindowFrameExclusion
 }
 
+// HasOffset returns true if the WindowFrame contains a specific offset.
+func (f *WindowFrame) HasOffset() bool {
+	return f.StartBoundType.IsOffset() || f.EndBoundType.IsOffset()
+}
+
 func (f *WindowFrame) String() string {
 	var bld strings.Builder
 	switch f.Mode {
@@ -562,7 +643,8 @@ func (f *WindowFrame) String() string {
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
 		s.Constraint == nil &&
-		s.HardLimit == 0
+		s.HardLimit == 0 &&
+		!s.LocalityOptimized
 }
 
 // IsUnfiltered returns true if the ScanPrivate will produce all rows in the
@@ -571,7 +653,7 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
-		!s.UsesPartialIndex(md)
+		s.PartialIndexPredicate(md) == nil
 }
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -582,20 +664,36 @@ func (s *ScanPrivate) IsLocking() bool {
 	return s.Locking != nil
 }
 
-// UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
-// partial index.
-func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
-	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
-	return isPartialIndex
-}
-
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
 // the partial index that the scan uses. If the scan does not use a partial
-// index, this function panics. UsesPartialIndex should be called first to
-// determine if the scan operates over a partial index.
+// index, nil is returned.
 func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	tabMeta := md.TableMeta(s.Table)
-	return PartialIndexPredicate(tabMeta, s.Index)
+	p, ok := tabMeta.PartialIndexPredicate(s.Index)
+	if !ok {
+		// The index is not a partial index.
+		return nil
+	}
+	return *p.(*FiltersExpr)
+}
+
+// SetConstraint sets the constraint in the ScanPrivate and caches the exact
+// prefix. This function should always be used instead of modifying the
+// constraint directly.
+func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
+	s.Constraint = c
+	if c == nil {
+		s.ExactPrefix = 0
+	} else {
+		s.ExactPrefix = c.ExactPrefix(evalCtx)
+	}
+}
+
+// UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a
+// partial index.
+func (lj *LookupJoinPrivate) UsesPartialIndex(md *opt.Metadata) bool {
+	_, isPartialIndex := md.Table(lj.Table).Index(lj.Index).Predicate()
+	return isPartialIndex
 }
 
 // NeedResults returns true if the mutation operator can return the rows that
@@ -623,10 +721,20 @@ func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	return m.ReturnCols[ord]
 }
 
-// MapToInputCols maps the given set of table columns to a corresponding set of
-// input columns using the MapToInputID function.
-func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
+// MapToInputCols maps the given set of columns to a corresponding set of
+// input columns using the PassthroughCols list and MapToInputID function.
+func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
+
+	// First see if any of the columns come from the passthrough columns.
+	for _, c := range m.PassthroughCols {
+		if cols.Contains(c) {
+			inCols.Add(c)
+		}
+	}
+
+	// The remaining columns must come from the table.
+	tabCols := cols.Difference(inCols)
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
@@ -634,6 +742,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 		}
 		inCols.Add(id)
 	})
+
 	return inCols
 }
 
@@ -657,6 +766,11 @@ func (m *MutationPrivate) WithBindingID() opt.WithID {
 // WithBindingID is used by factory.Replace as a uniform way to get the with ID.
 func (w *WithExpr) WithBindingID() opt.WithID {
 	return w.ID
+}
+
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (r *RecursiveCTEExpr) WithBindingID() opt.WithID {
+	return r.WithID
 }
 
 // initUnexportedFields is called when a project expression is created.
@@ -692,20 +806,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
 			// different values for equal values of d, like 1 and 1.0.
-			//
-			// We only add the FD if composite types are not involved.
-			//
-			// TODO(radu): add an allowlist of expressions/operators that are ok, like
-			// arithmetic.
-			composite := false
-			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := mem.Metadata().ColumnMeta(i).Type
-				if sqlbase.HasCompositeKeyEncoding(typ) {
-					composite = true
-					break
-				}
-			}
-			if !composite {
+			if !CanBeCompositeSensitive(mem.Metadata(), item.Element) {
 				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
 			}
 		}
@@ -781,7 +882,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 
 	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
 		*NotLikeExpr, *ILikeExpr, *NotILikeExpr, *SimilarToExpr, *NotSimilarToExpr, *RegMatchExpr,
-		*NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr, *ContainsExpr, *JsonExistsExpr,
+		*NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr, *ContainsExpr, *ContainedByExpr, *JsonExistsExpr,
 		*JsonAllExistsExpr, *JsonSomeExistsExpr, *AnyScalarExpr, *BitandExpr, *BitorExpr, *BitxorExpr,
 		*PlusExpr, *MinusExpr, *MultExpr, *DivExpr, *FloorDivExpr, *ModExpr, *PowExpr, *ConcatExpr,
 		*LShiftExpr, *RShiftExpr, *WhenExpr:
@@ -841,18 +942,6 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	return false
 }
 
-// PartialIndexPredicate returns the FiltersExpr representing the partial index
-// predicate at the given index ordinal. If the index at the ordinal is not a
-// partial index, this function panics. cat.Index.Predicate should be used first
-// to determine if the index is a partial index.
-//
-// Note that TableMeta.PartialIndexPredicates is not initialized for mutation
-// queries. This function will panic in the context of a mutation.
-func PartialIndexPredicate(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) FiltersExpr {
-	p := tabMeta.PartialIndexPredicates[ord]
-	return *p.(*FiltersExpr)
-}
-
 // FKCascades stores metadata necessary for building cascading queries.
 type FKCascades []FKCascade
 
@@ -867,17 +956,18 @@ type FKCascade struct {
 	Builder CascadeBuilder
 
 	// WithID identifies the buffer for the mutation input in the original
-	// expression tree.
+	// expression tree. 0 if the cascade does not require input.
 	WithID opt.WithID
 
 	// OldValues are column IDs from the mutation input that correspond to the
 	// old values of the modified rows. The list maps 1-to-1 to foreign key
-	// columns.
+	// columns. Empty if the cascade does not require input.
 	OldValues opt.ColList
 
 	// NewValues are column IDs from the mutation input that correspond to the
 	// new values of the modified rows. The list maps 1-to-1 to foreign key columns.
-	// It is empty if the mutation is a deletion.
+	// It is empty if the mutation is a deletion. Empty if the cascade does not
+	// require input.
 	NewValues opt.ColList
 }
 
@@ -897,6 +987,9 @@ type CascadeBuilder interface {
 	//
 	// The method does not mutate any captured state; it is ok to call Build
 	// concurrently (e.g. if the plan it originates from is cached and reused).
+	//
+	// Some cascades (delete fast path) don't require an input binding. In that
+	// case binding is 0, bindingProps is nil, and oldValues/newValues are empty.
 	//
 	// Note: factory is always *norm.Factory; it is an interface{} only to avoid
 	// circular package dependencies.

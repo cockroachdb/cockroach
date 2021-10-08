@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvserverbase",
+    srcs = [
+        "base.go",
+        "bulk_adder.go",
+        "knobs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "//pkg/util/quotapool",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)

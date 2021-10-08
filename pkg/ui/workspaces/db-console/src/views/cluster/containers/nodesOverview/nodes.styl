@@ -1,0 +1,49 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.embedded-table
+  padding 0 $spacing-medium-small $spacing-medium-small
+
+.embedded-table--dense
+  padding 0 $spacing-medium-small $spacing-base
+.nodes-overview
+  background $colors--neutral-1
+  &__panel
+    background $colors--neutral-0
+    margin-bottom $spacing-small
+    border 1px solid rgb(237, 237, 237)
+    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+    border-radius 3px
+
+.status-column
+  &--color-warning
+  &--color-suspect
+    color $colors--functional-orange-3
+  &--color-dead
+    color $colors--functional-red-3
+
+.nodes-list-container
+  background $background-color
+  display flex
+  flex-direction column
+
+.nodes-list-container > *
+  margin-bottom $spacing-smaller
+
+.nodes-list-container > *:last-child
+  margin-bottom 0
+
+.nodes-overview__panel .crl-table-wrapper .nodes-table__link
+  color $colors--link
+
+.nodes-overview__panel .crl-table-wrapper .ant-table-row:hover .nodes-table__link
+  text-decoration underline

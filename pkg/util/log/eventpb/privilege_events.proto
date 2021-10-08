@@ -1,0 +1,138 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: SQL Privilege changes
+// Channel: PRIVILEGES
+//
+// Events in this category pertain to DDL (Data Definition Language)
+// operations performed by SQL statements that modify the privilege
+// grants for stored objects.
+//
+// They are relative to a particular SQL tenant.
+// In a multi-tenant setup, copies of DDL-related events are preserved
+// in each tenant's own `system.eventlog` table.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CommonSQLPrivilegeEventDetails contains the fields common to all
+// grant/revoke events.
+message CommonSQLPrivilegeEventDetails {
+  // The user/role affected by the grant or revoke operation.
+  string grantee = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // The privileges being granted to the grantee.
+  repeated string granted_privileges = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The privileges being revoked from the grantee.
+  repeated string revoked_privileges = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// ChangeDatabasePrivilege is recorded when privileges are
+// added to / removed from a user for a database object.
+message ChangeDatabasePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected database.
+  string database_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// ChangeTablePrivilege is recorded when privileges are added to / removed
+// from a user for a table, sequence or view object.
+message ChangeTablePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected table.
+  string table_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// ChangeSchemaPrivilege is recorded when privileges are added to /
+// removed from a user for a schema object.
+message ChangeSchemaPrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected schema.
+  string schema_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// ChangeTypePrivilege is recorded when privileges are added to /
+// removed from a user for a type object.
+message ChangeTypePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected type.
+  string type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+
+// AlterDatabaseOwner is recorded when a database's owner is changed.
+message AlterDatabaseOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the database being affected.
+  string database_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterSchemaOwner is recorded when a schema's owner is changed.
+message AlterSchemaOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected schema.
+  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterTypeOwner is recorded when the owner of a user-defiend type is changed.
+message AlterTypeOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected type.
+  string type_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterTableOwner is recorded when the owner of a table, view or sequence is changed.
+message AlterTableOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected object.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterDefaultPrivileges is recorded when default privileges are changed.
+message AlterDefaultPrivileges {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected database.
+  string database_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Either role_name should be populated or for_all_roles should be true.
+  // The role having its default privileges altered.
+  string role_name = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // Identifies if FOR ALL ROLES is used.
+  bool for_all_roles = 6 [(gogoproto.jsontag) = ",omitempty"];;
+}

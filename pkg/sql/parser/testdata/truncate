@@ -1,0 +1,31 @@
+parse
+TRUNCATE TABLE a
+----
+TRUNCATE TABLE a
+TRUNCATE TABLE a -- fully parenthesized
+TRUNCATE TABLE a -- literals removed
+TRUNCATE TABLE _ -- identifiers removed
+
+parse
+EXPLAIN TRUNCATE TABLE a
+----
+EXPLAIN TRUNCATE TABLE a
+EXPLAIN TRUNCATE TABLE a -- fully parenthesized
+EXPLAIN TRUNCATE TABLE a -- literals removed
+EXPLAIN TRUNCATE TABLE _ -- identifiers removed
+
+parse
+TRUNCATE TABLE a, b.c
+----
+TRUNCATE TABLE a, b.c
+TRUNCATE TABLE a, b.c -- fully parenthesized
+TRUNCATE TABLE a, b.c -- literals removed
+TRUNCATE TABLE _, _._ -- identifiers removed
+
+parse
+TRUNCATE TABLE a CASCADE
+----
+TRUNCATE TABLE a CASCADE
+TRUNCATE TABLE a CASCADE -- fully parenthesized
+TRUNCATE TABLE a CASCADE -- literals removed
+TRUNCATE TABLE _ CASCADE -- identifiers removed

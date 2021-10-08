@@ -1,0 +1,314 @@
+# Tests for multi-column inverted indexes.
+
+# Err if the last column is not an invertable type.
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
+
+# Err if a non-last column is not a non-invertable type.
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE m_err (k INT PRIMARY KEY, j JSON, geom GEOMETRY, INVERTED INDEX (j, geom))
+
+# Err if a non-last column is not a non-invertable type.
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE m_err (k INT PRIMARY KEY, a INT, j JSON, geom GEOMETRY, INVERTED INDEX (a, j, geom))
+
+statement ok
+CREATE TABLE m (k INT PRIMARY KEY, a INT, geom GEOMETRY, INVERTED INDEX (a, geom))
+
+statement ok
+CREATE TABLE n (k INT PRIMARY KEY, a INT, geom GEOMETRY);
+CREATE INVERTED INDEX n ON n (a, geom);
+
+statement
+CREATE TABLE s (
+  k INT PRIMARY KEY,
+  a INT,
+  geom GEOMETRY,
+  INVERTED INDEX (a, geom) WITH (geometry_min_x=0),
+  FAMILY (k),
+  FAMILY (a),
+  FAMILY (geom)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE s]
+----
+CREATE TABLE public.s (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   geom GEOMETRY NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   INVERTED INDEX s_a_geom_idx (a, geom) WITH (geometry_min_x=0),
+   FAMILY fam_0_k (k),
+   FAMILY fam_1_a (a),
+   FAMILY fam_2_geom (geom)
+)
+
+# Dropping the inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_j (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_j DROP COLUMN j;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
+----
+CREATE TABLE public.drop_j (
+   a INT8 NULL,
+   b INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
+)
+
+# Dropping the non-inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_a (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_a DROP COLUMN a;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
+----
+CREATE TABLE public.drop_a (
+   b INT8 NULL,
+   j JSONB NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
+)
+
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies multi-column inverted indexes.
+statement ok
+CREATE TABLE src (a INT, b INT, j JSON, INVERTED INDEX (a, j), INVERTED INDEX (a, b, j));
+CREATE TABLE dst (LIKE src INCLUDING INDEXES);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE dst]
+----
+CREATE TABLE public.dst (
+   a INT8 NULL,
+   b INT8 NULL,
+   j JSONB NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   INVERTED INDEX src_a_j_idx (a, j),
+   INVERTED INDEX src_a_b_j_idx (a, b, j),
+   FAMILY "primary" (a, b, j, rowid)
+)
+
+# Test dropping a table with a multi-column inverted index.
+statement ok
+CREATE TABLE t (i INT, s STRING, j JSON, INVERTED INDEX (i, s, j));
+DROP TABLE t;
+
+# Test selecting, inserting, updating, and deleting on a table with a
+# multi-column inverted index.
+statement ok
+CREATE TABLE t (
+  i INT,
+  s STRING,
+  j JSON,
+  INVERTED INDEX idx (i, s, j)
+)
+
+statement ok
+INSERT INTO t VALUES
+    (1, 'foo', '{"x": "y", "num": 1}'),
+    (2, 'bar', '{"x": "y", "num": 2}'),
+    (3, 'baz', '{"x": "y", "num": 3}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'foo' AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i = 1 AND s IN ('foo', 'bar') AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'bar') AND j @> '{"num": 1}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'baz') AND j @> '{"x": "y"}' ORDER BY i
+----
+1  foo  {"num": 1, "x": "y"}
+3  baz  {"num": 3, "x": "y"}
+
+# Delete a row.
+statement ok
+DELETE FROM t WHERE i = 3
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'baz') AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+# Update the JSON column of a row.
+statement ok
+UPDATE t SET j = '{"x": "y", "num": 10}' WHERE i = 1
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'foo' AND j @> '{"num": 10}'
+----
+1  foo  {"num": 10, "x": "y"}
+
+# Update the non-inverted prefix columns of rows.
+statement ok
+UPDATE t SET i = 10 WHERE i = 1;
+UPDATE t SET s = 'bar' WHERE i = 2;
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (2, 10) AND s IN ('foo', 'bar') AND j @> '{"x": "y"}' ORDER BY i
+----
+2   bar  {"num": 2, "x": "y"}
+10  foo  {"num": 10, "x": "y"}
+
+# Upsert a non-conflicting row.
+statement ok
+UPSERT INTO t VALUES (3, 'bar', '{"x": "y", "num": 3}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'bar' AND j @> '{"x": "y"}' ORDER BY i
+----
+2  bar  {"num": 2, "x": "y"}
+3  bar  {"num": 3, "x": "y"}
+
+# Upsert a conflicting row with a different JSON value.
+statement ok
+UPSERT INTO t VALUES (3, 'bar', '{"x": "y", "num": 4}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'bar' AND j @> '{"num": 4}'
+----
+3  bar  {"num": 4, "x": "y"}
+
+# The non-inverted prefix columns must be constrained in order to use the index.
+statement error index "idx" is inverted and cannot be used for this query
+SELECT * FROM t@idx WHERE i = 1 AND j @> '{"num": 2}'
+
+statement error index "idx" is inverted and cannot be used for this query
+SELECT * FROM t@idx WHERE s = 'foo' AND j @> '{"num": 2}'
+
+# Backfill a multi-column inverted index.
+
+statement ok
+CREATE TABLE backfill_a (i INT, s STRING, j JSON)
+
+statement ok
+INSERT INTO backfill_a VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}'),
+    (4, 'baz', '["a", "b"]')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_a (i, s, j)
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i = 1 AND s = 'foo' AND j @> '7'::JSON
+----
+1  foo  [7]
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i IN (1, 2, 3, 4) AND s IN ('foo', 'bar', 'baz') AND j @> '7'::JSON ORDER BY i
+----
+1  foo  [7]
+2  bar  [7, 0, 7]
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i IN (3, 4) AND s = 'baz' AND j @> '{"a": "b"}'::JSON
+----
+3  baz  {"a": "b"}
+
+# Backfill a partial index when a new table is created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE backfill_b (i INT, s STRING, j JSON)
+
+statement ok
+INSERT INTO backfill_b VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_b (i, s, j)
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM backfill_b@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON
+----
+2  bar  [7, 0, 7]
+
+# Backfill a partial index with a reference to a new column in the predicate.
+
+statement ok
+CREATE TABLE backfill_c (i INT, j JSON)
+
+statement ok
+INSERT INTO backfill_c VALUES
+    (1, '[7]'),
+    (2, '[7, 0, 7]'),
+    (3, '{"a": "b"}')
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE backfill_c ADD COLUMN s STRING
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_c (i, s, j)
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM backfill_c@idx WHERE i IN (1, 2, 3, 4) AND s IS NULL AND j @> '7'::JSON ORDER BY i
+----
+1  [7]        NULL
+2  [7, 0, 7]  NULL
+
+# Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE backfill_d (i INT, s enum, j JSON)
+
+statement ok
+INSERT INTO backfill_d VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_d (i, s, j)
+
+query ITT
+SELECT * FROM backfill_d@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON
+----
+2  bar  [7, 0, 7]

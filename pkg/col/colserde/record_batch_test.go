@@ -19,19 +19,23 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -182,12 +186,27 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	case types.IntervalFamily:
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
-		sizeOfInt64 := int(unsafe.Sizeof(int64(0)))
+		sizeOfInt64 := int(memsize.Int64)
 		for i := range data {
 			data[i] = make([]byte, sizeOfInt64*3)
 			binary.LittleEndian.PutUint64(data[i][0:sizeOfInt64], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64:sizeOfInt64*2], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64*2:sizeOfInt64*3], rng.Uint64())
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case types.JsonFamily:
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		for i := range data {
+			j, err := json.Random(20, rng)
+			if err != nil {
+				panic(err)
+			}
+			bytes, err := json.EncodeJSON(nil, j)
+			if err != nil {
+				panic(err)
+			}
+			data[i] = bytes
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -198,8 +217,8 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			err     error
 		)
 		for i := range data {
-			d := sqlbase.RandDatum(rng, t, false /* nullOk */)
-			data[i], err = sqlbase.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
+			d := randgen.RandDatum(rng, t, false /* nullOk */)
+			data[i], err = rowenc.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
 			if err != nil {
 				panic(err)
 			}
@@ -214,11 +233,6 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 func TestRecordBatchSerializer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Run("UnsupportedSchema", func(t *testing.T) {
-		_, err := colserde.NewRecordBatchSerializer([]*types.T{})
-		require.True(t, testutils.IsError(err, "zero length"), err)
-	})
-
 	// Serializing and Deserializing an invalid schema is undefined.
 
 	t.Run("SerializeDifferentColumnLengths", func(t *testing.T) {
@@ -229,7 +243,7 @@ func TestRecordBatchSerializer(t *testing.T) {
 		firstCol := b.NewArray().Data()
 		b.AppendValues([]int64{3}, nil /* valid */)
 		secondCol := b.NewArray().Data()
-		_, _, err = s.Serialize(&bytes.Buffer{}, []*array.Data{firstCol, secondCol})
+		_, _, err = s.Serialize(&bytes.Buffer{}, []*array.Data{firstCol, secondCol}, firstCol.Len())
 		require.True(t, testutils.IsError(err, "mismatched data lengths"), err)
 	})
 }
@@ -253,7 +267,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = sqlbase.RandType(rng)
+		typs[i] = randgen.RandType(rng)
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 
@@ -265,13 +279,15 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	// Run Serialize/Deserialize in a loop to test reuse.
 	for i := 0; i < 2; i++ {
 		buf.Reset()
-		_, _, err := s.Serialize(&buf, data)
+		dataCopy := append([]*array.Data{}, data...)
+		_, _, err := s.Serialize(&buf, dataCopy, dataLen)
 		require.NoError(t, err)
 		if buf.Len()%8 != 0 {
 			t.Fatal("message length must align to 8 byte boundary")
 		}
 		var deserializedData []*array.Data
-		require.NoError(t, s.Deserialize(&deserializedData, buf.Bytes()))
+		_, err = s.Deserialize(&deserializedData, buf.Bytes())
+		require.NoError(t, err)
 
 		// Check the fields we care most about. We can't use require.Equal directly
 		// due to some unimportant differences (e.g. mutability of underlying
@@ -297,6 +313,46 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	}
 }
 
+func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var err error
+	rng, _ := randutil.NewPseudoRand()
+
+	typs := []*types.T{types.Bytes}
+	src := testAllocator.NewMemBatchWithMaxCapacity(typs)
+	dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
+	bytesVec := src.ColVec(0).Bytes()
+	maxValueLen := coldata.BytesInitialAllocationFactor * 8
+	value := make([]byte, maxValueLen)
+	for i := 0; i < coldata.BatchSize(); i++ {
+		value = value[:rng.Intn(maxValueLen)]
+		_, err = rng.Read(value)
+		require.NoError(t, err)
+		bytesVec.Set(i, value)
+	}
+	src.SetLength(coldata.BatchSize())
+
+	c, err := colserde.NewArrowBatchConverter(typs)
+	require.NoError(t, err)
+	r, err := colserde.NewRecordBatchSerializer(typs)
+	require.NoError(t, err)
+	require.NoError(t, roundTripBatch(src, dest, c, r))
+
+	originalMemorySize := colmem.GetBatchMemSize(src)
+	newMemorySize := colmem.GetBatchMemSize(dest)
+
+	// We expect that the original and the new memory sizes are relatively close
+	// to each other (do not differ by more than a third). We cannot guarantee
+	// more precise bound here because the capacities of the underlying []byte
+	// slices is unpredictable. However, this check is sufficient to ensure that
+	// we don't double count memory under `Bytes.data`.
+	const maxDeviation = float64(0.33)
+	deviation := math.Abs(float64(originalMemorySize-newMemorySize) / (float64(originalMemorySize)))
+	require.GreaterOrEqualf(t, maxDeviation, deviation,
+		"new memory size %d is too far away from original %d", newMemorySize, originalMemorySize)
+}
+
 func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -317,7 +373,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				if _, _, err := s.Serialize(&buf, data); err != nil {
+				if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -326,7 +382,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		// buf should still have the result of the last serialization. It is still
 		// empty in cases in which we run only the Deserialize benchmarks.
 		if buf.Len() == 0 {
-			if _, _, err := s.Serialize(&buf, data); err != nil {
+			if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -334,7 +390,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		b.Run(fmt.Sprintf("Deserialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
-				if err := s.Deserialize(&deserializedData, buf.Bytes()); err != nil {
+				if _, err := s.Deserialize(&deserializedData, buf.Bytes()); err != nil {
 					b.Fatal(err)
 				}
 				deserializedData = deserializedData[:0]

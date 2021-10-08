@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scplan",
+    srcs = [
+        "declarative.go",
+        "helpers.go",
+        "plan.go",
+        "rules.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scgraph",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "scplan_test",
+    srcs = [
+        "main_test.go",
+        "plan_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":scplan",
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/resolver",
+        "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scgraph",
+        "//pkg/sql/schemachanger/scgraphviz",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

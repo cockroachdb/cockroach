@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -32,7 +33,8 @@ func TestLookupJoinProvided(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	var f norm.Factory
 	f.Init(evalCtx, tc)
 	md := f.Metadata()
@@ -96,7 +98,7 @@ func TestLookupJoinProvided(t *testing.T) {
 			input := &testexpr.Instance{
 				Rel: &props.Relational{},
 				Provided: &physical.Provided{
-					Ordering: physical.ParseOrdering(tc.input),
+					Ordering: props.ParseOrdering(tc.input),
 				},
 			}
 			lookupJoin := f.Memo().MemoizeLookupJoin(
@@ -110,7 +112,7 @@ func TestLookupJoinProvided(t *testing.T) {
 					Cols:     tc.outCols,
 				},
 			)
-			req := physical.ParseOrderingChoice(tc.required)
+			req := props.ParseOrderingChoice(tc.required)
 			res := lookupJoinBuildProvided(lookupJoin, &req).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)

@@ -20,22 +20,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 )
 
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
-	rowContainer *rowcontainer.RowContainer
+	rowContainer *rowContainerHelper
 	rowsAffected int
 	err          error
 }
@@ -43,19 +45,21 @@ type RowResultWriter struct {
 var _ rowResultWriter = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
-func NewRowResultWriter(rowContainer *rowcontainer.RowContainer) *RowResultWriter {
+func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
 	return &RowResultWriter{rowContainer: rowContainer}
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
-func (b *RowResultWriter) IncrementRowsAffected(n int) {
+func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	b.rowsAffected += n
 }
 
 // AddRow implements the rowResultWriter interface.
 func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	_, err := b.rowContainer.AddRow(ctx, row)
-	return err
+	if b.rowContainer != nil {
+		return b.rowContainer.addRow(ctx, row)
+	}
+	return nil
 }
 
 // SetError is part of the rowResultWriter interface.
@@ -85,7 +89,7 @@ func newCallbackResultWriter(
 	return &callbackResultWriter{fn: fn}
 }
 
-func (c *callbackResultWriter) IncrementRowsAffected(n int) {
+func (c *callbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	c.rowsAffected += n
 }
 
@@ -101,16 +105,23 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
+func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
+	progress := job.Progress()
+	importProgress := progress.GetImport()
+	return importProgress.Summary
+}
+
 func makeImportReaderSpecs(
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
 	walltime int64,
-	user string,
+	user security.SQLUsername,
 ) []*execinfrapb.ReadImportDataSpec {
-
+	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
 	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(nodes))
 	progress := job.Progress()
@@ -121,15 +132,17 @@ func makeImportReaderSpecs(
 		if i < len(nodes) {
 			spec := &execinfrapb.ReadImportDataSpec{
 				Tables: tables,
+				Types:  typeDescs,
 				Format: format,
 				Progress: execinfrapb.JobProgress{
-					JobID: *job.ID(),
+					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos: walltime,
-				Uri:           make(map[int32]string),
-				ResumePos:     make(map[int32]int64),
-				User:          user,
+				WalltimeNanos:         walltime,
+				Uri:                   make(map[int32]string),
+				ResumePos:             make(map[int32]int64),
+				UserProto:             user.EncodeProto(),
+				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -153,10 +166,13 @@ func presplitTableBoundaries(
 	cfg *ExecutorConfig,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 ) error {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "import-pre-splitting-table-boundaries")
+	defer span.Finish()
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := sqlbase.MakeImmutableTableDescriptor(*tbl.Desc)
+		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
@@ -180,9 +196,10 @@ func presplitTableBoundaries(
 // returned.
 func DistIngest(
 	ctx context.Context,
-	phs PlanHookState,
+	execCtx JobExecContext,
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -190,21 +207,29 @@ func DistIngest(
 ) (roachpb.BulkOpSummary, error) {
 	ctx = logtags.AddTag(ctx, "import-distsql-ingest", nil)
 
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, phs.User())
+	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
+	// processor in their progress updates. It stores stats about the amount of
+	// data written since the last time we update the job progress.
+	accumulatedBulkSummary := struct {
+		syncutil.Mutex
+		roachpb.BulkOpSummary
+	}{}
+	accumulatedBulkSummary.Lock()
+	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
+	accumulatedBulkSummary.Unlock()
 
-	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
-	if err != nil {
-		return roachpb.BulkOpSummary{}, err
-	}
-	p := MakePhysicalPlan(gatewayNodeID)
+	inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, nodes, walltime,
+		execCtx.User())
+
+	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
@@ -222,24 +247,35 @@ func DistIngest(
 
 	p.PlanToStreamColMap = []int{0, 1}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
-	if err := job.FractionProgressed(ctx,
-		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			prog := details.(*jobspb.Progress_Import).Import
-			prog.ReadProgress = make([]float32, len(from))
-			prog.ResumePos = make([]int64, len(from))
-			return 0.0
-		},
-	); err != nil {
-		return roachpb.BulkOpSummary{}, err
+	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
+	if importDetails.ReadProgress == nil {
+		// Initialize the progress metrics on the first attempt.
+		if err := job.FractionProgressed(ctx, nil, /* txn */
+			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				prog := details.(*jobspb.Progress_Import).Import
+				prog.ReadProgress = make([]float32, len(from))
+				prog.ResumePos = make([]int64, len(from))
+				if prog.SequenceDetails == nil {
+					prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
+					for i := range prog.SequenceDetails {
+						prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
+					}
+				}
+
+				return 0.0
+			},
+		); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
 	}
 
 	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
 
 	updateJobProgress := func() error {
-		return job.FractionProgressed(ctx,
+		return job.FractionProgressed(ctx, nil, /* txn */
 			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				var overall float32
 				prog := details.(*jobspb.Progress_Import).Import
@@ -251,6 +287,11 @@ func DistIngest(
 					prog.ReadProgress[i] = fileProgress
 					overall += fileProgress
 				}
+
+				accumulatedBulkSummary.Lock()
+				prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
+				accumulatedBulkSummary.Reset()
+				accumulatedBulkSummary.Unlock()
 				return overall / float32(len(from))
 			},
 		)
@@ -264,6 +305,10 @@ func DistIngest(
 			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
 				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
 			}
+
+			accumulatedBulkSummary.Lock()
+			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
+			accumulatedBulkSummary.Unlock()
 
 			if alwaysFlushProgress {
 				return updateJobProgress()
@@ -282,8 +327,10 @@ func DistIngest(
 		return nil
 	})
 
-	if err := presplitTableBoundaries(ctx, phs.ExecCfg(), tables); err != nil {
-		return roachpb.BulkOpSummary{}, err
+	if evalCtx.Codec.ForSystemTenant() {
+		if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), tables); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
 	}
 
 	recv := MakeDistSQLReceiver(
@@ -292,8 +339,10 @@ func DistIngest(
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* txn - the flow does not read or write the database */
-		func(ts hlc.Timestamp) {},
+		nil, /* clockUpdater */
 		evalCtx.Tracing,
+		evalCtx.ExecCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
@@ -321,7 +370,7 @@ func DistIngest(
 		defer close(stopProgress)
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+		dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 		return rowResultWriter.Err()
 	})
 

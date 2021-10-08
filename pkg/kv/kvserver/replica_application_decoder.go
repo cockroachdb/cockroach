@@ -17,8 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -140,21 +139,27 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(cmd.proposal.ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ForkSpan(cmd.proposal.ctx, opName)
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
-			// the span context and start a server-side span.
-			spanCtx, err := d.r.AmbientContext.Tracer.Extract(
-				opentracing.TextMap, opentracing.TextMapCarrier(cmd.raftCmd.TraceData))
+			// the remote span and start a server-side span that follows from it.
+			spanMeta, err := d.r.AmbientContext.Tracer.ExtractMetaFrom(tracing.MapCarrier{
+				Map: cmd.raftCmd.TraceData,
+			})
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
-				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
-					"raft application", opentracing.FollowsFrom(spanCtx))
-				cmd.ctx = opentracing.ContextWithSpan(ctx, cmd.sp)
+				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
+					ctx,
+					opName,
+					// NB: we are lying here - we are not actually going to propagate
+					// the recording towards the root. That seems ok.
+					tracing.WithParentAndManualCollection(spanMeta),
+					tracing.WithFollowsFrom(),
+				)
 			}
 		} else {
-			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ForkSpan(ctx, opName)
 		}
 	}
 }

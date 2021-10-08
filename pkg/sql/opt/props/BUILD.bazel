@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "props",
+    srcs = [
+        "cardinality.go",
+        "col_stats_map.go",
+        "func_dep.go",
+        "histogram.go",
+        "logical.go",
+        "multiplicity.go",
+        "ordering_choice.go",
+        "selectivity.go",
+        "statistics.go",
+        "verify.go",
+        "volatility.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/inverted",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
+    ],
+)
+
+go_test(
+    name = "props_test",
+    size = "small",
+    srcs = [
+        "cardinality_test.go",
+        "col_stats_map_test.go",
+        "func_dep_rand_test.go",
+        "func_dep_test.go",
+        "histogram_test.go",
+        "multiplicity_test.go",
+        "ordering_choice_test.go",
+        "selectivity_test.go",
+        "statistics_test.go",
+        "volatility_test.go",
+    ],
+    embed = [":props"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

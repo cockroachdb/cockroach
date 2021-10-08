@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# keep
+go_library(
+    name = "gssapiccl",
+    srcs = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["gssapi.go"],
+        "//conditions:default": ["empty.go"],
+    }),
+    cdeps = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["@cockroach//c-deps:libkrb5"],
+        "//conditions:default": [],
+    }),
+    cgo = True,
+    clinkopts = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["-ldl -lresolv"],
+        "//conditions:default": [],
+    }),
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            "//pkg/ccl/utilccl",
+            "//pkg/security",
+            "//pkg/sql",
+            "//pkg/sql/sem/tree",
+            "//pkg/sql/pgwire",
+            "//pkg/sql/pgwire/hba",
+            "@com_github_cockroachdb_errors//:errors",
+        ],
+        "//conditions:default": [],
+    }),
+)

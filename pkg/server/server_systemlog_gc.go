@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -35,7 +35,7 @@ const (
 var (
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
-	rangeLogTTL = settings.RegisterPublicDurationSetting(
+	rangeLogTTL = settings.RegisterDurationSetting(
 		"server.rangelog.ttl",
 		fmt.Sprintf(
 			"if nonzero, range log entries older than this duration are deleted every %s. "+
@@ -43,19 +43,19 @@ var (
 			systemLogGCPeriod,
 		),
 		30*24*time.Hour, // 30 days
-	)
+	).WithPublic()
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
 	// entries are periodically garbage collected.
-	eventLogTTL = settings.RegisterPublicDurationSetting(
+	eventLogTTL = settings.RegisterDurationSetting(
 		"server.eventlog.ttl",
 		fmt.Sprintf(
-			"if nonzero, event log entries older than this duration are deleted every %s. "+
+			"if nonzero, entries in system.eventlog older than this duration are deleted every %s. "+
 				"Should not be lowered below 24 hours.",
 			systemLogGCPeriod,
 		),
 		90*24*time.Hour, // 90 days
-	)
+	).WithPublic()
 )
 
 // gcSystemLog deletes entries in the given system log table between
@@ -70,7 +70,7 @@ func (s *Server) gcSystemLog(
 	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
 ) (time.Time, int64, error) {
 	var totalRowsAffected int64
-	repl, _, err := s.node.stores.GetReplicaForRangeID(roachpb.RangeID(1))
+	repl, _, err := s.node.stores.GetReplicaForRangeID(ctx, roachpb.RangeID(1))
 	if roachpb.IsRangeNotFoundError(err) {
 		return timestampLowerBound, 0, nil
 	}
@@ -78,12 +78,12 @@ func (s *Server) gcSystemLog(
 		return timestampLowerBound, 0, err
 	}
 
-	if !repl.IsFirstRange() || !repl.OwnsValidLease(ctx, s.clock.Now()) {
+	if !repl.IsFirstRange() || !repl.OwnsValidLease(ctx, s.clock.NowAsClockTimestamp()) {
 		return timestampLowerBound, 0, nil
 	}
 
 	deleteStmt := fmt.Sprintf(
-		`SELECT count(1), max(timestamp) FROM 
+		`SELECT count(1), max(timestamp) FROM
 [DELETE FROM system.%s WHERE timestamp >= $1 AND timestamp <= $2 LIMIT 1000 RETURNING timestamp]`,
 		table,
 	)
@@ -96,7 +96,7 @@ func (s *Server) gcSystemLog(
 				ctx,
 				table+"-gc",
 				txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,
@@ -164,7 +164,7 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 		},
 	}
 
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "system-log-gc", func(ctx context.Context) {
 		period := systemLogGCPeriod
 		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
 			period = storeKnobs.SystemLogsGCPeriod
@@ -205,12 +205,12 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
 					select {
 					case storeKnobs.SystemLogsGCGCDone <- struct{}{}:
-					case <-s.stopper.ShouldStop():
+					case <-s.stopper.ShouldQuiesce():
 						// Test has finished.
 						return
 					}
 				}
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}

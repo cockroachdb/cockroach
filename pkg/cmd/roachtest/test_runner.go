@@ -11,8 +11,10 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"math/rand"
 	"net"
@@ -28,7 +30,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -39,6 +48,8 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 )
+
+var errTestsFailed = fmt.Errorf("some tests failed")
 
 // testRunner runs tests.
 type testRunner struct {
@@ -53,14 +64,16 @@ type testRunner struct {
 		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
 		skipClusterStopOnAttach bool
 		skipClusterWipeOnAttach bool
+		// disableIssue disables posting GitHub issues for test failures.
+		disableIssue bool
 	}
 
 	status struct {
 		syncutil.Mutex
-		running map[*test]struct{}
-		pass    map[*test]struct{}
-		fail    map[*test]struct{}
-		skip    map[*test]struct{}
+		running map[*testImpl]struct{}
+		pass    map[*testImpl]struct{}
+		fail    map[*testImpl]struct{}
+		skip    map[*testImpl]struct{}
 	}
 
 	// cr keeps track of all live clusters.
@@ -94,6 +107,7 @@ func newTestRunner(cr *clusterRegistry, buildVersion version.Version) *testRunne
 		buildVersion: buildVersion,
 	}
 	r.config.skipClusterWipeOnAttach = !clusterWipe
+	r.config.disableIssue = disableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
 	return r
 }
@@ -136,6 +150,10 @@ func (c clustersOpt) validate() error {
 	return nil
 }
 
+type testOpts struct {
+	versionsBinaryOverride map[string]string
+}
+
 // Run runs tests.
 //
 // Args:
@@ -149,17 +167,25 @@ func (c clustersOpt) validate() error {
 // lopt: Options for logging.
 func (r *testRunner) Run(
 	ctx context.Context,
-	tests []testSpec,
+	tests []registry.TestSpec,
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
-	artifactsDir string,
+	topt testOpts,
 	lopt loggingOpt,
 ) error {
 	// Validate options.
 	if len(tests) == 0 {
 		return fmt.Errorf("no test matched filters")
 	}
+
+	hasDevLicense := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "") != ""
+	for _, t := range tests {
+		if t.RequiresLicense && !hasDevLicense {
+			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
+		}
+	}
+
 	if err := clustersOpt.validate(); err != nil {
 		return err
 	}
@@ -207,11 +233,11 @@ func (r *testRunner) Run(
 	// to an existing one).
 	allocateCluster := func(
 		ctx context.Context,
-		t testSpec,
+		t registry.TestSpec,
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
-	) (*cluster, error) {
+	) (*clusterImpl, error) {
 		wStatus.SetStatus("creating cluster")
 		defer wStatus.SetStatus("")
 
@@ -221,11 +247,11 @@ func (r *testRunner) Run(
 		if existingClusterName != "" {
 			// Logs for attaching to a cluster go to a dedicated log file.
 			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
-			clusterL, err := rootLogger(logPath, lopt.tee)
-			defer clusterL.close()
+			clusterL, err := logger.RootLogger(logPath, lopt.tee)
 			if err != nil {
 				return nil, err
 			}
+			defer clusterL.Close()
 			opt := attachOpt{
 				skipValidation: r.config.skipClusterValidationOnAttach,
 				skipStop:       r.config.skipClusterStopOnAttach,
@@ -253,10 +279,10 @@ func (r *testRunner) Run(
 		parallelism = n * count
 	}
 
-	r.status.running = make(map[*test]struct{})
-	r.status.pass = make(map[*test]struct{})
-	r.status.fail = make(map[*test]struct{})
-	r.status.skip = make(map[*test]struct{})
+	r.status.running = make(map[*testImpl]struct{})
+	r.status.pass = make(map[*testImpl]struct{})
+	r.status.fail = make(map[*testImpl]struct{})
+	r.status.skip = make(map[*testImpl]struct{})
 
 	r.work = newWorkPool(tests, count)
 	stopper := stop.NewStopper()
@@ -269,7 +295,7 @@ func (r *testRunner) Run(
 	for i := 0; i < parallelism; i++ {
 		i := i // Copy for closure.
 		wg.Add(1)
-		stopper.RunWorker(ctx, func(ctx context.Context) {
+		if err := stopper.RunAsyncTask(ctx, "worker", func(ctx context.Context) {
 			defer wg.Done()
 
 			if err := r.runWorker(
@@ -278,21 +304,29 @@ func (r *testRunner) Run(
 				clustersOpt.keepClustersOnTestFailure,
 				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
+				topt,
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
-				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
+				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
 				errs.AddErr(err)
-				// Quiesce the stopper. This will cause all workers to not pick up more
-				// tests after finishing the currently running one.
-				stopper.Quiesce(ctx)
+				// Stop the stopper. This will cause all workers to not pick up more
+				// tests after finishing the currently running one. We add one to the
+				// WaitGroup so that wg.Wait() will also wait for the stopper.
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					stopper.Stop(ctx)
+				}()
 				// Interrupt everybody waiting for resources.
 				if qp != nil {
 					qp.Close(msg)
 				}
 			}
-		})
+		}); err != nil {
+			wg.Done()
+		}
 	}
 
 	// Wait for all the workers to finish.
@@ -306,18 +340,18 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 	if len(r.status.fail) > 0 {
-		return fmt.Errorf("some tests failed")
+		return errTestsFailed
 	}
 	return nil
 }
 
 type clusterAllocatorFn func(
 	ctx context.Context,
-	t testSpec,
+	t registry.TestSpec,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*cluster, error)
+) (*clusterImpl, error)
 
 // runWorker runs tests in a loop until work is exhausted.
 //
@@ -349,10 +383,11 @@ func (r *testRunner) runWorker(
 	debug bool,
 	artifactsRootDir string,
 	testRunnerLogPath string,
-	teeOpt teeOptType,
+	teeOpt logger.TeeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
-	l *logger,
+	topt testOpts,
+	l *logger.Logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
 	wStatus := r.addWorker(ctx, name)
@@ -360,7 +395,7 @@ func (r *testRunner) runWorker(
 		r.removeWorker(ctx, name)
 	}()
 
-	var c *cluster // The cluster currently being used.
+	var c *clusterImpl // The cluster currently being used.
 	var err error
 	// When this method returns we'll destroy the cluster we had at the time.
 	// Note that, if debug was set, c has been set to nil.
@@ -370,6 +405,7 @@ func (r *testRunner) runWorker(
 		wStatus.SetCluster(nil)
 
 		if c == nil {
+			l.PrintfCtx(ctx, "Worker exiting; no cluster to destroy.")
 			return
 		}
 		doDestroy := ctx.Err() == nil
@@ -396,10 +432,10 @@ func (r *testRunner) runWorker(
 		}
 
 		if c != nil {
-			if _, ok := c.spec.ReusePolicy.(reusePolicyNone); ok {
+			if _, ok := c.spec.ReusePolicy.(spec.ReusePolicyNone); ok {
 				wStatus.SetStatus("destroying cluster")
 				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(ctx, closeLogger, l)
+				c.Destroy(context.Background(), closeLogger, l)
 				c = nil
 			}
 		}
@@ -409,7 +445,7 @@ func (r *testRunner) runWorker(
 		testToRun, c, err = r.getWork(
 			ctx, work, qp, c, interrupt, l,
 			getWorkCallbacks{
-				createCluster: func(ctx context.Context, ttr testToRunRes) (*cluster, error) {
+				createCluster: func(ctx context.Context, ttr testToRunRes) (*clusterImpl, error) {
 					wStatus.SetTest(nil /* test */, ttr)
 					return allocateCluster(ctx, ttr.spec, ttr.alloc, artifactsRootDir, wStatus)
 				},
@@ -435,21 +471,24 @@ func (r *testRunner) runWorker(
 			artifactsDir = filepath.Join(base, runSuffix)
 			logPath = filepath.Join(artifactsDir, "test.log")
 
-			// Map artifacts/TestFoo/** => TestFoo/**, i.e. collect the artifacts
+			// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
 			// for this test exactly as they are laid out on disk (when the time
 			// comes).
-			artifactsSpec = fmt.Sprintf("%s/** => %s", base, escapedTestName)
+			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", base, runSuffix, escapedTestName, runSuffix)
 		}
-		testL, err := rootLogger(logPath, teeOpt)
+		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			return err
 		}
-		t := &test{
-			spec:          &testToRun.spec,
-			buildVersion:  r.buildVersion,
-			artifactsDir:  artifactsDir,
-			artifactsSpec: artifactsSpec,
-			l:             testL,
+		t := &testImpl{
+			spec:                   &testToRun.spec,
+			cockroach:              cockroach,
+			deprecatedWorkload:     workload,
+			buildVersion:           r.buildVersion,
+			artifactsDir:           artifactsDir,
+			artifactsSpec:          artifactsSpec,
+			l:                      testL,
+			versionsBinaryOverride: topt.versionsBinaryOverride,
 		}
 		// Tell the cluster that, from now on, it will be run "on behalf of this
 		// test".
@@ -461,7 +500,7 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 		var success bool
-		success, err = r.runTest(ctx, t, testToRun.runNum, c, testRunnerLogPath, stdout, testL)
+		success, err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, testRunnerLogPath, stdout, testL)
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
@@ -475,7 +514,7 @@ func (r *testRunner) runWorker(
 			}
 			l.PrintfCtx(ctx, msg)
 		}
-		testL.close()
+		testL.Close()
 		if err != nil || t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
@@ -494,7 +533,7 @@ func (r *testRunner) runWorker(
 				// On any test failure or error, we destroy the cluster. We could be
 				// more selective, but this sounds safer.
 				l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-				c.Destroy(ctx, closeLogger, l)
+				c.Destroy(context.Background(), closeLogger, l)
 				c = nil
 			}
 
@@ -511,7 +550,7 @@ func (r *testRunner) runWorker(
 // getPerfArtifacts retrieves the perf artifacts for the test.
 // If there's an error, oh well, don't do anything rash like fail a test
 // which already passed.
-func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
+func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t test.Test) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
@@ -530,7 +569,7 @@ fi'`
 			}
 			switch out := strings.TrimSpace(string(out)); out {
 			case "true":
-				dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
+				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
 				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
 			case "false":
 				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
@@ -564,23 +603,31 @@ func allStacks() []byte {
 // testRunnerLogPath: The path to the test runner's log. It will be copied to
 //  	the test's artifacts dir if the test fails and we're running under
 //  	TeamCity.
+//
+// TODO(test-eng): the `bool` should go away, instead `t.Failed()` can be consulted
+// by the caller to determine whether the test passed.
 func (r *testRunner) runTest(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	runNum int,
-	c *cluster,
+	runCount int,
+	c *clusterImpl,
 	testRunnerLogPath string,
 	stdout io.Writer,
-	l *logger,
+	l *logger.Logger,
 ) (bool, error) {
-	if t.spec.Skip != "" {
-		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.spec.Skip)
+	if t.Spec().(*registry.TestSpec).Skip != "" {
+		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
 	}
 
+	runID := t.Name()
+	if runCount > 1 {
+		runID += fmt.Sprintf("#%d", runNum)
+	}
 	if teamCity {
-		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), t.Name())
+		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), runID)
 	} else {
-		shout(ctx, l, stdout, "=== RUN   %s", t.Name())
+		shout(ctx, l, stdout, "=== RUN   %s", runID)
 	}
 
 	r.status.Lock()
@@ -614,63 +661,39 @@ func (r *testRunner) runTest(
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(output), t.Name(),
-				)
+					t.Name(), teamCityEscape(output), runID)
 
 				// Copy a snapshot of the testrunner's log to the test's artifacts dir
 				// so that we collect it below.
-				cp := exec.Command("cp", testRunnerLogPath, t.artifactsDir)
+				cp := exec.Command("cp", testRunnerLogPath, t.ArtifactsDir())
 				if err := cp.Run(); err != nil {
 					l.ErrorfCtx(ctx, "failed to copy test runner's logs to test artifacts: %s", err)
 				}
 			}
 
-			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
-			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				projectColumnID := 0
-				if info, ok := roachtestOwners[t.spec.Owner]; ok {
-					projectColumnID = info.TriageColumnID
-				}
+			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-				branch := "<unknown branch>"
-				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-					branch = b
-				}
-				msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-					branch, cloud, output)
-				artifacts := fmt.Sprintf("/%s", t.Name())
-
-				req := issues.PostRequest{
-					// TODO(tbg): actually use this as a template.
-					TitleTemplate: fmt.Sprintf("roachtest: %s failed", t.Name()),
-					// TODO(tbg): make a template better adapted to roachtest.
-					BodyTemplate: issues.UnitTestFailureBody,
-					PackageName:  "roachtest",
-					TestName:     t.Name(),
-					Message:      msg,
-					Artifacts:    artifacts,
-					// Issues posted from roachtest are identifiable as such and
-					// they are also release blockers (this label may be removed
-					// by a human upon closer investigation).
-					ExtraLabels:     []string{"O-roachtest", "release-blocker"},
-					ProjectColumnID: projectColumnID,
-				}
-				if err := issues.Post(
-					context.Background(),
-					req,
-				); err != nil {
-					shout(ctx, l, stdout, "failed to post issue: %s", err)
-				}
+			issueOutput := output
+			if t.timedOut() {
+				issueOutput = "test timed out (see artifacts for details)"
 			}
+			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
 		} else {
-			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
+			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 			// TeamCity regards the test as successful.
 		}
 
 		if teamCity {
-			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
+			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), runID)
+
+			// Zip the artifacts. This improves the TeamCity UX where we can navigate
+			// through zip files just fine, but we can't download subtrees of the
+			// artifacts storage. By zipping we get this capability as we can just
+			// download the zip file for the failing test instead.
+			if err := zipArtifacts(t.ArtifactsDir()); err != nil {
+				l.Printf("unable to zip artifacts: %s", err)
+			}
 
 			if t.artifactsSpec != "" {
 				// Tell TeamCity to collect this test's artifacts now. The TC job
@@ -694,10 +717,10 @@ func (r *testRunner) runTest(
 		r.status.Lock()
 		delete(r.status.running, t)
 		// Only include tests with a Run function in the summary output.
-		if t.spec.Run != nil {
+		if t.Spec().(*registry.TestSpec).Run != nil {
 			if t.Failed() {
 				r.status.fail[t] = struct{}{}
-			} else if t.spec.Skip == "" {
+			} else if t.Spec().(*registry.TestSpec).Skip == "" {
 				r.status.pass[t] = struct{}{}
 			} else {
 				r.status.skip[t] = struct{}{}
@@ -709,8 +732,8 @@ func (r *testRunner) runTest(
 	t.start = timeutil.Now()
 
 	timeout := 10 * time.Hour
-	if t.spec.Timeout != 0 {
-		timeout = t.spec.Timeout
+	if d := t.Spec().(*registry.TestSpec).Timeout; d != 0 {
+		timeout = d
 	}
 	// Make sure the cluster has enough life left for the test plus enough headroom
 	// after the test finishes so that the next test can be selected. If it
@@ -751,12 +774,26 @@ func (r *testRunner) runTest(
 			}
 		}()
 
-		t.spec.Run(runCtx, t, c)
+		t.Spec().(*registry.TestSpec).Run(runCtx, t, c)
 	}()
 
+	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		return false, err
+	}
 	select {
 	case <-done:
+		s := "success"
+		if t.Failed() {
+			s = "failure"
+		}
+		t.L().Printf("tearing down after %s; see teardown.log", s)
+		l, c.l = teardownL, teardownL
+		t.ReplaceL(teardownL)
 	case <-time.After(timeout):
+		t.L().Printf("tearing down after timeout; see teardown.log")
+		l, c.l = teardownL, teardownL
+		t.ReplaceL(teardownL)
 		// Timeouts are often opaque. Improve our changes by dumping the stack
 		// so that at least we can piece together what the test is trying to
 		// do at this very moment.
@@ -769,22 +806,21 @@ func (r *testRunner) runTest(
 		// Do this before we cancel the context, which might (hopefully) unblock
 		// the test. We want to see where it got stuck.
 		const stacksFile = "__stacks"
-		if cl, err := t.l.ChildLogger(stacksFile, quietStderr, quietStdout); err == nil {
+		if cl, err := t.L().ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
 			cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
-			t.l.PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
+			t.L().PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
 		}
 		// Now kill anything going on in this cluster while collecting stacks
 		// to the logs, to get the server side of the hang.
 		//
-		// TODO(tbg): send --sig=3 followed by a hard kill after we've fixed
-		// https://github.com/cockroachdb/cockroach/issues/45875.
-		// Signal 11 will dump stacks, but it might be confusing to folks
-		// who debug from the artifacts only.
-		//
 		// Don't use surrounding context, which are likely already canceled.
 		if nodes := c.All(); len(nodes) > 0 { // avoid tests
 			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = c.StopE(innerCtx, c.All(), stopArgs("--sig=11"))
+			// SIGABRT causes the go runtime to dump stacks and terminate.
+			// We also need --wait because roachprod does not think signals other than SIGKILL will terminate
+			// the process, and that is mistaken.
+			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=ABRT", "--wait=true"))
+			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
 
@@ -799,6 +835,7 @@ func (r *testRunner) runTest(
 		// reused since we have a runaway test goroutine that's presumably going
 		// to continue using the cluster.
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
+		t.setTimedOut()
 		select {
 		case <-done:
 			if success {
@@ -808,12 +845,18 @@ func (r *testRunner) runTest(
 			// We really shouldn't get here unless the test code somehow managed
 			// to deadlock without blocking on anything remote - since we killed
 			// everything.
-			const msg = "test timed out and afterwards failed to respond to cancelation"
-			t.l.PrintfCtx(ctx, msg)
-			r.collectClusterLogs(ctx, c, t.l)
-			// We return an error here because the test goroutine is still running, so
-			// we want to alert the caller of this unusual situation.
-			return false, errors.New(msg)
+			const msg = "test timed out and afterwards failed to respond to cancellation"
+			t.L().PrintfCtx(ctx, msg)
+
+			const stacksFile = "__stacks_after_cancellation"
+			if cl, err := t.L().ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
+				cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
+				t.L().PrintfCtx(ctx, "dumped stacks (after cancellation) to %s", stacksFile)
+			}
+			r.collectClusterLogs(ctx, c, t)
+			// We already marked the test as failing, so don't return an error here.
+			// Doing so would shut down the entire roachtest run.
+			return false, nil
 		}
 	}
 
@@ -838,13 +881,85 @@ func (r *testRunner) runTest(
 	}
 
 	if t.Failed() {
-		r.collectClusterLogs(ctx, c, t.l)
+		r.collectClusterLogs(ctx, c, t)
 		return false, nil
 	}
 	return true, nil
 }
 
-func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
+func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
+	opts := issues.DefaultOptionsFromEnv()
+	return !r.config.disableIssue &&
+		opts.CanPost() &&
+		opts.IsReleaseBranch() &&
+		t.Spec().(*registry.TestSpec).Run != nil &&
+		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
+		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
+}
+
+func (r *testRunner) maybePostGithubIssue(
+	ctx context.Context, l *logger.Logger, t test.Test, stdout io.Writer, output string,
+) {
+	if !r.shouldPostGithubIssue(t) {
+		return
+	}
+
+	teams, err := team.DefaultLoadTeams()
+	if err != nil {
+		t.Fatalf("could not load teams: %v", err)
+	}
+
+	var mention []string
+	var projColID int
+	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
+		for _, alias := range sl {
+			mention = append(mention, "@"+string(alias))
+		}
+		projColID = teams[sl[0]].TriageColumnID
+	}
+
+	branch := "<unknown branch>"
+	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+		branch = b
+	}
+	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
+		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
+	artifacts := fmt.Sprintf("/%s", t.Name())
+
+	// Issues posted from roachtest are identifiable as such and
+	// they are also release blockers (this label may be removed
+	// by a human upon closer investigation).
+	labels := []string{"O-roachtest"}
+	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
+		labels = append(labels, "release-blocker")
+	}
+
+	req := issues.PostRequest{
+		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
+		Mention:         mention,
+		ProjectColumnID: projColID,
+		PackageName:     "roachtest",
+		TestName:        t.Name(),
+		Message:         msg,
+		Artifacts:       artifacts,
+		ExtraLabels:     labels,
+		ReproductionCommand: func(renderer *issues.Renderer) {
+			issues.ReproductionAsLink(
+				"roachtest README",
+				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
+			)(renderer)
+		},
+	}
+	if err := issues.Post(
+		context.Background(),
+		issues.UnitTestFormatter,
+		req,
+	); err != nil {
+		shout(ctx, l, stdout, "failed to post issue: %s", err)
+	}
+}
+
+func (r *testRunner) collectClusterLogs(ctx context.Context, c *clusterImpl, t test.Test) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this
@@ -853,27 +968,32 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	l.PrintfCtx(ctx, "collecting cluster logs")
-	if err := c.FetchLogs(ctx); err != nil {
-		l.Printf("failed to download logs: %s", err)
+	t.L().PrintfCtx(ctx, "collecting cluster logs")
+	// Do this before collecting logs to make sure the file gets
+	// downloaded below.
+	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
+		t.L().Printf("failed to fetch disk uage summary: %s", err)
 	}
-	if err := c.FetchDmesg(ctx); err != nil {
-		l.Printf("failed to fetch dmesg: %s", err)
+	if err := c.FetchLogs(ctx, t); err != nil {
+		t.L().Printf("failed to download logs: %s", err)
 	}
-	if err := c.FetchJournalctl(ctx); err != nil {
-		l.Printf("failed to fetch journalctl: %s", err)
+	if err := c.FetchDmesg(ctx, t); err != nil {
+		t.L().Printf("failed to fetch dmesg: %s", err)
 	}
-	if err := c.FetchCores(ctx); err != nil {
-		l.Printf("failed to fetch cores: %s", err)
+	if err := c.FetchJournalctl(ctx, t); err != nil {
+		t.L().Printf("failed to fetch journalctl: %s", err)
+	}
+	if err := c.FetchCores(ctx, t); err != nil {
+		t.L().Printf("failed to fetch cores: %s", err)
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
-		l.Printf("failed to copy roachprod state: %s", err)
+		t.L().Printf("failed to copy roachprod state: %s", err)
 	}
-	if err := c.FetchDiskUsage(ctx); err != nil {
-		l.Printf("failed to fetch disk uage summary: %s", err)
+	if err := c.FetchTimeseriesData(ctx, t); err != nil {
+		t.L().Printf("failed to fetch timeseries data: %s", err)
 	}
-	if err := c.FetchDebugZip(ctx); err != nil {
-		l.Printf("failed to collect zip: %s", err)
+	if err := c.FetchDebugZip(ctx, t); err != nil {
+		t.L().Printf("failed to collect zip: %s", err)
 	}
 }
 
@@ -907,7 +1027,7 @@ func (r *testRunner) generateReport() string {
 }
 
 type getWorkCallbacks struct {
-	createCluster func(context.Context, testToRunRes) (*cluster, error)
+	createCluster func(context.Context, testToRunRes) (*clusterImpl, error)
 	onDestroy     func()
 }
 
@@ -923,11 +1043,11 @@ func (r *testRunner) getWork(
 	ctx context.Context,
 	work *workPool,
 	qp *quotapool.IntPool,
-	c *cluster,
+	c *clusterImpl,
 	interrupt <-chan struct{},
-	l *logger,
+	l *logger.Logger,
 	callbacks getWorkCallbacks,
-) (testToRunRes, *cluster, error) {
+) (testToRunRes, *clusterImpl, error) {
 
 	select {
 	case <-interrupt:
@@ -955,6 +1075,13 @@ func (r *testRunner) getWork(
 		}
 		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
 			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
+		}
+		if c.localCertsDir != "" {
+			if err := os.RemoveAll(c.localCertsDir); err != nil {
+				return testToRunRes{}, nil, errors.Wrapf(err,
+					"failed to remove local certs in %s", c.localCertsDir)
+			}
+			c.localCertsDir = ""
 		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test
@@ -1056,17 +1183,21 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 				clusterReused = "no"
 			}
 		}
-		var clusterName string
+		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
+			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().Node(1))
+			if err == nil {
+				clusterAdminUIAddr = adminUIAddrs[0]
+			}
 		}
 		t := w.Test()
 		testStatus := "N/A"
 		if t != nil {
 			testStatus = t.GetStatus()
 		}
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			w.name, w.Status(), testName, clusterName, clusterReused, testStatus)
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='//%s'>%s</a></td><td>%s</td><td>%s</td></tr>\n",
+			w.name, w.Status(), testName, clusterAdminUIAddr, clusterName, clusterReused, testStatus)
 	}
 	fmt.Fprintf(wr, "</table>")
 
@@ -1082,7 +1213,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		name := fmt.Sprintf("%s (run %d)", t.test, t.run)
 		status := "PASS"
 		if !t.pass {
-			status = "FAIL " + t.failure
+			status = "FAIL " + strings.ReplaceAll(html.EscapeString(t.failure), "\n", "<br>")
 		}
 		duration := fmt.Sprintf("%s (%s - %s)", t.end.Sub(t.start), t.start, t.end)
 		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><tr/>", name, status, duration)
@@ -1141,37 +1272,6 @@ type completedTestInfo struct {
 	failure string
 }
 
-// PredecessorVersion returns a recent predecessor of the build version (i.e.
-// the build tag of the main binary). For example, if the running binary is from
-// the master branch prior to releasing 19.2.0, this will return a recent
-// (ideally though not necessarily the latest) 19.1 patch release.
-func PredecessorVersion(buildVersion version.Version) (string, error) {
-	if buildVersion == (version.Version{}) {
-		return "", errors.Errorf("buildVersion not set")
-	}
-
-	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
-
-	// NB: you can update the values in this map to point at newer patch
-	// releases. You will need to run acceptance/version-upgrade with the
-	// checkpoint option enabled to create the missing store directory fixture
-	// (see runVersionUpgrade). The same is true for adding a new key to this
-	// map.
-	verMap := map[string]string{
-		"20.2": "20.1.4",
-		"20.1": "19.2.9",
-		"19.2": "19.1.11",
-		"19.1": "2.1.9",
-		"2.2":  "2.1.9",
-		"2.1":  "2.0.7",
-	}
-	v, ok := verMap[buildVersionMajorMinor]
-	if !ok {
-		return "", errors.Errorf("prev version not set for version: %s", buildVersionMajorMinor)
-	}
-	return v, nil
-}
-
 type workerErrors struct {
 	mu struct {
 		syncutil.Mutex
@@ -1194,4 +1294,78 @@ func (we *workerErrors) Err() error {
 	// TODO(andrei): Maybe we should do something other than return the first
 	// error...
 	return we.mu.errs[0]
+}
+
+func zipArtifacts(path string) error {
+	f, err := os.Create(filepath.Join(path, "artifacts.zip"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	z := zip.NewWriter(f)
+	rel := func(targetpath string) string {
+		relpath, err := filepath.Rel(path, targetpath)
+		if err != nil {
+			return targetpath
+		}
+		return relpath
+	}
+
+	walk := func(visitor func(string, os.FileInfo) error) error {
+		return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasSuffix(path, ".zip") {
+				// Skip any top-level zip files, which notably includes itself
+				// and, if present, the debug.zip.
+				return nil
+			}
+			return visitor(path, info)
+		})
+	}
+
+	// Zip all of the files.
+	if err := walk(func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			return nil
+		}
+		w, err := z.Create(rel(path))
+		if err != nil {
+			return err
+		}
+		r, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if _, err := io.Copy(w, r); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := z.Close(); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+
+	// Now that the zip file is there, remove all of the files that went into it.
+	// Note that 'walk' skips the debug.zip and our newly written zip file.
+	root := path
+	return walk(func(path string, info os.FileInfo) error {
+		if path == root {
+			return nil
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
 }

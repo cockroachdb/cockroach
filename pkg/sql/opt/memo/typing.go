@@ -119,6 +119,9 @@ func FindFunction(
 	props, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
+		if overload.Types.Length() != e.ChildCount() {
+			continue
+		}
 		matches := true
 		for i, n := 0, e.ChildCount(); i < n; i++ {
 			typ := e.Child(i).(opt.ScalarExpr).DataType()
@@ -166,7 +169,6 @@ var typingFuncMap map[opt.Operator]typingFunc
 func init() {
 	typingFuncMap = make(map[opt.Operator]typingFunc)
 	typingFuncMap[opt.PlaceholderOp] = typeAsTypedExpr
-	typingFuncMap[opt.UnsupportedExprOp] = typeAsTypedExpr
 	typingFuncMap[opt.CoalesceOp] = typeCoalesce
 	typingFuncMap[opt.CaseOp] = typeCase
 	typingFuncMap[opt.WhenOp] = typeWhen

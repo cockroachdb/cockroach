@@ -14,29 +14,30 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo/colinfotestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
-var _ sqlutils.ColumnItemResolverTester = &scope{}
+var _ colinfotestutils.ColumnItemResolverTester = &scope{}
 
 // GetColumnItemResolver is part of the sqlutils.ColumnItemResolverTester
 // interface.
-func (s *scope) GetColumnItemResolver() tree.ColumnItemResolver {
+func (s *scope) GetColumnItemResolver() colinfo.ColumnItemResolver {
 	return s
 }
 
 // AddTable is part of the sqlutils.ColumnItemResolverTester interface.
 func (s *scope) AddTable(tabName tree.TableName, colNames []tree.Name) {
 	for _, col := range colNames {
-		s.cols = append(s.cols, scopeColumn{name: col, table: tabName})
+		s.cols = append(s.cols, scopeColumn{name: scopeColName(col), table: tabName})
 	}
 }
 
 // ResolveQualifiedStarTestResults is part of the
 // sqlutils.ColumnItemResolverTester interface.
 func (s *scope) ResolveQualifiedStarTestResults(
-	srcName *tree.TableName, srcMeta tree.ColumnSourceMeta,
+	srcName *tree.TableName, srcMeta colinfo.ColumnSourceMeta,
 ) (string, string, error) {
 	s, ok := srcMeta.(*scope)
 	if !ok {
@@ -45,8 +46,8 @@ func (s *scope) ResolveQualifiedStarTestResults(
 	nl := make(tree.NameList, 0, len(s.cols))
 	for i := range s.cols {
 		col := s.cols[i]
-		if col.table == *srcName && !col.hidden {
-			nl = append(nl, col.name)
+		if col.table == *srcName && col.visibility == visible {
+			nl = append(nl, col.name.ReferenceName())
 		}
 	}
 	return srcName.String(), nl.String(), nil
@@ -54,20 +55,22 @@ func (s *scope) ResolveQualifiedStarTestResults(
 
 // ResolveColumnItemTestResults is part of the
 // sqlutils.ColumnItemResolverTester interface.
-func (s *scope) ResolveColumnItemTestResults(colRes tree.ColumnResolutionResult) (string, error) {
+func (s *scope) ResolveColumnItemTestResults(
+	colRes colinfo.ColumnResolutionResult,
+) (string, error) {
 	col, ok := colRes.(*scopeColumn)
 	if !ok {
 		return "", fmt.Errorf("resolver did not return *scopeColumn, found %T instead", colRes)
 	}
-	return fmt.Sprintf("%s.%s", col.table.String(), col.name), nil
+	return fmt.Sprintf("%s.%s", col.table.String(), col.name.ReferenceName()), nil
 }
 
 func TestResolveQualifiedStar(t *testing.T) {
 	s := &scope{}
-	sqlutils.RunResolveQualifiedStarTest(t, s)
+	colinfotestutils.RunResolveQualifiedStarTest(t, s)
 }
 
 func TestResolveColumnItem(t *testing.T) {
 	s := &scope{}
-	sqlutils.RunResolveColumnItemTest(t, s)
+	colinfotestutils.RunResolveColumnItemTest(t, s)
 }

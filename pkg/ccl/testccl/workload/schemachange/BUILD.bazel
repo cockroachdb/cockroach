@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "schemachange_test",
+    srcs = [
+        "main_test.go",
+        "schema_change_external_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/schemachange",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

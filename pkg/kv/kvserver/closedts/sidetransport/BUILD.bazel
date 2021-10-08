@@ -1,0 +1,62 @@
+load("//build:STRINGER.bzl", "stringer")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sidetransport",
+    srcs = [
+        "debug.go",
+        "receiver.go",
+        "sender.go",
+        ":gen-cantclosereason-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "sidetransport_test",
+    srcs = [
+        "receiver_test.go",
+        "sender_test.go",
+    ],
+    embed = [":sidetransport"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+stringer(
+    name = "gen-cantclosereason-stringer",
+    src = "sender.go",
+    typ = "CantCloseReason",
+)

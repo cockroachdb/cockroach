@@ -12,6 +12,7 @@ package geoindex
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
@@ -67,12 +68,13 @@ func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
 func DefaultGeometryIndexConfig() *Config {
 	return &Config{
 		S2Geometry: &S2GeometryConfig{
-			// Arbitrary bounding box.
-			MinX:     -10000,
-			MaxX:     10000,
-			MinY:     -10000,
-			MaxY:     10000,
-			S2Config: DefaultS2Config()},
+			// Bounding box similar to the circumference of the earth (~2B meters)
+			MinX:     -(1 << 31),
+			MaxX:     (1 << 31) - 1,
+			MinY:     -(1 << 31),
+			MaxY:     (1 << 31) - 1,
+			S2Config: DefaultS2Config(),
+		},
 	}
 }
 
@@ -81,9 +83,9 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
 	if srid == 0 {
 		return DefaultGeometryIndexConfig(), nil
 	}
-	p, exists := geoprojbase.Projection(srid)
-	if !exists {
-		return nil, errors.Newf("expected definition for SRID %d", srid)
+	p, err := geoprojbase.Projection(srid)
+	if err != nil {
+		return nil, err
 	}
 	b := p.Bounds
 	minX, maxX, minY, maxY := b.MinX, b.MaxX, b.MinY, b.MaxY
@@ -172,14 +174,16 @@ func isBadGeomCovering(cu s2.CellUnion) bool {
 }
 
 // InvertedIndexKeys implements the GeometryIndex interface.
-func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error) {
+func (s *s2GeometryIndex) InvertedIndexKeys(
+	c context.Context, g geo.Geometry,
+) ([]Key, geopb.BoundingBox, error) {
 	// If the geometry exceeds the bounds, we index the clipped geometry in
 	// addition to the special cell, so that queries for geometries that don't
 	// exceed the bounds don't need to query the special cell (which would
 	// become a hotspot in the key space).
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
 	if err != nil {
-		return nil, err
+		return nil, geopb.BoundingBox{}, err
 	}
 	var keys []Key
 	if gt != nil {
@@ -189,16 +193,24 @@ func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) 
 	if clipped {
 		keys = append(keys, Key(exceedsBoundsCellID))
 	}
-	return keys, nil
+	bbox := geopb.BoundingBox{}
+	bboxRef := g.BoundingBoxRef()
+	if bboxRef == nil && len(keys) > 0 {
+		return keys, bbox, errors.AssertionFailedf("non-empty geometry should have bounding box")
+	}
+	if bboxRef != nil {
+		bbox = *bboxRef
+	}
+	return keys, bbox, nil
 }
 
 // Covers implements the GeometryIndex interface.
-func (s *s2GeometryIndex) Covers(c context.Context, g *geo.Geometry) (UnionKeySpans, error) {
+func (s *s2GeometryIndex) Covers(c context.Context, g geo.Geometry) (UnionKeySpans, error) {
 	return s.Intersects(c, g)
 }
 
 // CoveredBy implements the GeometryIndex interface.
-func (s *s2GeometryIndex) CoveredBy(c context.Context, g *geo.Geometry) (RPKeyExpr, error) {
+func (s *s2GeometryIndex) CoveredBy(c context.Context, g geo.Geometry) (RPKeyExpr, error) {
 	// If the geometry exceeds the bounds, we use the clipped geometry to
 	// restrict the search within the bounds.
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
@@ -221,7 +233,7 @@ func (s *s2GeometryIndex) CoveredBy(c context.Context, g *geo.Geometry) (RPKeyEx
 }
 
 // Intersects implements the GeometryIndex interface.
-func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error) {
+func (s *s2GeometryIndex) Intersects(c context.Context, g geo.Geometry) (UnionKeySpans, error) {
 	// If the geometry exceeds the bounds, we use the clipped geometry to
 	// restrict the search within the bounds.
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
@@ -242,7 +254,7 @@ func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionK
 }
 
 func (s *s2GeometryIndex) DWithin(
-	c context.Context, g *geo.Geometry, distance float64,
+	c context.Context, g geo.Geometry, distance float64,
 ) (UnionKeySpans, error) {
 	// TODO(sumeer): are the default params the correct thing to use here?
 	g, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), distance)
@@ -253,7 +265,7 @@ func (s *s2GeometryIndex) DWithin(
 }
 
 func (s *s2GeometryIndex) DFullyWithin(
-	c context.Context, g *geo.Geometry, distance float64,
+	c context.Context, g geo.Geometry, distance float64,
 ) (UnionKeySpans, error) {
 	// TODO(sumeer): are the default params the correct thing to use here?
 	g, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), distance)
@@ -264,7 +276,7 @@ func (s *s2GeometryIndex) DFullyWithin(
 }
 
 // Converts to geom.T and clips to the rectangle bounds of the index.
-func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, bool, error) {
+func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err
@@ -274,6 +286,11 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 	}
 	clipped := false
 	if s.geomExceedsBounds(gt) {
+		// TODO(#63126): Replace workaround for bug in geos.ClipByRect.
+		g, err = geomfn.ForceLayout(g, geom.XY)
+		if err != nil {
+			return nil, false, err
+		}
 		clipped = true
 		clippedEWKB, err :=
 			geos.ClipByRect(g.EWKB(), s.minX+s.deltaX, s.minY+s.deltaY, s.maxX-s.deltaX, s.maxY-s.deltaY)
@@ -285,9 +302,6 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 			g, err = geo.ParseGeometryFromEWKBUnsafe(clippedEWKB)
 			if err != nil {
 				return nil, false, err
-			}
-			if g == nil {
-				return nil, false, errors.Errorf("internal error: clippedWKB cannot be parsed")
 			}
 			gt, err = g.AsGeomT()
 			if err != nil {
@@ -359,8 +373,8 @@ func (s *s2GeometryIndex) geomExceedsBounds(g geom.T) bool {
 	return false
 }
 
-// stToUV() and face0UVToXYZPoint() are adapted from unexported methods in
-// github.com/golang/geo/s2/stuv.go
+// stToUV, uvToST, xyzToFace0UV and face0UVToXYZPoint are adapted
+// from unexported methods in github.com/golang/geo/s2/stuv.go
 
 // stToUV converts an s or t value to the corresponding u or v value.
 // This is a non-linear transformation from [-1,1] to [-1,1] that
@@ -373,17 +387,42 @@ func stToUV(s float64) float64 {
 	return (1 / 3.) * (1 - 4*(1-s)*(1-s))
 }
 
+// uvToST is the inverse of the stToUV transformation. Note that it
+// is not always true that uvToST(stToUV(x)) == x due to numerical
+// errors.
+func uvToST(u float64) float64 {
+	if u >= 0 {
+		return 0.5 * math.Sqrt(1+3*u)
+	}
+	return 1 - 0.5*math.Sqrt(1-3*u)
+}
+
 // Specialized version of faceUVToXYZ() for face 0
 func face0UVToXYZPoint(u, v float64) s2.Point {
 	return s2.Point{Vector: r3.Vector{X: 1, Y: u, Z: v}}
 }
 
+// xyzToFace0UV converts a direction vector (not necessarily unit length) to
+// (u, v) coordinates on face 0.
+func xyzToFace0UV(r s2.Point) (u, v float64) {
+	return r.Y / r.X, r.Z / r.X
+}
+
+// planarPointToS2Point converts a planar point to an s2.Point.
 func (s *s2GeometryIndex) planarPointToS2Point(x float64, y float64) s2.Point {
 	ss := (x - s.minX) / (s.maxX - s.minX)
 	tt := (y - s.minY) / (s.maxY - s.minY)
 	u := stToUV(ss)
 	v := stToUV(tt)
 	return face0UVToXYZPoint(u, v)
+}
+
+// s2PointToPlanarPoints converts an s2.Point to a planar point.
+func (s *s2GeometryIndex) s2PointToPlanarPoint(p s2.Point) (x, y float64) {
+	u, v := xyzToFace0UV(p)
+	ss := uvToST(u)
+	tt := uvToST(v)
+	return ss*(s.maxX-s.minX) + s.minX, tt*(s.maxY-s.minY) + s.minY
 }
 
 // TODO(sumeer): this is similar to S2RegionsFromGeomT() but needs to do
@@ -449,11 +488,27 @@ func (s *s2GeometryIndex) s2RegionsFromPlanarGeomT(geomRepr geom.T) []s2.Region 
 	return regions
 }
 
-func (s *s2GeometryIndex) TestingInnerCovering(g *geo.Geometry) s2.CellUnion {
+func (s *s2GeometryIndex) TestingInnerCovering(g geo.Geometry) s2.CellUnion {
 	gt, _, err := s.convertToGeomTAndTryClip(g)
 	if err != nil || gt == nil {
 		return nil
 	}
 	r := s.s2RegionsFromPlanarGeomT(gt)
 	return innerCovering(s.rc, r)
+}
+
+func (s *s2GeometryIndex) CoveringGeometry(
+	c context.Context, g geo.Geometry,
+) (geo.Geometry, error) {
+	keys, _, err := s.InvertedIndexKeys(c, g)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t, err := makeGeomTFromKeys(keys, g.SRID(), func(p s2.Point) (float64, float64) {
+		return s.s2PointToPlanarPoint(p)
+	})
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.MakeGeometryFromGeomT(t)
 }

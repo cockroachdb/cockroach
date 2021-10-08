@@ -348,3 +348,321 @@ NULL
 statement ok
 CREATE TABLE ab (a INT, b INT);
 SELECT a, b, rowid FROM ab UNION VALUES (1, 2, 3);
+DROP TABLE ab;
+
+# Regression test for #59148.
+statement ok
+CREATE TABLE ab (a INT4, b INT8);
+INSERT INTO ab VALUES (1, 1), (1, 2), (2, 1), (2, 2);
+
+query I rowsort
+SELECT a FROM ab UNION SELECT b FROM ab
+----
+1
+2
+
+query I rowsort
+SELECT b FROM ab UNION SELECT a FROM ab
+----
+1
+2
+
+statement ok
+DROP TABLE ab;
+
+# Regression test for the vectorized engine not being able to handle a UNION
+# between NULL and a tuple (#59611).
+statement ok
+CREATE TABLE t59611 (a INT);
+INSERT INTO t59611 VALUES (1)
+
+query T
+WITH
+  cte (cte_col)
+    AS (
+      SELECT
+        *
+      FROM
+        (VALUES ((SELECT NULL FROM t59611 LIMIT 1:::INT8)))
+      UNION SELECT * FROM (VALUES ((1, 2)))
+    )
+SELECT
+  NULL
+FROM
+  cte
+----
+NULL
+NULL
+
+statement ok
+CREATE TABLE t34524 (a INT PRIMARY KEY)
+
+# Regression test for #34524.
+query I
+(SELECT NULL FROM t34524) EXCEPT (VALUES((SELECT 1 FROM t34524 LIMIT 1)), (1))
+----
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b, a));
+INSERT INTO ab VALUES
+  (1, 1),
+  (2, 2),
+  (3, 1),
+  (4, 2),
+  (5, 1),
+  (6, 2),
+  (7, 3)
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y, x));
+INSERT INTO xy VALUES
+  (1, 1),
+  (2, 3),
+  (3, 2),
+  (4, 3),
+  (5, 1),
+  (6, 3)
+
+# Regression tests for #41245, #40797. Ensure we can plan ordered set ops
+# without a sort.
+query II
+SELECT a, b FROM ab UNION SELECT x AS a, y AS b FROM xy ORDER BY b, a
+----
+1  1
+3  1
+5  1
+2  2
+3  2
+4  2
+6  2
+2  3
+4  3
+6  3
+7  3
+
+query I
+SELECT a FROM ab UNION ALL SELECT x AS a FROM xy ORDER BY a
+----
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+6
+6
+7
+
+query II
+SELECT a, b FROM ab INTERSECT SELECT x AS a, y AS b FROM xy ORDER BY b, a
+----
+1  1
+5  1
+
+query I
+SELECT b FROM ab INTERSECT ALL SELECT y AS b FROM xy ORDER BY b
+----
+1
+1
+2
+3
+
+query II
+SELECT b, a FROM ab EXCEPT SELECT y AS b, x AS a FROM xy ORDER BY b, a
+----
+1  3
+2  2
+2  4
+2  6
+3  7
+
+query I
+SELECT b FROM ab EXCEPT ALL SELECT y AS b FROM xy ORDER BY b
+----
+1
+2
+2
+
+# Regression tests for #64062. Use a streaming set operation even though the
+# ordering is not required.
+query II rowsort
+SELECT a, b FROM ab UNION SELECT x AS a, y AS b FROM xy
+----
+1  1
+2  2
+2  3
+3  1
+3  2
+4  2
+4  3
+5  1
+6  2
+6  3
+7  3
+
+query II rowsort
+SELECT a, b FROM ab INTERSECT SELECT x AS a, y AS b FROM xy
+----
+1  1
+5  1
+
+query I rowsort
+SELECT b FROM ab INTERSECT ALL SELECT y AS b FROM xy
+----
+1
+1
+2
+3
+
+query II rowsort
+SELECT b, a FROM ab EXCEPT SELECT y AS b, x AS a FROM xy
+----
+1  3
+2  2
+2  4
+2  6
+3  7
+
+query I rowsort
+SELECT b FROM ab EXCEPT ALL SELECT y AS b FROM xy
+----
+1
+2
+2
+
+# UNION ALL doesn't need to use a streaming operation.
+query I rowsort
+SELECT a FROM ab UNION ALL SELECT x AS a FROM xy
+----
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+6
+6
+7
+
+# If the ordering is only required on a subset of the columns, ensure that we
+# still produce the correct ordering.
+statement ok
+TRUNCATE ab;
+TRUNCATE xy;
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5);
+INSERT INTO xy VALUES (1, 1), (3, 3), (5, 5), (7, 7);
+
+query II
+SELECT a, b FROM ab UNION SELECT x, y FROM xy ORDER BY a
+----
+1  1
+2  2
+3  3
+4  4
+5  5
+7  7
+
+query II
+SELECT a, b FROM ab UNION ALL SELECT x, y FROM xy ORDER BY a
+----
+1  1
+1  1
+2  2
+3  3
+3  3
+4  4
+5  5
+5  5
+7  7
+
+query II
+SELECT a, b FROM ab INTERSECT SELECT x, y FROM xy ORDER BY a
+----
+1  1
+3  3
+5  5
+
+query II
+SELECT a, b FROM ab INTERSECT ALL SELECT x, y FROM xy ORDER BY a
+----
+1  1
+3  3
+5  5
+
+query II
+SELECT a, b FROM ab EXCEPT SELECT x, y FROM xy ORDER BY a
+----
+2  2
+4  4
+
+query II
+SELECT a, b FROM ab EXCEPT ALL SELECT x, y FROM xy ORDER BY a
+----
+2  2
+4  4
+
+# Regression test for #64181. Ensure that a projection on top of an ordered
+# UNION ALL correctly projects away ordering columns.
+query TT
+WITH q (x, y) AS (
+  SELECT * FROM (VALUES ('a', 'a'), ('b', 'b'), ('c', 'c'))
+  UNION ALL
+  SELECT * FROM (VALUES ('d', 'd'))
+)
+SELECT 'e', y FROM q
+ORDER BY x
+----
+e  a
+e  b
+e  c
+e  d
+
+# Regression test for #69497. Ensure streaming set ops return correct results
+# when some input columns are in descending order.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX (a, b, c DESC));
+INSERT INTO abc VALUES (1, 1, 1), (1, 2, 2), (1, 2, 3), (2, 2, 2), (2, 2, 3);
+CREATE TABLE def (d INT PRIMARY KEY, e INT, f INT);
+INSERT INTO def VALUES (1, 1, 1), (2, 2, 2), (3, 2, 3), (4, 2, 2), (5, 2, 3);
+
+query III
+SELECT d, e, f FROM def EXCEPT SELECT a, b, c FROM abc ORDER by d, e
+----
+3  2  3
+4  2  2
+5  2  3
+
+# Example where the interesting orderings do not include all columns.
+statement ok
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c DESC) STORING (d));
+INSERT INTO abcd VALUES (1, 1, 1, 1), (1, 2, 2, 2), (1, 2, 3, 3), (2, 2, 2, 2), (2, 2, 3, 3);
+CREATE TABLE efgh (e INT PRIMARY KEY, f INT, g INT, h INT);
+INSERT INTO efgh VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 2, 3, 3), (4, 2, 2, 2), (5, 2, 3, 3);
+
+query IIII
+SELECT e, f, g, h FROM efgh EXCEPT SELECT a, b, c, d FROM abcd ORDER by e, f
+----
+3  2  3  3
+4  2  2  2
+5  2  3  3
+
+# Regression test for #68702. Ensure correct behavior when a column is projected
+# twice on the left side.
+query III
+SELECT a, b AS b1, b AS b2 FROM abc EXCEPT SELECT a, b, c FROM abc ORDER by a, b1
+----
+
+query III
+SELECT a, b AS b1, b AS b2 FROM abc INTERSECT SELECT a, c, b FROM abc ORDER by a, b2
+----
+1  1  1
+1  2  2
+2  2  2

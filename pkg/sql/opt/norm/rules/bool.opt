@@ -114,8 +114,8 @@ $input
 [NegateComparison, Normalize]
 (Not
     $input:(Comparison $left:* $right:*) &
-        ^(Contains | JsonExists | JsonSomeExists | JsonAllExists
-                | Overlaps
+        ^(Contains | ContainedBy | JsonExists | JsonSomeExists
+                | JsonAllExists | Overlaps
         )
 )
 =>
@@ -156,8 +156,9 @@ $input
 (Or
     $left:^(Or)
     $right:^(Or) &
-        (Succeeded
-            $conjunct:(FindRedundantConjunct $left $right)
+        (Let
+            ($conjunct $ok):(FindRedundantConjunct $left $right)
+            $ok
         )
 )
 =>

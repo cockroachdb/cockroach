@@ -1,0 +1,61 @@
+# This file contains basic tests for session_migration.
+
+exec
+CREATE DATABASE d; USE d
+----
+
+exec
+SET extra_float_digits = -1;
+SET enable_zigzag_join = false;
+SET search_path = public
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+dump_vars
+old_state
+----
+
+reset
+----
+
+query
+SHOW database
+----
+defaultdb
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+query
+SHOW database
+----
+d
+
+dump_vars
+new_state
+----
+
+compare_vars
+old_state
+new_state
+----
+
+reset
+----
+
+reset
+----
+
+# We cannot serialized prepared statements
+exec
+PREPARE stmt AS SELECT 1
+----
+
+exec
+SELECT crdb_internal.serialize_session()
+----
+pq: crdb_internal.serialize_session(): cannot serialize a session which has portals or prepared statements

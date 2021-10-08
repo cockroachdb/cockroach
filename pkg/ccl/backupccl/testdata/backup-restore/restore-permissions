@@ -1,0 +1,99 @@
+# Test permissions checks for non-admin users running RESTORE.
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+exec-sql
+BACKUP TO 'nodelocal://0/test/'
+----
+
+# Restores should succeed as a non-root user with admin role.
+exec-sql
+CREATE USER testuser;
+GRANT ADMIN TO testuser;
+----
+
+exec-sql user=testuser
+DROP DATABASE d;
+RESTORE DATABASE d FROM 'nodelocal://0/test/';
+----
+
+# Start a new cluster with the same IO dir.
+new-server name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+exec-sql server=s2
+CREATE USER testuser
+----
+
+# Restore into the new cluster.
+exec-sql server=s2 user=testuser
+RESTORE FROM 'nodelocal://0/test/'
+----
+pq: only users with the admin role are allowed to restore full cluster backups
+
+exec-sql server=s2 user=testuser
+RESTORE DATABASE d FROM 'nodelocal://0/test/'
+----
+pq: only users with the CREATEDB privilege can restore databases
+
+exec-sql server=s2
+CREATE DATABASE d
+----
+
+exec-sql server=s2 user=testuser
+RESTORE TABLE d.t FROM 'nodelocal://0/test/'
+----
+pq: user testuser does not have CREATE privilege on database d
+
+exec-sql server=s2
+GRANT CREATE ON DATABASE d TO testuser
+----
+
+exec-sql server=s2 user=testuser
+RESTORE TABLE d.t FROM 'nodelocal://0/test/'
+----
+
+query-sql server=s2
+SELECT x FROM d.t ORDER BY x
+----
+1
+2
+3
+
+exec-sql server=s2
+DROP DATABASE d
+----
+
+exec-sql server=s2
+ALTER USER testuser CREATEDB
+----
+
+exec-sql server=s2 user=testuser
+RESTORE DATABASE d FROM 'nodelocal://0/test/'
+----
+
+query-sql server=s2
+SELECT x FROM d.t ORDER BY x
+----
+1
+2
+3
+
+# Test that implicit access is disallowed when the testing knob isn't set.
+new-server name=s3 share-io-dir=s1
+----
+
+exec-sql server=s3
+CREATE USER testuser
+----
+
+exec-sql server=s3 user=testuser
+RESTORE TABLE d.t FROM 'nodelocal://0/test/'
+----
+pq: only users with the admin role are allowed to RESTORE from the specified nodelocal URI

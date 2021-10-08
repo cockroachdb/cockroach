@@ -57,6 +57,11 @@ func (c Cardinality) CanBeZero() bool {
 	return c.Min == 0
 }
 
+// IsUnbounded returns true if the expression has unbounded maximum cardinality.
+func (c Cardinality) IsUnbounded() bool {
+	return c.Max == AnyCardinality.Max
+}
+
 // AsLowAs ratchets the min bound downwards in order to ensure that it allows
 // values that are >= the min value.
 func (c Cardinality) AsLowAs(min uint32) Cardinality {

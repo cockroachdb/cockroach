@@ -56,13 +56,6 @@ func MakeTenantSQLDeprecatedWrapper(v interface{}, exposed bool) TenantSQLDeprec
 	return TenantSQLDeprecatedWrapper{v: v, exposed: exposed}
 }
 
-// Deprecated returns the unwrapped object. It takes an issue number that should
-// contain a work item resulting in the removal of the Deprecated() call (i.e.
-// removes the dependency on the wrapped object).
-func (w TenantSQLDeprecatedWrapper) Deprecated(issueNo int) interface{} {
-	return w.v
-}
-
 // Optional returns the wrapped object if it is available (meaning that the
 // wrapper was set up to make it available). This should be called by
 // functionality that relies on the wrapped object but can be disabled when this
@@ -80,10 +73,10 @@ func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 
 // OptionalErr calls Optional and returns an error (referring to the optionally
 // supplied Github issues) if the wrapped object is not available.
-func (w TenantSQLDeprecatedWrapper) OptionalErr(issueNos ...int) (interface{}, error) {
+func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) {
 	v, ok := w.Optional()
 	if !ok {
-		return nil, UnsupportedWithMultiTenancy(issueNos...)
+		return nil, UnsupportedWithMultiTenancy(issue)
 	}
 	return v, nil
 }

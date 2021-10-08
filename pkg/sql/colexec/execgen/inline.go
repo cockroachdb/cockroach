@@ -122,6 +122,9 @@ func inlineFunc(inlineFuncMap map[string]funcInfo, n dst.Node) dst.Node {
 			// }
 			inlinedStatements := &dst.BlockStmt{
 				List: []dst.Stmt{retValDeclStmt},
+				Decs: dst.BlockStmtDecorations{
+					NodeDecs: n.Decs.NodeDecs,
+				},
 			}
 			body := dst.Clone(decl.Body).(*dst.BlockStmt)
 
@@ -179,6 +182,9 @@ func inlineFunc(inlineFuncMap map[string]funcInfo, n dst.Node) dst.Node {
 			// the mangled returns after the inlined function.
 			funcBlock := &dst.BlockStmt{
 				List: []dst.Stmt{reassignments},
+				Decs: dst.BlockStmtDecorations{
+					NodeDecs: n.Decs.NodeDecs,
+				},
 			}
 			body := dst.Clone(decl.Body).(*dst.BlockStmt)
 
@@ -316,7 +322,7 @@ func extractReturnValues(decl *dst.FuncDecl) (retValDeclStmt dst.Stmt, retValNam
 //   b string = y
 // )
 //
-// In the case where the formal parameter name is the same as the the input
+// In the case where the formal parameter name is the same as the input
 // parameter name, no extra assignment is created.
 func getFormalParamReassignments(decl *dst.FuncDecl, callExpr *dst.CallExpr) dst.Stmt {
 	formalParams := decl.Type.Params.List

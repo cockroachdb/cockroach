@@ -14,10 +14,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -25,8 +24,7 @@ import (
 func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+	skip.UnderRace(t, "takes >1 min under race")
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
@@ -40,9 +38,16 @@ func TestChangefeedNemeses(t *testing.T) {
 			t.Error(failure)
 		}
 	}
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+
+	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
+	// support in multi-tenancy mode:
+	//
+	// nemeses_test.go:39: pq: unimplemented: operation is
+	// unsupported in multi-tenancy mode
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn, feedTestNoTenants))
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)

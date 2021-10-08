@@ -12,10 +12,9 @@ package colcontainer
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -27,7 +26,9 @@ type PartitionedQueue interface {
 	// Enqueue adds the batch to the end of the partitionIdx'th partition. If a
 	// partition at that index does not exist, a new one is created. Existing
 	// partitions may not be Enqueued to after calling
-	// CloseAllOpenWriteFileDescriptors.
+	// CloseAllOpenWriteFileDescriptors. A zero-length batch must be enqueued as
+	// the last one.
+	// WARNING: Selection vectors are ignored.
 	Enqueue(ctx context.Context, partitionIdx int, batch coldata.Batch) error
 	// Dequeue removes and returns the batch from the front of the
 	// partitionIdx'th partition. If the partition is empty, or no partition at
@@ -140,12 +141,6 @@ func NewPartitionedDiskQueue(
 	partitionerStrategy PartitionerStrategy,
 	diskAcc *mon.BoundAccount,
 ) *PartitionedDiskQueue {
-	if len(typs) == 0 {
-		// DiskQueues cannot serialize zero length schemas, so catch this error
-		// early.
-		// TODO(asubiotto): We could support this, but not sure we need to.
-		colexecerror.InternalError("zero length schema unsupported")
-	}
 	return &PartitionedDiskQueue{
 		typs:                     typs,
 		strategy:                 partitionerStrategy,
@@ -175,7 +170,7 @@ func (p *PartitionedDiskQueue) closeWritePartition(
 	ctx context.Context, idx int, releaseFDOption closeWritePartitionArgument,
 ) error {
 	if p.partitions[idx].state != partitionStateWriting {
-		colexecerror.InternalError(fmt.Sprintf("illegal state change from %d to partitionStateClosedForWriting, only partitionStateWriting allowed", p.partitions[idx].state))
+		colexecerror.InternalError(errors.AssertionFailedf("illegal state change from %d to partitionStateClosedForWriting, only partitionStateWriting allowed", p.partitions[idx].state))
 	}
 	if err := p.partitions[idx].Enqueue(ctx, coldata.ZeroBatch); err != nil {
 		return err
@@ -190,7 +185,7 @@ func (p *PartitionedDiskQueue) closeWritePartition(
 
 func (p *PartitionedDiskQueue) closeReadPartition(idx int) error {
 	if p.partitions[idx].state != partitionStateReading {
-		colexecerror.InternalError(fmt.Sprintf("illegal state change from %d to partitionStateClosedForReading, only partitionStateReading allowed", p.partitions[idx].state))
+		colexecerror.InternalError(errors.AssertionFailedf("illegal state change from %d to partitionStateClosedForReading, only partitionStateReading allowed", p.partitions[idx].state))
 	}
 	if err := p.partitions[idx].CloseRead(); err != nil {
 		return err
@@ -300,7 +295,7 @@ func (p *PartitionedDiskQueue) Dequeue(
 	case partitionStatePermanentlyClosed:
 		return errors.Errorf("partition at index %d permanently closed, cannot Dequeue", partitionIdx)
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled state %d", state))
+		colexecerror.InternalError(errors.AssertionFailedf("unhandled state %d", state))
 	}
 	notEmpty, err := p.partitions[idx].Dequeue(ctx, batch)
 	if err != nil {
@@ -317,7 +312,8 @@ func (p *PartitionedDiskQueue) Dequeue(
 		// Dequeue but more batches will be added in the future (i.e. a zero batch
 		// was never enqueued). Since we require partitions to be closed for writing
 		// before reading, this state is unexpected.
-		colexecerror.InternalError("DiskQueue unexpectedly returned that more data will be added")
+		colexecerror.InternalError(
+			errors.AssertionFailedf("DiskQueue unexpectedly returned that more data will be added"))
 	}
 	return nil
 }

@@ -76,9 +76,10 @@ func (sc *AbortSpan) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortSpan) ClearData(e storage.Engine) error {
-	iter := e.NewIterator(storage.IterOptions{UpperBound: sc.max()})
+	// NB: The abort span is a Range-ID local key which has no versions or intents.
+	iter := e.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: sc.max()})
 	defer iter.Close()
-	b := e.NewWriteOnlyBatch()
+	b := e.NewUnindexedBatch(true /* writeOnly */)
 	defer b.Close()
 	err := b.ClearIterRange(iter, sc.min(), sc.max())
 	if err != nil {
@@ -104,15 +105,15 @@ func (sc *AbortSpan) Iterate(
 	ctx context.Context, reader storage.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
 ) error {
 	_, err := storage.MVCCIterate(ctx, reader, sc.min(), sc.max(), hlc.Timestamp{}, storage.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
+		func(kv roachpb.KeyValue) error {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
-				return false, err
+				return err
 			}
 			if err := kv.Value.GetProto(&entry); err != nil {
-				return false, err
+				return err
 			}
-			return false, f(kv.Key, entry)
+			return f(kv.Key, entry)
 		})
 	return err
 }
@@ -133,6 +134,7 @@ func (sc *AbortSpan) Put(
 	txnID uuid.UUID,
 	entry *roachpb.AbortSpanEntry,
 ) error {
+	log.VEventf(ctx, 2, "writing abort span entry for %s", txnID.Short())
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }
@@ -182,7 +184,7 @@ func (sc *AbortSpan) CopyTo(
 			hlc.Timestamp{}, nil, &entry,
 		)
 	}); err != nil {
-		return roachpb.NewReplicaCorruptionError(errors.Wrap(err, "AbortSpan.CopyTo"))
+		return errors.Wrap(err, "AbortSpan.CopyTo")
 	}
 	log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
 	return nil

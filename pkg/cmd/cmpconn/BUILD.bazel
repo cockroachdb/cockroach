@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmpconn",
+    srcs = [
+        "compare.go",
+        "conn.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmpconn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/duration",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
+        "@com_github_google_go_cmp//cmp/cmpopts",
+        "@com_github_jackc_pgtype//:pgtype",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "cmpconn_test",
+    size = "small",
+    srcs = ["compare_test.go"],
+    embed = [":cmpconn"],
+    deps = ["@com_github_cockroachdb_apd_v2//:apd"],
+)

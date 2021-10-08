@@ -48,13 +48,13 @@ message ReplicaState {
   // The latest range lease.
   //
   // Note that this message is both sent over the network and used to model
-  // replica state in memory. In memory (storage.Replica.mu.state), the lease
-  // is never nil (and never zero-valued), but it may be nil when sent over
-  // the network as part of ReplicatedEvalResult.
+  // replica state in memory. In memory (Replica.mu.state), the lease is never
+  // nil (and never zero-valued), but it may be nil when sent over the network
+  // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;
-  // gcThreshold is the GC threshold of the Range, typically updated when keys
+  // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
@@ -68,6 +68,45 @@ message ReplicaState {
   // is idempotent by Replica state machines, meaning that it is ok for multiple
   // Raft commands to set it to true.
   bool using_applied_state_key = 11;
+  // Version tells us which migrations can be assumed to have run against this
+  // particular replica. When we introduce backwards incompatible changes to the
+  // replica state (for example using the unreplicated truncated state instead
+  // of the replicated variant), this field tells us if we should expect a
+  // state representation prior to, or after the change (in our example it
+  // tells us whether or not we can assume an unreplicated truncated state). All
+  // migrations associated with versions less than or equal to this one, can be
+  // assumed to have run.
+  //
+  // We should note that the progression of cluster versions in the cluster does
+  // not happen in lock step with replica versions for all replicas in the
+  // system. Well, not for all cluster versions. Replica versions are one the
+  // primitives used to coordinate below-raft migrations, and when cluster
+  // versions for those are being rolled out cluster-wide, the expectation is
+  // that all replica versions are bumped along side it. For everything else,
+  // the coupling is neither necessary nor enforced. When a new replica is being
+  // initialized, it's annotated with a replica version. This happens in one of
+  // two places:
+  // - during cluster creation time, in which case we source the binary version
+  //   (i.e. the version the cluster is bootstrapped with)
+  // - replicas created through snapshots or splits, where we inherit the
+  //   version from the incoming snapshot or the LHS of the split respectively.
+  //
+  // While a below-raft migration is underway, replicas from different ranges
+  // may have differing replica versions. This is fine, we rely on higher level
+  // orchestration primitives[1][2] to shepherd all replicas in the system to
+  // the right version.
+  //
+  // [1]: migration.Manager
+  // [2]: PurgeOutdatedReplicas
+  roachpb.Version version = 12;
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands. This means that the current leaseholder (if
+  // any) and any future leaseholder will not evaluate writes at or below this
+  // timestamp, and also that any in-flight commands that can still apply are
+  // writing at higher timestamps. Non-leaseholder replicas are free to serve
+  // "follower reads" at or below this timestamp.
+  util.hlc.Timestamp raft_closed_timestamp = 13 [(gogoproto.nullable) = false];
 
   reserved 8, 9, 10;
 }
@@ -96,37 +135,37 @@ message RangeInfo {
   repeated int64 proposal_quota_release_queue = 15;
   // The max size the range can grow to before it will be split.
   int64 range_max_bytes = 8;
-  reserved 9;
-  message CTEntry {
-    option (gogoproto.equal) = true;
-    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
-    int64 mlai = 3 [(gogoproto.customname) = "MLAI"];
-    int64 epoch = 4;
-  }
-  // The highest closed timestamp known to have data for this replica, taken
-  // across the data received from all nodes. This does not reflect whether
-  // the replica can use this closed timestamp (it may, for example, not have
-  // caught up sufficiently to do so).
-  CTEntry newest_closed_timestamp = 11 [(gogoproto.nullable) = false];
+  reserved 9, 11;
   // The closed timestamp active on the replica when the info was generated.
   // This is the actual timestamp at or below which requests can be served from
-  // this replica at this moment (assuming it is not the leaseholder). This takes
-  // into account the lease start time, the current lease applied index, and the
-  // closed timestamp information received from other nodes, among other things.
-  // In practice, this should not usually trail newest_closed_timestamp except
-  // for a short moment after newest_closed_timestamp gets updated.
+  // this replica at this moment (assuming it is not the leaseholder). This
+  // takes into account the current lease applied index, and the closed
+  // timestamp information received from other nodes, among other things.
   util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
   // The number of Rangefeed registrations attached to the Replica.
   int64 rangefeed_registrations = 13;
   // TenantID is the ID of the tenant for which this range contains data.
   uint64 tenant_id = 16 [(gogoproto.customname) = "TenantID"];
+  reserved 17;
+  roachpb.RangeClosedTimestampPolicy closed_timestamp_policy = 18;
+  // Closed timestamp info communicated through the side-transport. See also
+  // state.raft_closed_timestamp.
+  RangeSideTransportInfo closed_timestamp_sidetransport_info = 19 [(gogoproto.customname) = "ClosedTimestampSideTransportInfo", (gogoproto.nullable) = false ];
 }
 
-// LatchManagerInfo is used for reporting status information about a spanlatch
-// manager out through the status server.
-message LatchManagerInfo {
-  int64 read_count = 1;
-  int64 write_count = 2;
+// RangeSideTransportInfo describes a range's closed timestamp info communicated
+// through the side-transport.
+//
+// This proto combines information that lives on a replica with information
+// taken from the side-transport's Receiver "centralized" state.
+message RangeSideTransportInfo {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp replica_closed = 1 [(gogoproto.nullable) = false];
+  int64 replica_lai = 2 [(gogoproto.customname) = "ReplicaLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+
+  util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
+  int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
 }

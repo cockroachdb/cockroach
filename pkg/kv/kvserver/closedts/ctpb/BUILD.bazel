@@ -1,0 +1,42 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ctpb",
+    srcs = ["service.go"],
+    embed = [":ctpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/timeutil",
+    ],
+)
+
+proto_library(
+    name = "ctpb_proto",
+    srcs = ["service.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@go_googleapis//google/api:annotations_proto",
+    ],
+)
+
+go_proto_library(
+    name = "ctpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
+    proto = ":ctpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
+    ],
+)

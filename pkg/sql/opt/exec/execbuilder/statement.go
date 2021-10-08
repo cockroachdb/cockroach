@@ -14,12 +14,13 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -50,7 +51,7 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	schema := md.Schema(cv.Schema)
-	cols := make(sqlbase.ResultColumns, len(cv.Columns))
+	cols := make(colinfo.ResultColumns, len(cv.Columns))
 	for i := range cols {
 		cols[i].Name = cv.Columns[i].Alias
 		cols[i].Typ = md.ColumnMeta(cv.Columns[i].ID).Type
@@ -65,6 +66,7 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 		cv.ViewQuery,
 		cols,
 		cv.Deps,
+		cv.TypeDeps,
 	)
 	return execPlan{root: root}, err
 }
@@ -93,6 +95,11 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 		// TODO(radu): add views, sequences
 	}
 
+	// If MEMO option was passed, show the memo.
+	if explain.Options.Flags[tree.ExplainFlagMemo] {
+		planText.WriteString(b.optimizer.FormatMemo(xform.FmtPretty))
+	}
+
 	f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
 	f.FormatExpr(explain.Input)
 	planText.WriteString(f.Buffer.String())
@@ -117,34 +124,21 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		return b.buildExplainOpt(explain)
 	}
 
-	if explain.Options.Mode == tree.ExplainPlan {
-		node, err := b.factory.ConstructExplainPlan(
-			&explain.Options,
-			func(ef exec.ExplainFactory) (exec.Plan, error) {
-				// Create a separate builder for the explain query.
-				explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
-				explainBld.disableTelemetry = true
-				return explainBld.Build()
-			},
-		)
-		if err != nil {
-			return execPlan{}, err
-		}
-		return planWithColumns(node, explain.ColList), nil
-	}
-
-	// Create a separate builder for the explain query.
-	explainBld := New(b.factory, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
-	explainBld.disableTelemetry = true
-	plan, err := explainBld.Build()
+	node, err := b.factory.ConstructExplain(
+		&explain.Options,
+		explain.StmtType,
+		func(ef exec.ExplainFactory) (exec.Plan, error) {
+			// Create a separate builder for the explain query.
+			explainBld := New(
+				ef, b.optimizer, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit,
+			)
+			explainBld.disableTelemetry = true
+			return explainBld.Build()
+		},
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	node, err := b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	return planWithColumns(node, explain.ColList), nil
 }
 
@@ -215,6 +209,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 		table.Index(relocate.Index),
 		input.root,
 		relocate.RelocateLease,
+		relocate.RelocateNonVoters,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -227,9 +222,17 @@ func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) 
 	if err != nil {
 		return execPlan{}, err
 	}
+
+	scalarCtx := buildScalarCtx{}
+	reason, err := b.buildScalar(&scalarCtx, ctl.Reason)
+	if err != nil {
+		return execPlan{}, err
+	}
+
 	node, err := b.factory.ConstructControlJobs(
 		ctl.Command,
 		input.root,
+		reason,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -283,6 +286,15 @@ func (b *Builder) buildCancelSessions(cancel *memo.CancelSessionsExpr) (execPlan
 		telemetry.Inc(sqltelemetry.CancelSessionsUseCounter)
 	}
 	// CancelSessions returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildCreateStatistics(c *memo.CreateStatisticsExpr) (execPlan, error) {
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CreateStatistics returns no columns.
 	return execPlan{root: node}, nil
 }
 

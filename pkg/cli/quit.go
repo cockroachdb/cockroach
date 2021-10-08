@@ -16,6 +16,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -38,7 +39,7 @@ cluster settings. After the first stage completes, the server process is shut
 down.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runQuit),
+	RunE: clierrorplus.MaybeDecorateError(runQuit),
 	Deprecated: `see 'cockroach node drain' instead to drain a 
 server without terminating the server process (which can in turn be done using 
 an orchestration layer or a process manager, or by sending a termination signal
@@ -137,8 +138,8 @@ func doDrainNoTimeout(
 		// Send a drain request with the drain bit set and the shutdown bit
 		// unset.
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-			DeprecatedProbeIndicator: server.DeprecatedDrainParameter,
-			DoDrain:                  true,
+			DoDrain:  true,
+			Shutdown: false,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
@@ -248,7 +249,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, er
 func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
 	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to connect to the node")
+		return nil, nil, errors.Wrap(err, "failed to connect to the node")
 	}
 	return serverpb.NewAdminClient(conn), finish, nil
 }

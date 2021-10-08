@@ -1,0 +1,236 @@
+# NOTE: when running with -rewrite, you may want to run with
+# -ignore-wait-until-match as well. Check diff output carefully!
+
+# Set a lower closed timestamp target to speed up time to reach follower reads.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
+----
+
+exec
+CREATE TABLE t(pk INT PRIMARY KEY);
+INSERT INTO t VALUES (1);
+----
+
+# If we try to read a timestamp that is impossible to satisfy with a follower
+# read, we should always be looking at the leaseholder in the nearest_only=False
+# case. We always do bounded staleness reads from node_idx 2, as node_idx 0 in a
+# TestCluster is always the leaseholder.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+# If nearest_only=True, all small 1μs reads should fail.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '1μs', true) WHERE pk = 1
+----
+pq: bounded staleness read with minimum timestamp bound of XXX could not be satisfied by a local resolved timestamp of XXX
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+
+# Wait until the follower has caught up. Ensure reads are local, follower reads.
+# Note we have to wait until a match here, in case a follower read reads an
+# older version of the data.
+query idx=2 wait-until-follower-read wait-until-match
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+exec idx=2
+PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1;
+PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+
+override-matching-stmt-for-tracing
+SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+
+query idx=2
+EXECUTE max_staleness_prep
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+override-matching-stmt-for-tracing
+SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+
+query idx=2
+EXECUTE min_timestamp_prep
+----
+1
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local follower read
+
+reset-matching-stmt-for-tracing
+----
+
+
+# Set a super high closed bounded staleness target and execute a schema change.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
+ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
+----
+
+# Ensure we resort to the leaseholder as the schema change requires a recent read
+# in the nearest_only=False case.
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+----
+1 2
+events (1 found):
+ * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
+
+# When nearest_only=True, we should only read the state before the schema change
+# successfully. Note the schema changes several times, hence the multiple events
+# output.
+# Note that we retry until follower read here as the first schema read of
+# historical schema descriptors result in non-follower reads.
+query idx=2 wait-until-follower-read
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+----
+1
+events (7 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan trace on node_idx 2: local read
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan trace on node_idx 2: local read
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan trace on node_idx 2: local follower read
+
+query idx=2
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+----
+1
+events (7 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan trace on node_idx 2: local read
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan trace on node_idx 2: local read
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan trace on node_idx 2: local follower read
+
+# When creating a new table, ensure when nearest_only=True, we correctly error
+# with the schema not existing if none of the followers have caught up.
+exec
+CREATE TABLE t2(pk INT PRIMARY KEY);
+INSERT INTO t2 VALUES (2);
+ALTER TABLE t2 ADD COLUMN new_col INT
+----
+
+query idx=2
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+----
+pq: descriptor not found
+events (7 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan trace on node_idx 2: local read
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan trace on node_idx 2: local read
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan trace on node_idx 2: local read
+
+query idx=2
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+----
+pq: descriptor not found
+events (7 found):
+ * event 1: colbatchscan trace on node_idx 2: local read
+ * event 2: transaction retry on node_idx: 2
+ * event 3: colbatchscan trace on node_idx 2: local read
+ * event 4: transaction retry on node_idx: 2
+ * event 5: colbatchscan trace on node_idx 2: local read
+ * event 6: transaction retry on node_idx: 2
+ * event 7: colbatchscan trace on node_idx 2: local read

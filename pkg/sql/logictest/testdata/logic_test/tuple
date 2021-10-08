@@ -822,7 +822,7 @@ query error pq: column reference "unnest" is ambiguous
 SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
 
 # No labels
-query error pq: type tuple{int, int, int} is not composite
+query error pq: could not identify column "x" in record data type
 SELECT ((1,2,3)).x FROM tb
 
 query I colnames
@@ -914,10 +914,23 @@ a  b
 1  one
 2  two
 
-
-# Pending #26719
-query error pq: column "t" does not exist
+query I rowsort
 SELECT (t).a FROM t
+----
+1
+2
+
+query T rowsort
+SELECT t FROM t
+----
+(1,one)
+(2,two)
+
+query T rowsort
+SELECT row_to_json(t) FROM t
+----
+{"a": 1, "b": "one"}
+{"a": 2, "b": "two"}
 
 statement ok
 DROP TABLE t
@@ -933,3 +946,36 @@ query B
 SELECT () = ()
 ----
 true
+
+# Regression tests for #58439. Ensure there are no errors when accessing columns
+# of a null tuple.
+subtest regression_58439
+
+statement ok
+CREATE TABLE t58439 (a INT, b INT);
+INSERT INTO t58439 VALUES (1, 10), (2, 20), (3, 30);
+
+query II
+SELECT (ARRAY[t58439.*][0]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
+query II
+SELECT (ARRAY[t58439.*][2]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
+# Regression test for #68308. Do not internally error with a cast of unknown to
+# unknown in a tuple.
+subtest regression_68308
+
+query T
+SELECT (1::INT2, NULL)
+UNION
+SELECT (1::INT, NULL)
+----
+(1,)

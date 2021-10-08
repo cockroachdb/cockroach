@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "debug",
+    srcs = [
+        "cpuprofile.go",
+        "logspy.go",
+        "queries_writer.go",
+        "server.go",
+        "vmodule.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/debug",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server/debug/goroutineui",
+        "//pkg/server/debug/pprofui",
+        "//pkg/server/serverpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/util/encoding/csv",
+        "//pkg/util/log",
+        "//pkg/util/log/channel",
+        "//pkg/util/log/logpb",
+        "//pkg/util/log/severity",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/uint128",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//tool",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_rcrowley_go_metrics//:go-metrics",
+        "@com_github_rcrowley_go_metrics//exp",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_net//trace",
+    ],
+)
+
+go_test(
+    name = "debug_test",
+    size = "small",
+    srcs = ["logspy_test.go"],
+    embed = [":debug"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/logpb",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

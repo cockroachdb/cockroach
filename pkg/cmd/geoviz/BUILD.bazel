@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "geoviz_lib",
+    srcs = [
+        "geoviz.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/geoviz",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geoindex",
+        "//pkg/geo/geos",
+        "@com_github_golang_geo//s2",
+    ],
+)
+
+go_binary(
+    name = "geoviz",
+    embed = [":geoviz_lib"],
+    visibility = ["//visibility:public"],
+)

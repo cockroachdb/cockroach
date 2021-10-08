@@ -12,6 +12,7 @@ package settings
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -77,11 +78,11 @@ func (e *EnumSetting) GetAvailableValuesAsHint() string {
 	return "Available values: " + strings.Join(vals, ", ")
 }
 
-func (e *EnumSetting) set(sv *Values, k int64) error {
+func (e *EnumSetting) set(ctx context.Context, sv *Values, k int64) error {
 	if _, ok := e.enumValues[k]; !ok {
 		return errors.Errorf("unrecognized value %d", k)
 	}
-	return e.IntSetting.set(sv, k)
+	return e.IntSetting.set(ctx, sv, k)
 }
 
 func enumValuesToDesc(enumValues map[int64]string) string {
@@ -103,14 +104,20 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 	return buffer.String()
 }
 
-// RegisterPublicEnumSetting defines a new setting with type int and makes it public.
-func RegisterPublicEnumSetting(
-	key, desc string, defaultValue string, enumValues map[int64]string,
-) *EnumSetting {
-	s := RegisterEnumSetting(key, desc, defaultValue, enumValues)
-	s.SetVisibility(Public)
-	return s
+// WithPublic sets public visibility and can be chained.
+func (e *EnumSetting) WithPublic() *EnumSetting {
+	e.SetVisibility(Public)
+	return e
 }
+
+// WithSystemOnly indicates system-usage only and can be chained.
+func (e *EnumSetting) WithSystemOnly() *EnumSetting {
+	e.common.systemOnly = true
+	return e
+}
+
+// Defeat the linter.
+var _ = (*EnumSetting).WithSystemOnly
 
 // RegisterEnumSetting defines a new setting with type int.
 func RegisterEnumSetting(

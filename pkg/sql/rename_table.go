@@ -14,22 +14,26 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
 type renameTableNode struct {
 	n            *tree.RenameTable
 	oldTn, newTn *tree.TableName
-	tableDesc    *sqlbase.MutableTableDescriptor
+	tableDesc    *tabledesc.Mutable
 }
 
 // RenameTable renames the table, view or sequence.
@@ -38,6 +42,14 @@ type renameTableNode struct {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"RENAME TABLE/VIEW/SEQUENCE",
+	); err != nil {
+		return nil, err
+	}
+
 	oldTn := n.Name.ToTableName()
 	newTn := n.NewName.ToTableName()
 	toRequire := tree.ResolveRequireTableOrViewDesc
@@ -47,7 +59,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = tree.ResolveRequireSequenceDesc
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}
@@ -60,23 +72,23 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	if tableDesc.State != descpb.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedRelationError(&oldTn)
+	if tableDesc.State != descpb.DescriptorState_PUBLIC {
+		return nil, sqlerrors.NewUndefinedRelationError(&oldTn)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
-	// Check if any views depend on this table/view. Because our views
-	// are currently just stored as strings, they explicitly specify the name
-	// of everything they depend on. Rather than trying to rewrite the view's
-	// query with the new name, we simply disallow such renames for now.
-	if len(tableDesc.DependedOnBy) > 0 {
-		return nil, p.dependentViewError(
-			ctx, tableDesc.TypeName(), oldTn.String(),
-			tableDesc.ParentID, tableDesc.DependedOnBy[0].ID, "rename",
-		)
+	// Check if any objects depend on this table/view/sequence via its name.
+	// If so, then we disallow renaming, otherwise we allow it.
+	for _, dependent := range tableDesc.DependedOnBy {
+		if !dependent.ByID {
+			return nil, p.dependentViewError(
+				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
+				tableDesc.ParentID, dependent.ID, "rename",
+			)
+		}
 	}
 
 	return &renameTableNode{n: n, oldTn: &oldTn, newTn: &newTn, tableDesc: tableDesc}, nil
@@ -94,14 +106,25 @@ func (n *renameTableNode) startExec(params runParams) error {
 	oldTn := n.oldTn
 	prevDBID := tableDesc.ParentID
 
-	var targetDbDesc *UncachedDatabaseDescriptor
+	var targetDbDesc catalog.DatabaseDescriptor
+	var targetSchemaDesc catalog.SchemaDescriptor
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
 	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
-		targetDbDesc, err = p.ResolveUncachedDatabaseByName(ctx, string(oldTn.CatalogName), true /* required */)
+		targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+			string(oldTn.CatalogName), tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return err
+		}
+
+		targetSchemaDesc, err = p.Descriptors().GetMutableSchemaByName(
+			ctx, p.txn, targetDbDesc, oldTn.Schema(), tree.SchemaLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+			})
 		if err != nil {
 			return err
 		}
@@ -110,7 +133,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// process of deprecating qualified rename targets, so issue a notice.
 		// TODO (rohany): Convert this to take in an unqualified name after 20.2
 		//  is released (#51445).
-		params.p.noticeSender.AppendNotice(
+		params.p.noticeSender.BufferNotice(
 			errors.WithHintf(
 				pgnotice.Newf("renaming tables with a qualification is deprecated"),
 				"use ALTER TABLE %s RENAME TO %s instead",
@@ -122,7 +145,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newUn := newTn.ToUnresolvedObjectName()
 		var prefix tree.ObjectNamePrefix
 		var err error
-		targetDbDesc, prefix, err = p.ResolveUncachedDatabase(ctx, newUn)
+		targetDbDesc, targetSchemaDesc, prefix, err = p.ResolveTargetObject(ctx, newUn)
 		if err != nil {
 			return err
 		}
@@ -141,6 +164,43 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
+	// Special checks when attempting to move a table to a different database,
+	// which is usually not allowed.
+	if oldTn.Catalog() != newTn.Catalog() {
+		// Don't allow moving the table to a different database unless both the
+		// source and target schemas are the public schema. This preserves backward
+		// compatibility for the behavior prior to user-defined schemas.
+		if oldTn.Schema() != string(tree.PublicSchemaName) || newTn.Schema() != string(tree.PublicSchemaName) {
+			return pgerror.Newf(pgcode.InvalidName,
+				"cannot change database of table unless both the old and new schemas are the public schema in each database")
+		}
+		// Don't allow moving the table to a different database if the table
+		// references any user-defined types, to prevent cross-database type
+		// references.
+		columns := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
+		columns = append(columns, tableDesc.Columns...)
+		for _, m := range tableDesc.Mutations {
+			if col := m.GetColumn(); col != nil {
+				columns = append(columns, *col)
+			}
+		}
+		for _, c := range columns {
+			if c.Type.UserDefined() {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot change database of table if any of its column types are user-defined")
+			}
+		}
+	}
+
+	// Special checks for tables, view and sequences to determine if cross
+	// DB references would occur.
+	if oldTn.Catalog() != newTn.Catalog() {
+		err := n.checkForCrossDbReferences(ctx, p, targetDbDesc)
+		if err != nil {
+			return err
+		}
+	}
+
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Catalog() == newTn.Catalog() &&
 		oldTn.Schema() == newTn.Schema() &&
@@ -149,25 +209,26 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, id, err := catalogkv.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	err := catalogkv.CheckObjectCollision(
+		params.ctx,
+		params.p.txn,
+		p.ExecCfg().Codec,
+		targetDbDesc.GetID(),
+		targetSchemaDesc.GetID(),
+		newTn,
 	)
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(
-			params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 
+	// The parent schema ID is never modified here because changing the schema of
+	// a table within the same database is disallowed, and changing the database
+	// of a table is only allowed if both the source and target schemas are the
+	// public schema.
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err
 	}
 
@@ -186,21 +247,20 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
-	} else if err != nil {
+	newTbKey := catalogkeys.NewNameKeyComponents(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
+
+	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
 		return err
 	}
 
-	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
-
-	return p.writeNameKey(ctx, newTbKey, descID)
+	// Log Rename Table event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return p.logEvent(ctx,
+		tableDesc.ID,
+		&eventpb.RenameTable{
+			TableName:    oldTn.FQString(),
+			NewTableName: newTn.FQString(),
+		})
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
@@ -216,26 +276,275 @@ func (p *planner) dependentViewError(
 	if err != nil {
 		return err
 	}
-	viewName := viewDesc.Name
-	if viewDesc.ParentID != parentID {
+	viewName := viewDesc.GetName()
+	if viewDesc.GetParentID() != parentID {
 		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
-			return sqlbase.NewDependentObjectErrorf(
+			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a view depends on it",
 				op, typeName, objName)
 		}
 		viewName = viewFQName.FQString()
 	}
 	return errors.WithHintf(
-		sqlbase.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
+		sqlerrors.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
 			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
 }
 
+// checkForCrossDbReferences validates if any cross DB references
+// will exist after any rename operation.
+func (n *renameTableNode) checkForCrossDbReferences(
+	ctx context.Context, p *planner, targetDbDesc catalog.DatabaseDescriptor,
+) error {
+	tableDesc := n.tableDesc
+
+	// Checks inbound / outbound foreign key references for cross DB references.
+	// The refTableID flag determines if the reference or origin field are checked.
+	checkFkForCrossDbDep := func(fk *descpb.ForeignKeyConstraint, refTableID bool) error {
+		if allowCrossDatabaseFKs.Get(&p.execCfg.Settings.SV) {
+			return nil
+		}
+		tableID := fk.ReferencedTableID
+		if !refTableID {
+			tableID = fk.OriginTableID
+		}
+
+		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				},
+			})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference
+		if referencedTable.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"a foreign key constraint %q will exist between databases after rename "+
+					"(see the '%s' cluster setting)",
+				fk.Name,
+				allowCrossDatabaseFKsSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+	// Validates if a given dependency on a relation will
+	// lead to a cross DB reference, and an appropriate
+	// error is generated.
+	type crossDBDepType int
+	const owner, reference crossDBDepType = 0, 1
+	checkDepForCrossDbRef := func(depID descpb.ID, depType crossDBDepType) error {
+		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				}})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference detected
+		if dependentObject.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+		// Based in the primary object.
+		switch {
+		case tableDesc.IsTable():
+			// Based on the dependent objects type, since
+			// for tables the type of the dependent object will
+			// determine the message.
+			switch {
+			case dependentObject.IsView():
+				if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+					return errors.WithHintf(
+						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"a view %q reference to this table will refer to another databases after rename "+
+								"(see the '%s' cluster setting)",
+							dependentObject.GetName(),
+							allowCrossDatabaseViewsSetting),
+						crossDBReferenceDeprecationHint(),
+					)
+				}
+			case dependentObject.IsSequence() && depType == owner:
+				if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+					return errors.WithHintf(
+						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"a sequence %q will be OWNED BY a table in a different database after rename "+
+								"(see the '%s' cluster setting)",
+							dependentObject.GetName(),
+							allowCrossDatabaseSeqOwnerSetting),
+						crossDBReferenceDeprecationHint(),
+					)
+				}
+			case dependentObject.IsSequence() && depType == reference:
+				if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
+					return errors.WithHintf(
+						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"a sequence %q will be referenced by a table in a different database after rename "+
+								"(see the '%s' cluster setting)",
+							dependentObject.GetName(),
+							allowCrossDatabaseSeqOwnerSetting),
+						crossDBReferenceDeprecationHint(),
+					)
+				}
+			}
+		case tableDesc.IsView():
+			if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+				// For view's dependent objects can only be
+				// relations.
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"this view will reference a table %q in another databases after rename "+
+							"(see the '%s' cluster setting)",
+						dependentObject.GetName(),
+						allowCrossDatabaseViewsSetting),
+					crossDBReferenceDeprecationHint(),
+				)
+			}
+		case tableDesc.IsSequence() && depType == reference:
+			if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
+				// For sequences dependent references can only be
+				// a relations.
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"this sequence will be referenced by a table %q in a different database after rename "+
+							"(see the '%s' cluster setting)",
+						dependentObject.GetName(),
+						allowCrossDatabaseSeqReferencesSetting),
+					crossDBReferenceDeprecationHint(),
+				)
+			}
+		case tableDesc.IsSequence() && depType == owner:
+			if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+				// For sequences dependent owners can only be
+				// a relations.
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"this sequence will be OWNED BY a table %q in a different database after rename "+
+							"(see the '%s' cluster setting)",
+						dependentObject.GetName(),
+						allowCrossDatabaseSeqReferencesSetting),
+					crossDBReferenceDeprecationHint(),
+				)
+			}
+		}
+		return nil
+	}
+
+	checkTypeDepForCrossDbRef := func(depID descpb.ID) error {
+		if allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+			return nil
+		}
+		dependentObject, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, depID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				}})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference detected
+		if dependentObject.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"this view will reference a type %q in another databases after rename "+
+					"(see the '%s' cluster setting)",
+				dependentObject.GetName(),
+				allowCrossDatabaseViewsSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+
+	// For tables check if any outbound or inbound foreign key references would
+	// be impacted.
+	if tableDesc.IsTable() {
+		err := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+			return checkFkForCrossDbDep(fk, true)
+		})
+		if err != nil {
+			return err
+		}
+
+		err = tableDesc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+			return checkFkForCrossDbDep(fk, false)
+		})
+		if err != nil {
+			return err
+		}
+		// If cross database sequence owners are not allowed, then
+		// check if any column owns a sequence.
+		for _, columnDesc := range tableDesc.Columns {
+			for _, ownsSequenceID := range columnDesc.OwnsSequenceIds {
+				if err := checkDepForCrossDbRef(ownsSequenceID, owner); err != nil {
+					return err
+				}
+			}
+			for _, seqID := range columnDesc.UsesSequenceIds {
+				if err := checkDepForCrossDbRef(seqID, reference); err != nil {
+					return err
+				}
+			}
+		}
+		// Check if any views depend on this table, while
+		// DependsOnBy contains sequences these are only
+		// once that are in use.
+		if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+			err := tableDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+				return checkDepForCrossDbRef(dep.ID, reference)
+			})
+			if err != nil {
+				return err
+			}
+		}
+	} else if tableDesc.IsView() {
+		// For views check if we depend on tables in a different database.
+		dependsOn := tableDesc.GetDependsOn()
+		for _, dependency := range dependsOn {
+			if err := checkDepForCrossDbRef(dependency, reference); err != nil {
+				return err
+			}
+		}
+		// Check if we depend on types in a different database.
+		dependsOnTypes := tableDesc.GetDependsOnTypes()
+		for _, dependency := range dependsOnTypes {
+			if err := checkTypeDepForCrossDbRef(dependency); err != nil {
+				return err
+			}
+		}
+	} else if tableDesc.IsSequence() {
+		// Check if the sequence is owned by a different database.
+		sequenceOpts := tableDesc.GetSequenceOpts()
+		if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+			err := checkDepForCrossDbRef(sequenceOpts.SequenceOwner.OwnerTableID, owner)
+			if err != nil {
+				return err
+			}
+		}
+		// Check if a table in a different database depends on this
+		// sequence.
+		for _, sequenceReferences := range tableDesc.GetDependedOnBy() {
+			err := checkDepForCrossDbRef(sequenceReferences.ID, reference)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // writeNameKey writes a name key to a batch and runs the batch.
-func (p *planner) writeNameKey(ctx context.Context, key sqlbase.DescriptorKey, ID descpb.ID) error {
-	marshalledKey := key.Key(p.ExecCfg().Codec)
+func (p *planner) writeNameKey(ctx context.Context, nameKey catalog.NameKey, ID descpb.ID) error {
+	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKey)
 	b := &kv.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", marshalledKey, ID)

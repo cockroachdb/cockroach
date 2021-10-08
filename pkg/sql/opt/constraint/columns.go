@@ -33,15 +33,20 @@ type Columns struct {
 
 // Init initializes a Columns structure.
 func (c *Columns) Init(cols []opt.OrderingColumn) {
-	c.firstCol = cols[0]
-	c.otherCols = cols[1:]
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Columns{
+		firstCol:  cols[0],
+		otherCols: cols[1:],
+	}
 }
 
 // InitSingle is a more efficient version of Init for the common case of a
 // single column.
 func (c *Columns) InitSingle(col opt.OrderingColumn) {
-	c.firstCol = col
-	c.otherCols = nil
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Columns{firstCol: col}
 }
 
 var _ = (*Columns).InitSingle

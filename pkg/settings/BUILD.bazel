@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "settings",
+    srcs = [
+        "bool.go",
+        "byte_size.go",
+        "doc.go",
+        "duration.go",
+        "enum.go",
+        "float.go",
+        "int.go",
+        "masked.go",
+        "registry.go",
+        "setting.go",
+        "string.go",
+        "updater.go",
+        "version.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "settings_test",
+    size = "small",
+    srcs = ["settings_test.go"],
+    deps = [
+        ":settings",
+        "//pkg/testutils",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

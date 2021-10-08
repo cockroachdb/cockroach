@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -42,8 +44,6 @@ import (
 func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 52959)
 
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
@@ -84,7 +84,10 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 			// The job should not run -- it should be rescheduled `recheckJobAfter` time in the
 			// future.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return s.executeSchedules(ctx, allSchedules, txn)
+				}))
 
 			if wait == jobspb.ScheduleDetails_WAIT {
 				expectedRunTime = h.env.Now().Add(recheckRunningAfter)
@@ -138,7 +141,10 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 
 			// Execute the job and verify it has the next run scheduled.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return s.executeSchedules(ctx, allSchedules, txn)
+				}))
 
 			expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 			loaded = h.loadSchedule(t, j.ScheduleID())
@@ -175,7 +181,10 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 
 	// Execute the job and verify it has the next run scheduled.
 	s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-	require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+	require.NoError(t,
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			return s.executeSchedules(ctx, allSchedules, txn)
+		}))
 
 	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 	loaded = h.loadSchedule(t, j.ScheduleID())
@@ -193,30 +202,31 @@ func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
 
 func getScopedSettings() (*settings.Values, func()) {
 	sv := &settings.Values{}
-	sv.Init(nil)
+	sv.Init(context.Background(), nil)
 	return sv, settings.TestingSaveRegistry()
 }
 
 func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	sv, cleanup := getScopedSettings()
 	defer cleanup()
 
-	schedulerEnabledSetting.Override(sv, false)
+	schedulerEnabledSetting.Override(ctx, sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
 	require.EqualValues(t, 5*time.Minute, getWaitPeriod(sv, nil))
-	schedulerEnabledSetting.Override(sv, true)
+	schedulerEnabledSetting.Override(ctx, sv, true)
 
 	// When pace is too low, we use something more reasonable.
-	schedulerPaceSetting.Override(sv, time.Nanosecond)
+	schedulerPaceSetting.Override(ctx, sv, time.Nanosecond)
 	require.EqualValues(t, minPacePeriod, getWaitPeriod(sv, nil))
 
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
-	schedulerPaceSetting.Override(sv, pace)
+	schedulerPaceSetting.Override(ctx, sv, pace)
 	require.EqualValues(t, pace, getWaitPeriod(sv, nil))
 }
 
@@ -237,8 +247,9 @@ func (n *recordScheduleExecutor) ExecuteJob(
 
 func (n *recordScheduleExecutor) NotifyJobTermination(
 	ctx context.Context,
-	jobID int64,
+	jobID jobspb.JobID,
 	jobStatus Status,
+	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	ex sqlutil.InternalExecutor,
@@ -249,6 +260,16 @@ func (n *recordScheduleExecutor) NotifyJobTermination(
 
 func (n *recordScheduleExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (n *recordScheduleExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
@@ -278,7 +299,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 
 	knobs := fastDaemonKnobs(func() time.Duration {
 		// Disable daemon
-		schedulerEnabledSetting.Override(&h.cfg.Settings.SV, false)
+		schedulerEnabledSetting.Override(ctx, &h.cfg.Settings.SV, false)
 
 		// Before we return, create a job which should not be executed
 		// (since the daemon is disabled).  We use our special executor
@@ -293,7 +314,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 		// Notify main thread and return some small delay for daemon to sleep.
 		select {
 		case getWaitPeriodCalled <- struct{}{}:
-		case <-stopper.ShouldStop():
+		case <-stopper.ShouldQuiesce():
 		}
 
 		return 10 * time.Millisecond
@@ -412,7 +433,7 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	// Advance our fake time 1 hour forward (plus a bit) so that the daemon finds matching jobs.
 	h.env.AdvanceTime(time.Hour + time.Second)
 	const jobsPerIteration = 2
-	schedulerMaxJobsPerIterationSetting.Override(&h.cfg.Settings.SV, jobsPerIteration)
+	schedulerMaxJobsPerIterationSetting.Override(ctx, &h.cfg.Settings.SV, jobsPerIteration)
 
 	// Make daemon execute initial scan immediately, but block subsequent scans.
 	h.cfg.TestingKnobs = fastDaemonKnobs(overridePaceSetting(time.Hour))
@@ -429,6 +450,129 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 		return nil
 	})
 	stopper.Stop(ctx)
+}
+
+// returnErrorExecutor counts the number of times it is
+// called, and always returns an error.
+type returnErrorExecutor struct {
+	numCalls int
+}
+
+func (e *returnErrorExecutor) ExecuteJob(
+	_ context.Context,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	_ *kv.Txn,
+) error {
+	e.numCalls++
+	return errors.Newf("error for schedule %d", schedule.ScheduleID())
+}
+
+func (e *returnErrorExecutor) NotifyJobTermination(
+	_ context.Context,
+	_ jobspb.JobID,
+	_ Status,
+	_ jobspb.Details,
+	_ scheduledjobs.JobSchedulerEnv,
+	_ *ScheduledJob,
+	_ sqlutil.InternalExecutor,
+	_ *kv.Txn,
+) error {
+	return nil
+}
+
+func (e *returnErrorExecutor) Metrics() metric.Struct {
+	return nil
+}
+
+func (e *returnErrorExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
+var _ ScheduledJobExecutor = &returnErrorExecutor{}
+
+func TestJobSchedulerToleratesBadSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const executorName = "return_error"
+	ex := &returnErrorExecutor{}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	// Create few one-off schedules.
+	const numJobs = 5
+	scheduleRunTime := h.env.Now().Add(time.Hour)
+	for i := 0; i < numJobs; i++ {
+		s := h.newScheduledJobForExecutor("schedule", executorName, nil)
+		s.SetNextRun(scheduleRunTime)
+		require.NoError(t, s.Create(ctx, h.cfg.InternalExecutor, nil))
+	}
+	h.env.SetTime(scheduleRunTime.Add(time.Second))
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
+	require.NoError(t,
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			return daemon.executeSchedules(ctx, numJobs, txn)
+		}))
+	require.Equal(t, numJobs, ex.numCalls)
+}
+
+func TestJobSchedulerRetriesFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const executorName = "return_error"
+	ex := &returnErrorExecutor{}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
+
+	schedule := h.newScheduledJobForExecutor("schedule", executorName, nil)
+	require.NoError(t, schedule.Create(ctx, h.cfg.InternalExecutor, nil))
+
+	startTime := h.env.Now()
+	execTime := startTime.Add(time.Hour).Add(time.Second)
+
+	cron := cronexpr.MustParse("@hourly")
+
+	for _, tc := range []struct {
+		onError jobspb.ScheduleDetails_ErrorHandlingBehavior
+		nextRun time.Time
+	}{
+		{jobspb.ScheduleDetails_PAUSE_SCHED, time.Time{}},
+		{jobspb.ScheduleDetails_RETRY_SOON, execTime.Add(retryFailedJobAfter).Round(time.Microsecond)},
+		{jobspb.ScheduleDetails_RETRY_SCHED, cron.Next(execTime).Round(time.Microsecond)},
+	} {
+		t.Run(tc.onError.String(), func(t *testing.T) {
+			h.env.SetTime(startTime)
+			schedule.SetScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError})
+			require.NoError(t, schedule.SetSchedule("@hourly"))
+			require.NoError(t, schedule.Update(ctx, h.cfg.InternalExecutor, nil))
+
+			h.env.SetTime(execTime)
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return daemon.executeSchedules(ctx, 1, txn)
+				}))
+
+			loaded := h.loadSchedule(t, schedule.ScheduleID())
+			require.EqualValues(t, tc.nextRun, loaded.NextRun())
+		})
+	}
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
@@ -454,7 +598,8 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 
 	// Create a one off job which writes some values into 'foo' table.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
-	schedule.SetScheduleName("test schedule")
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
 	schedule.SetNextRun(timeutil.Now())
 	any, err := types.MarshalAny(
 		&jobspb.SqlStatementExecutionArg{Statement: "INSERT INTO defaultdb.foo VALUES (1), (2), (3)"})
@@ -472,4 +617,136 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+type txnConflictExecutor struct {
+	beforeUpdate, proceed chan struct{}
+}
+
+func (e *txnConflictExecutor) ExecuteJob(
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	txn *kv.Txn,
+) error {
+	// Read number of rows -- this count will be used when updating
+	// a single row in the table.
+	row, err := cfg.InternalExecutor.QueryRow(
+		ctx, "txn-executor", txn, "SELECT count(*) FROM defaultdb.foo")
+	if err != nil {
+		return err
+	}
+	cnt := int(tree.MustBeDInt(row[0]))
+	if e.beforeUpdate != nil {
+		// Wait to be signaled.
+		e.beforeUpdate <- struct{}{}
+		<-e.proceed
+		e.beforeUpdate = nil
+		e.proceed = nil
+	}
+
+	// Try updating.
+	_, err = cfg.InternalExecutor.Exec(
+		ctx, "txn-executor", txn, "UPDATE defaultdb.foo SET b=b+$1 WHERE a=1", cnt)
+	return err
+}
+
+func (e *txnConflictExecutor) NotifyJobTermination(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	jobStatus Status,
+	details jobspb.Details,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	return nil
+}
+
+func (e *txnConflictExecutor) Metrics() metric.Struct {
+	return nil
+}
+
+func (e *txnConflictExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
+var _ ScheduledJobExecutor = (*txnConflictExecutor)(nil)
+
+func TestTransientTxnErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	h.sqlDB.Exec(t, `
+CREATE TABLE defaultdb.foo(a int primary key, b int);
+INSERT INTO defaultdb.foo VALUES(1, 1)
+`)
+
+	const execName = "test-executor"
+	ex := &txnConflictExecutor{
+		beforeUpdate: make(chan struct{}),
+		proceed:      make(chan struct{}),
+	}
+	defer registerScopedScheduledJobExecutor(execName, ex)()
+
+	// Setup schedule with our test executor.
+	schedule := NewScheduledJob(h.env)
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
+	nextRun := h.env.Now().Add(time.Hour)
+	schedule.SetNextRun(nextRun)
+	schedule.SetExecutionDetails(execName, jobspb.ExecutionArguments{})
+	require.NoError(t, schedule.Create(
+		ctx, h.cfg.InternalExecutor, nil))
+
+	// Execute schedule on another thread.
+	g := ctxgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return h.cfg.DB.Txn(context.Background(),
+			func(ctx context.Context, txn *kv.Txn) error {
+				err := h.execSchedules(ctx, allSchedules, txn)
+				return err
+			},
+		)
+	})
+
+	require.NoError(t,
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			// Let schedule start running, and wait for it to be ready to update.
+			h.env.SetTime(nextRun.Add(time.Second))
+			<-ex.beforeUpdate
+
+			// Before we let schedule proceed, update the number of rows in the table.
+			// This should cause transaction in schedule to restart, but we don't
+			// expect to see any errors in the schedule status.
+			if _, err := h.cfg.InternalExecutor.Exec(ctx, "update-a", txn,
+				`UPDATE defaultdb.foo SET b=3 WHERE a=1`); err != nil {
+				return err
+			}
+			if _, err := h.cfg.InternalExecutor.Exec(ctx, "add-row", txn,
+				`INSERT INTO defaultdb.foo VALUES (123, 123)`); err != nil {
+				return err
+			}
+			ex.proceed <- struct{}{}
+			return nil
+		}))
+
+	err := g.Wait()
+	require.True(t, errors.HasType(err, &savePointError{}))
+
+	// Reload schedule -- verify it doesn't have any errors in its status.
+	updated := h.loadSchedule(t, schedule.ScheduleID())
+	require.Equal(t, "", updated.ScheduleStatus())
 }

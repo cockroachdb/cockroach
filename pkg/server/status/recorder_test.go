@@ -15,7 +15,6 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
-	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -294,6 +294,7 @@ func TestMetricsRecorder(t *testing.T) {
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 			case "latency":
 				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name}, time.Hour)
 				reg.reg.AddMetric(l)
@@ -303,6 +304,7 @@ func TestMetricsRecorder(t *testing.T) {
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 			default:
 				t.Fatalf("unexpected: %+v", data)
 			}
@@ -347,7 +349,7 @@ func TestMetricsRecorder(t *testing.T) {
 			},
 		},
 		TotalSystemMemory: totalMemory,
-		NumCpus:           int32(runtime.NumCPU()),
+		NumCpus:           int32(system.NumCPU()),
 	}
 
 	// Make sure there is at least one environment variable that will be

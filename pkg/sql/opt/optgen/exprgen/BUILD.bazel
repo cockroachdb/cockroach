@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "exprgen",
+    srcs = [
+        "custom_funcs.go",
+        "expr_gen.go",
+        "parse_type.go",
+        "private.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optgen/lang",
+        "//pkg/sql/opt/ordering",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/stats",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "exprgen_test",
+    size = "small",
+    srcs = ["expr_gen_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
