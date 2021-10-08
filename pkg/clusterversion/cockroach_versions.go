@@ -277,6 +277,10 @@ const (
 	// limits when splitting requests.
 	TargetBytesAvoidExcess
 
+	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
+	// of span that RPCs get on the server depending on the tracing context.
+	TraceIDDoesntImplyStructuredRecording
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -472,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TargetBytesAvoidExcess,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     TraceIDDoesntImplyStructuredRecording,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************

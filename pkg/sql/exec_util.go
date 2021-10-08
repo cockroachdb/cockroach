@@ -2062,8 +2062,7 @@ func (st *SessionTracing) StartTracing(
 		}
 
 		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
-			"session tracing", tracing.WithForceRealSpan())
-		sp.SetVerbose(true)
+			"session tracing", tracing.WithRecording(tracing.RecordingVerbose))
 		st.ex.state.Ctx = newTxnCtx
 		st.firstTxnSpan = sp
 	}
@@ -2081,9 +2080,8 @@ func (st *SessionTracing) StartTracing(
 		connCtx,
 		st.ex.server.cfg.AmbientCtx.Tracer,
 		opName,
-		tracing.WithForceRealSpan(),
+		tracing.WithRecording(tracing.RecordingVerbose),
 	)
-	sp.SetVerbose(true)
 	st.connSpan = sp
 
 	// Hijack the connections context.
