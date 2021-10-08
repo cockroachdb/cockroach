@@ -339,10 +339,10 @@ describe("Routing to", () => {
   });
 
   describe("'/statement' path", () => {
-    it("redirected to '/statements'", () => {
+    it("redirected to '/sql-activity/statements'", () => {
       navigateToPath("/statement");
       const location = history.location;
-      assert.equal(location.pathname, "/statements");
+      assert.equal(location.pathname, "/sql-activity/statements");
     });
   });
 
@@ -580,6 +580,30 @@ describe("Routing to", () => {
     it("routes to <NotFound> component", () => {
       navigateToPath("/some-random-ulr");
       assert.lengthOf(appWrapper.find(NotFound), 1);
+    });
+  });
+
+  describe("'/statements' path", () => {
+    it("redirected to '/sql-activity/statements'", () => {
+      navigateToPath("/statements");
+      const location = history.location;
+      assert.equal(location.pathname, "/sql-activity/statements");
+    });
+  });
+
+  describe("'/sessions' path", () => {
+    it("redirected to '/sql-activity/sessions'", () => {
+      navigateToPath("/sessions");
+      const location = history.location;
+      assert.equal(location.pathname, "/sql-activity/sessions");
+    });
+  });
+
+  describe("'/transactions' path", () => {
+    it("redirected to '/sql-activity/transactions'", () => {
+      navigateToPath("/transactions");
+      const location = history.location;
+      assert.equal(location.pathname, "/sql-activity/transactions");
     });
   });
 });
