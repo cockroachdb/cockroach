@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -33,34 +34,71 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	pkgEnv = "PKG"
+	pkgEnv  = "PKG"
+	unknown = "(unknown)"
 )
 
-func main() {
-	ctx := context.Background()
-	fileIssue := func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error {
-		log.Printf("filing issue with title: %s", title)
-		req := issues.PostRequest{
-			// TODO(tbg): actually use this as a template and not a hard-coded
-			// string.
-			TitleTemplate: title,
-			BodyTemplate:  issues.UnitTestFailureBody,
-			PackageName:   packageName,
-			TestName:      testName,
-			Message:       testMessage,
-			Artifacts:     "",
-			AuthorEmail:   authorEmail,
+type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
+
+func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
+	teams, authorEmail := getOwner(ctx, f.packageName, f.testName)
+	repro := fmt.Sprintf("make stressrace TESTS=%s PKG=./pkg/%s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
+		f.testName, trimPkg(f.packageName))
+
+	var projColID int
+	var mentions []string
+	if len(teams) > 0 {
+		projColID = teams[0].TriageColumnID
+		for _, team := range teams {
+			mentions = append(mentions, "@"+string(team.Name()))
 		}
-		return issues.Post(ctx, req)
+	}
+	return issues.UnitTestFormatter, issues.PostRequest{
+		TestName:            f.testName,
+		PackageName:         f.packageName,
+		Message:             f.testMessage,
+		Artifacts:           "/", // best we can do for unit tests
+		AuthorEmail:         authorEmail,
+		ReproductionCommand: issues.ReproductionCommandFromString(repro),
+		Mention:             mentions,
+		ProjectColumnID:     projColID,
+	}
+}
+
+func main() {
+	formatterName := flag.String("formatter", "", "formatter to use to construct GitHub issues")
+	flag.Parse()
+
+	var reqFromFailure formatter
+	switch *formatterName {
+	case "pebble-metamorphic":
+		reqFromFailure = formatPebbleMetamorphicIssue
+	default:
+		reqFromFailure = defaultFormatter
 	}
 
-	if err := listFailures(ctx, os.Stdin, fileIssue); err != nil {
-		log.Fatal(err)
+	fileIssue := func(ctx context.Context, f failure) error {
+		fmter, req := reqFromFailure(ctx, f)
+		return issues.Post(ctx, fmter, req)
 	}
+
+	ctx := context.Background()
+	if err := listFailures(ctx, os.Stdin, fileIssue); err != nil {
+		log.Println(err) // keep going
+	}
+}
+
+type failure struct {
+	title       string
+	packageName string
+	testName    string
+	testMessage string
 }
 
 // This struct is described in the test2json documentation.
@@ -87,19 +125,24 @@ func scoped(te testEvent) scopedTest {
 }
 
 func mustPkgFromEnv() string {
-	packageName := maybePkgFromEnv()
+	packageName := os.Getenv(pkgEnv)
 	if packageName == "" {
 		panic(errors.Errorf("package name environment variable %s is not set", pkgEnv))
 	}
 	return packageName
 }
 
-func maybePkgFromEnv() string {
-	packageName, ok := os.LookupEnv(pkgEnv)
-	if !ok {
-		return ""
+func maybeEnv(envKey, defaultValue string) string {
+	v := os.Getenv(envKey)
+	if v == "" {
+		return defaultValue
 	}
-	return packageName
+	return v
+}
+
+func shortPkg() string {
+	packageName := maybeEnv(pkgEnv, "unknown")
+	return trimPkg(packageName)
 }
 
 func trimPkg(pkg string) string {
@@ -107,11 +150,7 @@ func trimPkg(pkg string) string {
 }
 
 func listFailures(
-	ctx context.Context,
-	input io.Reader,
-	fileIssue func(
-		ctx context.Context, title, packageName, testName, testMessage, authorEmail string,
-	) error,
+	ctx context.Context, input io.Reader, fileIssue func(context.Context, failure) error,
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
@@ -309,16 +348,13 @@ func listFailures(
 	if lastEvent.Action == "fail" && len(failures) == 0 && timedOutCulprit.name == "" {
 		// If we couldn't find a failing Go test, assume that a failure occurred
 		// before running Go and post an issue about that.
-		const unknown = "(unknown)"
-		packageName := maybePkgFromEnv()
-		if packageName == "" {
-			packageName = "unknown"
-		}
-		trimmedPkgName := trimPkg(packageName)
-		title := fmt.Sprintf("%s: package failed", trimmedPkgName)
-		if err := fileIssue(
-			ctx, title, packageName, unknown, packageOutput.String(), "", /* authorEmail */
-		); err != nil {
+		err := fileIssue(ctx, failure{
+			title:       fmt.Sprintf("%s: package failed", shortPkg()),
+			packageName: maybeEnv(pkgEnv, "unknown"),
+			testName:    unknown,
+			testMessage: packageOutput.String(),
+		})
+		if err != nil {
 			return errors.Wrap(err, "failed to post issue")
 		}
 	} else {
@@ -342,17 +378,17 @@ func listFailures(
 		})
 		for _, test := range failedTestNames {
 			testEvents := failures[test]
-			authorEmail, err := getAuthorEmail(ctx, test.pkg, test.name)
-			if err != nil {
-				log.Printf("unable to determine test author email: %s\n", err)
-			}
 			var outputs []string
 			for _, testEvent := range testEvents {
 				outputs = append(outputs, testEvent.Output)
 			}
-			message := strings.Join(outputs, "")
-			title := fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name)
-			if err := fileIssue(ctx, title, test.pkg, test.name, message, authorEmail); err != nil {
+			err := fileIssue(ctx, failure{
+				title:       fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name),
+				packageName: test.pkg,
+				testName:    test.name,
+				testMessage: strings.Join(outputs, ""),
+			})
+			if err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		}
@@ -385,29 +421,28 @@ func listFailures(
 		if timedOutCulprit == scoped(slowest) {
 			// The test that was running when the timeout hit is the one that ran for
 			// the longest time.
-			authorEmail, err := getAuthorEmail(ctx, timedOutCulprit.pkg, timedOutCulprit.name)
-			if err != nil {
-				log.Printf("unable to determine test author email: %s\n", err)
-			}
-			title := fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name)
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
-			if err := fileIssue(ctx, title, timedOutCulprit.pkg, timedOutCulprit.name, report, authorEmail); err != nil {
+			err := fileIssue(ctx, failure{
+				title:       fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name),
+				packageName: timedOutCulprit.pkg,
+				testName:    timedOutCulprit.name,
+				testMessage: report,
+			})
+			if err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		} else {
-			packageName := maybePkgFromEnv()
-			if packageName == "" {
-				packageName = "unknown"
-			}
-			trimmedPkgName := trimPkg(packageName)
-			title := fmt.Sprintf("%s: package timed out", trimmedPkgName)
+			log.Printf("timeout culprit not found\n")
 			// TODO(irfansharif): These are assigned to nobody given our lack of
 			// a story around #51653. It'd be nice to be able to go from pkg
 			// name to team-name, and be able to assign to a specific team.
-			log.Printf("timeout culprit not found\n")
-			if err := fileIssue(
-				ctx, title, packageName, "(unknown)" /* testName */, report, "",
-			); err != nil {
+			err := fileIssue(ctx, failure{
+				title:       fmt.Sprintf("%s: package timed out", shortPkg()),
+				packageName: maybeEnv(pkgEnv, "unknown"),
+				testName:    unknown,
+				testMessage: report,
+			})
+			if err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		}
@@ -446,7 +481,11 @@ func writeSlowTestsReport(report string) error {
 	return ioutil.WriteFile("artifacts/slow-tests-report.txt", []byte(report), 0644)
 }
 
-func getAuthorEmail(ctx context.Context, packageName, testName string) (string, error) {
+// getFileLine returns the file (relative to repo root) and line for the given test.
+// The package name is assumed relative to the repo root as well, i.e. pkg/foo/bar.
+func getFileLine(
+	ctx context.Context, packageName, testName string,
+) (_filename string, _linenum string, _ error) {
 	// Search the source code for the email address of the last committer to touch
 	// the first line of the source code that contains testName. Then, ask GitHub
 	// for the GitHub username of the user with that email address by searching
@@ -455,41 +494,88 @@ func getAuthorEmail(ctx context.Context, packageName, testName string) (string, 
 	testName = subtests[0]
 	packageName = strings.TrimPrefix(packageName, "github.com/cockroachdb/cockroach/")
 	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git grep -n "func %s" $(git rev-parse --show-toplevel)/%s/*_test.go`,
+		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep -n 'func %s(' '%s/*_test.go'`,
 			testName, packageName))
 	// This command returns output such as:
 	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", errors.Errorf("couldn't find test %s in %s: %s %s",
+		return "", "", errors.Errorf("couldn't find test %s in %s: %s %s",
 			testName, packageName, err, string(out))
 	}
 	re := regexp.MustCompile(`(.*):(.*):`)
 	// The first 2 :-delimited fields are the filename and line number.
 	matches := re.FindSubmatch(out)
 	if matches == nil {
-		return "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
+		return "", "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
 			testName, packageName, string(out))
 	}
-	filename := matches[1]
-	linenum := matches[2]
+	return string(matches[1]), string(matches[2]), nil
+}
 
-	// Now run git blame.
-	cmd = exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git blame --porcelain -L%s,+1 %s | grep author-mail`,
+// getOwner looks up the file containing the given test and returns
+// the owning teams as well as the author email. It does not return
+// errors, but instead simply returns what it can.
+func getOwner(
+	ctx context.Context, packageName, testName string,
+) (_teams []team.Team, _authorEmail string) {
+	filename, linenum, err := getFileLine(ctx, packageName, testName)
+	if err != nil {
+		log.Printf("getting file:line for %s.%s: %s", packageName, testName, err)
+		return nil, ""
+	}
+	authorEmail, _ := getAuthorEmail(ctx, filename, linenum)
+	co, err := codeowners.DefaultLoadCodeOwners()
+	if err != nil {
+		log.Printf("loading codeowners: %s", err)
+		return nil, authorEmail
+	}
+	return co.Match(filename), authorEmail
+}
+
+func getAuthorEmail(ctx context.Context, filename, linenum string) (string, error) {
+	// Run git blame.
+	cmd := exec.Command(`/bin/bash`, `-c`,
+		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git blame --porcelain -L%s,+1 '%s' | grep author-mail`,
 			linenum, filename))
 	// This command returns output such as:
 	// author-mail <jordan@cockroachlabs.com>
-	out, err = cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", errors.Errorf("couldn't find author of test %s in %s: %s %s",
-			testName, packageName, err, string(out))
+		return "", errors.Errorf("couldn't find author of %s:%s: %s\n%s",
+			filename, linenum, err, string(out))
 	}
-	re = regexp.MustCompile("author-mail <(.*)>")
-	matches = re.FindSubmatch(out)
+	re := regexp.MustCompile("author-mail <(.*)>")
+	matches := re.FindSubmatch(out)
 	if matches == nil {
-		return "", errors.Errorf("couldn't find author email of test %s in %s: %s",
-			testName, packageName, string(out))
+		return "", errors.Errorf("couldn't find author email of %s:%s: %s",
+			filename, linenum, string(out))
 	}
 	return string(matches[1]), nil
+}
+
+func formatPebbleMetamorphicIssue(
+	ctx context.Context, f failure,
+) (issues.IssueFormatter, issues.PostRequest) {
+	var repro string
+	{
+		const seedHeader = "===== SEED =====\n"
+		i := strings.Index(f.testMessage, seedHeader)
+		if i != -1 {
+			s := f.testMessage[i+len(seedHeader):]
+			s = strings.TrimSpace(s)
+			s = strings.TrimSpace(s[:strings.Index(s, "\n")])
+
+			repro = fmt.Sprintf("go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' "+
+				"-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s", s)
+		}
+	}
+	return issues.UnitTestFormatter, issues.PostRequest{
+		TestName:            f.testName,
+		PackageName:         f.packageName,
+		Message:             f.testMessage,
+		Artifacts:           "meta",
+		ReproductionCommand: issues.ReproductionCommandFromString(repro),
+		ExtraLabels:         []string{"metamorphic-failure"},
+	}
 }

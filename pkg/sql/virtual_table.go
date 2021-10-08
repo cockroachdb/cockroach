@@ -12,13 +12,17 @@ package sql
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,7 +40,7 @@ type cleanupFunc func()
 // and then suspend until the next row has been requested.
 type rowPusher interface {
 	// pushRow pushes the input row to the receiver of the generator. It doesn't
-	// mutate the input row. It will block until the the data has been received
+	// mutate the input row. It will block until the data has been received
 	// and more data has been requested. Once pushRow returns, the caller is free
 	// to mutate the slice passed as input. The caller is not allowed to perform
 	// operations on a transaction while blocked on a call to pushRow.
@@ -63,25 +67,27 @@ type virtualTableGeneratorResponse struct {
 // * cleanup: Performs all cleanup. This function must be called exactly once
 //   to ensure that resources are cleaned up.
 func setupGenerator(
-	ctx context.Context, worker func(pusher rowPusher) error,
-) (next virtualTableGenerator, cleanup cleanupFunc) {
+	ctx context.Context, worker func(pusher rowPusher) error, stopper *stop.Stopper,
+) (next virtualTableGenerator, cleanup cleanupFunc, setupError error) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
-	cleanup = cancel
+	var wg sync.WaitGroup
+	cleanup = func() {
+		cancel()
+		wg.Wait()
+	}
 
 	// comm is the channel to manage communication between the row receiver
 	// and the generator. The row receiver notifies the worker to begin
 	// computation through comm, and the generator places rows to consume
 	// back into comm.
 	comm := make(chan virtualTableGeneratorResponse)
-
 	addRow := func(datums ...tree.Datum) error {
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case comm <- virtualTableGeneratorResponse{datums: datums}:
 		}
-
 		// Block until the next call to cleanup() or next(). This allows us to
 		// avoid issues with concurrent transaction usage if the worker is using
 		// a transaction. Otherwise, worker could proceed running operations after
@@ -92,13 +98,15 @@ func setupGenerator(
 		// worker, and then back to the next() caller after it is done.
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case <-comm:
 		}
 		return nil
 	}
 
-	go func() {
+	wg.Add(1)
+	if setupError = stopper.RunAsyncTask(ctx, "sql.rowPusher: send rows", func(ctx context.Context) {
+		defer wg.Done()
 		// We wait until a call to next before starting the worker. This prevents
 		// concurrent transaction usage during the startup phase. We also have to
 		// wait on done here if cleanup is called before any calls to next() to
@@ -112,48 +120,52 @@ func setupGenerator(
 		err := worker(funcRowPusher(addRow))
 		// If the query was canceled, next() will already return a
 		// QueryCanceledError, so just exit here.
-		if errors.Is(err, sqlbase.QueryCanceledError) {
+		if errors.Is(err, cancelchecker.QueryCanceledError) {
 			return
 		}
-
 		// Notify that we are done sending rows.
 		select {
 		case <-ctx.Done():
 			return
 		case comm <- virtualTableGeneratorResponse{err: err}:
 		}
-	}()
+	}); setupError != nil {
+		// The presence of an error means the goroutine never started,
+		// thus wg.Done() is never called, which can result in
+		// cleanup() being blocked indefinitely on wg.Wait(). We call
+		// wg.Done() manually here to account for this case.
+		wg.Done()
+	}
 
 	next = func() (tree.Datums, error) {
 		// Notify the worker to begin computing a row.
 		select {
 		case comm <- virtualTableGeneratorResponse{}:
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		}
-
 		// Wait for the row to be sent.
 		select {
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		case resp := <-comm:
 			return resp.datums, resp.err
 		}
 	}
-	return next, cleanup
+	return next, cleanup, setupError
 }
 
 // virtualTableNode is a planNode that constructs its rows by repeatedly
 // invoking a virtualTableGenerator function.
 type virtualTableNode struct {
-	columns    sqlbase.ResultColumns
+	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
 	cleanup    func()
 	currentRow tree.Datums
 }
 
 func (p *planner) newVirtualTableNode(
-	columns sqlbase.ResultColumns, next virtualTableGenerator, cleanup func(),
+	columns colinfo.ResultColumns, next virtualTableGenerator, cleanup func(),
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,
@@ -192,25 +204,25 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *sqlbase.ImmutableDatabaseDescriptor
-	table  *sqlbase.ImmutableTableDescriptor
-	index  *descpb.IndexDescriptor
+	db     catalog.DatabaseDescriptor
+	table  catalog.TableDescriptor
+	index  catalog.Index
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
-	virtualTableEntry virtualDefEntry
+	virtualTableEntry *virtualDefEntry
 
 	joinType descpb.JoinType
 
 	// columns is the join's output schema.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	// pred contains the join's on condition, if any.
 	pred *joinPredicate
 	// inputCols is the schema of the input to this lookup join.
-	inputCols sqlbase.ResultColumns
+	inputCols colinfo.ResultColumns
 	// vtableCols is the schema of the virtual table we're looking up rows from,
 	// before any projection.
-	vtableCols sqlbase.ResultColumns
+	vtableCols colinfo.ResultColumns
 	// lookupCols is the projection on vtableCols to apply.
 	lookupCols exec.TableColumnOrdinalSet
 
@@ -238,21 +250,24 @@ var _ rowPusher = &vTableLookupJoinNode{}
 // startExec implements the planNode interface.
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
-	v.run.rows = rowcontainer.NewRowContainer(params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
+	v.run.rows = rowcontainer.NewRowContainer(
+		params.EvalContext().Mon.MakeBoundAccount(),
+		colinfo.ColTypeInfoFromResCols(v.columns),
+	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(
+	db, err := params.p.Descriptors().GetImmutableDatabaseByName(
 		params.ctx,
 		params.p.txn,
-		params.p.ExecCfg().Codec,
 		v.dbName,
-		tree.DatabaseLookupFlags{Required: true, AvoidCached: params.p.avoidCachedDescriptors},
+		tree.DatabaseLookupFlags{
+			Required: true, AvoidCached: params.p.avoidCachedDescriptors,
+		},
 	)
 	if err != nil {
 		return err
 	}
-	v.db = db.(*sqlbase.ImmutableDatabaseDescriptor)
+	v.db = db
 	return err
 }
 
@@ -264,8 +279,8 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 	for {
 		// Check if there are any rows left to emit from the last input row.
 		if v.run.rows.Len() > 0 {
-			v.run.row = v.run.rows.At(0)
-			v.run.rows.PopFirst()
+			copy(v.run.row, v.run.rows.At(0))
+			v.run.rows.PopFirst(params.ctx)
 			return true, nil
 		}
 
@@ -287,7 +302,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(params.ctx,
 			params.p, v.db, v.index,
 			v.run.indexKeyDatums,
-			v.table.ColumnIdxMap(),
+			catalog.ColumnIDToOrdinalMap(v.table.PublicColumns()),
 			&idxConstraint,
 			v.vtableCols,
 		)

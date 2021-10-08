@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "featureflag",
+    srcs = ["feature_flags.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/featureflag",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+    ],
+)

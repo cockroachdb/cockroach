@@ -1,0 +1,336 @@
+##### Intents written are interleaved. #####
+
+new-writer enable-separated=false
+----
+
+# Go through all combinations of put-intent with
+# preceding={none,interleaved,separated} x txn-did-not-update-meta={true,false}
+
+put-intent k=a ts=50 txn=1 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutUnversioned(a, meta{ts: 50.000000000,0, txn: 1})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+
+put-intent k=b ts=50 txn=2 preceding=interleaved txn-did-not-update-meta=true
+----
+=== Calls ===
+PutUnversioned(b, meta{ts: 50.000000000,0, txn: 2})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+
+put-intent k=c ts=50 txn=3 preceding=separated txn-did-not-update-meta=true
+----
+=== Calls ===
+SingleClearEngineKey(LT{k: c, strength: Exclusive, uuid:3})
+PutUnversioned(c, meta{ts: 50.000000000,0, txn: 3})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+put-intent k=d ts=50 txn=4 preceding=none txn-did-not-update-meta=false
+----
+=== Calls ===
+PutUnversioned(d, meta{ts: 50.000000000,0, txn: 4})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+
+put-intent k=e ts=50 txn=5 preceding=interleaved txn-did-not-update-meta=false
+----
+=== Calls ===
+PutUnversioned(e, meta{ts: 50.000000000,0, txn: 5})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+k: "e"/0,0, v: meta{ts: 50.000000000,0, txn: 5}
+
+put-intent k=f ts=50 txn=6 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearEngineKey(LT{k: f, strength: Exclusive, uuid:6})
+PutUnversioned(f, meta{ts: 50.000000000,0, txn: 6})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+k: "e"/0,0, v: meta{ts: 50.000000000,0, txn: 5}
+k: "f"/0,0, v: meta{ts: 50.000000000,0, txn: 6}
+
+# clear an intent
+clear-intent k=f txn=6 preceding=interleaved txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearUnversioned(f)
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+k: "e"/0,0, v: meta{ts: 50.000000000,0, txn: 5}
+
+##### Intents written are separated. #####
+new-writer enable-separated=true
+----
+
+# Clear an interleaved intent.
+clear-intent k=e txn=5 preceding=interleaved txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearUnversioned(e)
+Return Value: separated-delta=0
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+
+# Overwrite an existing interleaved intent.
+put-intent k=a ts=50 txn=1 preceding=interleaved txn-did-not-update-meta=true
+----
+=== Calls ===
+ClearUnversioned(a)
+PutEngineKey(LT{k: a, strength: Exclusive, uuid:1}, meta{ts: 50.000000000,0, txn: 1})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+k: "d"/0,0, v: meta{ts: 50.000000000,0, txn: 4}
+
+# Overwrite an existing interleaved intent.
+put-intent k=d ts=50 txn=4 preceding=interleaved txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearUnversioned(d)
+PutEngineKey(LT{k: d, strength: Exclusive, uuid:4}, meta{ts: 50.000000000,0, txn: 4})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Write some new intents with txn-did-not-update-meta={true,false}
+put-intent k=e ts=50 txn=5 preceding=none txn-did-not-update-meta=false
+----
+=== Calls ===
+PutEngineKey(LT{k: e, strength: Exclusive, uuid:5}, meta{ts: 50.000000000,0, txn: 5})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:5}, v: meta{ts: 50.000000000,0, txn: 5}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+put-intent k=f ts=50 txn=6 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: f, strength: Exclusive, uuid:6}, meta{ts: 50.000000000,0, txn: 6})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:5}, v: meta{ts: 50.000000000,0, txn: 5}
+k: LT{k: f, strength: Exclusive, uuid:6}, v: meta{ts: 50.000000000,0, txn: 6}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Overwrite an existing separated intent
+put-intent k=e ts=60 txn=5 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+PutEngineKey(LT{k: e, strength: Exclusive, uuid:5}, meta{ts: 60.000000000,0, txn: 5})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:5}, v: meta{ts: 60.000000000,0, txn: 5}
+k: LT{k: f, strength: Exclusive, uuid:6}, v: meta{ts: 50.000000000,0, txn: 6}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+put-intent k=f ts=60 txn=6 preceding=separated txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: f, strength: Exclusive, uuid:6}, meta{ts: 60.000000000,0, txn: 6})
+Return Value: separated-delta=0
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:5}, v: meta{ts: 60.000000000,0, txn: 5}
+k: LT{k: f, strength: Exclusive, uuid:6}, v: meta{ts: 60.000000000,0, txn: 6}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Clear intents that have been updated.
+clear-intent k=f txn=6 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearEngineKey(LT{k: f, strength: Exclusive, uuid:6})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:5}, v: meta{ts: 60.000000000,0, txn: 5}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+clear-intent k=e txn=5 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearEngineKey(LT{k: e, strength: Exclusive, uuid:5})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Put and clear an intent that has not been updated.
+put-intent k=e ts=60 txn=10 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: e, strength: Exclusive, uuid:10}, meta{ts: 60.000000000,0, txn: 10})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:10}, v: meta{ts: 60.000000000,0, txn: 10}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+clear-intent k=e txn=10 preceding=separated txn-did-not-update-meta=true
+----
+=== Calls ===
+SingleClearEngineKey(LT{k: e, strength: Exclusive, uuid:10})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Put new intents at e, f, g.
+put-intent k=e ts=60 txn=15 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: e, strength: Exclusive, uuid:15}, meta{ts: 60.000000000,0, txn: 15})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+put-intent k=f ts=60 txn=15 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: f, strength: Exclusive, uuid:15}, meta{ts: 60.000000000,0, txn: 15})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+put-intent k=g ts=60 txn=15 preceding=none txn-did-not-update-meta=true
+----
+=== Calls ===
+PutEngineKey(LT{k: g, strength: Exclusive, uuid:15}, meta{ts: 60.000000000,0, txn: 15})
+Return Value: separated-delta=1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: d, strength: Exclusive, uuid:4}, v: meta{ts: 50.000000000,0, txn: 4}
+k: LT{k: e, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: g, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "c"/0,0, v: meta{ts: 50.000000000,0, txn: 3}
+
+# Clear range of intents that will clear c and d.
+clear-range start=c end=da
+----
+=== Calls ===
+ClearRawRange(c, da)
+ClearRawRange(LT{c}, LT{da})
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: e, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: g, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+
+##### Intents written are interleaved. #####
+
+new-writer enable-separated=false
+----
+
+# Overwrite an existing separated intent that was not updated.
+put-intent k=e ts=60 txn=15 preceding=separated txn-did-not-update-meta=true
+----
+=== Calls ===
+SingleClearEngineKey(LT{k: e, strength: Exclusive, uuid:15})
+PutUnversioned(e, meta{ts: 60.000000000,0, txn: 15})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: a, strength: Exclusive, uuid:1}, v: meta{ts: 50.000000000,0, txn: 1}
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: g, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "e"/0,0, v: meta{ts: 60.000000000,0, txn: 15}
+
+# Overwrite an existing separated intent that was updated.
+put-intent k=a ts=60 txn=1 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearEngineKey(LT{k: a, strength: Exclusive, uuid:1})
+PutUnversioned(a, meta{ts: 60.000000000,0, txn: 1})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: LT{k: g, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "a"/0,0, v: meta{ts: 60.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "e"/0,0, v: meta{ts: 60.000000000,0, txn: 15}
+
+# Clear separated intent.
+clear-intent k=g ts=60 txn=15 preceding=separated txn-did-not-update-meta=false
+----
+=== Calls ===
+ClearEngineKey(LT{k: g, strength: Exclusive, uuid:15})
+Return Value: separated-delta=-1
+=== Storage contents ===
+k: LT{k: f, strength: Exclusive, uuid:15}, v: meta{ts: 60.000000000,0, txn: 15}
+k: "a"/0,0, v: meta{ts: 60.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}
+k: "e"/0,0, v: meta{ts: 60.000000000,0, txn: 15}
+
+# Clear range of intents that will clear e, f.
+clear-range start=e end=fa
+----
+=== Calls ===
+ClearRawRange(e, fa)
+ClearRawRange(LT{e}, LT{fa})
+=== Storage contents ===
+k: "a"/0,0, v: meta{ts: 60.000000000,0, txn: 1}
+k: "b"/0,0, v: meta{ts: 50.000000000,0, txn: 2}

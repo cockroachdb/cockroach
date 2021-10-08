@@ -12,7 +12,8 @@ SHOW CREATE parent
 TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    └── p int not null
  └── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
 
@@ -23,7 +24,8 @@ TABLE child
  ├── c int not null
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    └── c int not null
  └── CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
 
@@ -42,9 +44,10 @@ TABLE parent2
  ├── p int
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
- ├── INDEX parent2_p_key
+ ├── UNIQUE INDEX parent2_p_key
  │    ├── p int
  │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
  └── REFERENCED BY CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
@@ -56,7 +59,8 @@ TABLE child2
  ├── c int not null
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    └── c int not null
  └── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
@@ -92,7 +96,8 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -107,7 +112,8 @@ TABLE child_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -121,7 +127,8 @@ TABLE child_multicol_full
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -137,7 +144,8 @@ SHOW CREATE parent
 TABLE parent
  ├── p int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- └── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX primary
       └── p int not null
 
 exec-ddl
@@ -152,7 +160,8 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX primary
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -170,7 +179,8 @@ TABLE parent_multicol
  ├── q int not null
  ├── r int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- └── INDEX primary
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX primary
       ├── p int not null
       ├── q int not null
       └── r int not null
@@ -182,4 +192,19 @@ CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE
 
 exec-ddl
 DROP TABLE self
+----
+
+# Verify that we can use "ALTER TABLE ... ADD FOREIGN KEY" syntax to reference
+# a primary key without specifying the referenced column(s).
+
+exec-ddl
+CREATE TABLE child_implied_ref(ref INT, INDEX (ref))
+----
+
+exec-ddl
+ALTER TABLE child_implied_ref ADD FOREIGN KEY (ref) REFERENCES parent
+----
+
+exec-ddl
+DROP TABLE child_implied_ref
 ----

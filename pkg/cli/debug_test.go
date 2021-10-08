@@ -43,17 +43,10 @@ import (
 
 func createStore(t *testing.T, path string) {
 	t.Helper()
-	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-	defer cache.Release()
-	db, err := storage.NewRocksDB(
-		storage.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Dir:       path,
-				MustExist: false,
-			},
-		},
-		cache,
-	)
+	db, err := storage.Open(
+		context.Background(),
+		storage.Filesystem(path),
+		storage.CacheSize(server.DefaultCacheSize))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,10 +118,11 @@ func TestOpenReadOnlyStore(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer db.Close()
 
-			key := storage.MakeMVCCMetadataKey(roachpb.Key("key"))
+			key := roachpb.Key("key")
 			val := []byte("value")
-			err = db.Put(key, val)
+			err = db.PutUnversioned(key, val)
 			if !testutils.IsError(err, test.expErr) {
 				t.Fatalf("wanted %s but got %v", test.expErr, err)
 			}
@@ -138,6 +132,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 50977, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// This test is pretty slow under race (200+ cpu-seconds) because it
@@ -445,5 +440,17 @@ func TestParseGossipValues(t *testing.T) {
 		sort.Strings(gossipInfoKeys)
 		t.Errorf("`debug gossip-values` output contains %d entries, but the source gossip contains %d:\ndebug output:\n%v\n\ngossipInfos:\n%v",
 			len(debugLines), len(gossipInfo.Infos), debugOutput, strings.Join(gossipInfoKeys, "\n"))
+	}
+}
+
+func TestParsePositiveDuration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	duration, _ := parsePositiveDuration("1h")
+	if duration != time.Hour {
+		t.Errorf("Expected %v, got %v", time.Hour, duration)
+	}
+	_, err := parsePositiveDuration("-5m")
+	if err == nil {
+		t.Errorf("Expected to fail parsing negative duration -5m")
 	}
 }

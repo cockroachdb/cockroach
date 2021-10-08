@@ -13,9 +13,9 @@ package tree
 // ReturningClause represents the returning clause on a statement.
 type ReturningClause interface {
 	NodeFormatter
-	// statementType returns the StatementType of statements that include
+	// statementReturnType returns the StatementReturnType of statements that include
 	// the implementors variant of a RETURNING clause.
-	statementType() StatementType
+	statementReturnType() StatementReturnType
 	returningClause()
 }
 
@@ -53,10 +53,10 @@ type NoReturningClause struct{}
 // Format implements the NodeFormatter interface.
 func (*NoReturningClause) Format(_ *FmtCtx) {}
 
-// used by parent statements to determine their own StatementType.
-func (*ReturningExprs) statementType() StatementType    { return Rows }
-func (*ReturningNothing) statementType() StatementType  { return RowsAffected }
-func (*NoReturningClause) statementType() StatementType { return RowsAffected }
+// used by parent statements to determine their own StatementReturnType.
+func (*ReturningExprs) statementReturnType() StatementReturnType    { return Rows }
+func (*ReturningNothing) statementReturnType() StatementReturnType  { return RowsAffected }
+func (*NoReturningClause) statementReturnType() StatementReturnType { return RowsAffected }
 
 func (*ReturningExprs) returningClause()    {}
 func (*ReturningNothing) returningClause()  {}

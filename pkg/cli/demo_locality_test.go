@@ -13,13 +13,16 @@
 package cli
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func Example_demo_locality() {
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
+
+	defer democluster.TestingForceRandomizeDemoPorts()()
 
 	testData := [][]string{
 		{`demo`, `--nodes`, `3`, `-e`, `select node_id, locality from crdb_internal.gossip_nodes order by node_id`},

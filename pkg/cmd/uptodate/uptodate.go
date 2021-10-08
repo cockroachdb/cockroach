@@ -19,6 +19,7 @@ import (
 	"os"
 
 	"github.com/MichaelTJones/walk"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/pflag"
 )
 
@@ -44,7 +45,7 @@ func main() {
 	output, inputs := pflag.Arg(0), pflag.Args()[1:]
 
 	fi, err := os.Stat(output)
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		log.Printf("output %q is missing", output)
 		os.Exit(1)
 	} else if err != nil {

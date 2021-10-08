@@ -12,7 +12,6 @@ package roachpb
 
 import (
 	"math/rand"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -60,15 +59,12 @@ func TestMergeSpans(t *testing.T) {
 		{"a-c,b-bb", "a-c", false},
 		{"a-c,b-c", "a-c", false},
 	}
-	for i, c := range testCases {
-		spans, distinct := MergeSpans(makeSpans(c.spans))
+	for _, c := range testCases {
+		spans := makeSpans(c.spans)
+		spans, distinct := MergeSpans((*[]Span)(&spans))
 		expected := makeSpans(c.expected)
-		if (len(expected) != 0 || len(spans) != 0) && reflect.DeepEqual(expected, spans) {
-			t.Fatalf("%d: expected\n%s\n, but found:\n%s", i, expected, spans)
-		}
-		if c.distinct != distinct {
-			t.Fatalf("%d: expected %t, but found %t", i, c.distinct, distinct)
-		}
+		require.Equal(t, expected, spans)
+		require.Equal(t, c.distinct, distinct)
 	}
 }
 

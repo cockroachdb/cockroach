@@ -23,12 +23,12 @@ import (
 func TestParseCartesianBoundingBox(t *testing.T) {
 	testCases := []struct {
 		s             string
-		expected      *CartesianBoundingBox
+		expected      CartesianBoundingBox
 		expectedError bool
 	}{
 		{
 			s: "box(1 2,3 4)",
-			expected: &CartesianBoundingBox{
+			expected: CartesianBoundingBox{
 				BoundingBox: geopb.BoundingBox{
 					LoX: 1,
 					LoY: 2,
@@ -39,7 +39,7 @@ func TestParseCartesianBoundingBox(t *testing.T) {
 		},
 		{
 			s: "BOX(1 2,3 4)",
-			expected: &CartesianBoundingBox{
+			expected: CartesianBoundingBox{
 				BoundingBox: geopb.BoundingBox{
 					LoX: 1,
 					LoY: 2,

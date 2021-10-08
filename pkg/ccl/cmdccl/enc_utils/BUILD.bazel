@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "enc_utils_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/enc_utils",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
+        "//pkg/storage/enginepb",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "enc_utils",
+    embed = [":enc_utils_lib"],
+    visibility = ["//visibility:public"],
+)

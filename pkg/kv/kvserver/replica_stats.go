@@ -57,6 +57,9 @@ type replicaStats struct {
 		requests   [6]perLocalityCounts
 		lastRotate time.Time
 		lastReset  time.Time
+
+		// Testing only.
+		avgQPSForTesting float64
 	}
 }
 
@@ -179,13 +182,16 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 // avgQPS returns the average requests-per-second and the amount of time
 // over which the stat was accumulated. Note that these averages are exact,
 // not exponentially decayed (there isn't a ton of justification for going
-// one way or the the other, but not decaying makes the average more stable,
+// one way or the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
 func (rs *replicaStats) avgQPS() (float64, time.Duration) {
 	now := timeutil.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	if rs.mu.avgQPSForTesting != 0 {
+		return rs.mu.avgQPSForTesting, 0
+	}
 
 	rs.maybeRotateLocked(now)
 
@@ -223,4 +229,10 @@ func (rs *replicaStats) resetRequestCounts() {
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
 	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.mu.lastReset = rs.mu.lastRotate
+}
+
+func (rs *replicaStats) setAvgQPSForTesting(qps float64) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.mu.avgQPSForTesting = qps
 }

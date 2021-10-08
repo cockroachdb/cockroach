@@ -41,6 +41,10 @@ type ViewDep struct {
 	Index         cat.IndexOrdinal
 }
 
+// ViewTypeDeps contains a set of the IDs of types that
+// this view depends on.
+type ViewTypeDeps = util.FastIntSet
+
 // GetColumnNames returns a sorted list of the names of the column dependencies
 // and a boolean to determine if the dependency was a table.
 // We only track column dependencies on tables.

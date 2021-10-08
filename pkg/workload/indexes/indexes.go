@@ -47,10 +47,11 @@ type indexes struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed    int64
-	idxs    int
-	unique  bool
-	payload int
+	seed        int64
+	idxs        int
+	unique      bool
+	payload     int
+	cycleLength uint64
 }
 
 func init() {
@@ -68,6 +69,8 @@ var indexesMeta = workload.Meta{
 		g.flags.IntVar(&g.idxs, `secondary-indexes`, 1, `Number of indexes to add to the table.`)
 		g.flags.BoolVar(&g.unique, `unique-indexes`, false, `Use UNIQUE secondary indexes.`)
 		g.flags.IntVar(&g.payload, `payload`, 64, `Size of the unindexed payload column.`)
+		g.flags.Uint64Var(&g.cycleLength, `cycle-length`, math.MaxUint64,
+			`Number of keys repeatedly accessed by each writer through upserts.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -83,8 +86,8 @@ func (w *indexes) Flags() workload.Flags { return w.flags }
 func (w *indexes) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.idxs < 0 || w.idxs > 10 {
-				return errors.Errorf(`--secondary-indexes must be in range [0, 10]`)
+			if w.idxs < 0 || w.idxs > 99 {
+				return errors.Errorf(`--secondary-indexes must be in range [0, 99]`)
 			}
 			if w.payload < 1 {
 				return errors.Errorf(`--payload size must be equal to or greater than 1`)
@@ -130,7 +133,12 @@ func (w *indexes) Tables() []workload.Table {
 	var b strings.Builder
 	b.WriteString(schemaBase)
 	for i := 0; i < w.idxs; i++ {
-		fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d)", unique, i, i)
+		col1, col2 := i/10, i%10
+		if col1 == col2 {
+			fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d)", unique, i, col1)
+		} else {
+			fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d, col%d)", unique, i, col1, col2)
+		}
 	}
 	b.WriteString("\n)")
 
@@ -151,7 +159,7 @@ func (w *indexes) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
 	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -184,10 +192,10 @@ type indexesOp struct {
 }
 
 func (o *indexesOp) run(ctx context.Context) error {
-	keyHi, keyLo := o.rand.Uint64(), o.rand.Uint64()
+	keyLo := o.rand.Uint64() % o.config.cycleLength
 	_, _ = o.rand.Read(o.buf[:])
 	args := []interface{}{
-		uuid.FromUint128(uint128.FromInts(keyHi, keyLo)).String(), // key
+		uuid.FromUint128(uint128.FromInts(0, keyLo)).String(), // key
 		int64(keyLo + 0), // col0
 		int64(keyLo + 1), // col1
 		int64(keyLo + 2), // col2

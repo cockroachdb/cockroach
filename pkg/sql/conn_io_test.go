@@ -182,7 +182,7 @@ func TestStmtBufLtrim(t *testing.T) {
 	buf.AdvanceOne()
 	buf.AdvanceOne()
 	trimPos := CmdPos(2)
-	buf.ltrim(ctx, trimPos)
+	buf.Ltrim(ctx, trimPos)
 	if l := buf.mu.data.Len(); l != 3 {
 		t.Fatalf("expected 3 left, got: %d", l)
 	}

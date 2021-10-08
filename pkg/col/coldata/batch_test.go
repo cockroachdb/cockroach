@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -107,4 +108,78 @@ func TestBatchReset(t *testing.T) {
 	// Bytes columns use a different impl than everything else
 	b = coldata.NewMemBatch(typsBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, true)
+}
+
+// TestBatchWithBytesAndNulls verifies that the invariant of Bytes vectors is
+// maintained when NULL values are present in the vector and there is a
+// selection vector on the batch.
+func TestBatchWithBytesAndNulls(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := coldata.NewMemBatch([]*types.T{types.Bytes}, coldata.StandardColumnFactory)
+	// We will insert some garbage data into the Bytes vector in positions that
+	// are not mentioned in the selection vector. All the values that are
+	// selected are actually NULL values, so we don't set anything on the Bytes
+	// vector there.
+	if coldata.BatchSize() < 6 {
+		return
+	}
+	sel := []int{1, 3, 5}
+	vec := b.ColVec(0).Bytes()
+	vec.Set(0, []byte("zero"))
+	vec.Set(2, []byte("two"))
+	b.SetSelection(true)
+	copy(b.Selection(), sel)
+
+	// This is where the invariant of non-decreasing offsets in the Bytes vector
+	// should be updated.
+	b.SetLength(len(sel))
+
+	// In many cases in the vectorized execution engine, for performance
+	// reasons, we will attempt to get something from the Bytes vector at
+	// positions on which we have NULLs, so all of the Gets below should be
+	// safe.
+	for _, idx := range sel {
+		assert.True(t, len(vec.Get(idx)) == 0)
+	}
+}
+
+// Import colconv package in order to inject the implementation of
+// coldata.VecsToStringWithRowPrefix.
+var _ colconv.VecToDatumConverter
+
+func TestBatchString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := coldata.NewMemBatch([]*types.T{types.String}, coldata.StandardColumnFactory)
+	input := []string{"one", "two", "three"}
+	for i := range input {
+		b.ColVec(0).Bytes().Set(i, []byte(input[i]))
+	}
+	getExpected := func(length int, sel []int) string {
+		var result string
+		for i := 0; i < length; i++ {
+			if i > 0 {
+				result += "\n"
+			}
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			result += "['" + input[rowIdx] + "']"
+		}
+		return result
+	}
+	for _, tc := range []struct {
+		length int
+		sel    []int
+	}{
+		{length: 3},
+		{length: 2, sel: []int{0, 2}},
+	} {
+		b.SetSelection(tc.sel != nil)
+		copy(b.Selection(), tc.sel)
+		b.SetLength(tc.length)
+		assert.Equal(t, getExpected(tc.length, tc.sel), b.String())
+	}
 }

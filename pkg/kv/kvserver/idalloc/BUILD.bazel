@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "idalloc",
+    srcs = ["id_alloc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "idalloc_test",
+    size = "small",
+    srcs = [
+        "helpers_test.go",
+        "id_alloc_test.go",
+        "main_test.go",
+    ],
+    embed = [":idalloc"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/localtestcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

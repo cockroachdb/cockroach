@@ -64,103 +64,192 @@ NULL             /NULL/NULL/NULL  {5}       5
 /"2"/"3"/"4"     /"3"/"4"/"5"     {4}       4
 /"3"/"4"/"5"     NULL             {5}       5
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-·          distribution         full                  ·          ·
-·          vectorized           true                  ·          ·
-distinct   ·                    ·                     (x, y, z)  ·
- │         estimated row count  1000 (missing stats)  ·          ·
- │         distinct on          x, y, z               ·          ·
- └── scan  ·                    ·                     (x, y, z)  ·
-·          estimated row count  1000 (missing stats)  ·          ·
-·          table                xyz@primary           ·          ·
-·          spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• distinct
+│ columns: (x, y, z)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, y, z
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@primary
+      spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
+EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lU1v4jAQhu_7K6w5tZKj4HxQyIlVy0pILHSBw0oVh5RYbSSaZO1E4kP891WSCgotHhdH3Ajx43ntZzTZgvy3hACm_WH_fkYKsSS_JuPf5Kn_93H4czAiNw-D6Wz6Z3hL3peUz4PR_YyMR-RmRcmaks0tef9Rw6v1Zg4UkjTio_CNSwiegAEFByi4QMEDCj7MKWQiXXApU1Eu2VbAIFpB0KIQJ1mRl3_PKSxSwSHYQh7nSw4BzMLnJZ_wMOLCbgGFiOdhvKzKrNabXibit1CsgcI0CxMZEMsuK4-LPCA9h_Zc2vNgvqOQFvmhiMzDFw4B21H9IA-xzONkkdv-cYoeo1WhkyoH8HlNXkP5epY65HHO5jnsViSpiLjg0dF-1S5nE7OWVuRDELfZIKPUSjOb-Scrv67tHdVm-t3BNLrDdizbu7A_kCj7225fqT9Yc_3BjPrD0Xfk6DjyrOoOL3GERNmf-O5KjpzmHDlGjlx9R66Oo7ZV3eEljpAo-xN3ruTIbc6Ra-TI03fk6Ti6sy40hATZn7d7JUNec4a8xr6EX5SZcJmlieRa37lWGZRHL7w-lUwLseCPIl1UZerHccVVf0Rc5vVbVj8MkvpVGfAjzE5h9hF2jmD2PbhtAndNYGaUm_lq2lHet6uGXbWsttqWp6R9NeybqFbDiGo1jKhWw5hqhEZUt01U3ynhjlpWx0SWGkZkqWFElhrGZCE0IqtrIoshUxQbo2Zz1GyQmk1Sw1FqNkuZ0TBlyDT1EGmfxum3pKlpTJqaxqSpaVQagmPSPg1VpbT57sf_AAAA__-kuPbl
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: x, y, z
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lU1v4jAQhu_7K6w5tZKj4MThIydWLSshsdAFDiutOKTEaiPROBsHiQ_x31cJKyi0eFwcccMkj-e1n9FkC-rvAkLo_X4afO8Pyd1jfzKd_Brck0lv0HuYknLdHz5MyWhI7laUrCnZ3JP_P8iP8egnWa03QCGVsRhGb0JB-AcYUPCAgg8UOFAIYEYhy-VcKCXz8pVtBfTjFYQNCkmaLYvy7xmFucwFhFsokmIhIIRp9LwQYxHFIncbQCEWRZQsqjKr9aab5clblK-BwiSLUhUSxy0rj5ZFSLoe7fq0y2G2oyCXxbGIKqIXASHbUfMgj4kqknReuMFpii6jVaGzKkfweU1eI_V6kTrm8S7mOe62TGUei1zEJ_tVu1xMzBpGkY9B_HqDDKUjM5cFZ29-Xpuf1Gbm3cEMusP1HJdf2R9IlMNtN2_UH6y-_mBW_eGZO_JMHHGnusNrHCFRDidu3ciRV58jz8qRb-7IN3HUdKo7vMYREuVw4vaNHPn1OfKtHHFzR9zEUcu50hAS5HDezo0M8foM8dq-hJ-UGQuVyVQJo-9cowwq4hexP5WSy3wunnI5r8rsl6OKq_6IhSr2T9l-0U_3j8qA72F2DrP3sHcCs6_BTRu4YwMzq9ws0NOe9r59PezrZTX1triWDvRwYKNaDyOq9TCiWg9jqhEaUd20Ud3Swm29rLaNLD2MyNLDiCw9jMlCaERWx0YWQ6YoNkbt5qjdILWbpJaj1G6WMqthypBpyhFpH8bpl6TpaUyansak6WlUGoJj0j4MVa202e7bvwAAAP__i4nxhg==
 
 # Ensure that ordering propagates past local DISTINCT processors.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-·               distribution         full                  ·          ·
-·               vectorized           true                  ·          ·
-distinct        ·                    ·                     (x, y, z)  +x
- │              estimated row count  1000 (missing stats)  ·          ·
- │              distinct on          x, y, z               ·          ·
- │              order key            x                     ·          ·
- └── sort       ·                    ·                     (x, y, z)  +x
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         order                +x                    ·          ·
-      └── scan  ·                    ·                     (x, y, z)  ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                xyz@primary           ·          ·
-·               spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• sort
+│ columns: (x, y, z)
+│ ordering: +x
+│ estimated row count: 1,000 (missing stats)
+│ order: +x
+│
+└── • distinct
+    │ columns: (x, y, z)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: x, y, z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
+EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzElk9v4jwQh-_vp7Dm1Oo1CnbCn-bEbstKSF3oAoddVRxSYrVIFLN2kKCI775KgpRCykxIkLgR4PGM5_dolC3Yv3PwYdR97N6P2crM2Y_h4Cd77v5-evzW67Obh95oPPr1eMv2f4mfe_37MRv02c2asw1nH7ds_yGF15sPNhg-dIfs-x-2ngCHhQ5VP3hXFvxnEMBBAgcXOHjAoQETDkujp8pabeK_bBOgF67Br3OYLZarKP56wmGqjQJ_C9EsmivwYRy8zNVQBaEyTh04hCoKZvOkzHrz0Vma2XtgNsBhtAwW1mc1J648WEU-60jecXnHg8mOg15FWREbBa8KfLHjxRsZaRMp4zQOe-iI_08eL885_mFmo9liGjmiflyBJxeJb2VCZVTos444Kpqd87Jhb4F9O3HGZJe1555sLztNpxW_ujN6h9yUCtwh68y7eGd9XdNLRx6O9lT5xkF5UdxPUcBPR9Ycr6ShRCt7Q5tlDSWOz9IVVzFUXNTQ3JQqGCqLKyKLKOLVkhDLKEK0slekVVYR4vhsvPIqisiLKpKbUgVF3OKKuEUUadaSEMsoQrSyV6RdVhHi-Gy87lUUcS-qSG5KFRTxiiviFVGkVSspCNHIXpC7soIQx2fD9a4iiHdRQXJTutCL0BdFh8ou9cKqQu849bhtFb6q9JpWr8xUPRk9Tcqkj4OES74IlY3SX0X60FukP8UNfoYFCksclsew-Ay7B7A4D25XgYWsRDer0LKO0y46cA-HPTwtIusGSjdxuInCLRxuVREFhwlRcJgShaAJUXCaEqVdRZQ7fCfUiaVArBRqp-SWyjlxEzSRN0FTgVM4kTiBU5GL3Go5J3OBrxbhEanhy0U0CDy3Xc4KHaep0HGaDJ3AqdBxnAwd36xU6Lklc5ham0gN3zLijsBze-as0HGaCh2nydAJnAodx6nQJb5hj0Of7P77FwAA__8PIyWL
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +x
+│
+└── • distinct
+    │ distinct on: x, y, z
+    │
+    └── • scan
+          missing stats
+          table: xyz@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lkFv2kAQhe_9Fas5Jeois2sDiU-0CZWQUkiBQ6uKg4NXCRLx0l0jQSL-e4UJEDDMLBhxwzZvZ_zepye_g_03ghAavx8fvjVb7Oq-2e11fz1cs27joXHXY4vrZuuux9otdjXlbMbZ2zX7-MF-dNo_2XT2xtqd-0aHff_DpsAh0bFqRa_KQvgXBHCQwMEHDgFwqECfw9jogbJWm8Vf3jNBM55CWOYwTMaTdHG7z2GgjYLwHdJhOlIQQi96GqmOimJlvDJwiFUaDUfZmOnsrT42w9fIzIBDdxwlNmQlbzG5PUlDVpe87vN6AP05Bz1JN0NsGj0rCMWcuy9yP7TpMBmkXmV7i7rg2aCdKRvh04y9RPbloGqzjzy4z-a0SaJNrIyKt87LTjm4sSg7rbxZxD_GmK42qTKeyPny9eD5gcOL7nvNj0P3LNHSJT32ZHnHlf3jK1vjhTuAwgFAT5a84EQEiVXWgVYvhKA4H4KiEIKEMSsEc764IijdGZAuDASlLKNTGCBWWTtauxAD8nwMyEIMEMasGMj54sqA786A78JAtZRldAoDxCprR28uxIB_Pgb8QgwQxqwYyPniykDgzkDgwkCtdCIBxCJrP28vREBwPgKCQgQQxqwIyPlyysfInvM7yo51YpXTd0Z5YYSKn9XSNasnZqAejR5kY5aX7UyX3YiVTZdPxfKimSwfLRb8LBa7YvFZLLfE4jhxrYhYiELqSiH1La6WqOE-briPigN8coCKJZF1BVVXcXG1CCi4mAAFF1OgEGoCFEJNgFJDDb_BDb8pAsot3gllohRylXJUK-BqqhZwNdkLhJwqBkJOBC5yxbLtuyR8x5uFyFzg1SICYniuXI4KHVdToeNqMnRCToVOyKnQ8V4VRLGKXMccFTreMYIoGZFrmaNCx9VU6LiaDJ2QU6ETcip0vGEl0bAS_2jbDb0___I_AAD__8DB-Cg=
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-·               distribution         full                  ·       ·
-·               vectorized           true                  ·       ·
-distinct        ·                    ·                     (x, y)  +y
- │              estimated row count  100 (missing stats)   ·       ·
- │              distinct on          y                     ·       ·
- │              order key            y                     ·       ·
- └── sort       ·                    ·                     (x, y)  +y,+x
-      │         estimated row count  1000 (missing stats)  ·       ·
-      │         order                +y,+x                 ·       ·
-      └── scan  ·                    ·                     (x, y)  ·
-·               estimated row count  1000 (missing stats)  ·       ·
-·               table                xyz@primary           ·       ·
-·               spans                FULL SCAN             ·       ·
+distribution: full
+vectorized: true
+·
+• distinct
+│ columns: (x, y)
+│ ordering: +y
+│ estimated row count: 100 (missing stats)
+│ distinct on: y
+│ order key: y
+│
+└── • sort
+    │ columns: (x, y)
+    │ ordering: +y,+x
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +y,+x
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
+EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lk1v2kAQhu_9Fas5Jcois2vzEZ9oEyohpZACh1YRBwevEiSC3V0j4UT898o2kgMOMzZGHP3xeGbnfTTyB5h_S3Bh0n_o303ZWi_Zz_HoF3vq_3l8-D4Ysqv7wWQ6-f1wzXavJNeD4d2UjYbsKr5mG87ijNnE72w0vu-P2Y-_LOZsMwMOq8BXQ-9NGXCfQAAHCRxs4OAAhxbMOIQ6mCtjAp288pECA38DbpPDYhWuo-T2jMM80ArcD4gW0VKBC1PveanGyvOVtprAwVeRt1imZTbxey_UizdPx8BhEnor47KGlVQerSOX9STv2TDbcgjWUV7BRN6LAldsefkuJoGOlLZa-w305A3viZujJWSVEvcLEy1W88gSzcMqyYG0r7Tyk0MdlMu_8ByzV8-8FujZNm_JPtpS_p0gq3XsrGjvhQmhved9OTX6-rqnYdAIQkvuD_NY-dZeeVFeSVFCSUs2LOcUKYk-dlK260hJlMiDFReTUpxdysKETpJSlrdClrHCaaTRVbaC6GNnRaeOFUSJfLLyYlbIs1tRmNBJVtjlrbDLWNFupNFVtoLoY2dFt44VRIl8svbFrLDPbkVhQidZ4ZS3wiljRadxihNEFzsnbus4QZTI5-pczAnn7E4UJlT7p-aLcmNlwmBlVKn_lWbSsPJfVHZIE6z1XD3qYJ6WyS5HKZfe8JWJsqciuxisskdJg59hgcISh-UhLD7D9h4sqsHdOrCQteh2HVo2cdpGB-7gsIOnRWTdQuk2DrdRuIPDnTqi4DAhCg5TohA0IQpOU6J064hyi--EJrEUiJVC7ZTCUqkSN0ETeRM0FTiFE4kTOBW5KKyWKpkLfLUIh0gNXy6iReCF7VIpdJymQsdpMnQCp0LHcTJ0fLNSoReWzH5qXSI1fMuIWwIv7JlKoeM0FTpOk6ETOBU6jlOhS3zDHoY-2377HwAA__8VCBZB
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: y
+│ order key: y
+│
+└── • sort
+    │ order: +y,+x
+    │
+    └── • scan
+          missing stats
+          table: xyz@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9r4kwUxu_fTzGcq5aOxJnEP82V77YuCF3tqhe7LF6kZmgF67gzEUzF774kCqmmnpMY8TK1P5-T8_w4uAH7dw4-dH89P_3f67Obx95oPPr5dMtG3afuw5glz73-w5gN-uwmvmVrzmL2fTj4wdbxBxsMH7tD9u03izlbA4eFDlU_eFcW_D8ggIMEDi5w8IBDAyYclkZPlbXaJP-ySYFeuAa_zmG2WK6i5M8TDlNtFPgbiGbRXIEP4-BlroYqCJVx6sAhVFEwm6cx6_ijszSz98DEwGG0DBbWZzUnSR6sIp91JO-4MNly0KsoS7BR8KrAF1tefIqRNpEyTuNwgI684x1xdzJClol4nNlotphGjqgfpyQvZEJlVJi81FFc9g0vMXsL7FuOnmyzkdyTI2Xfo3dZp94VnT23IXT2bC6vwlxfz9TXNb105OEyT8U3DuJFcSVFASUdWXO8c6Qk5thL2awiJRGRFSuuJqW4uJS5DZ0lpSxuhSxihVdLqyttBTHH3opWFSuIiGyz8mpWyItbkdvQWVa4xa1wi1jRrKXVlbaCmGNvRbuKFUREtln3ala4F7cit6GzrPCKW-EVsaJVO8cJYoq9E_dVnCAisr16V3PCu7gTuQ1V_lHzRdxQ2aVeWFXo90o9GViFr2r3klavzFQ9Gz1NY3aPg5RL_xAqG-0-FbuH3mL3UTLgZ1igsMRheQyLz7B7AItycLsKLGQlulmFlnWcdtGFezjs4W0RXTdQuonDTRRu4XCriig4TIiCw5QoBE2IgtOUKO0qotzjN6FOHAXipFA3JXdUytRN0ETfBE0VTuFE4wROVS5yp6VM5wI_LcIjWsOPi2gQeO66lCodp6nScZosncCp0nGcLB2_rFTpuSNz2FqbaA2_MuKewHN3plTpOE2VjtNk6QROlY7jVOkSv7DHpU-2__0LAAD__xPOEOI=
 
 # Distinct processors elided becaue of strong key.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-·     distribution         full                  ·          ·
-·     vectorized           true                  ·          ·
-scan  ·                    ·                     (a, b, c)  ·
-·     estimated row count  1000 (missing stats)  ·          ·
-·     table                abc@primary           ·          ·
-·     spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 1,000 (missing stats)
+  table: abc@primary
+  spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
+EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0-L2zAQxe_9FOKddkHG8Z_04FPLNgWD62yTFAobHxRr2Aa8livJ0BLy3YvlpfnTtCjNZfCT5vn9GEY7mO8NMixnxexhxXrdsI-L-Sf2NPv6WLzPS3b3IV-ulp-Le_baMui8fFixecnuBGcbzup79voxmsWmrsDRKkmleCGD7AkROGJwJOBIwTFFxdFpVZMxSg8tO2fI5Q9kE45t2_V2OK44aqUJ2Q52axtChpXYNLQgIUmHw38lWbFtXIzY1O86vX0R-ic4lp1oTcbC8ktRHEoQrhGt8bvGa6Dac6jeHjKNFc-ELNrzv3AdcPpWaUma5AlKtb9AXqpAdeH0rPFydHwSHfmPJPYZyR8jCI7FVVOJ_dGSa9DiY7RRJK6m3miJP1rqh3bGERyLcI2pN1rqjzbxQAvOlpyJVrKIKfuN9H9s9wWiBZlOtYa8lncybD_JZxqfilG9rulRq9rFjHLufO5AkrHjbTSKvHVXDvDYHP3T_PbEPDk3x7ckJ7eY01vM06vM1f7NrwAAAP__dnDXkQ==
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: abc@primary
+  spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0-L2zAQxe_9FOKddkHG8Z_04FPLNgWD62yTFAqND4o1bAOJ5UoKtIR892K5NI6bFqW5DH7SPL8fw-gI822HDLPPz8XbvGQP7_LlavmxeGTLWTF7WrFO5-XTis1L9iA423BWP7JfH-z9Yv6BiU0NjkZJKsWeDLIviMARgyMBRwqOKSqOVquajFG6azk6Qy6_I5twbJv2YLvjiqNWmpAdYbd2R8iwEpsdLUhI0mH3X0lWbHcuRmzqN63e7oX-AY5lKxqTsbD8VBTnEoRrRGv8rvEaqE4c6mDPmcaKF0IWnfhfuM44h0ZpSZrkBUp1ukJeqkC14XTUeD06voiO_EcS-4zkjxEEQ3HTVGJ_tOQWtHiI1ovE1dQbLfFHS_3QRhzBUIRrTL3RUn-0iQdaMFpyJhrJIqbsV9L_sd1XiBZkWtUY8lreSbf9JF-ofypGHXRNz1rVLqaXc-dzB5KM7W-jXuSNu3KAQ3P0T_PrC_NkbI7vSU7uMaf3mKc3mavTq58BAAD__1Um0jI=
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-·               distribution         full                  ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (a, b)     +a,+b
- │              estimated row count  1000 (missing stats)  ·          ·
- └── distinct   ·                    ·                     (a, b, c)  +a,+b
-      │         distinct on          a, b                  ·          ·
-      │         order key            a, b                  ·          ·
-      └── scan  ·                    ·                     (a, b, c)  +a,+b,+c
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                abc@primary           ·          ·
-·               spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ ordering: +a,+b
+│ estimated row count: 1,000 (missing stats)
+│
+└── • distinct
+    │ columns: (a, b, c)
+    │ ordering: +a,+b
+    │ distinct on: a, b
+    │ order key: a, b
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a,+b,+c
+          estimated row count: 1,000 (missing stats)
+          table: abc@primary
+          spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
+EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lk9v4jwQxu_vp7Dm1KpG4PyhbU6827ISEgtdYKVdFQ4msVokGrN2kLaq-O6rJCsgFDxGVrhYGifP-Bn_RpN8gP69hAjG3X73YULWakm-jobfyHP351P__96AXD32xpPx9_41-fdKHvcGDxMyHJArTsn8muRrKePzmAxHj90R-fKr2KYkngGFVCZiwN-EhugZGFDwgIIPFAKgEMKMwkrJWGgtVf7KRyHoJX8galFYpKt1lm_PKMRSCYg-IFtkSwERTPh8KUaCJ0I187yJyPhiWRzD53FnpRZvXL0DhfGKpzoizcGPfn-3NJpTYFPYrt4UYLahINfZ7kyd8RcBEdtQe1-PC50t0jhrtqumOox28tqHKhFKJBEpN6pn7tLM38kr16_Hcsw2O2veSWu7VLI88TDVDe14N7Tj35QJT9bBmFUhFIbr7HhVO7u-o93jVgeyIVdNFlYkpywEFQvMvsk8myb71FSN_eCsPkOsbfncXr7PWC195tXVZ549ZP8cyN4-5DLwizWwhoxY217O3eUhe7VA9uuC7NtDDuwgHxBt7AfNKYTWkBFr28u5vzxkvxbIQV2QA3vILQvIjYOfAsLThDAis1ehLNkijrZ3El6ebVAL29Yl_gaOOBgJvZKpFlYf-VZeg0heRFm7lmsViycl4-KYMhwWumIjETorn7Iy6KXlo9zgvpgdillFHFbU7Dy15yJuu4jvXcQM8e0Z79s3i30zrLaZVmBUh2Zx6ITarEauzCxGUJvFCGqkaMR32wX1rVF8Z4Z15wTLrEaKNosRWGYxAgspGvF97wKLIVMUG6OOc9RtkLpNUrdR6jZLmdMwZcg0DRBon8bpedDMcqxysxqDZlZj0JDCMeufhqoR2mzz398AAAD__w5OR9U=
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: a, b
+│ order key: a, b
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ld9v2jAQx9_3V1j31KpG4PygbZ7YWiYhsaQDJm0aPJjEaiPROIuDtKrif5-SSITQ1hdm4MXSGb533_PndHkF9WcFHgx_Pow_j3xycT-azqbfx5dkOhwP72akiEf-3YwEPrnglCwvSXGSr5PgG-HLkAST--GEfPlVXlMSAoVERsLnz0KB9xsYULCAgg0UHKDgwoJCmslQKCWz4i-vpWAU_QWvRyFO0nVeXC8ohDIT4L1CHucrAR7M-HIlJoJHIusWeSOR83hVluHLcJBm8TPPXoDCNOWJ8kjX_zEe10enOwc2h-1pzQEWGwpyndc1Vc4fBXhsQ9v7uo9VHidh3u03TQ0YHRS9B1kkMhF5pLpo1qzTLF_IE1dP7-VYbGpr1ofW6lSyqrif6ooOrCs6sK-qhB_2wdh_NFI7tA0dvu_Olx2ZdpnblATrHLPjNOyw9jNmtZmxNzPV2Q0OGjPE2hbP9fnHjJ1kzKwjjpnVnqt9CFdrl2sV2OXptOaKWNu-x835uVon4WofkavdnqvTjusexM5u0J2D25orYm37Hrfn52qfhKtzRK5Oe669Flw7ex97wpOIMCLzJ5G1xIk42j6De36czklw9k70lX-n6ESoVCZKNCp-lLlX2BbRo6jaVXKdheIhk2FZpgqDUldeRELl1a-sCkZJ9VNhcFfM9sWsIXYbanaY2jIR903EtyZihvi2tO9t68W2HlZfT8vRql292DVCrVcjT6YXI6j1YgQ10jTiu2-C-lorvtHDujGCpVcjTevFCCy9GIGFNI34vjWBxZAtiq1Rwz1qtkjNNqnZKjXbpcxomTJkmzoItDfr9DBoejnWuV6NQdOrMWhI45j1N0tVC22x-fQvAAD__5UTNgY=

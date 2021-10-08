@@ -19,26 +19,27 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/collate"
 )
 
 const (
-	pgCatalogName = sessiondata.PgCatalogName
+	pgCatalogName = catconstants.PgCatalogName
 )
 
 var pgCatalogNameDString = tree.NewDString(pgCatalogName)
@@ -46,8 +47,8 @@ var pgCatalogNameDString = tree.NewDString(pgCatalogName)
 // informationSchema lists all the table definitions for
 // information_schema.
 var informationSchema = virtualSchema{
-	name: sessiondata.InformationSchemaName,
-	allTableNames: buildStringSet(
+	name: catconstants.InformationSchemaName,
+	undefinedTables: buildStringSet(
 		// Generated with:
 		// select distinct '"'||table_name||'",' from information_schema.tables
 		//    where table_schema='information_schema' order by table_name;
@@ -56,91 +57,97 @@ var informationSchema = virtualSchema{
 		"_pg_foreign_table_columns",
 		"_pg_foreign_tables",
 		"_pg_user_mappings",
-		"administrable_role_authorizations",
-		"applicable_roles",
-		"attributes",
-		"character_sets",
-		"check_constraint_routine_usage",
-		"check_constraints",
-		"collation_character_set_applicability",
-		"collations",
-		"column_domain_usage",
-		"column_options",
-		"column_privileges",
-		"column_udt_usage",
-		"columns",
-		"constraint_column_usage",
-		"constraint_table_usage",
-		"data_type_privileges",
-		"domain_constraints",
-		"domain_udt_usage",
-		"domains",
-		"element_types",
-		"enabled_roles",
-		"foreign_data_wrapper_options",
-		"foreign_data_wrappers",
-		"foreign_server_options",
-		"foreign_servers",
-		"foreign_table_options",
-		"foreign_tables",
-		"information_schema_catalog_name",
-		"key_column_usage",
-		"parameters",
-		"referential_constraints",
-		"role_column_grants",
-		"role_routine_grants",
-		"role_table_grants",
-		"role_udt_grants",
-		"role_usage_grants",
-		"routine_privileges",
-		"routines",
-		"schemata",
-		"sequences",
-		"sql_features",
-		"sql_implementation_info",
 		"sql_languages",
 		"sql_packages",
-		"sql_parts",
-		"sql_sizing",
 		"sql_sizing_profiles",
-		"table_constraints",
-		"table_privileges",
-		"tables",
-		"transforms",
-		"triggered_update_columns",
-		"triggers",
-		"udt_privileges",
-		"usage_privileges",
-		"user_defined_types",
-		"user_mapping_options",
-		"user_mappings",
-		"view_column_usage",
-		"view_routine_usage",
-		"view_table_usage",
-		"views",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
-		catconstants.InformationSchemaAdministrableRoleAuthorizationsID: informationSchemaAdministrableRoleAuthorizations,
-		catconstants.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
-		catconstants.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
-		catconstants.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
-		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
-		catconstants.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
-		catconstants.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
-		catconstants.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
-		catconstants.InformationSchemaParametersTableID:                 informationSchemaParametersTable,
-		catconstants.InformationSchemaReferentialConstraintsTableID:     informationSchemaReferentialConstraintsTable,
-		catconstants.InformationSchemaRoleTableGrantsID:                 informationSchemaRoleTableGrants,
-		catconstants.InformationSchemaRoutineTableID:                    informationSchemaRoutineTable,
-		catconstants.InformationSchemaSchemataTableID:                   informationSchemaSchemataTable,
-		catconstants.InformationSchemaSchemataTablePrivilegesID:         informationSchemaSchemataTablePrivileges,
-		catconstants.InformationSchemaSequencesID:                       informationSchemaSequences,
-		catconstants.InformationSchemaStatisticsTableID:                 informationSchemaStatisticsTable,
-		catconstants.InformationSchemaTableConstraintTableID:            informationSchemaTableConstraintTable,
-		catconstants.InformationSchemaTablePrivilegesID:                 informationSchemaTablePrivileges,
-		catconstants.InformationSchemaTablesTableID:                     informationSchemaTablesTable,
-		catconstants.InformationSchemaViewsTableID:                      informationSchemaViewsTable,
-		catconstants.InformationSchemaUserPrivilegesID:                  informationSchemaUserPrivileges,
+		catconstants.InformationSchemaAdministrableRoleAuthorizationsID:   informationSchemaAdministrableRoleAuthorizations,
+		catconstants.InformationSchemaApplicableRolesID:                   informationSchemaApplicableRoles,
+		catconstants.InformationSchemaAttributesTableID:                   informationSchemaAttributesTable,
+		catconstants.InformationSchemaCharacterSets:                       informationSchemaCharacterSets,
+		catconstants.InformationSchemaCheckConstraintRoutineUsageTableID:  informationSchemaCheckConstraintRoutineUsageTable,
+		catconstants.InformationSchemaCheckConstraints:                    informationSchemaCheckConstraints,
+		catconstants.InformationSchemaCollationCharacterSetApplicability:  informationSchemaCollationCharacterSetApplicability,
+		catconstants.InformationSchemaCollations:                          informationSchemaCollations,
+		catconstants.InformationSchemaColumnColumnUsageTableID:            informationSchemaColumnColumnUsageTable,
+		catconstants.InformationSchemaColumnDomainUsageTableID:            informationSchemaColumnDomainUsageTable,
+		catconstants.InformationSchemaColumnOptionsTableID:                informationSchemaColumnOptionsTable,
+		catconstants.InformationSchemaColumnPrivilegesID:                  informationSchemaColumnPrivileges,
+		catconstants.InformationSchemaColumnStatisticsTableID:             informationSchemaColumnStatisticsTable,
+		catconstants.InformationSchemaColumnUDTUsageID:                    informationSchemaColumnUDTUsage,
+		catconstants.InformationSchemaColumnsExtensionsTableID:            informationSchemaColumnsExtensionsTable,
+		catconstants.InformationSchemaColumnsTableID:                      informationSchemaColumnsTable,
+		catconstants.InformationSchemaConstraintColumnUsageTableID:        informationSchemaConstraintColumnUsageTable,
+		catconstants.InformationSchemaConstraintTableUsageTableID:         informationSchemaConstraintTableUsageTable,
+		catconstants.InformationSchemaDataTypePrivilegesTableID:           informationSchemaDataTypePrivilegesTable,
+		catconstants.InformationSchemaDomainConstraintsTableID:            informationSchemaDomainConstraintsTable,
+		catconstants.InformationSchemaDomainUdtUsageTableID:               informationSchemaDomainUdtUsageTable,
+		catconstants.InformationSchemaDomainsTableID:                      informationSchemaDomainsTable,
+		catconstants.InformationSchemaElementTypesTableID:                 informationSchemaElementTypesTable,
+		catconstants.InformationSchemaEnabledRolesID:                      informationSchemaEnabledRoles,
+		catconstants.InformationSchemaEnginesTableID:                      informationSchemaEnginesTable,
+		catconstants.InformationSchemaEventsTableID:                       informationSchemaEventsTable,
+		catconstants.InformationSchemaFilesTableID:                        informationSchemaFilesTable,
+		catconstants.InformationSchemaForeignDataWrapperOptionsTableID:    informationSchemaForeignDataWrapperOptionsTable,
+		catconstants.InformationSchemaForeignDataWrappersTableID:          informationSchemaForeignDataWrappersTable,
+		catconstants.InformationSchemaForeignServerOptionsTableID:         informationSchemaForeignServerOptionsTable,
+		catconstants.InformationSchemaForeignServersTableID:               informationSchemaForeignServersTable,
+		catconstants.InformationSchemaForeignTableOptionsTableID:          informationSchemaForeignTableOptionsTable,
+		catconstants.InformationSchemaForeignTablesTableID:                informationSchemaForeignTablesTable,
+		catconstants.InformationSchemaInformationSchemaCatalogNameTableID: informationSchemaInformationSchemaCatalogNameTable,
+		catconstants.InformationSchemaKeyColumnUsageTableID:               informationSchemaKeyColumnUsageTable,
+		catconstants.InformationSchemaKeywordsTableID:                     informationSchemaKeywordsTable,
+		catconstants.InformationSchemaOptimizerTraceTableID:               informationSchemaOptimizerTraceTable,
+		catconstants.InformationSchemaParametersTableID:                   informationSchemaParametersTable,
+		catconstants.InformationSchemaPartitionsTableID:                   informationSchemaPartitionsTable,
+		catconstants.InformationSchemaPluginsTableID:                      informationSchemaPluginsTable,
+		catconstants.InformationSchemaProcesslistTableID:                  informationSchemaProcesslistTable,
+		catconstants.InformationSchemaProfilingTableID:                    informationSchemaProfilingTable,
+		catconstants.InformationSchemaReferentialConstraintsTableID:       informationSchemaReferentialConstraintsTable,
+		catconstants.InformationSchemaResourceGroupsTableID:               informationSchemaResourceGroupsTable,
+		catconstants.InformationSchemaRoleColumnGrantsTableID:             informationSchemaRoleColumnGrantsTable,
+		catconstants.InformationSchemaRoleRoutineGrantsTableID:            informationSchemaRoleRoutineGrantsTable,
+		catconstants.InformationSchemaRoleTableGrantsID:                   informationSchemaRoleTableGrants,
+		catconstants.InformationSchemaRoleUdtGrantsTableID:                informationSchemaRoleUdtGrantsTable,
+		catconstants.InformationSchemaRoleUsageGrantsTableID:              informationSchemaRoleUsageGrantsTable,
+		catconstants.InformationSchemaRoutinePrivilegesTableID:            informationSchemaRoutinePrivilegesTable,
+		catconstants.InformationSchemaRoutineTableID:                      informationSchemaRoutineTable,
+		catconstants.InformationSchemaSQLFeaturesTableID:                  informationSchemaSQLFeaturesTable,
+		catconstants.InformationSchemaSQLImplementationInfoTableID:        informationSchemaSQLImplementationInfoTable,
+		catconstants.InformationSchemaSQLPartsTableID:                     informationSchemaSQLPartsTable,
+		catconstants.InformationSchemaSQLSizingTableID:                    informationSchemaSQLSizingTable,
+		catconstants.InformationSchemaSchemataExtensionsTableID:           informationSchemaSchemataExtensionsTable,
+		catconstants.InformationSchemaSchemataTableID:                     informationSchemaSchemataTable,
+		catconstants.InformationSchemaSchemataTablePrivilegesID:           informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSequencesID:                         informationSchemaSequences,
+		catconstants.InformationSchemaSessionVariables:                    informationSchemaSessionVariables,
+		catconstants.InformationSchemaStGeometryColumnsTableID:            informationSchemaStGeometryColumnsTable,
+		catconstants.InformationSchemaStSpatialReferenceSystemsTableID:    informationSchemaStSpatialReferenceSystemsTable,
+		catconstants.InformationSchemaStUnitsOfMeasureTableID:             informationSchemaStUnitsOfMeasureTable,
+		catconstants.InformationSchemaStatisticsTableID:                   informationSchemaStatisticsTable,
+		catconstants.InformationSchemaTableConstraintTableID:              informationSchemaTableConstraintTable,
+		catconstants.InformationSchemaTableConstraintsExtensionsTableID:   informationSchemaTableConstraintsExtensionsTable,
+		catconstants.InformationSchemaTablePrivilegesID:                   informationSchemaTablePrivileges,
+		catconstants.InformationSchemaTablesExtensionsTableID:             informationSchemaTablesExtensionsTable,
+		catconstants.InformationSchemaTablesTableID:                       informationSchemaTablesTable,
+		catconstants.InformationSchemaTablespacesExtensionsTableID:        informationSchemaTablespacesExtensionsTable,
+		catconstants.InformationSchemaTablespacesTableID:                  informationSchemaTablespacesTable,
+		catconstants.InformationSchemaTransformsTableID:                   informationSchemaTransformsTable,
+		catconstants.InformationSchemaTriggeredUpdateColumnsTableID:       informationSchemaTriggeredUpdateColumnsTable,
+		catconstants.InformationSchemaTriggersTableID:                     informationSchemaTriggersTable,
+		catconstants.InformationSchemaTypePrivilegesID:                    informationSchemaTypePrivilegesTable,
+		catconstants.InformationSchemaUdtPrivilegesTableID:                informationSchemaUdtPrivilegesTable,
+		catconstants.InformationSchemaUsagePrivilegesTableID:              informationSchemaUsagePrivilegesTable,
+		catconstants.InformationSchemaUserAttributesTableID:               informationSchemaUserAttributesTable,
+		catconstants.InformationSchemaUserDefinedTypesTableID:             informationSchemaUserDefinedTypesTable,
+		catconstants.InformationSchemaUserMappingOptionsTableID:           informationSchemaUserMappingOptionsTable,
+		catconstants.InformationSchemaUserMappingsTableID:                 informationSchemaUserMappingsTable,
+		catconstants.InformationSchemaUserPrivilegesID:                    informationSchemaUserPrivileges,
+		catconstants.InformationSchemaViewColumnUsageTableID:              informationSchemaViewColumnUsageTable,
+		catconstants.InformationSchemaViewRoutineUsageTableID:             informationSchemaViewRoutineUsageTable,
+		catconstants.InformationSchemaViewTableUsageTableID:               informationSchemaViewTableUsageTable,
+		catconstants.InformationSchemaViewsTableID:                        informationSchemaViewsTable,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -199,17 +206,17 @@ func validateInformationSchemaTable(table *descpb.TableDescriptor) error {
 
 var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 	comment: `roles for which the current user has admin option
-` + base.DocsURL("information-schema.html#administrable_role_authorizations") + `
+` + docs.URL("information-schema.html#administrable_role_authorizations") + `
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
 		}
 
-		grantee := tree.NewDString(currentUser)
+		grantee := tree.NewDString(currentUser.Normalized())
 		for roleName, isAdmin := range memberMap {
 			if !isAdmin {
 				// We only show memberships with the admin option.
@@ -217,9 +224,9 @@ https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations
 			}
 
 			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesString,                 // is_grantable: always YES
+				grantee,                                // grantee: always the current user
+				tree.NewDString(roleName.Normalized()), // role_name
+				yesString,                              // is_grantable: always YES
 			); err != nil {
 				return err
 			}
@@ -231,23 +238,23 @@ https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations
 
 var informationSchemaApplicableRoles = virtualSchemaTable{
 	comment: `roles available to the current user
-` + base.DocsURL("information-schema.html#applicable_roles") + `
+` + docs.URL("information-schema.html#applicable_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
 		}
 
-		grantee := tree.NewDString(currentUser)
+		grantee := tree.NewDString(currentUser.Normalized())
 
 		for roleName, isAdmin := range memberMap {
 			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesOrNoDatum(isAdmin),     // is_grantable
+				grantee,                                // grantee: always the current user
+				tree.NewDString(roleName.Normalized()), // role_name
+				yesOrNoDatum(isAdmin),                  // is_grantable
 			); err != nil {
 				return err
 			}
@@ -257,17 +264,39 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	},
 }
 
+var informationSchemaCharacterSets = virtualSchemaTable{
+	comment: `character sets available in the current database
+` + docs.URL("information-schema.html#character_sets") + `
+https://www.postgresql.org/docs/9.5/infoschema-character-sets.html`,
+	schema: vtable.InformationSchemaCharacterSets,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+			func(db catalog.DatabaseDescriptor) error {
+				return addRow(
+					tree.DNull,                    // character_set_catalog
+					tree.DNull,                    // character_set_schema
+					tree.NewDString("UTF8"),       // character_set_name: UTF8 is the only available encoding
+					tree.NewDString("UCS"),        // character_repertoire: UCS for UTF8 encoding
+					tree.NewDString("UTF8"),       // form_of_use: same as the database encoding
+					tree.NewDString(db.GetName()), // default_collate_catalog
+					tree.DNull,                    // default_collate_schema
+					tree.DNull,                    // default_collate_name
+				)
+			})
+	},
+}
+
 var informationSchemaCheckConstraints = virtualSchemaTable{
 	comment: `check constraints
-` + base.DocsURL("information-schema.html#check_constraints") + `
+` + docs.URL("information-schema.html#check_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 	schema: vtable.InformationSchemaCheckConstraints,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.ImmutableDatabaseDescriptor,
+			db catalog.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
+			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -299,59 +328,59 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			// NULL column constraints in information_schema.check_constraints.
 			// Cockroach doesn't track these constraints as check constraints,
 			// but we can pull them off of the table's column descriptors.
-			colNum := 0
-			return forEachColumnInTable(table, func(column *descpb.ColumnDescriptor) error {
-				colNum++
+			for _, column := range table.PublicColumns() {
 				// Only visible, non-nullable columns are included.
-				if column.Hidden || column.Nullable {
-					return nil
+				if column.IsHidden() || column.IsNullable() {
+					continue
 				}
 				// Generate a unique name for each NOT NULL constraint. Postgres
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
+					"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), column.Ordinal()+1,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
-					"%s IS NOT NULL", column.Name,
+					"%s IS NOT NULL", column.GetName(),
 				))
-				return addRow(
+				if err := addRow(
 					dbNameStr,  // constraint_catalog
 					scNameStr,  // constraint_schema
 					conNameStr, // constraint_name
 					chkExprStr, // check_clause
-				)
-			})
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	},
 }
 
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	comment: `column privilege grants (incomplete)
-` + base.DocsURL("information-schema.html#column_privileges") + `
+` + docs.URL("information-schema.html#column_privileges") + `
 https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
+			db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			for _, u := range table.Privileges.Users {
+			for _, u := range table.GetPrivileges().Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
-						for i := range table.Columns {
-							cd := &table.Columns[i]
+						for _, cd := range table.PublicColumns() {
 							if err := addRow(
-								tree.DNull,                     // grantor
-								tree.NewDString(u.User),        // grantee
-								dbNameStr,                      // table_catalog
-								scNameStr,                      // table_schema
-								tree.NewDString(table.Name),    // table_name
-								tree.NewDString(cd.Name),       // column_name
-								tree.NewDString(priv.String()), // privilege_type
-								tree.DNull,                     // is_grantable
+								tree.DNull,                             // grantor
+								tree.NewDString(u.User().Normalized()), // grantee
+								dbNameStr,                              // table_catalog
+								scNameStr,                              // table_schema
+								tree.NewDString(table.GetName()),       // table_name
+								tree.NewDString(cd.GetName()),          // column_name
+								tree.NewDString(priv.String()),         // privilege_type
+								tree.DNull,                             // is_grantable
 							); err != nil {
 								return err
 							}
@@ -366,106 +395,193 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 
 var informationSchemaColumnsTable = virtualSchemaTable{
 	comment: `table and view columns (incomplete)
-` + base.DocsURL("information-schema.html#columns") + `
+` + docs.URL("information-schema.html#columns") + `
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Get the collations for all comments of current database.
+		comments, err := getComments(ctx, p)
+		if err != nil {
+			return err
+		}
+		// Push all comments of columns into map.
+		commentMap := make(map[tree.DInt]map[tree.DInt]string)
+		for _, comment := range comments {
+			objID := tree.MustBeDInt(comment[0])
+			objSubID := tree.MustBeDInt(comment[1])
+			description := comment[2].String()
+			commentType := tree.MustBeDInt(comment[3])
+			if commentType == 2 {
+				if commentMap[objID] == nil {
+					commentMap[objID] = make(map[tree.DInt]string)
+				}
+				commentMap[objID][objSubID] = description
+			}
+		}
+
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
+			db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			return forEachColumnInTable(table, func(column *descpb.ColumnDescriptor) error {
+			for _, column := range table.PublicColumns() {
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
 				collationName := tree.DNull
-				if locale := column.Type.Locale(); locale != "" {
+				if locale := column.GetType().Locale(); locale != "" {
 					collationCatalog = dbNameStr
 					collationSchema = pgCatalogNameDString
 					collationName = tree.NewDString(locale)
 				}
 				colDefault := tree.DNull
-				if column.DefaultExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx)
+				if column.HasDefault() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
 					if err != nil {
 						return err
 					}
 					colDefault = tree.NewDString(colExpr)
 				}
 				colComputed := emptyString
-				if column.ComputeExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, *column.ComputeExpr, &p.semaCtx)
+				if column.IsComputed() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetComputeExpr(), &p.semaCtx, tree.FmtSimple)
 					if err != nil {
 						return err
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
-				return addRow(
-					dbNameStr,                    // table_catalog
-					scNameStr,                    // table_schema
-					tree.NewDString(table.Name),  // table_name
-					tree.NewDString(column.Name), // column_name
+				colGeneratedAsIdentity := emptyString
+				if column.IsGeneratedAsIdentity() {
+					if column.IsGeneratedAlwaysAsIdentity() {
+						colGeneratedAsIdentity = tree.NewDString(
+							"generated always as identity")
+					} else if column.IsGeneratedByDefaultAsIdentity() {
+						colGeneratedAsIdentity = tree.NewDString(
+							"generated by default as identity")
+					} else {
+						return errors.AssertionFailedf(
+							"column %s is of wrong generated as identity type (neither ALWAYS nor BY DEFAULT)",
+							column.GetName(),
+						)
+					}
+				}
+
+				// Match the comment belonging to current column from map,using table id and column id
+				tableID := tree.DInt(table.GetID())
+				columnID := tree.DInt(column.GetID())
+				description := commentMap[tableID][columnID]
+
+				// udt_schema is set to pg_catalog for builtin types. If, however, the
+				// type is a user defined type, then we should fill this value based on
+				// the schema it is under.
+				udtSchema := pgCatalogNameDString
+				typeMetaName := column.GetType().TypeMeta.Name
+				if typeMetaName != nil {
+					udtSchema = tree.NewDString(typeMetaName.Schema)
+				}
+
+				err := addRow(
+					dbNameStr,                         // table_catalog
+					scNameStr,                         // table_schema
+					tree.NewDString(table.GetName()),  // table_name
+					tree.NewDString(column.GetName()), // column_name
+					tree.NewDString(description),      // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
-					colDefault,                    // column_default
-					yesOrNoDatum(column.Nullable), // is_nullable
-					tree.NewDString(column.Type.InformationSchemaName()), // data_type
-					characterMaximumLength(column.Type),                  // character_maximum_length
-					characterOctetLength(column.Type),                    // character_octet_length
-					numericPrecision(column.Type),                        // numeric_precision
-					numericPrecisionRadix(column.Type),                   // numeric_precision_radix
-					numericScale(column.Type),                            // numeric_scale
-					datetimePrecision(column.Type),                       // datetime_precision
-					tree.DNull,                                           // interval_type
-					tree.DNull,                                           // interval_precision
-					tree.DNull,                                           // character_set_catalog
-					tree.DNull,                                           // character_set_schema
-					tree.DNull,                                           // character_set_name
-					collationCatalog,                                     // collation_catalog
-					collationSchema,                                      // collation_schema
-					collationName,                                        // collation_name
-					tree.DNull,                                           // domain_catalog
-					tree.DNull,                                           // domain_schema
-					tree.DNull,                                           // domain_name
-					dbNameStr,                                            // udt_catalog
-					pgCatalogNameDString,                                 // udt_schema
-					tree.NewDString(column.Type.PGName()),                // udt_name
-					tree.DNull,                                           // scope_catalog
-					tree.DNull,                                           // scope_schema
-					tree.DNull,                                           // scope_name
-					tree.DNull,                                           // maximum_cardinality
-					tree.DNull,                                           // dtd_identifier
-					tree.DNull,                                           // is_self_referencing
-					tree.DNull,                                           // is_identity
-					tree.DNull,                                           // identity_generation
-					tree.DNull,                                           // identity_start
-					tree.DNull,                                           // identity_increment
-					tree.DNull,                                           // identity_maximum
-					tree.DNull,                                           // identity_minimum
-					tree.DNull,                                           // identity_cycle
-					yesOrNoDatum(column.IsComputed()),                    // is_generated
-					colComputed,                                          // generation_expression
+					colDefault,                        // column_default
+					yesOrNoDatum(column.IsNullable()), // is_nullable
+					tree.NewDString(column.GetType().InformationSchemaName()), // data_type
+					characterMaximumLength(column.GetType()),                  // character_maximum_length
+					characterOctetLength(column.GetType()),                    // character_octet_length
+					numericPrecision(column.GetType()),                        // numeric_precision
+					numericPrecisionRadix(column.GetType()),                   // numeric_precision_radix
+					numericScale(column.GetType()),                            // numeric_scale
+					datetimePrecision(column.GetType()),                       // datetime_precision
+					tree.DNull,                                                // interval_type
+					tree.DNull,                                                // interval_precision
+					tree.DNull,                                                // character_set_catalog
+					tree.DNull,                                                // character_set_schema
+					tree.DNull,                                                // character_set_name
+					collationCatalog,                                          // collation_catalog
+					collationSchema,                                           // collation_schema
+					collationName,                                             // collation_name
+					tree.DNull,                                                // domain_catalog
+					tree.DNull,                                                // domain_schema
+					tree.DNull,                                                // domain_name
+					dbNameStr,                                                 // udt_catalog
+					udtSchema,                                                 // udt_schema
+					tree.NewDString(column.GetType().PGName()), // udt_name
+					tree.DNull, // scope_catalog
+					tree.DNull, // scope_schema
+					tree.DNull, // scope_name
+					tree.DNull, // maximum_cardinality
+					tree.DNull, // dtd_identifier
+					tree.DNull, // is_self_referencing
+					yesOrNoDatum(column.IsGeneratedAsIdentity()), // is_identity
+					colGeneratedAsIdentity,                       // identity_generation
+					// TODO(janexing): parse the GeneratedAsIdentitySequenceOption to
+					// fill out these "identity_x" columns.
+					tree.DNull,                        // identity_start
+					tree.DNull,                        // identity_increment
+					tree.DNull,                        // identity_maximum
+					tree.DNull,                        // identity_minimum
+					tree.DNull,                        // identity_cycle
+					yesOrNoDatum(column.IsComputed()), // is_generated
+					colComputed,                       // generation_expression
 					yesOrNoDatum(table.IsTable() &&
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),
 					), // is_updatable
-					yesOrNoDatum(column.Hidden),              // is_hidden
-					tree.NewDString(column.Type.SQLString()), // crdb_sql_type
+					yesOrNoDatum(column.IsHidden()),               // is_hidden
+					tree.NewDString(column.GetType().SQLString()), // crdb_sql_type
 				)
-			})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
 		})
+	},
+}
+
+var informationSchemaColumnUDTUsage = virtualSchemaTable{
+	comment: `columns with user defined types
+` + docs.URL("information-schema.html#column_udt_usage") + `
+https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
+	schema: vtable.InformationSchemaColumnUDTUsage,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+				dbNameStr := tree.NewDString(db.GetName())
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.GetName())
+				for _, col := range table.PublicColumns() {
+					if !col.GetType().UserDefined() {
+						continue
+					}
+					if err := addRow(
+						tree.NewDString(col.GetType().TypeMeta.Name.Catalog), // UDT_CATALOG
+						tree.NewDString(col.GetType().TypeMeta.Name.Schema),  // UDT_SCHEMA
+						tree.NewDString(col.GetType().TypeMeta.Name.Name),    // UDT_NAME
+						dbNameStr,                      // TABLE_CATALOG
+						scNameStr,                      // TABLE_SCHEMA
+						tbNameStr,                      // TABLE_NAME
+						tree.NewDString(col.GetName()), // COLUMN_NAME
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
 	},
 }
 
 var informationSchemaEnabledRoles = virtualSchemaTable{
 	comment: `roles for the current user
-` + base.DocsURL("information-schema.html#enabled_roles") + `
+` + docs.URL("information-schema.html#enabled_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
-	schema: `
-CREATE TABLE information_schema.enabled_roles (
-	ROLE_NAME STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+	schema: vtable.InformationSchemaEnabledRoles,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
@@ -473,14 +589,14 @@ CREATE TABLE information_schema.enabled_roles (
 
 		// The current user is always listed.
 		if err := addRow(
-			tree.NewDString(currentUser), // role_name: the current user
+			tree.NewDString(currentUser.Normalized()), // role_name: the current user
 		); err != nil {
 			return err
 		}
 
 		for roleName := range memberMap {
 			if err := addRow(
-				tree.NewDString(roleName), // role_name
+				tree.NewDString(roleName.Normalized()), // role_name
 			); err != nil {
 				return err
 			}
@@ -593,21 +709,12 @@ func datetimePrecision(colType *types.T) tree.Datum {
 var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
 	comment: `columns usage by constraints
 https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
-	schema: `
-CREATE TABLE information_schema.constraint_column_usage (
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	COLUMN_NAME        STRING NOT NULL,
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaConstraintColumnUsage,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.ImmutableDatabaseDescriptor,
+			db catalog.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
+			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -625,13 +732,13 @@ CREATE TABLE information_schema.constraint_column_usage (
 					// For foreign key constraint, constraint_column_usage
 					// identifies the table/columns that the foreign key
 					// references.
-					conTable = sqlbase.NewImmutableTableDescriptor(*con.ReferencedTable)
+					conTable = tabledesc.NewBuilder(con.ReferencedTable).BuildImmutableTable()
 					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
 					if err != nil {
 						return err
 					}
 				}
-				tableNameStr := tree.NewDString(conTable.Name)
+				tableNameStr := tree.NewDString(conTable.GetName())
 				for _, col := range conCols {
 					if err := addRow(
 						dbNameStr,            // table_catalog
@@ -654,25 +761,14 @@ CREATE TABLE information_schema.constraint_column_usage (
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/key-column-usage-table.html
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	comment: `column usage by indexes and key constraints
-` + base.DocsURL("information-schema.html#key_column_usage") + `
+` + docs.URL("information-schema.html#key_column_usage") + `
 https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
-	schema: `
-CREATE TABLE information_schema.key_column_usage (
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL,
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	COLUMN_NAME        STRING NOT NULL,
-	ORDINAL_POSITION   INT NOT NULL,
-	POSITION_IN_UNIQUE_CONSTRAINT INT
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaKeyColumnUsage,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.ImmutableDatabaseDescriptor,
+			db catalog.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
+			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -681,7 +777,7 @@ CREATE TABLE information_schema.key_column_usage (
 			}
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
+			tbNameStr := tree.NewDString(table.GetName())
 			for conName, con := range conInfo {
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
 				switch con.Kind {
@@ -725,44 +821,11 @@ CREATE TABLE information_schema.key_column_usage (
 var informationSchemaParametersTable = virtualSchemaTable{
 	comment: `built-in function parameters (empty - introspection not yet supported)
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
-	schema: `
-CREATE TABLE information_schema.parameters (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ORDINAL_POSITION INT,
-	PARAMETER_MODE STRING,
-	IS_RESULT STRING,
-	AS_LOCATOR STRING,
-	PARAMETER_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION INT,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_SCHEMA STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	PARAMETER_DEFAULT STRING
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaParameters,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var (
@@ -802,34 +865,20 @@ func dStringForFKAction(action descpb.ForeignKeyReference_Action) tree.Datum {
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/referential-constraints-table.html
 var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
 	comment: `foreign key constraints
-` + base.DocsURL("information-schema.html#referential_constraints") + `
+` + docs.URL("information-schema.html#referential_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
-	schema: `
-CREATE TABLE information_schema.referential_constraints (
-	CONSTRAINT_CATALOG        STRING NOT NULL,
-	CONSTRAINT_SCHEMA         STRING NOT NULL,
-	CONSTRAINT_NAME           STRING NOT NULL,
-	UNIQUE_CONSTRAINT_CATALOG STRING NOT NULL,
-	UNIQUE_CONSTRAINT_SCHEMA  STRING NOT NULL,
-	UNIQUE_CONSTRAINT_NAME    STRING,
-	MATCH_OPTION              STRING NOT NULL,
-	UPDATE_RULE               STRING NOT NULL,
-	DELETE_RULE               STRING NOT NULL,
-	TABLE_NAME                STRING NOT NULL,
-	REFERENCED_TABLE_NAME     STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaReferentialConstraints,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.ImmutableDatabaseDescriptor,
+			db catalog.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
+			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
-			for i := range table.OutboundFKs {
-				fk := &table.OutboundFKs[i]
+			tbNameStr := tree.NewDString(table.GetName())
+			return table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 				refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
 				if err != nil {
 					return err
@@ -838,27 +887,26 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+					refTable, fk.ReferencedColumnIDs,
+				)
 				if err != nil {
 					return err
 				}
-				if err := addRow(
-					dbNameStr,                           // constraint_catalog
-					scNameStr,                           // constraint_schema
-					tree.NewDString(fk.Name),            // constraint_name
-					dbNameStr,                           // unique_constraint_catalog
-					scNameStr,                           // unique_constraint_schema
-					tree.NewDString(referencedIdx.Name), // unique_constraint_name
-					matchType,                           // match_option
-					dStringForFKAction(fk.OnUpdate),     // update_rule
-					dStringForFKAction(fk.OnDelete),     // delete_rule
-					tbNameStr,                           // table_name
-					tree.NewDString(refTable.GetName()), // referenced_table_name
-				); err != nil {
-					return err
-				}
-			}
-			return nil
+				return addRow(
+					dbNameStr,                                // constraint_catalog
+					scNameStr,                                // constraint_schema
+					tree.NewDString(fk.Name),                 // constraint_name
+					dbNameStr,                                // unique_constraint_catalog
+					scNameStr,                                // unique_constraint_schema
+					tree.NewDString(refConstraint.GetName()), // unique_constraint_name
+					matchType,                                // match_option
+					dStringForFKAction(fk.OnUpdate),          // update_rule
+					dStringForFKAction(fk.OnDelete),          // delete_rule
+					tbNameStr,                                // table_name
+					tree.NewDString(refTable.GetName()),      // referenced_table_name
+				)
+			})
 		})
 	},
 }
@@ -867,19 +915,9 @@ CREATE TABLE information_schema.referential_constraints (
 // MySQL:    missing
 var informationSchemaRoleTableGrants = virtualSchemaTable{
 	comment: `privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
-` + base.DocsURL("information-schema.html#role_table_grants") + `
+` + docs.URL("information-schema.html#role_table_grants") + `
 https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
-	schema: `
-CREATE TABLE information_schema.role_table_grants (
-	GRANTOR        STRING,
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	TABLE_SCHEMA   STRING NOT NULL,
-	TABLE_NAME     STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING,
-	WITH_HIERARCHY STRING
-)`,
+	schema: vtable.InformationSchemaRoleTableGrants,
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
@@ -890,112 +928,93 @@ CREATE TABLE information_schema.role_table_grants (
 var informationSchemaRoutineTable = virtualSchemaTable{
 	comment: `built-in functions (empty - introspection not yet supported)
 https://www.postgresql.org/docs/9.5/infoschema-routines.html`,
-	schema: `
-CREATE TABLE information_schema.routines (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ROUTINE_CATALOG STRING,
-	ROUTINE_SCHEMA STRING,
-	ROUTINE_NAME STRING,
-	ROUTINE_TYPE STRING,
-	MODULE_CATALOG STRING,
-	MODULE_SCHEMA STRING,
-	MODULE_NAME STRING,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION STRING,
-	TYPE_UDT_CATALOG STRING,
-	TYPE_UDT_SCHEMA STRING,
-	TYPE_UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	ROUTINE_BODY STRING,
-	ROUTINE_DEFINITION STRING,
-	EXTERNAL_NAME STRING,
-	EXTERNAL_LANGUAGE STRING,
-	PARAMETER_STYLE STRING,
-	IS_DETERMINISTIC STRING,
-	SQL_DATA_ACCESS STRING,
-	IS_NULL_CALL STRING,
-	SQL_PATH STRING,
-	SCHEMA_LEVEL_ROUTINE STRING,
-	MAX_DYNAMIC_RESULT_SETS INT,
-	IS_USER_DEFINED_CAST STRING,
-	IS_IMPLICITLY_INVOCABLE STRING,
-	SECURITY_TYPE STRING,
-	TO_SQL_SPECIFIC_CATALOG STRING,
-	TO_SQL_SPECIFIC_SCHEMA STRING,
-	TO_SQL_SPECIFIC_NAME STRING,
-	AS_LOCATOR STRING,
-	CREATED  TIMESTAMPTZ,
-	LAST_ALTERED TIMESTAMPTZ,
-	NEW_SAVEPOINT_LEVEL  STRING,
-	IS_UDT_DEPENDENT STRING,
-	RESULT_CAST_FROM_DATA_TYPE STRING,
-	RESULT_CAST_AS_LOCATOR STRING,
-	RESULT_CAST_CHAR_MAX_LENGTH  INT,
-	RESULT_CAST_CHAR_OCTET_LENGTH STRING,
-	RESULT_CAST_CHAR_SET_CATALOG STRING,
-	RESULT_CAST_CHAR_SET_SCHEMA  STRING,
-	RESULT_CAST_CHAR_SET_NAME STRING,
-	RESULT_CAST_COLLATION_CATALOG STRING,
-	RESULT_CAST_COLLATION_SCHEMA STRING,
-	RESULT_CAST_COLLATION_NAME STRING,
-	RESULT_CAST_NUMERIC_PRECISION INT,
-	RESULT_CAST_NUMERIC_PRECISION_RADIX INT,
-	RESULT_CAST_NUMERIC_SCALE INT,
-	RESULT_CAST_DATETIME_PRECISION STRING,
-	RESULT_CAST_INTERVAL_TYPE STRING,
-	RESULT_CAST_INTERVAL_PRECISION INT,
-	RESULT_CAST_TYPE_UDT_CATALOG STRING,
-	RESULT_CAST_TYPE_UDT_SCHEMA  STRING,
-	RESULT_CAST_TYPE_UDT_NAME STRING,
-	RESULT_CAST_SCOPE_CATALOG STRING,
-	RESULT_CAST_SCOPE_SCHEMA STRING,
-	RESULT_CAST_SCOPE_NAME STRING,
-	RESULT_CAST_MAXIMUM_CARDINALITY INT,
-	RESULT_CAST_DTD_IDENTIFIER STRING
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaRoutines,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html
 var informationSchemaSchemataTable = virtualSchemaTable{
 	comment: `database schemas (may contain schemata without permission)
-` + base.DocsURL("information-schema.html#schemata") + `
+` + docs.URL("information-schema.html#schemata") + `
 https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	schema: vtable.InformationSchemaSchemata,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				return forEachSchemaName(ctx, p, db, func(sc string, userDefined bool) error {
+			func(db catalog.DatabaseDescriptor) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
-						tree.NewDString(sc),           // schema_name
+						tree.NewDString(sc.GetName()), // schema_name
 						tree.DNull,                    // default_character_set_name
 						tree.DNull,                    // sql_path
-						yesOrNoDatum(userDefined),     // crdb_is_user_defined
+						yesOrNoDatum(sc.SchemaKind() == catalog.SchemaUserDefined), // crdb_is_user_defined
 					)
+				})
+			})
+	},
+}
+
+// Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
+// which may result in confusing semantics for the user compared to this table
+// which has one row for each grantee.
+var informationSchemaTypePrivilegesTable = virtualSchemaTable{
+	comment: `type privileges (incomplete; may contain excess users or roles)
+` + docs.URL("information-schema.html#type_privileges"),
+	schema: vtable.InformationSchemaTypePrivileges,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db catalog.DatabaseDescriptor) error {
+				dbNameStr := tree.NewDString(db.GetName())
+				pgCatalogStr := tree.NewDString("pg_catalog")
+
+				// Generate one for each existing type.
+				for _, typ := range types.OidToType {
+					for _, it := range []struct {
+						grantee   *tree.DString
+						privilege *tree.DString
+					}{
+						{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+					} {
+						typeNameStr := tree.NewDString(typ.Name())
+						if err := addRow(
+							it.grantee,
+							dbNameStr,
+							pgCatalogStr,
+							typeNameStr,
+							it.privilege,
+						); err != nil {
+							return err
+						}
+					}
+				}
+
+				// And for all user defined types.
+				return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc string, typeDesc catalog.TypeDescriptor) error {
+					scNameStr := tree.NewDString(sc)
+					typeNameStr := tree.NewDString(typeDesc.GetName())
+					// TODO(knz): This should filter for the current user, see
+					// https://github.com/cockroachdb/cockroach/issues/35572
+					privs := typeDesc.GetPrivileges().Show(privilege.Type)
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User.Normalized())
+						for _, priv := range u.Privileges {
+							if err := addRow(
+								userNameStr,           // grantee
+								dbNameStr,             // type_catalog
+								scNameStr,             // type_schema
+								typeNameStr,           // type_name
+								tree.NewDString(priv), // privilege_type
+							); err != nil {
+								return err
+							}
+						}
+					}
+					return nil
 				})
 			})
 	},
@@ -1004,27 +1023,41 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schema-privileges-table.html
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	comment: `schema privileges (incomplete; may contain excess users or roles)
-` + base.DocsURL("information-schema.html#schema_privileges"),
-	schema: `
-CREATE TABLE information_schema.schema_privileges (
-	GRANTEE         STRING NOT NULL,
-	TABLE_CATALOG   STRING NOT NULL,
-	TABLE_SCHEMA    STRING NOT NULL,
-	PRIVILEGE_TYPE  STRING NOT NULL,
-	IS_GRANTABLE    STRING
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+` + docs.URL("information-schema.html#schema_privileges"),
+	schema: vtable.InformationSchemaSchemaPrivileges,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				return forEachSchemaName(ctx, p, db, func(scName string, _ bool) error {
-					privs := db.Privileges.Show(privilege.Schema)
+			func(db catalog.DatabaseDescriptor) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
+					var privs []descpb.UserPrivilegeString
+					if sc.SchemaKind() == catalog.SchemaUserDefined {
+						// User defined schemas have their own privileges.
+						privs = sc.GetPrivileges().Show(privilege.Schema)
+					} else {
+						// Other schemas inherit from the parent database.
+						// TODO(ajwerner): Fix this because it's bogus for everything other
+						// than public.
+						privs = db.GetPrivileges().Show(privilege.Database)
+					}
 					dbNameStr := tree.NewDString(db.GetName())
-					scNameStr := tree.NewDString(scName)
+					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User)
+						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							privKind := privilege.ByName[priv]
+							// Non-user defined schemas inherit privileges from the database,
+							// but the USAGE privilege is conferred by having SELECT privilege
+							// on the database. (There is no SELECT privilege on schemas.)
+							if sc.SchemaKind() != catalog.SchemaUserDefined {
+								if privKind == privilege.SELECT {
+									priv = privilege.USAGE.String()
+								} else if !privilege.SchemaPrivileges.Contains(privKind) {
+									continue
+								}
+							}
+
 							if err := addRow(
 								userNameStr,           // grantee
 								dbNameStr,             // table_catalog
@@ -1060,26 +1093,12 @@ func dStringForIndexDirection(dir descpb.IndexDescriptor_Direction) tree.Datum {
 
 var informationSchemaSequences = virtualSchemaTable{
 	comment: `sequences
-` + base.DocsURL("information-schema.html#sequences") + `
+` + docs.URL("information-schema.html#sequences") + `
 https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
-	schema: `
-CREATE TABLE information_schema.sequences (
-    SEQUENCE_CATALOG         STRING NOT NULL,
-    SEQUENCE_SCHEMA          STRING NOT NULL,
-    SEQUENCE_NAME            STRING NOT NULL,
-    DATA_TYPE                STRING NOT NULL,
-    NUMERIC_PRECISION        INT NOT NULL,
-    NUMERIC_PRECISION_RADIX  INT NOT NULL,
-    NUMERIC_SCALE            INT NOT NULL,
-    START_VALUE              STRING NOT NULL,
-    MINIMUM_VALUE            STRING NOT NULL,
-    MAXIMUM_VALUE            STRING NOT NULL,
-    INCREMENT                STRING NOT NULL,
-    CYCLE_OPTION             STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaSequences,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -1091,10 +1110,10 @@ CREATE TABLE information_schema.sequences (
 					tree.NewDInt(64),                 // numeric precision
 					tree.NewDInt(2),                  // numeric precision radix
 					tree.NewDInt(0),                  // numeric scale
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
+					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().Start, 10)),     // start value
+					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MinValue, 10)),  // min value
+					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MaxValue, 10)),  // max value
+					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().Increment, 10)), // increment
 					noString, // cycle
 				)
 			})
@@ -1105,40 +1124,25 @@ CREATE TABLE information_schema.sequences (
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/statistics-table.html
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	comment: `index metadata and statistics (incomplete)
-` + base.DocsURL("information-schema.html#statistics"),
-	schema: `
-CREATE TABLE information_schema.statistics (
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA  STRING NOT NULL,
-	TABLE_NAME    STRING NOT NULL,
-	NON_UNIQUE    STRING NOT NULL,
-	INDEX_SCHEMA  STRING NOT NULL,
-	INDEX_NAME    STRING NOT NULL,
-	SEQ_IN_INDEX  INT NOT NULL,
-	COLUMN_NAME   STRING NOT NULL,
-	"COLLATION"   STRING,
-	CARDINALITY   INT,
-	DIRECTION     STRING NOT NULL,
-	STORING       STRING NOT NULL,
-	IMPLICIT      STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+` + docs.URL("information-schema.html#statistics"),
+	schema: vtable.InformationSchemaStatistics,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
 
-				appendRow := func(index *descpb.IndexDescriptor, colName string, sequence int,
+				appendRow := func(index catalog.Index, colName string, sequence int,
 					direction tree.Datum, isStored, isImplicit bool,
 				) error {
 					return addRow(
 						dbNameStr,                         // table_catalog
 						scNameStr,                         // table_schema
 						tbNameStr,                         // table_name
-						yesOrNoDatum(!index.Unique),       // non_unique
+						yesOrNoDatum(!index.IsUnique()),   // non_unique
 						scNameStr,                         // index_schema
-						tree.NewDString(index.Name),       // index_name
+						tree.NewDString(index.GetName()),  // index_name
 						tree.NewDInt(tree.DInt(sequence)), // seq_in_index
 						tree.NewDString(colName),          // column_name
 						tree.DNull,                        // collation
@@ -1149,37 +1153,47 @@ CREATE TABLE information_schema.statistics (
 					)
 				}
 
-				return forEachIndexInTable(table, func(index *descpb.IndexDescriptor) error {
-					// Columns in the primary key that aren't in index.ColumnNames or
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+					// Columns in the primary key that aren't in index.KeyColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
 					var hasImplicitCols bool
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+						hasImplicitCols = index.NumKeySuffixColumns() > index.NumSecondaryStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > 0
+						hasImplicitCols = index.NumKeySuffixColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for _, col := range table.PrimaryIndex.ColumnNames {
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
 
 					sequence := 1
-					for i, col := range index.ColumnNames {
+					for i := 0; i < index.NumKeyColumns(); i++ {
+						col := index.GetKeyColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.ColumnDirections[i])
-						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
+						dir := dStringForIndexDirection(index.GetKeyColumnDirection(i))
+						if err := appendRow(
+							index,
+							col,
+							sequence,
+							dir,
+							false,
+							i < index.ExplicitColumnStartIdx(),
+						); err != nil {
 							return err
 						}
 						sequence++
 						delete(implicitCols, col)
 					}
-					for _, col := range index.StoreColumnNames {
+					for i := 0; i < index.NumPrimaryStoredColumns()+index.NumSecondaryStoredColumns(); i++ {
+						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,
 							indexDirectionNA, true, false); err != nil {
@@ -1188,13 +1202,24 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for col := range implicitCols {
-						// We add a row for each implicit column of index.
-						if err := appendRow(index, col, sequence,
-							indexDirectionAsc, false, true); err != nil {
-							return err
+					if len(implicitCols) > 0 {
+						// In order to have the implicit columns reported in a
+						// deterministic order, we will add all of them in the
+						// same order as they are mentioned in the primary key.
+						//
+						// Note that simply iterating over implicitCols map
+						// produces non-deterministic output.
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
+							if _, isImplicit := implicitCols[col]; isImplicit {
+								// We add a row for each implicit column of index.
+								if err := appendRow(index, col, sequence,
+									indexDirectionAsc, false, true); err != nil {
+									return err
+								}
+								sequence++
+							}
 						}
-						sequence++
 					}
 					return nil
 				})
@@ -1205,27 +1230,16 @@ CREATE TABLE information_schema.statistics (
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-constraints-table.html
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	comment: `table constraints
-` + base.DocsURL("information-schema.html#table_constraints") + `
+` + docs.URL("information-schema.html#table_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
-	schema: `
-CREATE TABLE information_schema.table_constraints (
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL,
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	CONSTRAINT_TYPE    STRING NOT NULL,
-	IS_DEFERRABLE      STRING NOT NULL,
-	INITIALLY_DEFERRED STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaTableConstraint,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
-				db *sqlbase.ImmutableDatabaseDescriptor,
+				db catalog.DatabaseDescriptor,
 				scName string,
-				table *sqlbase.ImmutableTableDescriptor,
+				table catalog.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
 				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -1235,7 +1249,7 @@ CREATE TABLE information_schema.table_constraints (
 
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
-				tbNameStr := tree.NewDString(table.Name)
+				tbNameStr := tree.NewDString(table.GetName())
 
 				for conName, c := range conInfo {
 					if err := addRow(
@@ -1257,30 +1271,29 @@ CREATE TABLE information_schema.table_constraints (
 				// NULL column constraints in information_schema.check_constraints.
 				// Cockroach doesn't track these constraints as check constraints,
 				// but we can pull them off of the table's column descriptors.
-				colNum := 0
-				return forEachColumnInTable(table, func(col *descpb.ColumnDescriptor) error {
-					colNum++
+				for _, col := range table.PublicColumns() {
+					if col.IsNullable() {
+						continue
+					}
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
+						"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), col.Ordinal()+1,
 					))
-					if !col.Nullable {
-						if err := addRow(
-							dbNameStr,                // constraint_catalog
-							scNameStr,                // constraint_schema
-							conNameStr,               // constraint_name
-							dbNameStr,                // table_catalog
-							scNameStr,                // table_schema
-							tbNameStr,                // table_name
-							tree.NewDString("CHECK"), // constraint_type
-							yesOrNoDatum(false),      // is_deferrable
-							yesOrNoDatum(false),      // initially_deferred
-						); err != nil {
-							return err
-						}
+					if err := addRow(
+						dbNameStr,                // constraint_catalog
+						scNameStr,                // constraint_schema
+						conNameStr,               // constraint_name
+						dbNameStr,                // table_catalog
+						scNameStr,                // table_schema
+						tbNameStr,                // table_name
+						tree.NewDString("CHECK"), // constraint_type
+						yesOrNoDatum(false),      // is_deferrable
+						yesOrNoDatum(false),      // initially_deferred
+					); err != nil {
+						return err
 					}
-					return nil
-				})
+				}
+				return nil
 			})
 	},
 }
@@ -1290,20 +1303,14 @@ CREATE TABLE information_schema.table_constraints (
 // TODO(knz): this introspection facility is of dubious utility.
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	comment: `grantable privileges (incomplete)`,
-	schema: `
-CREATE TABLE information_schema.user_privileges (
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema:  vtable.InformationSchemaUserPrivileges,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(dbDesc *sqlbase.ImmutableDatabaseDescriptor) error {
+			func(dbDesc catalog.DatabaseDescriptor) error {
 				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{security.RootUser, security.AdminRole} {
 					grantee := tree.NewDString(u)
-					for _, p := range privilege.DBSchemaTablePrivileges.SortedNames() {
+					for _, p := range privilege.GetValidPrivilegesForObject(privilege.Table).SortedNames() {
 						if err := addRow(
 							grantee,            // grantee
 							dbNameStr,          // table_catalog
@@ -1322,19 +1329,9 @@ CREATE TABLE information_schema.user_privileges (
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-privileges-table.html
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	comment: `privileges granted on table or views (incomplete; may contain excess users or roles)
-` + base.DocsURL("information-schema.html#table_privileges") + `
+` + docs.URL("information-schema.html#table_privileges") + `
 https://www.postgresql.org/docs/9.5/infoschema-table-privileges.html`,
-	schema: `
-CREATE TABLE information_schema.table_privileges (
-	GRANTOR        STRING,
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	TABLE_SCHEMA   STRING NOT NULL,
-	TABLE_NAME     STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING,
-	WITH_HIERARCHY STRING NOT NULL
-)`,
+	schema:   vtable.InformationSchemaTablePrivileges,
 	populate: populateTablePrivileges,
 }
 
@@ -1342,27 +1339,27 @@ CREATE TABLE information_schema.table_privileges (
 func populateTablePrivileges(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	addRow func(...tree.Datum) error,
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+		func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
+			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
-			for _, u := range table.Privileges.Show(privilege.Table) {
+			for _, u := range table.GetPrivileges().Show(privilege.Table) {
 				for _, priv := range u.Privileges {
 					if err := addRow(
-						tree.DNull,                     // grantor
-						tree.NewDString(u.User),        // grantee
-						dbNameStr,                      // table_catalog
-						scNameStr,                      // table_schema
-						tbNameStr,                      // table_name
-						tree.NewDString(priv),          // privilege_type
-						tree.DNull,                     // is_grantable
-						yesOrNoDatum(priv == "SELECT"), // with_hierarchy
+						tree.DNull,                           // grantor
+						tree.NewDString(u.User.Normalized()), // grantee
+						dbNameStr,                            // table_catalog
+						scNameStr,                            // table_schema
+						tbNameStr,                            // table_name
+						tree.NewDString(priv),                // privilege_type
+						tree.DNull,                           // is_grantable
+						yesOrNoDatum(priv == "SELECT"),       // with_hierarchy
 					); err != nil {
 						return err
 					}
@@ -1381,39 +1378,22 @@ var (
 
 var informationSchemaTablesTable = virtualSchemaTable{
 	comment: `tables and views
-` + base.DocsURL("information-schema.html#tables") + `
+` + docs.URL("information-schema.html#tables") + `
 https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 	schema: vtable.InformationSchemaTables,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, addTablesTableRow(addRow))
-	},
-	indexes: []virtualIndex{
-		{
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
-				addRow func(...tree.Datum) error) (bool, error) {
-				// This index is on the TABLE_NAME column.
-				name := tree.MustBeDString(constraint)
-				flags := tree.ObjectLookupFlags{}
-				flags.DesiredTableDescKind = tree.ResolveAnyTableKind
-				desc, err := resolver.ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)), flags)
-				if err != nil || desc == nil {
-					return false, err
-				}
-				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, desc.GetParentSchemaID())
-				if err != nil {
-					return false, err
-				}
-				return true, addTablesTableRow(addRow)(db, sc.Name, desc)
-			},
-		},
 	},
 }
 
 func addTablesTableRow(
 	addRow func(...tree.Datum) error,
-) func(db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-	table *sqlbase.ImmutableTableDescriptor) error {
-	return func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+) func(
+	db catalog.DatabaseDescriptor,
+	scName string,
+	table catalog.TableDescriptor,
+) error {
+	return func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 		if table.IsSequence() {
 			return nil
 		}
@@ -1425,19 +1405,19 @@ func addTablesTableRow(
 		} else if table.IsView() {
 			tableType = tableTypeView
 			insertable = noString
-		} else if table.Temporary {
+		} else if table.IsTemporary() {
 			tableType = tableTypeTemporary
 		}
 		dbNameStr := tree.NewDString(db.GetName())
 		scNameStr := tree.NewDString(scName)
-		tbNameStr := tree.NewDString(table.Name)
+		tbNameStr := tree.NewDString(table.GetName())
 		return addRow(
-			dbNameStr,                              // table_catalog
-			scNameStr,                              // table_schema
-			tbNameStr,                              // table_name
-			tableType,                              // table_type
-			insertable,                             // is_insertable_into
-			tree.NewDInt(tree.DInt(table.Version)), // version
+			dbNameStr,  // table_catalog
+			scNameStr,  // table_schema
+			tbNameStr,  // table_name
+			tableType,  // table_type
+			insertable, // is_insertable_into
+			tree.NewDInt(tree.DInt(table.GetVersion())), // version
 		)
 	}
 }
@@ -1446,24 +1426,12 @@ func addTablesTableRow(
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/views-table.html
 var informationSchemaViewsTable = virtualSchemaTable{
 	comment: `views (incomplete)
-` + base.DocsURL("information-schema.html#views") + `
+` + docs.URL("information-schema.html#views") + `
 https://www.postgresql.org/docs/9.5/infoschema-views.html`,
-	schema: `
-CREATE TABLE information_schema.views (
-    TABLE_CATALOG              STRING NOT NULL,
-    TABLE_SCHEMA               STRING NOT NULL,
-    TABLE_NAME                 STRING NOT NULL,
-    VIEW_DEFINITION            STRING NOT NULL,
-    CHECK_OPTION               STRING,
-    IS_UPDATABLE               STRING NOT NULL,
-    IS_INSERTABLE_INTO         STRING NOT NULL,
-    IS_TRIGGER_UPDATABLE       STRING NOT NULL,
-    IS_TRIGGER_DELETABLE       STRING NOT NULL,
-    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	schema: vtable.InformationSchemaViews,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsView() {
 					return nil
 				}
@@ -1476,53 +1444,691 @@ CREATE TABLE information_schema.views (
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDString(db.GetName()),    // table_catalog
-					tree.NewDString(scName),          // table_schema
-					tree.NewDString(table.Name),      // table_name
-					tree.NewDString(table.ViewQuery), // view_definition
-					tree.DNull,                       // check_option
-					noString,                         // is_updatable
-					noString,                         // is_insertable_into
-					noString,                         // is_trigger_updatable
-					noString,                         // is_trigger_deletable
-					noString,                         // is_trigger_insertable_into
+					tree.NewDString(db.GetName()),         // table_catalog
+					tree.NewDString(scName),               // table_schema
+					tree.NewDString(table.GetName()),      // table_name
+					tree.NewDString(table.GetViewQuery()), // view_definition
+					tree.DNull,                            // check_option
+					noString,                              // is_updatable
+					noString,                              // is_insertable_into
+					noString,                              // is_trigger_updatable
+					noString,                              // is_trigger_deletable
+					noString,                              // is_trigger_insertable_into
 				)
 			})
 	},
 }
 
-// forEachSchemaName iterates over the physical and virtual schemas.
-func forEachSchemaName(
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collations.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html
+var informationSchemaCollations = virtualSchemaTable{
+	comment: `shows the collations available in the current database
+https://www.postgresql.org/docs/current/infoschema-collations.html`,
+	schema: vtable.InformationSchemaCollations,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		dbNameStr := tree.NewDString(p.CurrentDatabase())
+		add := func(collName string) error {
+			return addRow(
+				dbNameStr,
+				pgCatalogNameDString,
+				tree.NewDString(collName),
+				// Always NO PAD (The alternative PAD SPACE is not supported.)
+				tree.NewDString("NO PAD"),
+			)
+		}
+		if err := add(tree.DefaultCollationTag); err != nil {
+			return err
+		}
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collation-character-set-applicability-table.html
+var informationSchemaCollationCharacterSetApplicability = virtualSchemaTable{
+	comment: `identifies which character set the available collations are 
+applicable to. As UTF-8 is the only available encoding this table does not
+provide much useful information.
+https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html`,
+	schema: vtable.InformationSchemaCollationCharacterSetApplicability,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		dbNameStr := tree.NewDString(p.CurrentDatabase())
+		add := func(collName string) error {
+			return addRow(
+				dbNameStr,                 // collation_catalog
+				pgCatalogNameDString,      // collation_schema
+				tree.NewDString(collName), // collation_name
+				tree.DNull,                // character_set_catalog
+				tree.DNull,                // character_set_schema
+				tree.NewDString("UTF8"),   // character_set_name: UTF8 is the only available encoding
+			)
+		}
+		if err := add(tree.DefaultCollationTag); err != nil {
+			return err
+		}
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var informationSchemaSessionVariables = virtualSchemaTable{
+	comment: `exposes the session variables.`,
+	schema:  vtable.InformationSchemaSessionVariables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen.Get(&p.extendedEvalCtx)
+			if err := addRow(
+				tree.NewDString(vName),
+				tree.NewDString(value),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var informationSchemaDomainConstraintsTable = virtualSchemaTable{
+	comment: "domain_constraints was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomainConstraints,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUdtPrivilegesTable = virtualSchemaTable{
+	comment: "udt_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUdtPrivileges,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaCheckConstraintRoutineUsageTable = virtualSchemaTable{
+	comment: "check_constraint_routine_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaCheckConstraintRoutineUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleColumnGrantsTable = virtualSchemaTable{
+	comment: "role_column_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleColumnGrants,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTriggeredUpdateColumnsTable = virtualSchemaTable{
+	comment: "triggered_update_columns was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTriggeredUpdateColumns,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignTablesTable = virtualSchemaTable{
+	comment: "foreign_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUsagePrivilegesTable = virtualSchemaTable{
+	comment: "usage_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUsagePrivileges,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserMappingsTable = virtualSchemaTable{
+	comment: "user_mappings was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserMappings,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleUdtGrantsTable = virtualSchemaTable{
+	comment: "role_udt_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleUdtGrants,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaViewColumnUsageTable = virtualSchemaTable{
+	comment: "view_column_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewColumnUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignDataWrapperOptionsTable = virtualSchemaTable{
+	comment: "foreign_data_wrapper_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignDataWrapperOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaViewTableUsageTable = virtualSchemaTable{
+	comment: "view_table_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewTableUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLPartsTable = virtualSchemaTable{
+	comment: "sql_parts was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLParts,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleUsageGrantsTable = virtualSchemaTable{
+	comment: "role_usage_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleUsageGrants,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaDataTypePrivilegesTable = virtualSchemaTable{
+	comment: "data_type_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDataTypePrivileges,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLImplementationInfoTable = virtualSchemaTable{
+	comment: "sql_implementation_info was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLImplementationInfo,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignTableOptionsTable = virtualSchemaTable{
+	comment: "foreign_table_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignTableOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
+	comment: "role_routine_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleRoutineGrants,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaInformationSchemaCatalogNameTable = virtualSchemaTable{
+	comment: "information_schema_catalog_name was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaInformationSchemaCatalogName,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserDefinedTypesTable = virtualSchemaTable{
+	comment: "user_defined_types was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserDefinedTypes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignServerOptionsTable = virtualSchemaTable{
+	comment: "foreign_server_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignServerOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaAttributesTable = virtualSchemaTable{
+	comment: "attributes was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaAttributes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserMappingOptionsTable = virtualSchemaTable{
+	comment: "user_mapping_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserMappingOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnColumnUsageTable = virtualSchemaTable{
+	comment: "column_column_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnColumnUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaDomainUdtUsageTable = virtualSchemaTable{
+	comment: "domain_udt_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomainUdtUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaDomainsTable = virtualSchemaTable{
+	comment: "domains was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomains,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaViewRoutineUsageTable = virtualSchemaTable{
+	comment: "view_routine_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewRoutineUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnDomainUsageTable = virtualSchemaTable{
+	comment: "column_domain_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnDomainUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignDataWrappersTable = virtualSchemaTable{
+	comment: "foreign_data_wrappers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignDataWrappers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLFeaturesTable = virtualSchemaTable{
+	comment: "sql_features was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLFeatures,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTransformsTable = virtualSchemaTable{
+	comment: "transforms was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTransforms,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLSizingTable = virtualSchemaTable{
+	comment: "sql_sizing was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLSizing,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaElementTypesTable = virtualSchemaTable{
+	comment: "element_types was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaElementTypes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoutinePrivilegesTable = virtualSchemaTable{
+	comment: "routine_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoutinePrivileges,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaConstraintTableUsageTable = virtualSchemaTable{
+	comment: "constraint_table_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaConstraintTableUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnOptionsTable = virtualSchemaTable{
+	comment: "column_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignServersTable = virtualSchemaTable{
+	comment: "foreign_servers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignServers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTriggersTable = virtualSchemaTable{
+	comment: "triggers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTriggers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaResourceGroupsTable = virtualSchemaTable{
+	comment: "resource_groups was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaResourceGroups,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaPartitionsTable = virtualSchemaTable{
+	comment: "partitions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaPartitions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablespacesExtensionsTable = virtualSchemaTable{
+	comment: "tablespaces_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablespacesExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSchemataExtensionsTable = virtualSchemaTable{
+	comment: "schemata_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSchemataExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnStatisticsTable = virtualSchemaTable{
+	comment: "column_statistics was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnStatistics,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStUnitsOfMeasureTable = virtualSchemaTable{
+	comment: "st_units_of_measure was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStUnitsOfMeasure,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaFilesTable = virtualSchemaTable{
+	comment: "files was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaFiles,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaEnginesTable = virtualSchemaTable{
+	comment: "engines was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaEngines,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaEventsTable = virtualSchemaTable{
+	comment: "events was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaEvents,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserAttributesTable = virtualSchemaTable{
+	comment: "user_attributes was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserAttributes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaKeywordsTable = virtualSchemaTable{
+	comment: "keywords was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaKeywords,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaOptimizerTraceTable = virtualSchemaTable{
+	comment: "optimizer_trace was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaOptimizerTrace,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTableConstraintsExtensionsTable = virtualSchemaTable{
+	comment: "table_constraints_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTableConstraintsExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnsExtensionsTable = virtualSchemaTable{
+	comment: "columns_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnsExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStGeometryColumnsTable = virtualSchemaTable{
+	comment: "st_geometry_columns was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStGeometryColumns,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaPluginsTable = virtualSchemaTable{
+	comment: "plugins was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaPlugins,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStSpatialReferenceSystemsTable = virtualSchemaTable{
+	comment: "st_spatial_reference_systems was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStSpatialReferenceSystems,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaProcesslistTable = virtualSchemaTable{
+	comment: "processlist was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaProcesslist,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablesExtensionsTable = virtualSchemaTable{
+	comment: "tables_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablesExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaProfilingTable = virtualSchemaTable{
+	comment: "profiling was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaProfiling,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablespacesTable = virtualSchemaTable{
+	comment: "tablespaces was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablespaces,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+// forEachSchema iterates over the physical and virtual schemas.
+func forEachSchema(
 	ctx context.Context,
 	p *planner,
-	db *sqlbase.ImmutableDatabaseDescriptor,
-	fn func(scName string, userDefined bool) error,
+	db catalog.DatabaseDescriptor,
+	fn func(sc catalog.SchemaDescriptor) error,
 ) error {
-	userDefinedSchemas := make(map[string]struct{})
 	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
 	}
-	for _, name := range schemaNames {
-		if !strings.HasPrefix(name, sessiondata.PgTempSchemaName) && name != tree.PublicSchema {
-			userDefinedSchemas[name] = struct{}{}
+
+	vtableEntries := p.getVirtualTabler().getSchemas()
+	schemas := make([]catalog.SchemaDescriptor, 0, len(schemaNames)+len(vtableEntries))
+	var userDefinedSchemaIDs []descpb.ID
+	for id, name := range schemaNames {
+		switch {
+		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
+			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
+		case name == tree.PublicSchema:
+			schemas = append(schemas, schemadesc.GetPublicSchema())
+		default:
+			// The default case is a user defined schema. Collect the ID to get the
+			// descriptor later.
+			userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
 		}
 	}
-	vtableEntries := p.getVirtualTabler().getEntries()
-	scNames := make([]string, 0, len(schemaNames)+len(vtableEntries))
-	for _, name := range schemaNames {
-		scNames = append(scNames, name)
+
+	userDefinedSchemas, err := catalogkv.GetSchemaDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, userDefinedSchemaIDs)
+	if err != nil {
+		return err
 	}
+	for i := range userDefinedSchemas {
+		desc := userDefinedSchemas[i]
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, db, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
+			continue
+		}
+		schemas = append(schemas, desc)
+	}
+
 	for _, schema := range vtableEntries {
-		scNames = append(scNames, schema.desc.GetName())
+		schemas = append(schemas, schema.Desc())
 	}
-	sort.Strings(scNames)
-	for _, sc := range scNames {
-		_, userDefined := userDefinedSchemas[sc]
-		if err := fn(sc, userDefined); err != nil {
+
+	sort.Slice(schemas, func(i int, j int) bool {
+		return schemas[i].GetName() < schemas[j].GetName()
+	})
+
+	for _, sc := range schemas {
+		if err := fn(sc); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1533,11 +2139,11 @@ func forEachSchemaName(
 func forEachDatabaseDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	requiresPrivileges bool,
-	fn func(*sqlbase.ImmutableDatabaseDescriptor) error,
+	fn func(descriptor catalog.DatabaseDescriptor) error,
 ) error {
-	var dbDescs []*sqlbase.ImmutableDatabaseDescriptor
+	var dbDescs []catalog.DatabaseDescriptor
 	if dbContext == nil {
 		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
@@ -1545,21 +2151,20 @@ func forEachDatabaseDesc(
 		}
 		dbDescs = allDbDescs
 	} else {
-		// We can't just use dbContext here because we need to fetch the descriptor
-		// with privileges from kv.
-		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()})
-		if err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
-				return pgerror.Newf(pgcode.UndefinedDatabase, "database %s does not exist", dbContext.GetName())
-			}
-			return err
-		}
-		dbDescs = fetchedDbDesc
+		dbDescs = append(dbDescs, dbContext)
 	}
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		if !requiresPrivileges || userCanSeeDatabase(ctx, p, dbDesc) {
+		canSeeDescriptor := !requiresPrivileges
+		if requiresPrivileges {
+			var err error
+			canSeeDescriptor, err = userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			if err != nil {
+				return err
+			}
+		}
+		if canSeeDescriptor {
 			if err := fn(dbDesc); err != nil {
 				return err
 			}
@@ -1575,27 +2180,31 @@ func forEachDatabaseDesc(
 func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
-	fn func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typ *sqlbase.ImmutableTypeDescriptor) error,
+	dbContext catalog.DatabaseDescriptor,
+	fn func(db catalog.DatabaseDescriptor, sc string, typ catalog.TypeDescriptor) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
-	if err != nil {
-		return err
-	}
-	lCtx := newInternalLookupCtx(descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
-		dbDesc, parentExists := lCtx.dbDescs[typ.ParentID]
-		if !parentExists {
+		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
+		if err != nil {
 			continue
 		}
-		scName, ok := schemaNames[typ.GetParentSchemaID()]
-		if !ok {
-			return errors.AssertionFailedf("schema id %d not found", typ.GetParentSchemaID())
+		scName, err := lCtx.getSchemaNameByID(typ.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typ, dbDesc, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
+			continue
 		}
 		if err := fn(dbDesc, scName, typ); err != nil {
 			return err
@@ -1619,15 +2228,14 @@ func forEachTypeDesc(
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	// TODO(ajwerner): Introduce TableDescriptor.
-	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor) error,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
-		db *sqlbase.ImmutableDatabaseDescriptor,
+		db catalog.DatabaseDescriptor,
 		scName string,
-		table *sqlbase.ImmutableTableDescriptor,
+		table catalog.TableDescriptor,
 		_ tableLookupFn,
 	) error {
 		return fn(db, scName, table)
@@ -1639,8 +2247,8 @@ type virtualOpts int
 const (
 	// virtualMany iterates over virtual schemas in every catalog/database.
 	virtualMany virtualOpts = iota
-	// virtualOnce iterates over virtual schemas once, in the nil database.
-	virtualOnce
+	// virtualCurrentDB iterates over virtual schemas in the current database.
+	virtualCurrentDB
 	// hideVirtual completely hides virtual schemas during iteration.
 	hideVirtual
 )
@@ -1650,33 +2258,34 @@ const (
 func forEachTableDescAll(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor) error,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor) error,
 ) error {
-	return forEachTableDescAllWithTableLookup(ctx,
-		p, dbContext, virtualOpts,
-		func(
-			db *sqlbase.ImmutableDatabaseDescriptor,
-			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
-			_ tableLookupFn,
-		) error {
-			return fn(db, scName, table)
-		})
+	return forEachTableDescAllWithTableLookup(ctx, p, dbContext, virtualOpts, func(
+		db catalog.DatabaseDescriptor,
+		scName string,
+		table catalog.TableDescriptor,
+		_ tableLookupFn,
+	) error {
+		return fn(db, scName, table)
+	})
 }
 
 // forEachTableDescAllWithTableLookup is like forEachTableDescAll, but it also
-// provides a tableLookupFn like forEachTableDescWithTableLookup.
+// provides a tableLookupFn like forEachTableDescWithTableLookup. If validate is
+// set to false descriptors will not be validated for existence or consistency
+// hence fn should be able to handle nil-s.
 func forEachTableDescAllWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx,
-		p, dbContext, virtualOpts, true /* allowAdding */, fn)
+	return forEachTableDescWithTableLookupInternal(
+		ctx, p, dbContext, virtualOpts, true /* allowAdding */, fn,
+	)
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
@@ -1691,15 +2300,17 @@ func forEachTableDescAllWithTableLookup(
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn)
+	return forEachTableDescWithTableLookupInternal(
+		ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn,
+	)
 }
 
 func getSchemaNames(
-	ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
 	if dbContext != nil {
 		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
@@ -1710,6 +2321,9 @@ func getSchemaNames(
 		return nil, err
 	}
 	for _, db := range dbs {
+		if db == nil {
+			return nil, catalog.ErrDescriptorNotFound
+		}
 		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db.GetID())
 		if err != nil {
 			return nil, err
@@ -1726,31 +2340,85 @@ func getSchemaNames(
 //
 // The allowAdding argument if true includes newly added tables that
 // are not yet public.
+// The validate argument if false turns off checking if the descriptor ids exist
+// and if they are valid.
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
-	dbContext *sqlbase.ImmutableDatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *ImmutableTableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(descs, dbContext)
+	return forEachTableDescWithTableLookupInternalFromDescriptors(
+		ctx, p, dbContext, virtualOpts, allowAdding, descs, fn)
+}
 
-	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
+func forEachTypeDescWithTableLookupInternalFromDescriptors(
+	ctx context.Context,
+	p *planner,
+	dbContext catalog.DatabaseDescriptor,
+	allowAdding bool,
+	descs []catalog.Descriptor,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TypeDescriptor, tableLookupFn) error,
+) error {
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+
+	for _, typID := range lCtx.typIDs {
+		typDesc := lCtx.typDescs[typID]
+		if typDesc.Dropped() {
+			continue
+		}
+		dbDesc, err := lCtx.getDatabaseByID(typDesc.GetParentID())
+		if err != nil {
+			return err
+		}
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
+			continue
+		}
+		scName, err := lCtx.getSchemaNameByID(typDesc.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+		if err := fn(dbDesc, scName, typDesc, lCtx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func forEachTableDescWithTableLookupInternalFromDescriptors(
+	ctx context.Context,
+	p *planner,
+	dbContext catalog.DatabaseDescriptor,
+	virtualOpts virtualOpts,
+	allowAdding bool,
+	descs []catalog.Descriptor,
+	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+) error {
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+
+	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
+		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
-		iterate := func(dbDesc *sqlbase.ImmutableDatabaseDescriptor) error {
+		iterate := func(dbDesc catalog.DatabaseDescriptor) error {
 			for _, virtSchemaName := range vSchemaNames {
 				e := vEntries[virtSchemaName]
 				for _, tName := range e.orderedDefNames {
 					te := e.defs[tName]
-					if err := fn(dbDesc, virtSchemaName, sqlbase.NewImmutableTableDescriptor(*te.desc), lCtx); err != nil {
+					if err := fn(dbDesc, virtSchemaName, te.desc, lCtx); err != nil {
 						return err
 					}
 				}
@@ -1759,8 +2427,8 @@ func forEachTableDescWithTableLookupInternal(
 		}
 
 		switch virtualOpts {
-		case virtualOnce:
-			if err := iterate(nil); err != nil {
+		case virtualCurrentDB:
+			if err := iterate(dbContext); err != nil {
 				return err
 			}
 		case virtualMany:
@@ -1773,22 +2441,45 @@ func forEachTableDescWithTableLookupInternal(
 		}
 	}
 
-	// Generate all schema names, and keep a mapping.
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
-	if err != nil {
-		return err
-	}
-
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbDesc, allowAdding)
+		if err != nil {
+			return err
+		}
+		if table.Dropped() || !canSeeDescriptor {
 			continue
 		}
-		scName, ok := schemaNames[table.GetParentSchemaID()]
-		if !ok {
-			return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+		var scName string
+		if parentExists {
+			var ok bool
+			scName, ok = lCtx.schemaNames[table.GetParentSchemaID()]
+			// Look up the schemas for this database if we discover that there is a
+			// missing temporary schema name. The only schemas which do not have
+			// descriptors are the public schema and temporary schemas. The public
+			// schema does not have a descriptor but will appear in the map. Temporary
+			// schemas do, however, have namespace entries. The below code will go
+			// and lookup schema names from the namespace table if needed to qualify
+			// the name of a temporary table.
+			if !ok && !table.IsTemporary() {
+				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			}
+			if !ok { // && table.IsTemporary()
+				namesForSchema, err := getSchemaNames(ctx, p, dbDesc)
+				if err != nil {
+					return errors.Wrapf(err, "failed to look up schema id %d",
+						table.GetParentSchemaID())
+				}
+				for id, n := range namesForSchema {
+					if _, exists := lCtx.schemaNames[id]; exists {
+						continue
+					}
+					lCtx.schemaNames[id] = n
+					scName = lCtx.schemaNames[table.GetParentSchemaID()]
+				}
+			}
 		}
 		if err := fn(dbDesc, scName, table, lCtx); err != nil {
 			return err
@@ -1797,104 +2488,121 @@ func forEachTableDescWithTableLookupInternal(
 	return nil
 }
 
-func forEachIndexInTable(
-	table *sqlbase.ImmutableTableDescriptor, fn func(*descpb.IndexDescriptor) error,
-) error {
-	if table.IsPhysicalTable() {
-		if err := fn(&table.PrimaryIndex); err != nil {
-			return err
-		}
-	}
-	for i := range table.Indexes {
-		if err := fn(&table.Indexes[i]); err != nil {
-			return err
-		}
-	}
-	return nil
+type roleOptions struct {
+	*tree.DJSON
 }
 
-func forEachColumnInTable(
-	table *sqlbase.ImmutableTableDescriptor, fn func(*descpb.ColumnDescriptor) error,
-) error {
-	// Table descriptors already hold columns in-order.
-	for i := range table.Columns {
-		if err := fn(&table.Columns[i]); err != nil {
-			return err
-		}
-	}
-	return nil
+func (r roleOptions) noLogin() (tree.DBool, error) {
+	nologin, err := r.Exists("NOLOGIN")
+	return tree.DBool(nologin), err
 }
 
-func forEachColumnInIndex(
-	table *sqlbase.ImmutableTableDescriptor,
-	index *descpb.IndexDescriptor,
-	fn func(*descpb.ColumnDescriptor) error,
-) error {
-	colMap := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(table.Columns))
-	for i := range table.Columns {
-		id := table.Columns[i].ID
-		colMap[id] = &table.Columns[i]
+func (r roleOptions) validUntil(p *planner) (tree.Datum, error) {
+	const validUntilKey = "VALID UNTIL"
+	jsonValue, err := r.FetchValKey(validUntilKey)
+	if err != nil {
+		return nil, err
 	}
-	for _, columnID := range index.ColumnIDs {
-		column := colMap[columnID]
-		if err := fn(column); err != nil {
-			return err
-		}
+	if jsonValue == nil {
+		return tree.DNull, nil
 	}
-	return nil
+	validUntilText, err := jsonValue.AsText()
+	if err != nil {
+		return nil, err
+	}
+	if validUntilText == nil {
+		return tree.DNull, nil
+	}
+	validUntil, _, err := pgdate.ParseTimestamp(
+		p.EvalContext().GetRelativeParseTime(),
+		pgdate.DefaultDateStyle(),
+		*validUntilText,
+	)
+	if err != nil {
+		return nil, errors.Errorf("rolValidUntil string %s could not be parsed with datestyle %s", *validUntilText, p.EvalContext().GetDateStyle())
+	}
+	return tree.MakeDTimestampTZ(validUntil, time.Second)
+}
+
+func (r roleOptions) createDB() (tree.DBool, error) {
+	createDB, err := r.Exists("CREATEDB")
+	return tree.DBool(createDB), err
+}
+
+func (r roleOptions) createRole() (tree.DBool, error) {
+	createRole, err := r.Exists("CREATEROLE")
+	return tree.DBool(createRole), err
+}
+
+func forEachRoleQuery(ctx context.Context, p *planner) string {
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
+		return `
+SELECT
+	u.username,
+	"isRole",
+  drs.settings,
+	json_object_agg(COALESCE(ro.option, 'null'), ro.value)
+FROM
+	system.users AS u
+	LEFT JOIN system.role_options AS ro ON
+			ro.username = u.username
+  LEFT JOIN system.database_role_settings AS drs ON 
+			drs.role_name = u.username AND drs.database_id = 0
+GROUP BY
+	u.username, "isRole", drs.settings;
+`
+	}
+
+	return `
+SELECT
+	u.username,
+	"isRole",
+	NULL::STRING[] AS settings,
+	json_object_agg(COALESCE(ro.option, 'null'), ro.value)
+FROM
+	system.users AS u
+	LEFT JOIN system.role_options AS ro ON
+			ro.username = u.username
+GROUP BY
+	u.username, "isRole", settings;
+`
 }
 
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(username string, isRole bool, noLogin bool, rolValidUntil *time.Time) error,
+	fn func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
 ) error {
-	query := `
-SELECT
-	u.username,
-	"isRole",
-	EXISTS(
-		SELECT
-			option
-		FROM
-			system.role_options AS r
-		WHERE
-			r.username = u.username AND option = 'NOLOGIN'
-	)
-		AS nologin,
-	ro.value::TIMESTAMPTZ AS rolvaliduntil
-FROM
-	system.users AS u
-	LEFT JOIN system.role_options AS ro ON
-			ro.username = u.username
-			AND option = 'VALID UNTIL';
-`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+	query := forEachRoleQuery(ctx, p)
+
+	// For some reason, using the iterator API here causes privilege_builtins
+	// logic test fail in 3node-tenant config with 'txn already encountered an
+	// error' (because of the context cancellation), so we buffer all roles
+	// first.
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 		ctx, "read-roles", p.txn, query,
 	)
-
 	if err != nil {
 		return err
 	}
 
 	for _, row := range rows {
-		username := tree.MustBeDString(row[0])
+		usernameS := tree.MustBeDString(row[0])
 		isRole, ok := row[1].(*tree.DBool)
 		if !ok {
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
 		}
-		noLogin, ok := row[2].(*tree.DBool)
-		if !ok {
-			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[2].ResolvedType())
-		}
-		var rolValidUntil *time.Time
-		if rolValidUntilDatum, ok := row[3].(*tree.DTimestampTZ); ok {
-			rolValidUntil = &rolValidUntilDatum.Time
-		} else if row[3] != tree.DNull {
-			return errors.Errorf("rolValidUntil should be a timestamp or null value, found %s instead", row[3].ResolvedType())
-		}
 
-		if err := fn(string(username), bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
+		defaultSettings := row[2]
+		roleOptionsJSON, ok := row[3].(*tree.DJSON)
+		if !ok {
+			return errors.Errorf("roleOptionJson should be a JSON value, found %s instead", row[3].ResolvedType())
+		}
+		options := roleOptions{roleOptionsJSON}
+
+		// system tables already contain normalized usernames.
+		username := security.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
+		if err := fn(username, bool(*isRole), options, defaultSettings); err != nil {
 			return err
 		}
 	}
@@ -1903,41 +2611,55 @@ FROM
 }
 
 func forEachRoleMembership(
-	ctx context.Context, p *planner, fn func(role, member string, isAdmin bool) error,
-) error {
+	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
+) (retErr error) {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 		ctx, "read-members", p.txn, query,
 	)
 	if err != nil {
 		return err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		roleName := tree.MustBeDString(row[0])
 		memberName := tree.MustBeDString(row[1])
 		isAdmin := row[2].(*tree.DBool)
 
-		if err := fn(string(roleName), string(memberName), bool(*isAdmin)); err != nil {
+		// The names in the system tables are already normalized.
+		if err := fn(
+			security.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
+			security.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
+			bool(*isAdmin)); err != nil {
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
-func userCanSeeDatabase(
-	ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
-) bool {
-	return p.CheckAnyPrivilege(ctx, db) == nil
+func userCanSeeDescriptor(
+	ctx context.Context, p *planner, desc, parentDBDesc catalog.Descriptor, allowAdding bool,
+) (bool, error) {
+	if !descriptorIsVisible(desc, allowAdding) {
+		return false, nil
+	}
+
+	// TODO(richardjcai): We may possibly want to remove the ability to view
+	// the descriptor if they have any privilege on the descriptor and only
+	// allow the descriptor to be viewed if they have CONNECT on the DB. #59827.
+	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
+	// Users can see objects in the database if they have connect privilege.
+	if parentDBDesc != nil {
+		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilege.CONNECT) == nil
+	}
+	return canSeeDescriptor, nil
 }
 
-func userCanSeeTable(
-	ctx context.Context, p *planner, table sqlbase.TableDescriptor, allowAdding bool,
-) bool {
-	return tableIsVisible(table, allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
-}
-
-func tableIsVisible(table sqlbase.TableDescriptor, allowAdding bool) bool {
-	return table.GetState() == descpb.TableDescriptor_PUBLIC ||
-		(allowAdding && table.GetState() == descpb.TableDescriptor_ADD)
+func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
+	return desc.Public() || (allowAdding && desc.Adding())
 }

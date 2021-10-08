@@ -1,0 +1,18 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
+
+query TTTT
+SHOW REGIONS
+----
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
+us-east-1       {us-az1,us-az2,us-az3}  {}  {}
+
+statement ok
+CREATE DATABASE mr primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
+
+statement ok
+USE mr;
+CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER DATABASE mr DROP REGION "us-east-1"

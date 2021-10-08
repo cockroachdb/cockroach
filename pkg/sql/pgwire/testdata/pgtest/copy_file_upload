@@ -1,0 +1,27 @@
+# This file contains tests for file upload, which is not a feature
+# supported by postgres.
+
+# Regression for #53232. We previously panic'd if a file chunk matched
+# the null string setting.
+send
+Query {"String": "COPY \"crdb_internal\".\"nodelocal_file_upload\" FROM STDIN WITH destination = 'nodelocal://self/test/file0.csv'"}
+CopyData {"Data": "\\N\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+----
+
+# We expect an error here because file uploads aren't enabled in the
+# test server. This test is here to verify that there wasn't a panic.
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42601"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -15,13 +15,16 @@ import (
 	"text/template"
 )
 
-const defaultAggTmpl = "pkg/sql/colexec/default_agg_tmpl.go"
+const defaultAggTmpl = "pkg/sql/colexec/colexecagg/default_agg_tmpl.go"
 
 func genDefaultAgg(inputFileContents string, wr io.Writer) error {
 	addTuple := makeFunctionRegex("_ADD_TUPLE", 5)
-	s := addTuple.ReplaceAllString(inputFileContents, `{{template "addTuple"}}`)
+	s := addTuple.ReplaceAllString(inputFileContents, `{{template "addTuple" buildDict "HasSel" $5}}`)
 
-	tmpl, err := template.New("default_agg").Parse(s)
+	setResult := makeFunctionRegex("_SET_RESULT", 2)
+	s = setResult.ReplaceAllString(s, `{{template "setResult"}}`)
+
+	tmpl, err := template.New("default_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
@@ -31,5 +34,6 @@ func genDefaultAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerAggGenerator(genDefaultAgg, "default_agg.eg.go", defaultAggTmpl)
+	registerAggGenerator(
+		genDefaultAgg, "default_agg.eg.go", defaultAggTmpl, false /* genWindowVariant */)
 }

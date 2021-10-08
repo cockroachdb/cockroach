@@ -27,20 +27,20 @@ func TestBestGeomProjection(t *testing.T) {
 		{
 			"north pole",
 			s2.RectFromLatLng(s2.LatLngFromDegrees(75, 75)),
-			geoprojbase.Projections[3574].Proj4Text,
+			geoprojbase.MustProjection(3574).Proj4Text,
 		},
 		{
 			"south pole",
 			s2.RectFromLatLng(s2.LatLngFromDegrees(-75, -75)),
-			geoprojbase.Projections[3409].Proj4Text},
+			geoprojbase.MustProjection(3409).Proj4Text},
 		{
 			"utm 15 on top hemisphere",
 			s2.RectFromLatLng(s2.LatLngFromDegrees(15, 93)),
-			geoprojbase.Projections[32646].Proj4Text},
+			geoprojbase.MustProjection(32646).Proj4Text},
 		{
 			"utm -16 on bottom hemisphere",
 			s2.RectFromLatLng(s2.LatLngFromDegrees(-15, -111)),
-			geoprojbase.Projections[32712].Proj4Text,
+			geoprojbase.MustProjection(32712).Proj4Text,
 		},
 		{
 			"LAEA at equator bands (north half)",
@@ -75,12 +75,12 @@ func TestBestGeomProjection(t *testing.T) {
 		{
 			"UTM which should be 32V, but we return 31V as we do not handle UTM exceptions",
 			s2.RectFromLatLng(s2.LatLngFromDegrees(59.4136, 5.26)),
-			geoprojbase.Projections[32631].Proj4Text, // Should be 32632
+			geoprojbase.MustProjection(32631).Proj4Text, // Should be 32632
 		},
 		{
 			"wide example",
 			s2.RectFromCenterSize(s2.LatLngFromDegrees(0, 0), s2.LatLngFromDegrees(50, 50)),
-			geoprojbase.Projections[3857].Proj4Text,
+			geoprojbase.MustProjection(3857).Proj4Text,
 		},
 	}
 

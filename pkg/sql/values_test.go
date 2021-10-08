@@ -22,12 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -37,20 +41,29 @@ import (
 func makeTestPlanner() *planner {
 	// Initialize an Executorconfig sufficiently for the purposes of creating a
 	// planner.
+	settings := cluster.MakeTestingClusterSettings()
 	execCfg := ExecutorConfig{
+		Settings: settings,
 		NodeInfo: NodeInfo{
 			NodeID: base.TestingIDContainer,
 			ClusterID: func() uuid.UUID {
 				return uuid.MakeV4()
 			},
 		},
+		RootMemoryMonitor: mon.NewUnlimitedMonitor(context.Background(), "test", mon.MemoryResource, nil, nil, 0, nil),
+		CollectionFactory: descs.NewCollectionFactory(settings, nil, nil, nil),
 	}
 
 	// TODO(andrei): pass the cleanup along to the caller.
-	p, _ /* cleanup */ := newInternalPlanner(
-		"test", nil /* txn */, security.RootUser, &MemoryMetrics{}, &execCfg,
+	p, _ /* cleanup */ := NewInternalPlanner(
+		"test",
+		nil, /* txn */
+		security.RootUserName(),
+		&MemoryMetrics{},
+		&execCfg,
+		sessiondatapb.SessionData{},
 	)
-	return p
+	return p.(*planner)
 }
 
 func TestValues(t *testing.T) {

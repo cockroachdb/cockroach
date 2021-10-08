@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+var _ roachpb.InternalServer = Node(0)
 
 type Node time.Duration
 
@@ -58,6 +61,34 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 func (n Node) GossipSubscription(
 	_ *roachpb.GossipSubscriptionRequest, _ roachpb.Internal_GossipSubscriptionServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (n Node) Join(context.Context, *roachpb.JoinNodeRequest) (*roachpb.JoinNodeResponse, error) {
+	panic("unimplemented")
+}
+
+func (n Node) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
+func (n Node) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
+func (n Node) GetSpanConfigs(
+	_ context.Context, _ *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (n Node) UpdateSpanConfigs(
+	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
 	panic("unimplemented")
 }
 
@@ -107,6 +138,8 @@ type firstNErrorTransport struct {
 func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
+
+func (f *firstNErrorTransport) Release() {}
 
 func (f *firstNErrorTransport) SendNext(
 	_ context.Context, _ roachpb.BatchRequest,
@@ -256,10 +289,14 @@ func TestSplitHealthy(t *testing.T) {
 	for _, td := range testData {
 		t.Run("", func(t *testing.T) {
 			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
-			health := make(map[roachpb.ReplicaDescriptor]bool)
+			var health util.FastIntMap
 			for i, r := range td.in {
 				replicas[i] = r.replica
-				health[replicas[i]] = r.healthy
+				if r.healthy {
+					health.Set(i, healthHealthy)
+				} else {
+					health.Set(i, healthUnhealthy)
+				}
 			}
 			splitHealthy(replicas, health)
 			if !reflect.DeepEqual(replicas, td.out) {
@@ -316,7 +353,7 @@ func sendBatch(
 		Desc:  *desc,
 		Lease: roachpb.Lease{},
 	})
-	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, EvictionToken{}, false /* useReverseScan */)
+	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, rangecache.EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
 
 	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)

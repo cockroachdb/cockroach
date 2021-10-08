@@ -1,0 +1,208 @@
+{"Time":"2020-09-15T21:37:58.109487-04:00","Action":"output","Output":"go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic\n"}
+{"Time":"2020-09-15T21:37:58.111291-04:00","Action":"output","Output":"\n"}
+{"Time":"2020-09-15T21:37:58.111323-04:00","Action":"run","Test":"TestMeta"}
+{"Time":"2020-09-15T21:37:58.111334-04:00","Action":"output","Test":"TestMeta","Output":"=== RUN   TestMeta\n"}
+{"Time":"2020-09-15T21:37:58.111351-04:00","Action":"run","Test":"TestMeta/standard-000"}
+{"Time":"2020-09-15T21:37:58.11136-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"=== RUN   TestMeta/standard-000\n"}
+{"Time":"2020-09-15T21:37:58.111369-04:00","Action":"run","Test":"TestMeta/standard-001"}
+{"Time":"2020-09-15T21:37:58.111377-04:00","Action":"output","Test":"TestMeta/standard-001","Output":"=== RUN   TestMeta/standard-001\n"}
+{"Time":"2020-09-15T21:37:58.111385-04:00","Action":"run","Test":"TestMeta/standard-002"}
+{"Time":"2020-09-15T21:37:58.111393-04:00","Action":"output","Test":"TestMeta/standard-002","Output":"=== RUN   TestMeta/standard-002\n"}
+{"Time":"2020-09-15T21:37:58.111402-04:00","Action":"run","Test":"TestMeta/standard-003"}
+{"Time":"2020-09-15T21:37:58.11141-04:00","Action":"output","Test":"TestMeta/standard-003","Output":"=== RUN   TestMeta/standard-003\n"}
+{"Time":"2020-09-15T21:37:58.111418-04:00","Action":"run","Test":"TestMeta/standard-004"}
+{"Time":"2020-09-15T21:37:58.111426-04:00","Action":"output","Test":"TestMeta/standard-004","Output":"=== RUN   TestMeta/standard-004\n"}
+{"Time":"2020-09-15T21:37:58.111434-04:00","Action":"run","Test":"TestMeta/standard-005"}
+{"Time":"2020-09-15T21:37:58.111442-04:00","Action":"output","Test":"TestMeta/standard-005","Output":"=== RUN   TestMeta/standard-005\n"}
+{"Time":"2020-09-15T21:37:58.11145-04:00","Action":"run","Test":"TestMeta/standard-006"}
+{"Time":"2020-09-15T21:37:58.111458-04:00","Action":"output","Test":"TestMeta/standard-006","Output":"=== RUN   TestMeta/standard-006\n"}
+{"Time":"2020-09-15T21:37:58.111466-04:00","Action":"run","Test":"TestMeta/standard-007"}
+{"Time":"2020-09-15T21:37:58.111474-04:00","Action":"output","Test":"TestMeta/standard-007","Output":"=== RUN   TestMeta/standard-007\n"}
+{"Time":"2020-09-15T21:37:58.111482-04:00","Action":"run","Test":"TestMeta/standard-008"}
+{"Time":"2020-09-15T21:37:58.11149-04:00","Action":"output","Test":"TestMeta/standard-008","Output":"=== RUN   TestMeta/standard-008\n"}
+{"Time":"2020-09-15T21:37:58.111498-04:00","Action":"run","Test":"TestMeta/standard-009"}
+{"Time":"2020-09-15T21:37:58.111506-04:00","Action":"output","Test":"TestMeta/standard-009","Output":"=== RUN   TestMeta/standard-009\n"}
+{"Time":"2020-09-15T21:37:58.111514-04:00","Action":"run","Test":"TestMeta/standard-010"}
+{"Time":"2020-09-15T21:37:58.111522-04:00","Action":"output","Test":"TestMeta/standard-010","Output":"=== RUN   TestMeta/standard-010\n"}
+{"Time":"2020-09-15T21:37:58.11153-04:00","Action":"run","Test":"TestMeta/standard-011"}
+{"Time":"2020-09-15T21:37:58.111538-04:00","Action":"output","Test":"TestMeta/standard-011","Output":"=== RUN   TestMeta/standard-011\n"}
+{"Time":"2020-09-15T21:37:58.111546-04:00","Action":"run","Test":"TestMeta/standard-012"}
+{"Time":"2020-09-15T21:37:58.111554-04:00","Action":"output","Test":"TestMeta/standard-012","Output":"=== RUN   TestMeta/standard-012\n"}
+{"Time":"2020-09-15T21:37:58.111562-04:00","Action":"run","Test":"TestMeta/standard-013"}
+{"Time":"2020-09-15T21:37:58.11157-04:00","Action":"output","Test":"TestMeta/standard-013","Output":"=== RUN   TestMeta/standard-013\n"}
+{"Time":"2020-09-15T21:37:58.111579-04:00","Action":"run","Test":"TestMeta/standard-014"}
+{"Time":"2020-09-15T21:37:58.111586-04:00","Action":"output","Test":"TestMeta/standard-014","Output":"=== RUN   TestMeta/standard-014\n"}
+{"Time":"2020-09-15T21:37:58.111595-04:00","Action":"run","Test":"TestMeta/standard-015"}
+{"Time":"2020-09-15T21:37:58.111603-04:00","Action":"output","Test":"TestMeta/standard-015","Output":"=== RUN   TestMeta/standard-015\n"}
+{"Time":"2020-09-15T21:37:58.111621-04:00","Action":"run","Test":"TestMeta/standard-016"}
+{"Time":"2020-09-15T21:37:58.111627-04:00","Action":"output","Test":"TestMeta/standard-016","Output":"=== RUN   TestMeta/standard-016\n"}
+{"Time":"2020-09-15T21:37:58.111633-04:00","Action":"run","Test":"TestMeta/standard-017"}
+{"Time":"2020-09-15T21:37:58.111638-04:00","Action":"output","Test":"TestMeta/standard-017","Output":"=== RUN   TestMeta/standard-017\n"}
+{"Time":"2020-09-15T21:37:58.111644-04:00","Action":"run","Test":"TestMeta/standard-018"}
+{"Time":"2020-09-15T21:37:58.111649-04:00","Action":"output","Test":"TestMeta/standard-018","Output":"=== RUN   TestMeta/standard-018\n"}
+{"Time":"2020-09-15T21:37:58.111655-04:00","Action":"run","Test":"TestMeta/standard-019"}
+{"Time":"2020-09-15T21:37:58.11166-04:00","Action":"output","Test":"TestMeta/standard-019","Output":"=== RUN   TestMeta/standard-019\n"}
+{"Time":"2020-09-15T21:37:58.111665-04:00","Action":"run","Test":"TestMeta/random-000"}
+{"Time":"2020-09-15T21:37:58.111671-04:00","Action":"output","Test":"TestMeta/random-000","Output":"=== RUN   TestMeta/random-000\n"}
+{"Time":"2020-09-15T21:37:58.111676-04:00","Action":"run","Test":"TestMeta/random-001"}
+{"Time":"2020-09-15T21:37:58.111681-04:00","Action":"output","Test":"TestMeta/random-001","Output":"=== RUN   TestMeta/random-001\n"}
+{"Time":"2020-09-15T21:37:58.111687-04:00","Action":"run","Test":"TestMeta/random-002"}
+{"Time":"2020-09-15T21:37:58.111692-04:00","Action":"output","Test":"TestMeta/random-002","Output":"=== RUN   TestMeta/random-002\n"}
+{"Time":"2020-09-15T21:37:58.111698-04:00","Action":"run","Test":"TestMeta/random-003"}
+{"Time":"2020-09-15T21:37:58.111705-04:00","Action":"output","Test":"TestMeta/random-003","Output":"=== RUN   TestMeta/random-003\n"}
+{"Time":"2020-09-15T21:37:58.111711-04:00","Action":"run","Test":"TestMeta/random-004"}
+{"Time":"2020-09-15T21:37:58.111717-04:00","Action":"output","Test":"TestMeta/random-004","Output":"=== RUN   TestMeta/random-004\n"}
+{"Time":"2020-09-15T21:37:58.111722-04:00","Action":"run","Test":"TestMeta/random-005"}
+{"Time":"2020-09-15T21:37:58.111727-04:00","Action":"output","Test":"TestMeta/random-005","Output":"=== RUN   TestMeta/random-005\n"}
+{"Time":"2020-09-15T21:37:58.111733-04:00","Action":"run","Test":"TestMeta/random-006"}
+{"Time":"2020-09-15T21:37:58.111738-04:00","Action":"output","Test":"TestMeta/random-006","Output":"=== RUN   TestMeta/random-006\n"}
+{"Time":"2020-09-15T21:37:58.111744-04:00","Action":"run","Test":"TestMeta/random-007"}
+{"Time":"2020-09-15T21:37:58.111749-04:00","Action":"output","Test":"TestMeta/random-007","Output":"=== RUN   TestMeta/random-007\n"}
+{"Time":"2020-09-15T21:37:58.111757-04:00","Action":"run","Test":"TestMeta/random-008"}
+{"Time":"2020-09-15T21:37:58.111765-04:00","Action":"output","Test":"TestMeta/random-008","Output":"=== RUN   TestMeta/random-008\n"}
+{"Time":"2020-09-15T21:37:58.111771-04:00","Action":"run","Test":"TestMeta/random-009"}
+{"Time":"2020-09-15T21:37:58.111776-04:00","Action":"output","Test":"TestMeta/random-009","Output":"=== RUN   TestMeta/random-009\n"}
+{"Time":"2020-09-15T21:37:58.111782-04:00","Action":"run","Test":"TestMeta/random-010"}
+{"Time":"2020-09-15T21:37:58.111787-04:00","Action":"output","Test":"TestMeta/random-010","Output":"=== RUN   TestMeta/random-010\n"}
+{"Time":"2020-09-15T21:37:58.111792-04:00","Action":"run","Test":"TestMeta/random-011"}
+{"Time":"2020-09-15T21:37:58.111797-04:00","Action":"output","Test":"TestMeta/random-011","Output":"=== RUN   TestMeta/random-011\n"}
+{"Time":"2020-09-15T21:37:58.111803-04:00","Action":"run","Test":"TestMeta/random-012"}
+{"Time":"2020-09-15T21:37:58.111808-04:00","Action":"output","Test":"TestMeta/random-012","Output":"=== RUN   TestMeta/random-012\n"}
+{"Time":"2020-09-15T21:37:58.111814-04:00","Action":"run","Test":"TestMeta/random-013"}
+{"Time":"2020-09-15T21:37:58.111819-04:00","Action":"output","Test":"TestMeta/random-013","Output":"=== RUN   TestMeta/random-013\n"}
+{"Time":"2020-09-15T21:37:58.111824-04:00","Action":"run","Test":"TestMeta/random-014"}
+{"Time":"2020-09-15T21:37:58.111841-04:00","Action":"output","Test":"TestMeta/random-014","Output":"=== RUN   TestMeta/random-014\n"}
+{"Time":"2020-09-15T21:37:58.111847-04:00","Action":"run","Test":"TestMeta/random-015"}
+{"Time":"2020-09-15T21:37:58.111852-04:00","Action":"output","Test":"TestMeta/random-015","Output":"=== RUN   TestMeta/random-015\n"}
+{"Time":"2020-09-15T21:37:58.111858-04:00","Action":"run","Test":"TestMeta/random-016"}
+{"Time":"2020-09-15T21:37:58.111863-04:00","Action":"output","Test":"TestMeta/random-016","Output":"=== RUN   TestMeta/random-016\n"}
+{"Time":"2020-09-15T21:37:58.111871-04:00","Action":"run","Test":"TestMeta/random-017"}
+{"Time":"2020-09-15T21:37:58.111876-04:00","Action":"output","Test":"TestMeta/random-017","Output":"=== RUN   TestMeta/random-017\n"}
+{"Time":"2020-09-15T21:37:58.111882-04:00","Action":"run","Test":"TestMeta/random-018"}
+{"Time":"2020-09-15T21:37:58.111887-04:00","Action":"output","Test":"TestMeta/random-018","Output":"=== RUN   TestMeta/random-018\n"}
+{"Time":"2020-09-15T21:37:58.111893-04:00","Action":"run","Test":"TestMeta/random-019"}
+{"Time":"2020-09-15T21:37:58.111898-04:00","Action":"output","Test":"TestMeta/random-019","Output":"=== RUN   TestMeta/random-019\n"}
+{"Time":"2020-09-15T21:37:58.112013-04:00","Action":"output","Test":"TestMeta","Output":"--- FAIL: TestMeta (1.15s)\n"}
+{"Time":"2020-09-15T21:37:58.112035-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"    --- FAIL: TestMeta/standard-000 (0.03s)\n"}
+{"Time":"2020-09-15T21:37:58.11205-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"        meta_test.go:217: \n"}
+{"Time":"2020-09-15T21:37:58.11206-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== SEED =====\n"}
+{"Time":"2020-09-15T21:37:58.112068-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            1600209371838097000\n"}
+{"Time":"2020-09-15T21:37:58.112077-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== ERR =====\n"}
+{"Time":"2020-09-15T21:37:58.112085-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            exit status 2\n"}
+{"Time":"2020-09-15T21:37:58.112094-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== OUT =====\n"}
+{"Time":"2020-09-15T21:37:58.112103-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            --- FAIL: TestMeta (0.01s)\n"}
+{"Time":"2020-09-15T21:37:58.112119-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            panic: induced panic [recovered]\n"}
+{"Time":"2020-09-15T21:37:58.112128-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \tpanic: induced panic\n"}
+{"Time":"2020-09-15T21:37:58.112137-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.112145-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            goroutine 19 [running]:\n"}
+{"Time":"2020-09-15T21:37:58.112154-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            testing.tRunner.func1(0xc000132400)\n"}
+{"Time":"2020-09-15T21:37:58.112162-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/usr/local/go/src/testing/testing.go:874 +0x3a3\n"}
+{"Time":"2020-09-15T21:37:58.112181-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            panic(0x45e2b80, 0x47ce350)\n"}
+{"Time":"2020-09-15T21:37:58.112191-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/usr/local/go/src/runtime/panic.go:679 +0x1b2\n"}
+{"Time":"2020-09-15T21:37:58.1122-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble.Open(0xc0000b90e0, 0x29, 0xc0000f9dc0, 0x0, 0x0, 0x0)\n"}
+{"Time":"2020-09-15T21:37:58.112215-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/open.go:54 +0x163\n"}
+{"Time":"2020-09-15T21:37:58.11223-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble/internal/metamorphic.(*test).init.func12(0xc0001e86c0, 0xc000127658)\n"}
+{"Time":"2020-09-15T21:37:58.112268-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/internal/metamorphic/test.go:121 +0x59\n"}
+{"Time":"2020-09-15T21:37:58.112289-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble/internal/metamorphic.withRetries(0xc000127770, 0xc0001e88c0, 0xc0001e85a0)\n"}
+{"Time":"2020-09-15T21:37:58.112298-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/internal/metamorphic/retryable.go:18 +0x27\n"}
+{"Time":"2020-09-15T21:37:58.112307-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble/internal/metamorphic.(*test).init(0xc0000dcdc0, 0xc0001f8240, 0xc0000b90e0, 0x29, 0xc0001b00e0, 0x0, 0x0)\n"}
+{"Time":"2020-09-15T21:37:58.112316-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/internal/metamorphic/test.go:120 +0x5e9\n"}
+{"Time":"2020-09-15T21:37:58.112325-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble/internal/metamorphic.testMetaRun(0xc000132400, 0x7ffeefbff9b2, 0x24)\n"}
+{"Time":"2020-09-15T21:37:58.112334-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/internal/metamorphic/meta_test.go:120 +0x8a3\n"}
+{"Time":"2020-09-15T21:37:58.112349-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            github.com/cockroachdb/pebble/internal/metamorphic.TestMeta(0xc000132400)\n"}
+{"Time":"2020-09-15T21:37:58.112359-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/Users/jbowens/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/pebble/internal/metamorphic/meta_test.go:163 +0x128b\n"}
+{"Time":"2020-09-15T21:37:58.112368-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            testing.tRunner(0xc000132400, 0x4732930)\n"}
+{"Time":"2020-09-15T21:37:58.112377-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/usr/local/go/src/testing/testing.go:909 +0xc9\n"}
+{"Time":"2020-09-15T21:37:58.112385-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            created by testing.(*T).Run\n"}
+{"Time":"2020-09-15T21:37:58.112394-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \t/usr/local/go/src/testing/testing.go:960 +0x350\n"}
+{"Time":"2020-09-15T21:37:58.112402-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.112411-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== OPTIONS =====\n"}
+{"Time":"2020-09-15T21:37:58.11242-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            [Version]\n"}
+{"Time":"2020-09-15T21:37:58.112428-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              pebble_version=0.1\n"}
+{"Time":"2020-09-15T21:37:58.112437-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.112452-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            [Options]\n"}
+{"Time":"2020-09-15T21:37:58.112462-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              bytes_per_sync=524288\n"}
+{"Time":"2020-09-15T21:37:58.112471-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              cache_size=8388608\n"}
+{"Time":"2020-09-15T21:37:58.112498-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              cleaner=delete\n"}
+{"Time":"2020-09-15T21:37:58.112514-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              comparer=leveldb.BytewiseComparator\n"}
+{"Time":"2020-09-15T21:37:58.112521-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              delete_range_flush_delay=0s\n"}
+{"Time":"2020-09-15T21:37:58.112526-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              disable_wal=false\n"}
+{"Time":"2020-09-15T21:37:58.112532-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              flush_split_bytes=0\n"}
+{"Time":"2020-09-15T21:37:58.112562-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              l0_compaction_concurrency=10\n"}
+{"Time":"2020-09-15T21:37:58.112569-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              l0_compaction_threshold=4\n"}
+{"Time":"2020-09-15T21:37:58.112576-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              l0_stop_writes_threshold=12\n"}
+{"Time":"2020-09-15T21:37:58.112583-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              l0_sublevel_compactions=false\n"}
+{"Time":"2020-09-15T21:37:58.112589-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              lbase_max_bytes=67108864\n"}
+{"Time":"2020-09-15T21:37:58.112596-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              max_concurrent_compactions=1\n"}
+{"Time":"2020-09-15T21:37:58.112603-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              max_manifest_file_size=134217728\n"}
+{"Time":"2020-09-15T21:37:58.11261-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              max_open_files=1000\n"}
+{"Time":"2020-09-15T21:37:58.112617-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              mem_table_size=4194304\n"}
+{"Time":"2020-09-15T21:37:58.112624-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              mem_table_stop_writes_threshold=2\n"}
+{"Time":"2020-09-15T21:37:58.11263-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              min_compaction_rate=4194304\n"}
+{"Time":"2020-09-15T21:37:58.112637-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              min_flush_rate=1048576\n"}
+{"Time":"2020-09-15T21:37:58.112644-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              merger=pebble.concatenate\n"}
+{"Time":"2020-09-15T21:37:58.112655-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              table_property_collectors=[]\n"}
+{"Time":"2020-09-15T21:37:58.112662-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              wal_dir=\n"}
+{"Time":"2020-09-15T21:37:58.11267-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.112676-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            [Level \"0\"]\n"}
+{"Time":"2020-09-15T21:37:58.112683-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              block_restart_interval=16\n"}
+{"Time":"2020-09-15T21:37:58.11269-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              block_size=4096\n"}
+{"Time":"2020-09-15T21:37:58.112697-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              compression=Snappy\n"}
+{"Time":"2020-09-15T21:37:58.112706-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              filter_policy=rocksdb.BuiltinBloomFilter\n"}
+{"Time":"2020-09-15T21:37:58.112718-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              filter_type=table\n"}
+{"Time":"2020-09-15T21:37:58.112725-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              index_block_size=4096\n"}
+{"Time":"2020-09-15T21:37:58.112732-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"              target_file_size=2097152\n"}
+{"Time":"2020-09-15T21:37:58.112751-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.112759-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== OPS =====\n"}
+{"Time":"2020-09-15T21:37:58.112766-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            Init(59 /* batches */, 59 /* iters */, 60 /* snapshots */)\n"}
+{"Time":"2020-09-15T21:37:58.112773-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"pzvxhpko\", \"cqaojarzmh\")\n"}
+{"Time":"2020-09-15T21:37:58.11278-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.DeleteRange(\"pzvxhpko\", \"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112787-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"mibwfbdyqvk\", \"iucxbdbc\")\n"}
+{"Time":"2020-09-15T21:37:58.112794-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"mibwfbdyqvk\", \"sknzkz\")\n"}
+{"Time":"2020-09-15T21:37:58.112801-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Get(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112808-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0 = db.NewIter(\"\", \"\")\n"}
+{"Time":"2020-09-15T21:37:58.112815-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"mibwfbdyqvk\", \"blylnjlncsxiocr\")\n"}
+{"Time":"2020-09-15T21:37:58.112822-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Merge(\"pzvxhpko\", \"ujiydnshzksgio\")\n"}
+{"Time":"2020-09-15T21:37:58.112833-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Delete(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.11284-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Prev()\n"}
+{"Time":"2020-09-15T21:37:58.112847-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekPrefixGE(\"mibwfbdyqvk\")\n"}
+{"Time":"2020-09-15T21:37:58.112854-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Merge(\"mibwfbdyqvk\", \"trfk\")\n"}
+{"Time":"2020-09-15T21:37:58.112861-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Delete(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112873-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.First()\n"}
+{"Time":"2020-09-15T21:37:58.11288-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Last()\n"}
+{"Time":"2020-09-15T21:37:58.112887-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.First()\n"}
+{"Time":"2020-09-15T21:37:58.112894-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekPrefixGE(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112901-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"dkmygg\", \"hsasxayifftoiqfbpd\")\n"}
+{"Time":"2020-09-15T21:37:58.112908-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"yvacb\", \"hgyaojskgqnl\")\n"}
+{"Time":"2020-09-15T21:37:58.112915-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Prev()\n"}
+{"Time":"2020-09-15T21:37:58.112922-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekGE(\"dkmygg\")\n"}
+{"Time":"2020-09-15T21:37:58.112929-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Next()\n"}
+{"Time":"2020-09-15T21:37:58.112936-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.First()\n"}
+{"Time":"2020-09-15T21:37:58.112942-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Next()\n"}
+{"Time":"2020-09-15T21:37:58.112949-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekLT(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112956-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekLT(\"mibwfbdyqvk\")\n"}
+{"Time":"2020-09-15T21:37:58.112975-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.Next()\n"}
+{"Time":"2020-09-15T21:37:58.112983-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Set(\"mibwfbdyqvk\", \"lfwwnguvbc\")\n"}
+{"Time":"2020-09-15T21:37:58.11299-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            iter0.SeekGE(\"pzvxhpko\")\n"}
+{"Time":"2020-09-15T21:37:58.112997-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Flush()\n"}
+{"Time":"2020-09-15T21:37:58.113003-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.DeleteRange(\"lqftab\", \"uxtpmryp\")\n"}
+{"Time":"2020-09-15T21:37:58.113011-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Get(\"fbbzgpdegqg\")\n"}
+{"Time":"2020-09-15T21:37:58.11302-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Get(\"ejsabwqsvgn\")\n"}
+{"Time":"2020-09-15T21:37:58.11303-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            snap59 = db.NewSnapshot()\n"}
+{"Time":"2020-09-15T21:37:58.113037-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.DeleteRange(\"bumfzaz\", \"dhdzvqmxavt\")\n"}
+{"Time":"2020-09-15T21:37:58.113044-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Merge(\"ndeylwxkkc\", \"tqtmv\")\n"}
+{"Time":"2020-09-15T21:37:58.113051-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            batch58 = db.NewIndexedBatch()\n"}
+{"Time":"2020-09-15T21:37:58.113058-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            snap59.Close()\n"}
+{"Time":"2020-09-15T21:37:58.113065-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            db.Close()\n"}
+{"Time":"2020-09-15T21:37:58.113072-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            \n"}
+{"Time":"2020-09-15T21:37:58.113079-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"            ===== HISTORY =====\n"}
+{"Time":"2020-09-15T21:37:58.113085-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"ERROR: exit status 1\n"}
+{"Time":"2020-09-15T21:37:58.113092-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"\n"}
+{"Time":"2020-09-15T21:37:58.113099-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"1 runs completed, 1 failures, over 4s\n"}
+{"Time":"2020-09-15T21:37:58.11311-04:00","Action":"output","Test":"TestMeta/standard-000","Output":"context canceled\n"}
+{"Time":"2020-09-15T21:37:58.113117-04:00","Action":"fail","Test":"TestMeta/standard-000","Elapsed":0.03}
+{"Time":"2020-09-15T21:37:58.113217-04:00","Action":"fail","Test":"TestMeta","Elapsed":1.15}
+{"Time":"2020-09-15T21:37:58.113228-04:00","Action":"output","Output":"FAIL\n"}
+{"Time":"2020-09-15T21:37:58.113235-04:00","Action":"output","Output":"FAIL\tgithub.com/cockroachdb/pebble/internal/metamorphic\t3.558s\n"}
+{"Time":"2020-09-15T21:37:58.113242-04:00","Action":"output","Output":"FAIL\n"}
+{"Time":"2020-09-15T21:37:58.113252-04:00","Action":"fail","Elapsed":0.004}

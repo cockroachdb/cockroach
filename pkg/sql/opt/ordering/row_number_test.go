@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -72,18 +73,19 @@ func TestOrdinalityProvided(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext(nil /* st */)
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.NewTestingEvalContext(st)
 			var f norm.Factory
 			f.Init(evalCtx, nil /* catalog */)
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{
-					Ordering: physical.ParseOrdering(tc.input),
+					Ordering: props.ParseOrdering(tc.input),
 				},
 			}
 			r := f.Memo().MemoizeOrdinality(input, &memo.OrdinalityPrivate{ColID: 10})
 			r.Relational().FuncDeps = tc.fds
-			req := physical.ParseOrderingChoice(tc.required)
+			req := props.ParseOrderingChoice(tc.required)
 			res := ordinalityBuildProvided(r, &req).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)

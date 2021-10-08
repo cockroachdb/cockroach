@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "execstats",
+    srcs = ["traceanalyzer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/execinfrapb",
+        "//pkg/util",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "execstats_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "traceanalyzer_test.go",
+        "utils_test.go",
+    ],
+    embed = [":execstats"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/optional",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,2 @@
+set_csetting_stmt ::=
+	'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value

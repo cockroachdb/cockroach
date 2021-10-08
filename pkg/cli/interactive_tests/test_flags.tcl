@@ -80,15 +80,22 @@ eexpect {Failed running "start"}
 end_test
 
 start_test "Check that demo start-up flags are reported to telemetry"
-send "$argv demo --empty --echo-sql --logtostderr=WARNING\r"
+send "$argv demo --no-example-database --echo-sql --logtostderr=WARNING\r"
 eexpect "defaultdb>"
 send "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'cli.demo.%' ORDER BY 1;\r"
 eexpect feature_name
 eexpect "cli.demo.explicitflags.echo-sql"
-eexpect "cli.demo.explicitflags.empty"
 eexpect "cli.demo.explicitflags.logtostderr"
+eexpect "cli.demo.explicitflags.no-example-database"
 eexpect "cli.demo.runs"
 eexpect "defaultdb>"
+interrupt
+eexpect ":/# "
+end_test
+
+start_test "Check that locality flags without a region tier warn"
+send "$argv start-single-node --insecure --locality=data-center=us-east,zone=a\r"
+eexpect "WARNING: The --locality flag does not contain a"
 interrupt
 eexpect ":/# "
 end_test
@@ -117,6 +124,18 @@ eexpect "defaultdb>"
 interrupt
 eexpect ":/# "
 end_test
+
+start_test "Check that an invalid URL in the env var produces a reasonable error"
+send "export COCKROACH_URL=invalid_url;\r"
+eexpect ":/# "
+send "$argv sql\r"
+eexpect "ERROR"
+eexpect "setting --url from COCKROACH_URL"
+eexpect "invalid argument"
+eexpect "unrecognized URL scheme"
+eexpect ":/# "
+end_test
+
 
 stop_server $argv
 

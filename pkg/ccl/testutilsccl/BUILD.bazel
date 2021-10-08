@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testutilsccl",
+    srcs = ["alter_primary_key.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/sqltestutils",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/util",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -13,6 +13,7 @@ package kvserver_test
 import (
 	"context"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,21 +22,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -86,11 +92,20 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		},
-	)
+	const numNodes = 5
+	args := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: make(map[int]base.TestServerArgs, numNodes),
+	}
+	for i := 0; i < numNodes; i++ {
+		// Disable closed timestamps as this test was designed assuming no closed
+		// timestamps would get propagated.
+		settings := cluster.MakeTestingClusterSettings()
+		closedts.TargetDuration.Override(ctx, &settings.SV, 24*time.Hour)
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+		args.ServerArgsPerNode[i] = base.TestServerArgs{Settings: settings}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(ctx)
 
 	ts := tc.Servers[0]
@@ -104,7 +119,8 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Split the range so that the RHS uses epoch-based leases.
 	startKey := []byte("a")
 	tc.SplitRangeOrFatal(t, startKey)
-	tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+	tc.AddNonVotersOrFatal(t, startKey, tc.Target(3), tc.Target(4))
 	if pErr := tc.WaitForVoters(startKey, tc.Target(1), tc.Target(2)); pErr != nil {
 		t.Fatalf("Unexpected error waiting for replication: %v", pErr)
 	}
@@ -117,13 +133,12 @@ func TestReplicaRangefeed(t *testing.T) {
 	if _, pErr := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
+	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9, 9, 9})
 
-	replNum := 3
-	streams := make([]*testStream, replNum)
-	streamErrC := make(chan *roachpb.Error, replNum)
+	streams := make([]*testStream, numNodes)
+	streamErrC := make(chan *roachpb.Error, numNodes)
 	rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
-	for i := 0; i < replNum; i++ {
+	for i := 0; i < numNodes; i++ {
 		stream := newTestStream()
 		streams[i] = stream
 		ts := tc.Servers[i]
@@ -140,7 +155,6 @@ func TestReplicaRangefeed(t *testing.T) {
 				Span:     rangefeedSpan,
 				WithDiff: true,
 			}
-			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
 			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}(i)
@@ -148,7 +162,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	checkForExpEvents := func(expEvents []*roachpb.RangeFeedEvent) {
 		t.Helper()
-		for i, stream := range streams {
+		for _, stream := range streams {
 			var events []*roachpb.RangeFeedEvent
 			testutils.SucceedsSoon(t, func() error {
 				if len(streamErrC) > 0 {
@@ -157,6 +171,15 @@ func TestReplicaRangefeed(t *testing.T) {
 				}
 
 				events = stream.Events()
+				// Filter out checkpoints. Those are not deterministic; they can come at any time.
+				var filteredEvents []*roachpb.RangeFeedEvent
+				for _, e := range events {
+					if e.Checkpoint != nil {
+						continue
+					}
+					filteredEvents = append(filteredEvents, e)
+				}
+				events = filteredEvents
 				if len(events) < len(expEvents) {
 					return errors.Errorf("too few events: %v", events)
 				}
@@ -166,9 +189,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			if len(streamErrC) > 0 {
 				t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 			}
-			if !reflect.DeepEqual(events, expEvents) {
-				t.Fatalf("incorrect events on stream %d, found %v, want %v", i, events, expEvents)
-			}
+			require.Equal(t, expEvents, events)
 		}
 	}
 
@@ -179,10 +200,6 @@ func TestReplicaRangefeed(t *testing.T) {
 	expEvents := []*roachpb.RangeFeedEvent{
 		{Val: &roachpb.RangeFeedValue{
 			Key: roachpb.Key("b"), Value: expVal1,
-		}},
-		{Checkpoint: &roachpb.RangeFeedCheckpoint{
-			Span:       rangefeedSpan,
-			ResolvedTS: hlc.Timestamp{},
 		}},
 	}
 	checkForExpEvents(expEvents)
@@ -203,7 +220,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Insert a second key transactionally.
 	ts3 := initTime.Add(0, 3)
 	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts3)
+		if err := txn.SetFixedTimestamp(ctx, ts3); err != nil {
+			return err
+		}
 		return txn.Put(ctx, roachpb.Key("m"), []byte("val3"))
 	}); err != nil {
 		t.Fatal(err)
@@ -223,7 +242,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Update the originally incremented key transactionally.
 	ts5 := initTime.Add(0, 5)
 	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts5)
+		if err := txn.SetFixedTimestamp(ctx, ts5); err != nil {
+			return err
+		}
 		_, err := txn.Inc(ctx, incArgs.Key, 7)
 		return err
 	}); err != nil {
@@ -295,7 +316,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < replNum; i++ {
+		for i := 0; i < numNodes; i++ {
 			ts := tc.Servers[i]
 			store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 			if pErr != nil {
@@ -327,24 +348,30 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	store, _ := createTestStore(t, stopper)
+	ctx := context.Background()
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	_, rdesc, err := s.ScratchRangeWithExpirationLeaseEx()
+	require.NoError(t, err)
 
 	// Establish a rangefeed on the replica we plan to remove.
 	stream := newTestStream()
 	req := roachpb.RangeFeedRequest{
 		Header: roachpb.Header{
-			RangeID: store.LookupReplica(roachpb.RKey("a")).RangeID,
+			RangeID: store.LookupReplica(rdesc.StartKey).RangeID,
 		},
-		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+		Span: roachpb.Span{Key: rdesc.StartKey.AsRawKey(), EndKey: rdesc.EndKey.AsRawKey()},
 	}
 
 	// Cancel the stream's context so that RangeFeed would return
 	// immediately even if it didn't return the correct error.
 	stream.Cancel()
 
-	kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+	kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
 	pErr := store.RangeFeed(&req, stream)
 	const exp = "expiration-based leases are incompatible with rangefeeds"
 	if !testutils.IsPError(pErr, exp) {
@@ -375,7 +402,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		tc.SplitRangeOrFatal(t, startKey)
-		tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 		rangeID := store.LookupReplica(startKey).RangeID
 
 		// Write to the RHS of the split and wait for all replicas to process it.
@@ -482,7 +509,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Remove the replica from the range.
-		tc.RemoveReplicasOrFatal(t, startKey, tc.Target(removeStore))
+		tc.RemoveVotersOrFatal(t, startKey, tc.Target(removeStore))
 
 		// Check the error.
 		pErr := <-streamErrC
@@ -729,7 +756,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				},
 				Span: rangefeedSpan,
 			}
-			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+			kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
 			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
@@ -739,7 +766,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
-		kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, false)
+		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
 		// Perform a write on the range.
 		writeKey := encoding.EncodeStringAscending(keys.SystemSQLCodec.TablePrefix(55), "c")
@@ -762,8 +789,9 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, _, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -866,103 +894,159 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	rangeFeedCancel()
 }
 
-// TestReplicaRangefeedNudgeSlowClosedTimestamp tests that rangefeed detects
-// that its closed timestamp updates have stalled and requests new information
-// from its Range's leaseholder. This is a regression test for #35142.
-func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
+// Test that a rangefeed registration receives checkpoints even if the lease
+// expires at some point. In other words, test that the rangefeed forces the
+// range to maintain a lease (i.e. renew the lease when the old one expires). In
+// particular, this test orchestrates a particularly tricky scenario - the
+// current lease expiring and the replica with the rangefeed registration not
+// being the Raft leader. In this case, the leader replica needs to acquire the
+// lease, and it does so because of a read performed by
+// r.ensureClosedTimestampStarted().
+func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	var scratchRangeID int64 // accessed atomically
+	// nudgeSeen will be set if a request filter sees the signature of the
+	// rangefeed nudger, as proof that the expected mechanism kicked in.
+	var nudgeSeen int64 // accessed atomically
+	// At some point, the test will require full control over the requests
+	// evaluating on the scratch range.
+	var rejectExtraneousRequests int64 // accessed atomically
+
+	cargs := aggressiveResolvedTimestampClusterArgs
+	cargs.ReplicationMode = base.ReplicationManual
+	manualClock := hlc.NewHybridManualClock()
+	cargs.ServerArgs = base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manualClock.UnixNano,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+					// Once reject is set, the test wants full control over the requests
+					// evaluating on the scratch range. On that range, we'll reject
+					// everything that's not triggered by the test because we want to only
+					// allow the rangefeed nudging mechanism to trigger a lease
+					// acquisition (which it does through a LeaseInfoRequests). Allowing
+					// other randos to trigger a lease acquisition would make the test
+					// inconclusive.
+					reject := atomic.LoadInt64(&rejectExtraneousRequests)
+					if reject == 0 {
+						return nil
+					}
+					scratch := atomic.LoadInt64(&scratchRangeID)
+					if roachpb.RangeID(scratch) != ba.RangeID {
+						return nil
+					}
+					if ba.IsSingleLeaseInfoRequest() {
+						atomic.StoreInt64(&nudgeSeen, 1)
+						return nil
+					}
+					nudged := atomic.LoadInt64(&nudgeSeen)
+					if ba.IsLeaseRequest() && (nudged == 1) {
+						return nil
+					}
+					log.Infof(ctx, "test rejecting request: %s", ba)
+					return roachpb.NewErrorf("test injected error")
+				},
+			},
+		},
+	}
+	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(db)
+	scratchKey := tc.ScratchRange(t)
+	// Add a replica; we're going to move the lease to it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	// While we're here, drop the target duration. This was set to
-	// testingTargetDuration above, but this is higher then it needs to be now
-	// that cluster and schema setup is complete.
+	// Drop the target closedts duration in order to speed up the rangefeed
+	// "nudging" once the range loses its lease.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
 
-	// Make sure all the nodes have gotten the rangefeed enabled setting from
-	// gossip, so that they will immediately be able to accept RangeFeeds. The
-	// target_duration one is just to speed up the test, we don't care if it has
-	// propagated everywhere yet.
+	n1 := tc.Server(0)
+	n2 := tc.Server(1)
+	n2Target := tc.Target(1)
+	ts1 := n1.Clock().Now()
+	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
+	defer rangeFeedCancel()
+	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
+	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedErrC := make(chan error, 1)
+	go func() {
+		span := roachpb.Span{
+			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
+		}
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+	}()
+
+	// Wait for a checkpoint above ts.
+	waitForCheckpoint := func(ts hlc.Timestamp) {
+		t.Helper()
+		checkpointed := false
+		timeout := time.After(60 * time.Second)
+		for !checkpointed {
+			select {
+			case event := <-rangeFeedCh:
+				if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
+					checkpointed = true
+				}
+			case err := <-rangeFeedErrC:
+				t.Fatal(err)
+			case <-timeout:
+				t.Fatal("timed out waiting for checkpoint")
+			}
+		}
+	}
+	// Wait for a RangeFeed checkpoint after the RangeFeed initial scan time (ts1)
+	// to make sure everything is set up. We intentionally don't care about the
+	// spans in the checkpoints, just verifying that something has made it past
+	// the initial scan and is running.
+	waitForCheckpoint(ts1)
+
+	// Move the lease from n1 to n2 in order for the Raft leadership to move with
+	// it.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
 	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < tc.NumServers(); i++ {
-			var enabled bool
-			if err := tc.ServerConn(i).QueryRow(
-				`SHOW CLUSTER SETTING kv.rangefeed.enabled`,
-			).Scan(&enabled); err != nil {
-				return err
-			}
-			if !enabled {
-				return errors.Errorf(`waiting for rangefeed to be enabled on node %d`, i)
-			}
+		leader := tc.GetRaftLeader(t, desc.StartKey).NodeID()
+		if tc.Target(1).NodeID != leader {
+			return errors.Errorf("leader still on n%d", leader)
 		}
 		return nil
 	})
 
-	ts1 := tc.Server(0).Clock().Now()
-	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
-	defer rangeFeedCancel()
-	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
-	rangeFeedErrC := make(chan error, len(repls))
-	for i := range repls {
-		ds := tc.Server(i).DistSenderI().(*kvcoord.DistSender)
-		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
-		rangeFeedChs[i] = rangeFeedCh
-		go func() {
-			span := roachpb.Span{
-				Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
-			}
-			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
-		}()
-	}
+	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
+	// eligible to acquire a new lease.
+	log.Infof(ctx, "test expiring lease")
+	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl.Self()
+	require.True(t, ok)
+	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
+	atomic.StoreInt64(&rejectExtraneousRequests, 1)
+	// Ask another node to increment n2's liveness record.
+	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
+	resumeHeartbeats()
 
-	// Wait for a RangeFeed checkpoint on each RangeFeed after the RangeFeed
-	// initial scan time (which is the timestamp passed in the request) to make
-	// sure everything is set up. We intentionally don't care about the spans in
-	// the checkpoints, just verifying that something has made it past the
-	// initial scan and is running.
-	waitForCheckpoint := func(ts hlc.Timestamp) {
-		t.Helper()
-		for _, rangeFeedCh := range rangeFeedChs {
-			checkpointed := false
-			for !checkpointed {
-				select {
-				case event := <-rangeFeedCh:
-					if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
-						checkpointed = true
-					}
-				case err := <-rangeFeedErrC:
-					t.Fatal(err)
-				}
-			}
-		}
-	}
-	waitForCheckpoint(ts1)
-
-	// Clear the closed timestamp storage on each server. This simulates the case
-	// where a closed timestamp message is lost or a node restarts. To recover,
-	// the servers will need to request an update from the leaseholder.
-	for i := 0; i < tc.NumServers(); i++ {
-		stores := tc.Server(i).GetStores().(*kvserver.Stores)
-		err := stores.VisitStores(func(s *kvserver.Store) error {
-			s.ClearClosedTimestampStorage()
-			return nil
-		})
-		require.NoError(t, err)
-	}
-
-	// Wait for another RangeFeed checkpoint after the store was cleared. Without
-	// RangeFeed nudging closed timestamps, this doesn't happen on its own. Again,
-	// we intentionally don't care about the spans in the checkpoints, just
-	// verifying that something has made it past the cleared time.
-	ts2 := tc.Server(0).Clock().Now()
+	// Wait for another RangeFeed checkpoint after the lease expired.
+	log.Infof(ctx, "test waiting for another checkpoint")
+	ts2 := n1.Clock().Now()
 	waitForCheckpoint(ts2)
+	nudged := atomic.LoadInt64(&nudgeSeen)
+	require.Equal(t, int64(1), nudged)
 
-	// Make sure the RangeFeed hasn't errored yet.
+	// Check that n2 renewed its lease, like the test intended.
+	li, _, err := tc.FindRangeLeaseEx(ctx, desc, &n2Target)
+	require.NoError(t, err)
+	require.True(t, li.Current().OwnedBy(n2.GetFirstStoreID()))
+	require.Equal(t, int64(2), li.Current().Epoch)
+
+	// Make sure the RangeFeed hasn't errored.
 	select {
 	case err := <-rangeFeedErrC:
 		t.Fatal(err)
@@ -970,4 +1054,164 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	}
 	// Now cancel it and wait for it to shut down.
 	rangeFeedCancel()
+}
+
+// Test that a new rangefeed that initially times out trying to ensure
+// a lease is created on its targeted range will retry.
+func TestNewRangefeedForceLeaseRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var scratchRangeID int64 // accessed atomically
+	// nudgeSeen will be set if a request filter sees the signature of the
+	// rangefeed nudger, as proof that the expected mechanism kicked in.
+	var nudgeSeen int64 // accessed atomically
+	// At some point, the test will require full control over the requests
+	// evaluating on the scratch range.
+	var rejectExtraneousRequests int64 // accessed atomically
+
+	var timeoutSimulated bool
+
+	cargs := aggressiveResolvedTimestampClusterArgs
+	cargs.ReplicationMode = base.ReplicationManual
+	manualClock := hlc.NewHybridManualClock()
+	cargs.ServerArgs = base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manualClock.UnixNano,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+
+					// Once reject is set, the test wants full control over the requests
+					// evaluating on the scratch range. On that range, we'll reject
+					// everything that's not triggered by the test because we want to only
+					// allow the rangefeed nudging mechanism to trigger a lease
+					// acquisition (which it does through a LeaseInfoRequests). Allowing
+					// other randos to trigger a lease acquisition would make the test
+					// inconclusive.
+					reject := atomic.LoadInt64(&rejectExtraneousRequests)
+					if reject == 0 {
+						return nil
+					}
+					scratch := atomic.LoadInt64(&scratchRangeID)
+					if roachpb.RangeID(scratch) != ba.RangeID {
+						return nil
+					}
+					if ba.IsSingleLeaseInfoRequest() {
+						atomic.StoreInt64(&nudgeSeen, 1)
+						if !timeoutSimulated {
+							mockTimeout := contextutil.RunWithTimeout(ctx, "test", 0,
+								func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() })
+							timeoutSimulated = true
+							return roachpb.NewError(mockTimeout)
+						}
+						log.Infof(ctx, "lease succeeds this time")
+						return nil
+					}
+					nudged := atomic.LoadInt64(&nudgeSeen)
+					if ba.IsLeaseRequest() && (nudged == 1) {
+						return nil
+					}
+					log.Infof(ctx, "test rejecting request: %s", ba)
+					return roachpb.NewErrorf("test injected error")
+				},
+			},
+		},
+	}
+	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	// Add a replica; we're going to move the lease to it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	n1 := tc.Server(0)
+	n2 := tc.Server(1)
+	n2Target := tc.Target(1)
+	ts1 := n1.Clock().Now()
+	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
+	defer rangeFeedCancel()
+	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
+	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedErrC := make(chan error, 1)
+	startRangefeed := func() {
+		span := roachpb.Span{
+			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
+		}
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+	}
+
+	// Wait for a checkpoint above ts.
+	waitForCheckpoint := func(ts hlc.Timestamp) {
+		t.Helper()
+		checkpointed := false
+		timeout := time.After(60 * time.Second)
+		for !checkpointed {
+			select {
+			case event := <-rangeFeedCh:
+				if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
+					checkpointed = true
+				}
+			case err := <-rangeFeedErrC:
+				t.Fatal(err)
+			case <-timeout:
+				t.Fatal("timed out waiting for checkpoint")
+			}
+		}
+	}
+
+	// Move the lease from n1 to n2 in order for the Raft leadership to move with
+	// it.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+	testutils.SucceedsSoon(t, func() error {
+		leader := tc.GetRaftLeader(t, desc.StartKey).NodeID()
+		if tc.Target(1).NodeID != leader {
+			return errors.Errorf("leader still on n%d", leader)
+		}
+		return nil
+	})
+
+	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
+	// eligible to acquire a new lease.
+	log.Infof(ctx, "test expiring lease")
+	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl.Self()
+	require.True(t, ok)
+	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
+	atomic.StoreInt64(&rejectExtraneousRequests, 1)
+	// Ask another node to increment n2's liveness record.
+	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
+
+	resumeHeartbeats()
+
+	go startRangefeed()
+
+	// Wait for a RangeFeed checkpoint after the lease expired.
+	log.Infof(ctx, "test waiting for another checkpoint")
+	ts2 := n1.Clock().Now()
+	waitForCheckpoint(ts2)
+	nudged := atomic.LoadInt64(&nudgeSeen)
+	require.Equal(t, int64(1), nudged)
+
+	// Check that a lease now exists
+	_, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+	require.NoError(t, err)
+
+	// Make sure the RangeFeed hasn't errored.
+	select {
+	case err := <-rangeFeedErrC:
+		t.Fatal(err)
+	default:
+	}
+	// Now cancel it and wait for it to shut down.
+	rangeFeedCancel()
+
 }

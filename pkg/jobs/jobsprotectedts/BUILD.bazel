@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jobsprotectedts",
+    srcs = ["jobs_protected_ts.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/scheduledjobs",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "jobsprotectedts_test",
+    size = "medium",
+    srcs = [
+        "jobs_protected_ts_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":jobsprotectedts",
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/scheduledjobs",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sqlutil",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
+    ],
+)

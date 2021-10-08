@@ -1,0 +1,60 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "zonepb",
+    srcs = [
+        "zone.go",
+        "zone_yaml.go",
+    ],
+    embed = [":zonepb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config/zonepb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "zonepb_test",
+    size = "small",
+    srcs = ["zone_test.go"],
+    embed = [":zonepb"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+proto_library(
+    name = "zonepb_proto",
+    srcs = ["zone.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "zonepb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config/zonepb",
+    proto = ":zonepb_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)

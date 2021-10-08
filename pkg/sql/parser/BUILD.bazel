@@ -1,0 +1,136 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "parser",
+    # We intentionally elide sql.go here (that's done through an exclude
+    # directive in the top-level BUILD.bazel) and instead list the generation
+    # that constructs sql.go on the fly. We pin it lest gazelle removes it
+    # during BUILD file re-generation.
+    srcs = [
+        "help.go",
+        "lexer.go",
+        "parse.go",
+        "scanner.go",
+        "show_syntax.go",
+        ":gen-help-messages",  # keep
+        ":sql-goyacc",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
+    visibility = ["//visibility:public"],
+    # We pin some go dependencies that are present in auto-generated code, but
+    # are not visible to bazel/gazelle when generating BUILD files.
+    deps = [
+        "//pkg/docs",
+        "//pkg/geo/geopb",  # keep
+        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/security",  # keep
+        "//pkg/sql/lexbase",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",  # keep
+        "//pkg/sql/scanner",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
+    ],
+)
+
+go_test(
+    name = "parser_test",
+    size = "small",
+    srcs = [
+        "help_test.go",
+        "lexer_test.go",
+        "parse_internal_test.go",
+        "parse_test.go",
+        "scanner_test.go",
+        ":gen-helpmap-test",  # keep
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":parser"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+sh_binary(
+    name = "sql-gen",
+    srcs = ["sql-gen.sh"],
+)
+
+# Define the target to auto-generate sql.go from the grammar file.
+genrule(
+    name = "sql-goyacc",
+    srcs = [
+        "sql.y",
+        "replace_help_rules.awk",
+    ],
+    outs = ["sql.go"],
+    cmd = """
+      $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
+          $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+    """,
+    exec_tools = [
+        ":sql-gen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@org_golang_x_tools//cmd/goyacc",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "help-gen-test",
+    srcs = ["help_gen_test.sh"],
+)
+
+# Define the target to auto-generate a helpmap test helper file.
+genrule(
+    name = "gen-helpmap-test",
+    srcs = [
+        ":sql-goyacc",
+    ],
+    outs = ["helpmap_test.go"],
+    cmd = """
+      $(location :help-gen-test) < $< >$@.tmp
+      mv -f $@.tmp $@
+    """,
+    exec_tools = [
+        ":help-gen-test",
+    ],
+)
+
+# Define the target to auto-generate help messages from the grammar file.
+genrule(
+    name = "gen-help-messages",
+    srcs = [
+        ":sql.y",
+        ":help.awk",
+    ],
+    outs = ["help_messages.go"],
+    cmd = """
+      awk -f $(location :help.awk) < $(location :sql.y) > $@
+    """,
+)
+
+exports_files(
+    [
+        "reserved_keywords.awk",
+        "sql.y",
+        "help.awk",
+    ],
+    visibility = ["//visibility:public"],
+)

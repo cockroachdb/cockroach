@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sdnotify",
+    srcs = [
+        "sdnotify.go",
+        "sdnotify_unix.go",
+        "sdnotify_windows.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/sdnotify",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "@com_github_cockroachdb_errors//:errors",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "sdnotify_test",
+    size = "small",
+    srcs = ["sdnotify_unix_test.go"],
+    embed = [":sdnotify"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//pkg/util/log",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//pkg/util/log",
+        ],
+        "//conditions:default": [],
+    }),
+)

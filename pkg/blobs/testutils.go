@@ -20,7 +20,7 @@ import (
 // in tests that use nodelocal storage.
 func TestBlobServiceClient(externalIODir string) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
-		return newLocalClient(externalIODir)
+		return NewLocalClient(externalIODir)
 	}
 }
 

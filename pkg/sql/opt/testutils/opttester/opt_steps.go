@@ -23,7 +23,7 @@ import (
 //      expression tree, with no transformations applied to it.
 //
 //   2. Each optSteps.next() call after that will perform N+1 transformations,
-//      where N is the the number of steps performed during the previous call
+//      where N is the number of steps performed during the previous call
 //      (starting at 0 with the first call).
 //
 //   3. Each optSteps.next() call will build the expression tree from scratch
@@ -109,7 +109,7 @@ func (os *optSteps) Next() error {
 		panic("iteration already complete")
 	}
 
-	fo, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */)
+	fo, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */, true /* disableCheckExpr */)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (os *optSteps) Next() error {
 	} else if !os.Done() {
 		// The expression is not better, so suppress the lowest cost expressions
 		// so that the changed portions of the tree will be part of the output.
-		fo2, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */)
+		fo2, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */, true /* disableCheckExpr */)
 		if err != nil {
 			return err
 		}

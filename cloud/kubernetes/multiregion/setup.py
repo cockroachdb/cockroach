@@ -97,7 +97,7 @@ for zone, context in contexts.items():
     check_call(['kubectl', 'create', 'namespace', zone, '--context', context])
     check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.client.root', '--from-file', certs_dir, '--context', context])
     check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.client.root', '--namespace', zone, '--from-file', certs_dir, '--context', context])
-    check_call([cockroach_path, 'cert', 'create-node', '--certs-dir', certs_dir, '--ca-key', ca_key_dir+'/ca.key', 'localhost', '127.0.0.1', 'cockroachdb-public', 'cockroachdb-public.default' 'cockroachdb-public.'+zone, 'cockroachdb-public.%s.svc.cluster.local' % (zone), '*.cockroachdb', '*.cockroachdb.'+zone, '*.cockroachdb.%s.svc.cluster.local' % (zone)])
+    check_call([cockroach_path, 'cert', 'create-node', '--certs-dir', certs_dir, '--ca-key', ca_key_dir+'/ca.key', 'localhost', '127.0.0.1', 'cockroachdb-public', 'cockroachdb-public.default', 'cockroachdb-public.'+zone, 'cockroachdb-public.%s.svc.cluster.local' % (zone), '*.cockroachdb', '*.cockroachdb.'+zone, '*.cockroachdb.%s.svc.cluster.local' % (zone)])
     check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.node', '--namespace', zone, '--from-file', certs_dir, '--context', context])
     check_call('rm %s/node.*' % (certs_dir), shell=True)
 

@@ -14,12 +14,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/errors"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -31,38 +33,6 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
-}
-
-func checkCanReceiveLease(newLease *roachpb.Lease, rec EvalContext) error {
-	repDesc, ok := rec.Desc().GetReplicaDescriptorByID(newLease.Replica.ReplicaID)
-	if !ok {
-		if newLease.Replica.StoreID == rec.StoreID() {
-			return errors.AssertionFailedf(
-				`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
-		}
-		return errors.Errorf(`replica %s not found in %s`, newLease.Replica, rec.Desc())
-	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
-		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
-		// but we disallow it anyway. On the other hand, transferring to
-		// VOTER_OUTGOING would be a pretty bad idea since those voters are
-		// dropped when transitioning out of the joint config, which then
-		// amounts to removing the leaseholder without any safety precautions.
-		// This would either wedge the range or allow illegal reads to be
-		// served.
-		//
-		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
-		// also know that in any configuration there's at least one VOTER_FULL.
-		//
-		// TODO(tbg): if this code path is hit during a lease transfer (we check
-		// upstream of raft, but this check has false negatives) then we are in
-		// a situation where the leaseholder is a node that has set its
-		// minProposedTS and won't be using its lease any more. Either the setting
-		// of minProposedTS needs to be "reversible" (tricky) or we make the
-		// lease evaluation succeed, though with a lease that's "invalid" so that
-		// a new lease can be requested right after.
-		return errors.Errorf(`replica %s of type %s cannot hold lease`, repDesc, t)
-	}
-	return nil
 }
 
 // evalNewLease checks that the lease contains a valid interval and that
@@ -85,6 +55,7 @@ func evalNewLease(
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
+	priorReadSum *rspb.ReadSummary,
 	isExtension bool,
 	isTransfer bool,
 ) (result.Result, error) {
@@ -92,7 +63,7 @@ func evalNewLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 
 	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start)) ||
+	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
 		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
@@ -147,6 +118,15 @@ func evalNewLease(
 		lease.Sequence = prevLease.Sequence + 1
 	}
 
+	// Record information about the type of event that resulted in this new lease.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AcquisitionTypeInLeaseHistory) {
+		if isTransfer {
+			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
+		} else {
+			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
+		}
+	}
+
 	// Store the lease to disk & in-memory.
 	if err := MakeStateLoader(rec).SetLease(ctx, readWriter, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
@@ -157,6 +137,20 @@ func evalNewLease(
 		Lease: &lease,
 	}
 	pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
+
+	// If we're setting a new prior read summary, store it to disk & in-memory.
+	// We elide this step in mixed-version clusters as old nodes would ignore
+	// the PriorReadSummary field (they don't know about it). It's possible that
+	// in this particular case we could get away with it (as the in-mem field
+	// only ever updates in-mem state) but it's easy to get things wrong (in
+	// which case they could easily take a catastrophic turn) and the benefit is
+	// low.
+	if priorReadSum != nil {
+		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
+			return newFailedLeaseTrigger(isTransfer), err
+		}
+		pd.Replicated.PriorReadSummary = priorReadSum
+	}
 
 	pd.Local.Metrics = new(result.Metrics)
 	if isTransfer {

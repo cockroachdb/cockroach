@@ -429,7 +429,7 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 			l.offset++
 		}
 
-		v := l.consumeInt()
+		v, hasDecimal, vp := l.consumeNum()
 		u := l.consumeUnit('T')
 		if l.err != nil {
 			return d, l.err
@@ -437,6 +437,13 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 
 		if unit, ok := unitMap[u]; ok {
 			d = d.Add(unit.Mul(v))
+			if hasDecimal {
+				var err error
+				d, err = addFrac(d, unit, vp)
+				if err != nil {
+					return d, err
+				}
+			}
 		} else {
 			return d, pgerror.Newf(
 				pgcode.InvalidDatetimeFormat,
@@ -494,7 +501,9 @@ var unitMap = func(
 // parseDuration parses a duration in the "traditional" Postgres
 // format (e.g. '1 day 2 hours', '1 day 03:02:04', etc.) or golang
 // format (e.g. '1d2h', '1d3h2m4s', etc.)
-func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration, error) {
+func parseDuration(
+	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (duration.Duration, error) {
 	var d duration.Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	l.consumeSpaces()
@@ -503,6 +512,17 @@ func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration,
 		return d, pgerror.Newf(
 			pgcode.InvalidDatetimeFormat, "interval: invalid input syntax: %q", l.str)
 	}
+
+	// If we have strictly one negative at the beginning belonging to a
+	// in SQL Standard parsing, treat everything as negative.
+	isSQLStandardNegative :=
+		style == duration.IntervalStyle_SQL_STANDARD &&
+			(l.offset+1) < len(l.str) && l.str[l.offset] == '-' &&
+			!strings.ContainsAny(l.str[l.offset+1:], "+-")
+	if isSQLStandardNegative {
+		l.offset++
+	}
+
 	for l.offset != len(l.str) {
 		// To support -00:XX:XX we record the sign here since -0 doesn't exist
 		// as an int64.
@@ -528,17 +548,31 @@ func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration,
 			// A regular number followed by a unit, such as "9 day".
 			d = d.Add(unit.Mul(v))
 			if hasDecimal {
-				d = addFrac(d, unit, vp)
+				var err error
+				d, err = addFrac(d, unit, vp)
+				if err != nil {
+					return d, err
+				}
 			}
 			continue
 		}
 
+		if l.err != nil {
+			return d, l.err
+		}
 		if u != "" {
 			return d, pgerror.Newf(
 				pgcode.InvalidDatetimeFormat, "interval: unknown unit %q in duration %q", u, s)
 		}
 		return d, pgerror.Newf(
 			pgcode.InvalidDatetimeFormat, "interval: missing unit at position %d: %q", l.offset, s)
+	}
+	if isSQLStandardNegative {
+		return duration.MakeDuration(
+			-d.Nanos(),
+			-d.Days,
+			-d.Months,
+		), l.err
 	}
 	return d, l.err
 }
@@ -622,14 +656,23 @@ func (l *intervalLexer) parseShortDuration(
 // given as second argument multiplied by the factor in the third
 // argument. For computing fractions there are 30 days to a month and
 // 24 hours to a day.
-func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Duration {
+func addFrac(d duration.Duration, unit duration.Duration, f float64) (duration.Duration, error) {
 	if unit.Months > 0 {
 		f = f * float64(unit.Months)
 		d.Months += int64(f)
-		f = math.Mod(f, 1) * 30
-		d.Days += int64(f)
-		f = math.Mod(f, 1) * 24
-		d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
+		switch unit.Months {
+		case 1:
+			f = math.Mod(f, 1) * 30
+			d.Days += int64(f)
+			f = math.Mod(f, 1) * 24
+			d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
+		case 12:
+			// Nothing to do: Postgres limits the precision of fractional years to
+			// months. Do not continue to add precision to the interval.
+			// See issue #55226 for more details on this.
+		default:
+			return duration.Duration{}, errors.AssertionFailedf("unhandled unit type %v", unit)
+		}
 	} else if unit.Days > 0 {
 		f = f * float64(unit.Days)
 		d.Days += int64(f)
@@ -638,7 +681,7 @@ func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Du
 	} else {
 		d.SetNanos(d.Nanos() + int64(float64(unit.Nanos())*f))
 	}
-	return d
+	return d, nil
 }
 
 // floatToNanos converts a fractional number representing nanoseconds to the

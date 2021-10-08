@@ -81,7 +81,7 @@ func (c *client) startLocked(
 	g.outgoing.addPlaceholder()
 
 	ctx, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "gossip-client", func(ctx context.Context) {
 		var wg sync.WaitGroup
 		defer func() {
 			// This closes the outgoing stream, causing any attempt to send or
@@ -121,7 +121,7 @@ func (c *client) startLocked(
 		}
 
 		// Start gossiping.
-		log.Infof(ctx, "started gossip client to %s", c.addr)
+		log.Infof(ctx, "started gossip client to n%d (%s)", c.peerID, c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.RLock()
@@ -133,7 +133,9 @@ func (c *client) startLocked(
 				g.mu.RUnlock()
 			}
 		}
-	})
+	}); err != nil {
+		disconnected <- c
+	}
 }
 
 // close stops the client gossip loop and returns immediately.
@@ -265,7 +267,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 				reply.AlternateAddr, reply.AlternateNodeID, err)
 		}
 		c.forwardAddr = reply.AlternateAddr
-		return errors.Errorf("received forward from n%d to %d (%s)",
+		return errors.Errorf("received forward from n%d to n%d (%s)",
 			reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
@@ -311,7 +313,7 @@ func (c *client) gossip(
 	// This wait group is used to allow the caller to wait until gossip
 	// processing is terminated.
 	wg.Add(1)
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "client-gossip", func(ctx context.Context) {
 		defer wg.Done()
 
 		errCh <- func() error {
@@ -335,7 +337,10 @@ func (c *client) gossip(
 				}
 			}
 		}()
-	})
+	}); err != nil {
+		wg.Done()
+		return err
+	}
 
 	// We attempt to defer registration of the callback until we've heard a
 	// response from the remote node which will contain the remote's high water
@@ -366,7 +371,7 @@ func (c *client) gossip(
 		select {
 		case <-c.closer:
 			return nil
-		case <-stopper.ShouldStop():
+		case <-stopper.ShouldQuiesce():
 			return nil
 		case err := <-errCh:
 			return err

@@ -20,8 +20,6 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu bionic stable
 EOF
-# Per https://github.com/golang/go/wiki/Ubuntu
-add-apt-repository ppa:longsleep/golang-backports
 # Git 2.7, which ships with Xenial, has a bug where submodule metadata sometimes
 # uses absolute paths instead of relative paths, which means the affected
 # submodules cannot be mounted in Docker containers. Use the latest version of
@@ -29,15 +27,51 @@ add-apt-repository ppa:longsleep/golang-backports
 add-apt-repository ppa:git-core/ppa
 apt-get update --yes
 
-# Install the necessary dependencies. Keep this list small!
+# Install the sudo version patched for CVE-2021-3156
+apt-get install --yes sudo
+
 apt-get install --yes \
+  build-essential \
+  curl \
   docker-ce \
   docker-compose \
   gnome-keyring \
+  gnupg2 \
   git \
-  golang-go \
+  jq \
   openjdk-11-jre-headless \
+  pass \
   unzip
+
+curl -fsSL https://dl.google.com/go/go1.16.6.linux-amd64.tar.gz > /tmp/go.tgz
+sha256sum -c - <<EOF
+be333ef18b3016e9d7cb7b1ff1fdb0cac800ca0be4cf2290fe613b3d069dfe0d /tmp/go.tgz
+EOF
+tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
+
+# Install the older version in parallel in order to run the acceptance test on older branches
+# TODO: Remove this when 21.1 is EOL
+curl -fsSL https://dl.google.com/go/go1.15.14.linux-amd64.tar.gz > /tmp/go_old.tgz
+sha256sum -c - <<EOF
+6f5410c113b803f437d7a1ee6f8f124100e536cc7361920f7e640fedf7add72d /tmp/go_old.tgz
+EOF
+mkdir -p /usr/local/go1.15
+tar -C /usr/local/go1.15 --strip-components=1 -zxf /tmp/go_old.tgz && rm /tmp/go_old.tgz
+
+# Explicitly symlink the pinned version to /usr/bin.
+for f in `ls /usr/local/go/bin`; do
+    ln -s /usr/local/go/bin/$f /usr/bin
+done
+
+# Install Bazelisk.
+# Keep this in sync with `build/bazelbuilder/Dockerfile`.
+curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64 > /tmp/bazelisk
+sha256sum -c - <<EOF
+4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk
+EOF
+chmod +x /tmp/bazelisk
+mv /tmp/bazelisk /usr/bin/bazel
+
 # Installing gnome-keyring prevents the error described in
 # https://github.com/moby/moby/issues/34048
 
@@ -51,6 +85,11 @@ usermod -a -G docker agent
 # N.B.: This must be done as the agent user.
 su - agent <<'EOF'
 set -euxo pipefail
+
+# Set the default branch name for git. (Out of an abundance of caution because
+# I don't know how well TC handles having a different default branch name, stick
+# with "master".)
+git config --global init.defaultBranch master
 
 echo 'export GOPATH="$HOME"/work/.go' >> .profile && source .profile
 
@@ -87,7 +126,9 @@ do
   git clean -dxf
 
   git checkout "$branch"
-  COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTS=-
+  # Stupid submodules.
+  rm -rf vendor; git checkout vendor; git submodule update --init --recursive
+  COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTTIMEOUT=45m TESTS=-
   # TODO(benesch): store the acceptanceversion somewhere more accessible.
   docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
 done

@@ -12,19 +12,21 @@ import (
 	"context"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -33,17 +35,21 @@ import (
 )
 
 type workloadReader struct {
+	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
-	table   *sqlbase.ImmutableTableDescriptor
+	table   catalog.TableDescriptor
 	kvCh    chan row.KVBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan row.KVBatch, table *sqlbase.ImmutableTableDescriptor, evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	table catalog.TableDescriptor,
+	kvCh chan row.KVBatch,
 ) *workloadReader {
-	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
+	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -52,7 +58,7 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *sqlbase.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
+	alloc *rowenc.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt(rowIdx) {
 		return tree.DNull, nil
@@ -104,7 +110,7 @@ func makeDatumFromColOffset(
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
-			return sqlbase.ParseDatumStringAs(hint, str, evalCtx)
+			return rowenc.ParseDatumStringAs(hint, str, evalCtx)
 		}
 	}
 	return nil, errors.Errorf(
@@ -117,16 +123,12 @@ func (w *workloadReader) readFiles(
 	_ map[int32]int64,
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
-	_ string,
+	_ security.SQLUsername,
 ) error {
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
 	for fileID, fileName := range dataFiles {
-		file, err := url.Parse(fileName)
-		if err != nil {
-			return err
-		}
-		conf, err := cloudimpl.ParseWorkloadConfig(file)
+		conf, err := parseWorkloadConfig(fileName)
 		if err != nil {
 			return err
 		}
@@ -155,7 +157,7 @@ func (w *workloadReader) readFiles(
 			}
 		}
 		if t.Name == `` {
-			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
+			return errors.Errorf(`unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
 		wc := NewWorkloadKVConverter(
@@ -164,9 +166,9 @@ func (w *workloadReader) readFiles(
 	}
 
 	for _, wc := range wcs {
-		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context, _ int) error {
+		if err := ctxgroup.GroupWorkers(ctx, runtime.GOMAXPROCS(0), func(ctx context.Context, _ int) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx)
+			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {
 			return err
 		}
@@ -176,7 +178,7 @@ func (w *workloadReader) readFiles(
 
 // WorkloadKVConverter converts workload.BatchedTuples to []roachpb.KeyValues.
 type WorkloadKVConverter struct {
-	tableDesc      *sqlbase.ImmutableTableDescriptor
+	tableDesc      catalog.TableDescriptor
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
@@ -192,7 +194,7 @@ type WorkloadKVConverter struct {
 // range of batches, emitted converted kvs to the given channel.
 func NewWorkloadKVConverter(
 	fileID int32,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,
@@ -218,8 +220,11 @@ func NewWorkloadKVConverter(
 // minimzing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
-func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
-	conv, err := row.NewDatumRowConverter(ctx, w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
+func (w *WorkloadKVConverter) Worker(
+	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext,
+) error {
+	conv, err := row.NewDatumRowConverter(ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
+		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */)
 	if err != nil {
 		return err
 	}
@@ -227,7 +232,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 	conv.FractionFn = func() float32 {
 		return float32(atomic.LoadInt64(&w.finishedBatchesAtomic)) / w.totalBatches
 	}
-	var alloc sqlbase.DatumAlloc
+	var alloc rowenc.DatumAlloc
 	var a bufalloc.ByteAllocator
 	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 
@@ -236,7 +241,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		if batchIdx >= w.batchEnd {
 			break
 		}
-		a = a[:0]
+		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range cb.ColVecs() {
@@ -265,4 +270,62 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 	}
 	return conv.SendBatch(ctx)
+}
+
+var errNotWorkloadURI = errors.New("not a workload URI")
+
+// parseWorkloadConfig parses a workload config URI to a config.
+func parseWorkloadConfig(fileName string) (workloadConfig, error) {
+	c := workloadConfig{}
+
+	uri, err := url.Parse(fileName)
+	if err != nil {
+		return c, err
+	}
+
+	if uri.Scheme != "workload" {
+		return c, errNotWorkloadURI
+	}
+	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
+	if len(pathParts) != 3 {
+		return c, errors.Errorf(
+			`path must be of the form /<format>/<generator>/<table>: %s`, uri.Path)
+	}
+	c.Format, c.Generator, c.Table = pathParts[0], pathParts[1], pathParts[2]
+	q := uri.Query()
+	if _, ok := q[`version`]; !ok {
+		return c, errors.New(`parameter version is required`)
+	}
+	c.Version = q.Get(`version`)
+	q.Del(`version`)
+	if s := q.Get(`row-start`); len(s) > 0 {
+		q.Del(`row-start`)
+		var err error
+		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
+			return c, err
+		}
+	}
+	if e := q.Get(`row-end`); len(e) > 0 {
+		q.Del(`row-end`)
+		var err error
+		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
+			return c, err
+		}
+	}
+	for k, vs := range q {
+		for _, v := range vs {
+			c.Flags = append(c.Flags, `--`+k+`=`+v)
+		}
+	}
+	return c, nil
+}
+
+type workloadConfig struct {
+	Generator  string
+	Version    string
+	Table      string
+	Flags      []string
+	Format     string
+	BatchBegin int64
+	BatchEnd   int64
 }

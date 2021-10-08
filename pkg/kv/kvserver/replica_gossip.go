@@ -13,13 +13,13 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -29,6 +29,10 @@ const configGossipTTL = 0 // does not expire
 func (r *Replica) gossipFirstRange(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.gossipFirstRangeLocked(ctx)
+}
+
+func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return
@@ -56,23 +60,26 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // inherently inconsistent and asynchronous, we're using the lease as a way to
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip(ctx context.Context) bool {
-	return r.OwnsValidLease(ctx, r.store.Clock().Now())
+	return r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp())
 }
 
-// MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// Further calls come from the trigger on EndTxn or range lease acquisition.
+// MaybeGossipSystemConfigRaftMuLocked scans the entire SystemConfig span and
+// gossips it. Further calls come from the trigger on EndTxn or range lease
+// acquisition.
 //
-// Note that MaybeGossipSystemConfig gossips information only when the
-// lease is actually held. The method does not request a range lease
-// here since RequestLease and applyRaftCommand call the method and we
-// need to avoid deadlocking in redirectOnOrAcquireLease.
+// Note that MaybeGossipSystemConfigRaftMuLocked gossips information only when
+// the lease is actually held. The method does not request a range lease here
+// since RequestLease and applyRaftCommand call the method and we need to avoid
+// deadlocking in redirectOnOrAcquireLease.
 //
-// MaybeGossipSystemConfig must only be called from Raft commands
-// (which provide the necessary serialization to avoid data races).
+// MaybeGossipSystemConfigRaftMuLocked must only be called from Raft commands
+// while holding the raftMu (which provide the necessary serialization to avoid
+// data races).
 //
-// TODO(nvanbenschoten,bdarnell): even though this is best effort, we
-// should log louder when we continually fail to gossip system config.
-func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
+// TODO(nvanbenschoten,bdarnell): even though this is best effort, we should log
+// louder when we continually fail to gossip system config.
+func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error {
+	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
 		return nil
@@ -119,30 +126,36 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	return nil
 }
 
-// MaybeGossipSystemConfigIfHaveFailure is a trigger to gossip the system config
-// due to an abort of a transaction keyed in the system config span. It will
-// call MaybeGossipSystemConfig if failureToGossipSystemConfig is true.
-func (r *Replica) MaybeGossipSystemConfigIfHaveFailure(ctx context.Context) error {
+// MaybeGossipSystemConfigIfHaveFailureRaftMuLocked is a trigger to gossip the
+// system config due to an abort of a transaction keyed in the system config
+// span. It will call MaybeGossipSystemConfigRaftMuLocked if
+// failureToGossipSystemConfig is true.
+func (r *Replica) MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx context.Context) error {
 	r.mu.RLock()
 	failed := r.mu.failureToGossipSystemConfig
 	r.mu.RUnlock()
 	if !failed {
 		return nil
 	}
-	return r.MaybeGossipSystemConfig(ctx)
+	return r.MaybeGossipSystemConfigRaftMuLocked(ctx)
 }
 
-// MaybeGossipNodeLiveness gossips information for all node liveness
-// records stored on this range. To scan and gossip, this replica
-// must hold the lease to a range which contains some or all of the
-// node liveness records. After scanning the records, it checks
-// against what's already in gossip and only gossips records which
-// are out of date.
-func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
+// MaybeGossipNodeLivenessRaftMuLocked gossips information for all node liveness
+// records stored on this range. To scan and gossip, this replica must hold the
+// lease to a range which contains some or all of the node liveness records.
+// After scanning the records, it checks against what's already in gossip and
+// only gossips records which are out of date.
+//
+// MaybeGossipNodeLivenessRaftMuLocked must only be called from Raft commands
+// while holding the raftMu (which provide the necessary serialization to avoid
+// data races).
+func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
+	ctx context.Context, span roachpb.Span,
+) error {
+	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return nil
 	}
-
 	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip(ctx) {
 		return nil
 	}
@@ -156,7 +169,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	defer rw.Close()
 
 	br, result, pErr :=
-		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, true /* readOnly */)
+		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, hlc.Timestamp{} /* lul */, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -166,7 +179,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
-		var kvLiveness, gossipLiveness kvserverpb.Liveness
+		var kvLiveness, gossipLiveness livenesspb.Liveness
 		if err := kv.Value.GetProto(&kvLiveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
@@ -177,15 +190,6 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 				continue
 			}
 		}
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
-			// We can't transmit liveness records with a backwards incompatible
-			// representation unless we're told by the user that there are no
-			// pre-v20.1 nodes around. We should never get here.
-			if kvLiveness.Membership.Decommissioned() {
-				log.Fatal(ctx, "programming error: illegal membership status: decommissioned")
-			}
-		}
-
 		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
 		}
@@ -208,7 +212,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	defer rw.Close()
 
 	br, result, pErr := evaluateBatch(
-		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, true, /* readOnly */
+		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, hlc.Timestamp{} /* lul */, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()
@@ -256,7 +260,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 					}
 				default:
 					// Any other error is worth being logged visibly.
-					log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
 				}
 			}
 		}); err != nil {
@@ -287,15 +291,11 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
-		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
+		log.Infof(ctx, "gossiping cluster ID %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
 		log.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
-	}
-
-	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
 	}
 
 	hasLease, pErr := r.getLeaseForGossip(ctx)

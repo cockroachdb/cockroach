@@ -11,17 +11,14 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // buildExport builds an EXPORT statement.
 func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *scope) {
-	if err := b.catalog.RequireAdminRole(b.ctx, "EXPORT"); err != nil {
-		panic(err)
-	}
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := b.allocScope()
@@ -31,10 +28,11 @@ func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *sc
 	fileName := b.buildScalar(
 		texpr, emptyScope, nil /* outScope */, nil /* outCol */, nil, /* colRefs */
 	)
+
 	options := b.buildKVOptions(export.Options, emptyScope)
 
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, sqlbase.ExportColumns)
+	b.synthesizeResultColumns(outScope, colinfo.ExportColumns)
 	outScope.expr = b.factory.ConstructExport(
 		inputScope.expr.(memo.RelExpr),
 		fileName,

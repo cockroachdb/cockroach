@@ -1,0 +1,19 @@
+begin_stmt ::=
+	'BEGIN' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'DEFERRABLE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 'NOT' 'DEFERRABLE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN' 'TRANSACTION' 
+	| 'BEGIN'  'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'AS' 'OF' 'SYSTEM' 'TIME' a_expr ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'DEFERRABLE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  'NOT' 'DEFERRABLE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
+	| 'BEGIN'  

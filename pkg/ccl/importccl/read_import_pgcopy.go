@@ -17,11 +17,13 @@ import (
 	"strconv"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
 )
@@ -38,16 +40,18 @@ type pgCopyReader struct {
 var _ inputConverter = &pgCopyReader{}
 
 func newPgCopyReader(
+	semaCtx *tree.SemaContext,
 	opts roachpb.PgCopyOptions,
 	kvCh chan row.KVBatch,
 	walltime int64,
 	parallelism int,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{
 		importCtx: &parallelImportContext{
+			semaCtx:    semaCtx,
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
@@ -68,7 +72,7 @@ func (d *pgCopyReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage, user)
 }
@@ -326,12 +330,12 @@ func (p *pgCopyConsumer) FillDatums(
 		if s == nil {
 			conv.Datums[i] = tree.DNull
 		} else {
-			conv.Datums[i], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+			conv.Datums[i], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(fmt.Errorf(
 					"encountered error %s when attempting to parse %q as %s",
-					err.Error(), col.Name, col.Type.SQLString()), data.String(), rowNum)
+					err.Error(), col.GetName(), col.GetType().SQLString()), data.String(), rowNum)
 			}
 		}
 	}

@@ -23,6 +23,7 @@ import "google/protobuf/timestamp.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors.proto";
+import "sql/sessiondatapb/session_data.proto";
 
 message SetupFlowRequest {
   reserved 1, 2;
@@ -44,6 +45,12 @@ message SetupFlowRequest {
   optional EvalContext evalContext = 6 [(gogoproto.nullable) = false];
 
   optional bool TraceKV = 8 [(gogoproto.nullable) = false];
+
+  // CollectStats specifies whether stats collection should be enabled for this
+  // flow. Note that some form of tracing must be enabled for these stats to be
+  // observed, since the resulting stats are added as structured data to a
+  // trace.
+  optional bool CollectStats = 9 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
@@ -63,40 +70,8 @@ message FlowSpec {
 message EvalContext {
   optional int64 stmtTimestampNanos = 1 [(gogoproto.nullable) = false];
   optional int64 txnTimestampNanos = 2 [(gogoproto.nullable) = false];
-  reserved 3;
-  // The name of the location according to whose current timezone we're going to
-  // parse timestamps. Used to init EvalContext.Location.
-  optional string location = 4 [(gogoproto.nullable) = false];
-  optional string database = 5 [(gogoproto.nullable) = false];
-  repeated string search_path = 6;
-  optional string temporary_schema_name = 13 [(gogoproto.nullable) = false];
-  optional string user = 7 [(gogoproto.nullable) = false];
-  optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
-  optional string application_name = 9 [(gogoproto.nullable) = false];
-  optional BytesEncodeFormat bytes_encode_format = 10 [(gogoproto.nullable) = false];
-  optional int32 extra_float_digits = 11 [(gogoproto.nullable) = false];
-  optional int32 vectorize = 12 [(gogoproto.nullable) = false];
-}
-
-// BytesEncodeFormat is the configuration for bytes to string conversions.
-enum BytesEncodeFormat {
-  HEX = 0;
-  ESCAPE = 1;
-  BASE64 = 2;
-}
-
-// SequenceState is used to marshall the sessiondata.SequenceState struct.
-message SequenceState {
-  // Seq represents the last value of one sequence modified by the session.
-  message Seq {
-    optional uint32 seq_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SeqID"];
-    optional int64 latest_val = 2 [(gogoproto.nullable) = false];
-  }
-
-  repeated Seq seqs = 1;
-  // last_seq_incremented is the id of the last sequence incremented by the
-  // session. This field is filled in iff seqs is not empty.
-  optional uint32 last_seq_incremented = 2;
+  reserved 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14;
+  optional sessiondatapb.SessionData session_data = 15 [(gogoproto.nullable) = false];
 }
 
 message SimpleResponse {
@@ -113,12 +88,10 @@ message ConsumerSignal {
   // stream.
   optional DrainRequest drain_request = 1;
 
-  // Used in the RunSyncFlow case; the first message on the client stream must
-  // contain this message.
-  optional SetupFlowRequest setup_flow_request = 2;
-
   // Consumer->Producer handshake messages. See message definition.
   optional ConsumerHandshake handshake = 3;
+
+  reserved 2;
 }
 
 message DrainRequest {
@@ -150,15 +123,33 @@ message ConsumerHandshake {
                                             (gogoproto.casttype) = "DistSQLVersion"];
 }
 
-service DistSQL {
-  // RunSyncFlow instantiates a flow and streams back results of that flow.
-  // The request must contain one flow, and that flow must have a single mailbox
-  // of the special sync response type.
-  rpc RunSyncFlow(stream ConsumerSignal) returns (stream ProducerMessage) {}
+// CancelDeadFlowsRequest is a request to cancel some flows that have been
+// scheduled to run on the receiving node but haven't been started yet (i.e.
+// they are in the queue to be run). This request originates on the node that
+// performed SetupFlow RPC in order to setup flows mentioned in the request.
+message CancelDeadFlowsRequest {
+  // FlowIDs is a list of IDs of flows to be canceled if they are currently in
+  // the queue to be scheduled. If a particular flow is not found for any reason
+  // in the queue (i.e. it has already completed or is currently running), such
+  // flow is ignored.
+  repeated bytes flow_ids = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowIDs",
+                              (gogoproto.customtype) = "FlowID"];
+}
 
+service DistSQL {
   // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
   rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
+
+  // CancelDeadFlows cancels all specified flows that are currently scheduled to
+  // run on the receiving node but haven't been started yet because the flows
+  // are dead (the client of SetupFlow RPC has abandoned them). Flows that have
+  // been started aren't affected even if mentioned in the request.
+  //
+  // This RPC is performed on a best effort basis, so any errors returned from
+  // it should be ignored.
+  rpc CancelDeadFlows(CancelDeadFlowsRequest) returns (SimpleResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
   // first message will have a StreamHeader which identifies the flow and the

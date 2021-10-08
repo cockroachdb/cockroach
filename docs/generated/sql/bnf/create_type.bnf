@@ -1,0 +1,3 @@
+create_type_stmt ::=
+	'CREATE' 'TYPE' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
+	| 'CREATE' 'TYPE' 'IF' 'NOT' 'EXISTS' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'

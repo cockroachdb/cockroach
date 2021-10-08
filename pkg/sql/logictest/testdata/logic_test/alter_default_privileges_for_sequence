@@ -1,0 +1,160 @@
+statement ok
+CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser
+
+# By default, testuser should have ALL privileges on a sequences it creates.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE SEQUENCE testuser_s;
+
+query TTTTT colnames
+SHOW GRANTS ON testuser_s;
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       testuser_s  admin     ALL
+d              public       testuser_s  root      ALL
+d              public       testuser_s  testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser;
+
+statement ok
+CREATE SEQUENCE testuser_s2;
+
+# Note that CREATE is still present for testuser due to our current inheritance
+# behavior.
+# TODO(richardjcai): Remove this when we remove our current inheritance logic.
+query TTTTT colnames
+SHOW GRANTS ON testuser_s2
+----
+database_name  schema_name  table_name   grantee   privilege_type
+d              public       testuser_s2  admin     ALL
+d              public       testuser_s2  root      ALL
+d              public       testuser_s2  testuser  CREATE
+
+user root
+
+statement ok
+USE test;
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO testuser, testuser2
+
+statement ok
+CREATE SEQUENCE s
+
+query TTTTT colnames
+SHOW GRANTS ON s
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       s           admin      ALL
+test           public       s           root       ALL
+test           public       s           testuser   ALL
+test           public       s           testuser2  ALL
+
+# Sequence DEFAULT PRIVILEGES should be separate from tables.
+statement ok
+CREATE TABLE t()
+
+query TTTTT colnames
+SHOW GRANTS ON t
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       t           admin    ALL
+test           public       t           root     ALL
+
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON SEQUENCES FROM testuser, testuser2
+
+statement ok
+CREATE SEQUENCE s2
+
+query TTTTT colnames
+SHOW GRANTS ON s2
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       s2          admin      ALL
+test           public       s2          root       ALL
+test           public       s2          testuser   CREATE
+test           public       s2          testuser   DELETE
+test           public       s2          testuser   DROP
+test           public       s2          testuser   GRANT
+test           public       s2          testuser   INSERT
+test           public       s2          testuser   UPDATE
+test           public       s2          testuser   ZONECONFIG
+test           public       s2          testuser2  CREATE
+test           public       s2          testuser2  DELETE
+test           public       s2          testuser2  DROP
+test           public       s2          testuser2  GRANT
+test           public       s2          testuser2  INSERT
+test           public       s2          testuser2  UPDATE
+test           public       s2          testuser2  ZONECONFIG
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser, testuser2
+
+statement ok
+CREATE SEQUENCE s3
+
+query TTTTT colnames
+SHOW GRANTS ON s3
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       s3          admin    ALL
+test           public       s3          root     ALL
+
+statement ok
+GRANT CREATE ON DATABASE d TO testuser
+
+user testuser
+statement ok
+USE d
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SEQUENCES FROM testuser, testuser2
+
+statement ok
+CREATE SEQUENCE s4
+
+# testuser still has CREATE due to "inheriting" it from the parent database.
+query TTTTT colnames
+SHOW GRANTS ON s4
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s4          admin     ALL
+d              public       s4          root      ALL
+d              public       s4          testuser  CREATE
+
+user root
+statement ok
+USE d
+
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SEQUENCES FROM testuser, testuser2
+
+user testuser
+statement ok
+USE d
+
+statement ok
+CREATE SEQUENCE s5
+
+# testuser still has CREATE due to "inheriting" it from the parent database.
+query TTTTT colnames
+SHOW GRANTS ON s5
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       s5          admin     ALL
+d              public       s5          root      ALL
+d              public       s5          testuser  CREATE

@@ -10,6 +10,7 @@
 
 syntax = "proto3";
 package cockroach.storage.enginepb;
+option go_package = "enginepb";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -17,7 +18,6 @@ import "gogoproto/gogo.proto";
 // TxnMeta is the metadata of a Transaction record.
 message TxnMeta {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // id is a unique UUID value which identifies the transaction.
@@ -107,6 +107,10 @@ message TxnMeta {
   //    txn record was not yet written. In that case, the pusher uses this field
   //    as an indication of a timestamp when the pushee's coordinator is known
   //    to have been alive.
+  //
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
   util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false];
   // The transaction's priority, ratcheted on transaction pushes.
   int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];
@@ -147,9 +151,13 @@ message MVCCStatsDelta {
   sint64 val_count = 9;
   sint64 intent_bytes = 10;
   sint64 intent_count = 11;
+  sint64 separated_intent_count = 16;
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
   sint64 abort_span_bytes = 15;
+
+  // WARNING: Do not add any PII-holding fields here, as this
+  // whole message is marked as safe for log redaction.
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
@@ -172,6 +180,7 @@ message MVCCPersistentStats {
   int64 val_count = 9;
   int64 intent_bytes = 10;
   int64 intent_count = 11;
+  int64 separated_intent_count = 16;
   int64 sys_bytes = 12;
   int64 sys_count = 13;
   int64 abort_span_bytes = 15;
@@ -194,6 +203,20 @@ message RangeAppliedState {
   // range_stats is the set of mvcc stats that accounts for the current value
   // of the Raft state machine.
   MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands as of this lease applied index. This means
+  // that the current leaseholder (if any) and any future leaseholder will not
+  // evaluate writes at or below this timestamp, and also that any in-flight
+  // commands that can still apply are writing at higher timestamps.
+  // Non-leaseholder replicas are free to serve "follower reads" at or below
+  // this timestamp.
+  //
+  // TODO(andrei): Make this field not-nullable in 21.2, once all the ranges
+  // have a closed timestamp applied to their state (this might need a
+  // migration). In 21.1 we cannot write empty timestamp to disk because that
+  // looks like an inconsistency to the consistency-checker.
+  util.hlc.Timestamp raft_closed_timestamp = 4;
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a

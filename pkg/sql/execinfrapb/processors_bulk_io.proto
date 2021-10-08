@@ -58,8 +58,16 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
+  // WriteAsOf is the time that the backfill entries should be written.
+  // Note: Older nodes may also use this as the read time instead of readAsOf.
+  optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
+
+  // IndexesToBackfill is the set of indexes to backfill. This is populated only
+  // starting in 21.1, prior to that the implied index set are those containing
+  // the mutation ID of the first mutation on the table descriptor.
+  repeated uint32 indexes_to_backfill = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 
   reserved 6;
 }
@@ -67,7 +75,8 @@ message BackfillerSpec {
 // JobProgress identifies the job to report progress on. This reporting
 // happens outside this package.
 message JobProgress {
-  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
+                            (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
   // contribution is the percent of work of the total this processor will
   // process.
   optional float contribution = 2 [(gogoproto.nullable) = false];
@@ -130,9 +139,46 @@ message ReadImportDataSpec {
 
   // User who initiated the import. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 15 [(gogoproto.nullable) = false];
+  optional string user_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 
-  // NEXTID: 16
+  repeated sqlbase.TypeDescriptor types = 16;
+
+  // If the database being imported into is a multi-region database, then this
+  // field stores the databases' primary region.
+  optional string database_primary_region = 17 [
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.RegionName"
+  ];
+
+  // NEXTID: 18
+}
+
+message StreamIngestionDataSpec {
+  // PartitionAddresses locate the partitions that produce events to be
+  // ingested. We don't set the casttype to avoid depending on ccl packages.
+  repeated string partition_addresses = 1;
+  // The processor will ingest events from StartTime onwards.
+  optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
+  // StreamAddress locate the stream so that a stream client can be initialized.
+  optional string stream_address = 3 [(gogoproto.nullable) = false];
+  // JobID is the job ID of the stream ingestion job.
+  optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+}
+
+message StreamIngestionFrontierSpec {
+  // HighWaterAtStart is set by the ingestion job when initializing the frontier
+  // processor. It is used as sanity check by the frontier processor to ensure
+  // that it does not receive updates at a timestamp lower than this field. This
+  // consequently prevents the job progress from regressing during ingestion.
+  optional util.hlc.Timestamp high_water_at_start = 1 [(gogoproto.nullable) = false];
+  // TrackedSpans is the entire span set being watched. The spans do not really
+  // represent KV spans but uniquely identify the partitions in the ingestion
+  // stream. Once all the partitions in the ingestion stream have been resolved
+  // at a certain timestamp, then it's safe to resolve the ingestion at that
+  // timestamp.
+  repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+  // JobID is the job ID of the stream ingestion job.
+  optional int64 job_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 }
 
 message BackupDataSpec {
@@ -151,7 +197,21 @@ message BackupDataSpec {
 
   // User who initiated the backup. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 10 [(gogoproto.nullable) = false];
+  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+}
+
+message RestoreFileSpec {
+  optional roachpb.ExternalStorage dir = 1 [(gogoproto.nullable) = false];
+  optional string path = 2 [(gogoproto.nullable) = false];
+  reserved 3;
+  reserved 4;
+}
+
+message TableRekey {
+  // OldID is the previous ID of `new_desc`.
+  optional uint32 old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
+  // NewDesc is an encoded Descriptor message.
+  optional bytes new_desc = 2;
 }
 
 // RestoreDataEntry will be specified at planning time to the SplitAndScatter
@@ -160,14 +220,14 @@ message BackupDataSpec {
 // This field has a subset of the importEntry struct defined in restore.
 message RestoreSpanEntry {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-  repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
+  repeated RestoreFileSpec files = 2 [(gogoproto.nullable) = false];
   optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
 }
 
 message RestoreDataSpec {
   optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
   optional roachpb.FileEncryptionOptions encryption = 2;
-  repeated roachpb.ImportRequest.TableRekey rekeys = 3 [(gogoproto.nullable) = false];
+  repeated TableRekey rekeys = 3 [(gogoproto.nullable) = false];
 
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
@@ -180,7 +240,7 @@ message SplitAndScatterSpec {
   }
 
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
-  repeated roachpb.ImportRequest.TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+  repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently
@@ -201,13 +261,15 @@ message CSVWriterSpec {
   optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
 
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 6 [(gogoproto.nullable) = false];
+  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

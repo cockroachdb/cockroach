@@ -1,0 +1,297 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log;
+option go_package = "logpb";
+
+import "gogoproto/gogo.proto";
+
+// Severity is the severity level of individual log events.
+//
+// Note: do not forget to run gen.sh (go generate) when
+// changing this list or the explanatory comments.
+enum Severity {
+  // UNKNOWN is populated into decoded log entries when the
+  // severity could not be determined.
+  UNKNOWN = 0;
+  // INFO is used for informational messages that do not
+  // require action.
+  INFO = 1;
+  // WARNING is used for situations which may require special handling,
+  // where normal operation is expected to resume automatically.
+  WARNING = 2;
+  // ERROR is used for situations that require special handling,
+  // where normal operation could not proceed as expected.
+  // Other operations can continue mostly unaffected.
+  ERROR = 3;
+  // FATAL is used for situations that require an immedate, hard
+  // server shutdown. A report is also sent to telemetry if telemetry
+  // is enabled.
+  FATAL = 4;
+  // NONE can be used in filters to specify that no messages
+  // should be emitted.
+  NONE = 5;
+  // DEFAULT is the end sentinel. It is used during command-line
+  // handling to indicate that another value should be replaced instead
+  // (depending on which command is being run); see cli/flags.go for
+  // details.
+  DEFAULT = 6;
+}
+
+// Channel is the logical logging channel on which a message is sent.
+// Different channels can be redirected to different sinks. All
+// messages from the same channel are sent to the same sink(s).
+//
+//
+// Note: do not forget to run gen.sh (go generate) when
+// changing this list or the explanatory comments.
+enum Channel {
+  // DEV is used during development to collect log
+  // details useful for troubleshooting that fall outside the
+  // scope of other channels. It is also the default logging
+  // channel for events not associated with a channel.
+  //
+  // This channel is special in that there are no constraints as to
+  // what may or may not be logged on it. Conversely, users in
+  // production deployments are invited to not collect `DEV` logs in
+  // centralized logging facilities, because they likely contain
+  // sensitive operational data.
+  // See [Configure logs](configure-logs.html#dev-channel).
+  DEV = 0;
+
+  // OPS is used to report "point" operational events,
+  // initiated by user operators or automation:
+  //
+  // - Operator or system actions on server processes: process starts,
+  //   stops, shutdowns, crashes (if they can be logged),
+  //   including each time: command-line parameters, current version being run
+  // - Actions that impact the topology of a cluster: node additions,
+  //   removals, decommissions, etc.
+  // - Job-related initiation or termination
+  // - [Cluster setting](cluster-settings.html) changes
+  // - [Zone configuration](configure-replication-zones.html) changes
+  OPS = 1;
+
+  // HEALTH is used to report "background" operational
+  // events, initiated by CockroachDB or reporting on automatic processes:
+  //
+  // - Current resource usage, including critical resource usage
+  // - Node-node connection events, including connection errors and
+  //   gossip details
+  // - Range and table leasing events
+  // - Up- and down-replication, range unavailability
+  HEALTH = 2;
+
+  // STORAGE is used to report low-level storage
+  // layer events (RocksDB/Pebble).
+  STORAGE = 3;
+
+  // SESSIONS is used to report client network activity when enabled via
+  // the `server.auth_log.sql_connections.enabled` and/or
+  // `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
+  //
+  // - Connections opened/closed
+  // - Authentication events: logins, failed attempts
+  // - Session and query cancellation
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  SESSIONS = 4;
+
+  // SQL_SCHEMA is used to report changes to the
+  // SQL logical schema, excluding privilege and ownership changes
+  // (which are reported separately on the `PRIVILEGES` channel) and
+  // zone configuration changes (which go to the `OPS` channel).
+  //
+  // This includes:
+  //
+  // - Database/schema/table/sequence/view/type creation
+  // - Adding/removing/changing table columns
+  // - Changing sequence parameters
+  //
+  // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
+  // functional behavior of client apps using stored objects.
+  SQL_SCHEMA = 5;
+
+  // USER_ADMIN is used to report changes
+  // in users and roles, including:
+  //
+  // - Users added/dropped
+  // - Changes to authentication credentials (e.g., passwords, validity, etc.)
+  // - Role grants/revocations
+  // - Role option grants/revocations
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  USER_ADMIN = 6;
+
+  // PRIVILEGES is used to report data
+  // authorization changes, including:
+  //
+  // - Privilege grants/revocations on database, objects, etc.
+  // - Object ownership changes
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  PRIVILEGES = 7;
+
+  // SENSITIVE_ACCESS is used to report SQL
+  // data access to sensitive data:
+  //
+  // - Data access audit events (when table audit is enabled via
+  //   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+  // - SQL statements executed by users with the admin role
+  // - Operations that write to system tables
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  SENSITIVE_ACCESS = 8;
+
+  // SQL_EXEC is used to report SQL execution on
+  // behalf of client connections:
+  //
+  // - Logical SQL statement executions (when enabled via the
+  //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+  // - uncaught Go panic errors during the execution of a SQL statement.
+  SQL_EXEC = 9;
+
+  // SQL_PERF is used to report SQL executions
+  // that are marked as "out of the ordinary"
+  // to facilitate performance investigations.
+  // This includes the SQL "slow query log".
+  //
+  // Arguably, this channel overlaps with `SQL_EXEC`.
+  // However, we keep both channels separate for backward compatibility
+  // with versions prior to v21.1, where the corresponding events
+  // were redirected to separate files.
+  SQL_PERF = 10;
+
+  // SQL_INTERNAL_PERF is like the `SQL_PERF` channel, but is aimed at
+  // helping developers of CockroachDB itself. It exists as a separate
+  // channel so as to not pollute the `SQL_PERF` logging output with
+  // internal troubleshooting details.
+  SQL_INTERNAL_PERF = 11;
+
+  // TELEMETRY reports telemetry events. Telemetry events describe
+  // feature usage within CockroachDB and anonymizes any application-
+  // specific data.
+  TELEMETRY = 12;
+
+  // CHANNEL_MAX is the maximum allocated channel number so far.
+  // This should be increased every time a new channel is added.
+  CHANNEL_MAX = 13;
+}
+
+// Entry represents a cockroach log entry in the following two cases:
+// - when reading a log file using the crdb-v1 format, entries
+//   are parsed into this struct.
+// - when injecting an interceptor into the logging package, the
+//   interceptor is fed entries using this structure.
+message Entry {
+  // Severity is the importance of the log entry. See the
+  // documentation for the Severity enum for more details.
+  Severity severity = 1;
+  // Nanoseconds since the epoch.
+  int64 time = 2;
+  // Goroutine ID. This helps match logging events with goroutine
+  // stack dumps.
+  int64 goroutine = 6;
+  // File name where the logging event was produced. Logging client
+  // code can adjust this with the "depth" parameter.
+  string file = 3;
+  // Line number in the file where the logging event was produced.
+  int64 line = 4;
+  // Message contains the main text of the logging message.
+  string message = 5;
+
+  // Tags contains the context tags available in the context where the
+  // entry was created.
+  string tags = 7;
+
+  // Counter is an entry counter, meant for use in audit logs as an
+  // instrument against log repudiation.
+  // See: https://en.wikipedia.org/wiki/Non-repudiation
+  //
+  // It is incremented for every use of the logger where the entry was
+  // produced.
+  uint64 counter = 8;
+
+  // Redactable is true if the message and tags fields include markers
+  // to delineate sensitive information. In that case, confidentiality
+  // can be obtained by only stripping away the data within this
+  // marker. If redactable is false or unknown, the message should be
+  // considered to only contain sensitive information, and should be
+  // stripped away completely for confidentiality.
+  bool redactable = 9;
+
+  // Channel is the channel on which the message was sent.
+  Channel channel = 10;
+
+  // StructuredEnd, if non-zero, indicates that the entry
+  // is structured; it is also the index
+  // inside the Message field where the JSON payload ends (exclusive).
+  uint32 structured_end = 11;
+
+  // StructuredStart, when StructuredEnd is non-zero, is the index
+  // inside the Message field where the JSON payload starts (inclusive).
+  uint32 structured_start = 12;
+
+  // StackTraceStart is the index inside Message where a detailed
+  // stack trace starts. If zero, no stack trace is present. Stack
+  // traces are always separated from the message using a newline
+  // character. If a stack trace is included, StackTracePosition is
+  // the index of the character immediately after the newline
+  // character.
+  //
+  // We use an index-in-string field in the protobuf, instead of two
+  // separate string fields, because previous-version consumers of
+  // Entry are still expecting the message and the stack trace in the
+  // same field.
+  uint32 stack_trace_start = 13;
+}
+
+// A FileDetails holds all of the particulars that can be parsed by the name of
+// a log file.
+message FileDetails {
+  // program contains the combination of program name and log file
+  // group name, separated by a hyphen. The program name part is
+  // guaranteed to not contain hyphens itself; if there had been any
+  // in the executable file name, they would be escaped to
+  // underscores. The first hyphen separates the program name from the
+  // file group name. The file group itself can contain hyphens.
+  //
+  // For example, if the field is set to "mybinary-my-log-group",
+  // the program name is "mybinary" and the file group is "my-log-group".
+  //
+  // The field is also guaranteed not to contain periods. If there had
+  // been periods in the executable file name, they would be replaced
+  // by underscores.
+  string program = 1;
+  // host is the hostname part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the hostname, they would be replaced by underscores.
+  string host = 2;
+  // user_name is the unix username part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the username, they would be replaced by underscores.
+  string user_name = 3;
+  reserved 4;
+  int64 time = 5;
+  int64 pid = 6 [(gogoproto.customname) = "PID"];
+}
+
+message FileInfo {
+  string name = 1;
+  int64 size_bytes = 2;
+  int64 mod_time_nanos = 3;
+  FileDetails details = 4 [(gogoproto.nullable) = false];
+  uint32 file_mode = 5;
+}

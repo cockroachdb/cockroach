@@ -12,82 +12,299 @@ package clusterversion
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// VersionKey is a unique identifier for a version of CockroachDB.
-type VersionKey int
+// Key is a unique identifier for a version of CockroachDB.
+type Key int
 
-// Version constants.
+// Version constants. These drive compatibility between versions as well as
+// migrations. Before you add a version or consider removing one, please
+// familiarize yourself with the rules below.
 //
-// To add a version:
-//   - Add it at the end of this block.
-//   - Add it at the end of the `Versions` block below.
-//   - For major or minor versions, bump binaryMinSupportedVersion. For
-//     example, if introducing the `20.1` release, bump it to
-//     VersionStart19_2 (i.e. `19.1-1`).
+// Adding Versions
 //
-// To delete a version.
-//   - Remove its associated runtime checks.
-//   - If the version is not the latest one, delete the constant, comment out
-//     its stanza, and say "Removed." above the versionsSingleton.
+// You'll want to add a new one in the following cases:
 //
-//go:generate stringer -type=VersionKey
+// (a) When introducing a backwards incompatible feature. Broadly, by this we
+//     mean code that's structured as follows:
+//
+//      if (specific-version is active) {
+//          // Implies that all nodes in the cluster are running binaries that
+//          // have this code. We can "enable" the new feature knowing that
+//          // outbound RPCs, requests, etc. will be handled by nodes that know
+//          // how to do so.
+//      } else {
+//          // There may be some nodes running older binaries without this code.
+//          // To be safe, we'll want to behave as we did before introducing
+//          // this feature.
+//      }
+//
+//     Authors of migrations need to be careful in ensuring that end-users
+//     aren't able to enable feature gates before they're active. This is fine:
+//
+//      func handleSomeNewStatement() error {
+//          if !(specific-version is active) {
+//              return errors.New("cluster version needs to be bumped")
+//          }
+//          // ...
+//      }
+//
+//     At the same time, with requests/RPCs originating at other crdb nodes, the
+//     initiator of the request gets to decide what's supported. A node should
+//     not refuse functionality on the grounds that its view of the version gate
+//     is as yet inactive. Consider the sender:
+//
+//      func invokeSomeRPC(req) {
+//	        if (specific-version is active) {
+//              // Like mentioned above, this implies that all nodes in the
+//              // cluster are running binaries that can handle this new
+//              // feature. We may have learned about this fact before the
+//              // node on the other end. This is due to the fact that migration
+//              // manager informs each node about the specific-version being
+//              // activated active concurrently. See BumpClusterVersion for
+//              // where that happens. Still, it's safe for us to enable the new
+//              // feature flags as we trust the recipient to know how to deal
+//              // with it.
+//		        req.NewFeatureFlag = true
+//	        }
+//	        send(req)
+//      }
+//
+//    And consider the recipient:
+//
+//     func someRPC(req) {
+//         if !req.NewFeatureFlag {
+//             // Legacy behavior...
+//         }
+//         // There's no need to even check if the specific-version is active.
+//         // If the flag is enabled, the specific-version must have been
+//         // activated, even if we haven't yet heard about it (we will pretty
+//         // soon).
+//     }
+//
+//     See clusterversion.Handle.IsActive and usage of some existing versions
+//     below for more clues on the matter.
+//
+// (b) When cutting a major release branch. When cutting release-20.2 for
+//     example, you'll want to introduce the following to `master`.
+//
+//       (i)  V20_2 (keyed to v20.2.0-0})
+//       (ii) Start21_1 (keyed to v20.2.0-1})
+//
+//    You'll then want to backport (i) to the release branch itself (i.e.
+//    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
+//    example above, you'll set it to V20_2. This indicates that the
+//    minimum binary version required in a cluster with nodes running
+//    v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
+//    upgrade into such a binary must start out from at least v20.2 nodes.
+//
+//    Aside: At the time of writing, the binary min supported version is the
+//    last major release, though we may consider relaxing this in the future
+//    (i.e. for example could skip up to one major release) as we move to a more
+//    frequent release schedule.
+//
+// When introducing a version constant, you'll want to:
+//   (1) Add it at the end of this block. For versions introduced during and
+//       after the 21.1 release, Internal versions must be even-numbered. The
+//       odd versions are used for internal book-keeping.
+//   (2) Add it at the end of the `versionsSingleton` block below.
+//
+// Migrations
+//
+// Migrations are idempotent functions that can be attached to versions and will
+// be rolled out before the respective cluster version gets rolled out. They are
+// primarily a means to remove legacy state from the cluster. For example, a
+// migration might scan the cluster for an outdated type of table descriptor and
+// rewrite it into a new format. Migrations are tricky to get right and they have
+// their own documentation in ./pkg/migration, which you should peruse should you
+// feel that a migration is necessary for your use case.
+//
+// Phasing out Versions and Migrations
+//
+// Versions and Migrations can be removed once they are no longer going to be
+// exercised. This is primarily driven by the BinaryMinSupportedVersion, which
+// declares the oldest *cluster* (not binary) version of CockroachDB that may
+// interface with the running node. It typically trails the current version by
+// one release. For example, if the current branch is a `21.1.x` release, you
+// will have a BinaryMinSupportedVersion of `21.0`, meaning that the versions
+// 20.2.0-1, 20.2.0-2, etc are always going to be active on any peer and thus
+// can be "baked in"; similarly all migrations attached to any of these versions
+// can be assumed to have run (or not having been necessary due to the cluster
+// having been initialized at a higher version in the first place). Note that
+// this implies that all peers will have a *binary* version of at least the
+// MinSupportedVersion as well, as this is a prerequisite for running at that
+// cluster version. Finally, note that even when all cluster versions known
+// to the current binary are active (i.e. most of the time), you still need
+// to be able to inter-op with older *binary* and/or *cluster* versions. This
+// is because *tenants* are allowed to run at any binary version compatible
+// with (i.e. greater than or equal to) the MinSupportedVersion. To give a
+// concrete example, a fully up-to-date v21.1 KV host cluster can have tenants
+// running against it that use the v21.0 binary and any cluster version known
+// to that binary (v20.2-0 ... v20.2-50 or thereabouts).
+//
+// You'll want to delete versions from this list after cutting a major release.
+// Once the development for 21.1 begins, after step (ii) from above, all
+// versions introduced in the previous release can be removed (everything prior
+// to V20_2 in our example).
+//
+// When removing a version, you'll want to remove its associated runtime checks.
+// All "is active" checks for the key will always evaluate to true. You'll also
+// want to delete the constant and remove its entry in the `versionsSingleton`
+// block below.
+//
+//go:generate stringer -type=Key
 const (
-	_ VersionKey = iota - 1 // want first named one to start at zero
-	Version19_1
-	VersionStart19_2
-	VersionLearnerReplicas
-	VersionTopLevelForeignKeys
-	VersionAtomicChangeReplicasTrigger
-	VersionAtomicChangeReplicas
-	VersionTableDescModificationTimeFromMVCC
-	VersionPartitionedBackup
-	Version19_2
-	VersionStart20_1
-	VersionContainsEstimatesCounter
-	VersionChangeReplicasDemotion
-	VersionSecondaryIndexColumnFamilies
-	VersionNamespaceTableWithSchemas
-	VersionProtectedTimestamps
-	VersionPrimaryKeyChanges
-	VersionAuthLocalAndTrustRejectMethods
-	VersionPrimaryKeyColumnsOutOfFamilyZero
-	VersionRootPassword
-	VersionNoExplicitForeignKeyIndexIDs
-	VersionHashShardedIndexes
-	VersionCreateRolePrivilege
-	VersionStatementDiagnosticsSystemTables
-	VersionSchemaChangeJob
-	VersionSavepoints
-	VersionTimeTZType
-	VersionTimePrecision
-	Version20_1
-	VersionStart20_2
-	VersionGeospatialType
-	VersionEnums
-	VersionRangefeedLeases
-	VersionAlterColumnTypeGeneral
-	VersionAlterSystemJobsAddCreatedByColumns
-	VersionAddScheduledJobsTable
-	VersionUserDefinedSchemas
-	VersionNoOriginFKIndexes
-	VersionClientRangeInfosOnBatchResponse
-	VersionNodeMembershipStatus
-	VersionRangeStatsRespHasDesc
-	VersionMinPasswordLength
-	VersionAbortSpanBytes
-	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
-	VersionMaterializedViews
-	VersionBox2DType
+	_ Key = iota - 1 // want first named one to start at zero
 
-	// Add new versions here (step one of two).
+	// v21.1 versions.
+	//
+	// replacedTruncatedAndRangeAppliedStateMigration stands in for
+	// TruncatedAndRangeAppliedStateMigration which was	re-introduced after the
+	// migration job was introduced. This is necessary because the jobs
+	// infrastructure used to run this migration in v21.1 and its later alphas
+	// was introduced after this version was first introduced. Later code in the
+	// release relies on the job to run the migration but the job relies on
+	// its startup migrations having been run. Versions associated with long
+	// running migrations must follow deletedLongRunningMigrations.
+	replacedTruncatedAndRangeAppliedStateMigration
+	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
+	// version. See its comment.
+	replacedPostTruncatedAndRangeAppliedStateMigration
+	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
+	// using the legacy truncated state within KV. After the migration, we'll be
+	// using the unreplicated truncated state and the RangeAppliedState on all
+	// ranges. Callers that wish to assert on there no longer being any legacy
+	// will be able to do so after PostTruncatedAndRangeAppliedStateMigration is
+	// active. This lets remove any holdover code handling the possibility of
+	// replicated truncated state in 21.2.
+	//
+	// TODO(irfansharif): Do the above in 21.2.
+	TruncatedAndRangeAppliedStateMigration
+	// PostTruncatedAndRangeAppliedStateMigration is used to purge all replicas
+	// using the replicated legacy TruncatedState. It's also used in asserting
+	// that no replicated truncated state representation is found.
+	PostTruncatedAndRangeAppliedStateMigration
+	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+	//
+	// TODO(irfansharif): This can be removed as part of #69828 (bumping the min
+	// cluster version).
+	V21_1
+
+	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
+	// used internally for the 2021 serverless offering.
+	Start21_1PLUS
+
+	// v21.2 versions.
+	//
+	// Start21_2 demarcates work towards CockroachDB v21.2.
+	Start21_2
+	// JoinTokensTable adds the system table for storing ephemeral generated
+	// join tokens.
+	JoinTokensTable
+	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
+	// include the type of lease acquisition event that resulted in that replica's
+	// current lease.
+	AcquisitionTypeInLeaseHistory
+	// SerializeViewUDTs serializes user defined types used in views to allow
+	// for renaming of the referenced types.
+	SerializeViewUDTs
+	// ExpressionIndexes is when expression indexes are supported.
+	ExpressionIndexes
+	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
+	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// FixDescriptors is for the migration to fix all descriptors.
+	FixDescriptors
+	// SQLStatsTable adds the system tables for storing persisted SQL statistics
+	// for statements and transactions.
+	SQLStatsTable
+	// DatabaseRoleSettings adds the system table for storing per-user and
+	// per-role default session settings.
+	DatabaseRoleSettings
+	// TenantUsageTable adds the system table for tracking tenant usage.
+	TenantUsageTable
+	// SQLInstancesTable adds the system table for storing SQL instance information
+	// per tenant.
+	SQLInstancesTable
+	// Can return new retryable rangefeed errors without crashing the client
+	NewRetryableRangefeedErrors
+	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
+	// lastUsedAt for the system.web_sessions table.
+	AlterSystemWebSessionsCreateIndexes
+	// SeparatedIntentsMigration adds the migration to move over all remaining
+	// intents to the separated lock table space.
+	SeparatedIntentsMigration
+	// PostSeparatedIntentsMigration runs a cleanup migration after the main
+	// SeparatedIntentsMigration.
+	PostSeparatedIntentsMigration
+	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
+	RetryJobsWithExponentialBackoff
+	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
+	// encryption-at-rest file registry with the new incremental records-based registry.
+	RecordsBasedRegistry
+	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
+	// type.
+	AutoSpanConfigReconciliationJob
+	// PreventNewInterleavedTables interleaved table creation is completely
+	// blocked on this version.
+	PreventNewInterleavedTables
+	// EnsureNoInterleavedTables interleaved tables no longer exist in
+	// this version.
+	EnsureNoInterleavedTables
+	// DefaultPrivileges default privileges are supported in this version.
+	DefaultPrivileges
+	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
+	ZonesTableForSecondaryTenants
+	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
+	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
+	UseKeyEncodeForHashShardedIndexes
+	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
+	// version.
+	DatabasePlacementPolicy
+	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
+	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
+	GeneratedAsIdentity
+	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
+	// this version.
+	OnUpdateExpressions
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
+	// BoundedStaleness adds capabilities to perform bounded staleness reads.
+	BoundedStaleness
+	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
+	// compaction on cluster startup and ensures that there is only one entry for
+	// the schedule.
+	SQLStatsCompactionScheduledJob
+	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
+	DateAndIntervalStyle
+	// PebbleFormatVersioned ratchets Pebble's format major version to
+	// the version FormatVersioned.
+	PebbleFormatVersioned
+	// MarkerDataKeysRegistry switches to using an atomic marker file
+	// for denoting which data keys registry is active.
+	MarkerDataKeysRegistry
+	// PebbleSetWithDelete switches to a backwards incompatible Pebble version
+	// that provides SingleDelete semantics that are cleaner and robust to
+	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
+	// and #69891.
+	PebbleSetWithDelete
+	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
+	// use a single consumption column (encoding a proto).
+	TenantUsageSingleConsumptionColumn
+	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+	V21_2
+
+	// *************************************************
+	// Step (1): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
 // introduced.
 //
-// A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-UNSTABLE],
-// where the PATCH and UNSTABLE components can be omitted if zero. Keep in mind
-// that a version with an unstable component, like 1.1-2, represents a version
+// A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-INTERNAL],
+// where the PATCH and INTERNAL components can be omitted if zero. Keep in mind
+// that a version with an internal component, like 1.1-2, represents a version
 // that was developed AFTER v1.1 was released and is not slated for release
 // until the next stable version (either 1.2-0 or 2.0-0). Patch releases, like
 // 1.1.2, do not have associated migrations.
@@ -98,489 +315,190 @@ const (
 // Such clusters would need to be wiped. As a result, do not bump the major or
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
-var versionsSingleton = keyedVersions([]keyedVersion{
-	//{
-	// Removed
-	// VersionUnreplicatedRaftTruncatedState is https://github.com/cockroachdb/cockroach/pull/34660.
-	// When active, it moves the truncated state into unreplicated keyspace
-	// on log truncations.
-	//
-	// The migration works as follows:
-	//
-	// 1. at any log position, the replicas of a Range either use the new
-	// (unreplicated) key or the old one, and exactly one of them exists.
-	//
-	// 2. When a log truncation evaluates under the new cluster version,
-	// it initiates the migration by deleting the old key. Under the old cluster
-	// version, it behaves like today, updating the replicated truncated state.
-	//
-	// 3. The deletion signals new code downstream of Raft and triggers a write
-	// to the new, unreplicated, key (atomic with the deletion of the old key).
-	//
-	// 4. Future log truncations don't write any replicated data any more, but
-	// (like before) send along the TruncatedState which is written downstream
-	// of Raft atomically with the deletion of the log entries. This actually
-	// uses the same code as 3.
-	// What's new is that the truncated state needs to be verified before
-	// replacing a previous one. If replicas disagree about their truncated
-	// state, it's possible for replica X at FirstIndex=100 to apply a
-	// truncated state update that sets FirstIndex to, say, 50 (proposed by a
-	// replica with a "longer" historical log). In that case, the truncated
-	// state update must be ignored (this is straightforward downstream-of-Raft
-	// code).
-	//
-	// 5. When a split trigger evaluates, it seeds the RHS with the legacy
-	// key iff the LHS uses the legacy key, and the unreplicated key otherwise.
-	// This makes sure that the invariant that all replicas agree on the
-	// state of the migration is upheld.
-	//
-	// 6. When a snapshot is applied, the receiver is told whether the snapshot
-	// contains a legacy key. If not, it writes the truncated state (which is
-	// part of the snapshot metadata) in its unreplicated version. Otherwise
-	// it doesn't have to do anything (the range will migrate later).
-	//
-	// The following diagram visualizes the above. Note that it abuses sequence
-	// diagrams to get a nice layout; the vertical lines belonging to NewState
-	// and OldState don't imply any particular ordering of operations.
-	//
-	// ┌────────┐                            ┌────────┐
-	// │OldState│                            │NewState│
-	// └───┬────┘                            └───┬────┘
-	//     │                        Bootstrap under old version
-	//     │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-	//     │                                     │
-	//     │                                     │     Bootstrap under new version
-	//     │                                     │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-	//     │                                     │
-	//     │─ ─ ┐
-	//     │    | Log truncation under old version
-	//     │< ─ ┘
-	//     │                                     │
-	//     │─ ─ ┐                                │
-	//     │    | Snapshot                       │
-	//     │< ─ ┘                                │
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Snapshot
-	//     │                                     │< ─ ┘
-	//     │                                     │
-	//     │   Log truncation under new version  │
-	//     │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─>│
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Log truncation under new version
-	//     │                                     │< ─ ┘
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Log truncation under old version
-	//     │                                     │< ─ ┘ (necessarily running new binary)
-	//
-	// Source: http://www.plantuml.com/plantuml/uml/ and the following input:
-	//
-	// @startuml
-	// scale 600 width
-	//
-	// OldState <--] : Bootstrap under old version
-	// NewState <--] : Bootstrap under new version
-	// OldState --> OldState : Log truncation under old version
-	// OldState --> OldState : Snapshot
-	// NewState --> NewState : Snapshot
-	// OldState --> NewState : Log truncation under new version
-	// NewState --> NewState : Log truncation under new version
-	// NewState --> NewState : Log truncation under old version\n(necessarily running new binary)
-	// @enduml
-
-	//Key:     VersionUnreplicatedRaftTruncatedState,
-	//Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 6},
-	//},
+var versionsSingleton = keyedVersions{
+	// v21.1 versions.
 	{
-		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
-		Key:     Version19_1,
-		Version: roachpb.Version{Major: 19, Minor: 1},
+		Key:     replacedTruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 14},
 	},
 	{
-		// VersionStart19_2 demarcates work towards CockroachDB v19.2.
-		Key:     VersionStart19_2,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 1},
-	},
-	// Removed.
-	// {
-	// 	// VersionQueryTxnTimestamp is https://github.com/cockroachdb/cockroach/pull/36307.
-	// 	Key:     VersionQueryTxnTimestamp,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 2},
-	// },
-	// Removed.
-	// {
-	// 	// VersionStickyBit is https://github.com/cockroachdb/cockroach/pull/37506.
-	// 	Key:     VersionStickyBit,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
-	// },
-	// Removed.
-	// {
-	// 	// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
-	// 	Key:     VersionParallelCommits,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
-	// },
-	// Removed.
-	// {
-	// 	// VersionGenerationComparable is https://github.com/cockroachdb/cockroach/pull/38334.
-	// 	Key:     VersionGenerationComparable,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
-	// },
-	{
-		// VersionLearnerReplicas is https://github.com/cockroachdb/cockroach/pull/38149.
-		Key:     VersionLearnerReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
+		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
 	},
 	{
-		// VersionTopLevelForeignKeys is https://github.com/cockroachdb/cockroach/pull/39173.
-		//
-		// It represents an upgrade to the table descriptor format in which foreign
-		// key references are pulled out of the index descriptors where they
-		// originally were kept, and rewritten into a top level field on the index's
-		// parent table descriptors. During a mixed-version state, the database will
-		// write old-style table descriptors at all system boundaries, but upgrade
-		// all old-style table descriptors into the new format upon read. Once the
-		// upgrade is finalized, the database will write the upgraded format, but
-		// continue to upgrade old-style descriptors on-demand.
-		//
-		// This version is also used for the new foreign key schema changes which
-		// are run in the schema changer, requiring new types of mutations on the
-		// table descriptor. The same version is used for both of these changes
-		// because the changes are intertwined, and it slightly simplifies some of
-		// the logic to assume that either neither or both sets of changes can be
-		// active.
-		Key:     VersionTopLevelForeignKeys,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 7},
+		Key:     TruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 22},
 	},
 	{
-		// VersionAtomicChangeReplicasTrigger is https://github.com/cockroachdb/cockroach/pull/39485.
-		//
-		// It enables use of updated fields in ChangeReplicasTrigger that will
-		// support atomic replication changes.
-		Key:     VersionAtomicChangeReplicasTrigger,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
+		Key:     PostTruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 24},
 	},
 	{
-		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
-		//
-		// It provides an implementation of (*Replica).ChangeReplicas that uses
-		// atomic replication changes. The corresponding cluster setting
-		// 'kv.atomic_replication_changes.enabled' provides a killswitch (i.e.
-		// no atomic replication changes will be scheduled when it is set to
-		// 'false').
-		Key:     VersionAtomicChangeReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
-	},
-	{
-		// VersionTableDescModificationTimeFromMVCC is https://github.com/cockroachdb/cockroach/pull/40581
-		//
-		// It represents an upgrade to the table descriptor format in which
-		// CreateAsOfTime and ModifiedTime are set to zero when new versions of
-		// table descriptors are written. This removes the need to fix the commit
-		// timestamp for transactions which update table descriptors. The value
-		// is then populated by the reading client with the MVCC timestamp of the
-		// row which contained the serialized table descriptor.
-		Key:     VersionTableDescModificationTimeFromMVCC,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 10},
-	},
-	{
-		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
-		Key:     VersionPartitionedBackup,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
-	},
-	{
-		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
-		Key:     Version19_2,
-		Version: roachpb.Version{Major: 19, Minor: 2},
-	},
-	{
-		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
-		Key:     VersionStart20_1,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
-	},
-	{
-		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
-		//
-		// MVCCStats.ContainsEstimates has been migrated from boolean to a
-		// counter so that the consistency checker and splits can reset it by
-		// returning -ContainsEstimates, avoiding racing with other operations
-		// that want to also change it.
-		//
-		// The migration maintains the invariant that raft commands with
-		// ContainsEstimates zero or one want the bool behavior (i.e. 1+1=1).
-		// Before the cluster version is active, at proposal time we'll refuse
-		// any negative ContainsEstimates plus we clamp all others to {0,1}.
-		// When the version is active, and ContainsEstimates is positive, we
-		// multiply it by 2 (i.e. we avoid 1). Downstream of raft, we use old
-		// behavior for ContainsEstimates=1 and the additive behavior for
-		// anything else.
-		Key:     VersionContainsEstimatesCounter,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 2},
-	},
-	{
-		// VersionChangeReplicasDemotion enables the use of voter demotions
-		// during replication changes that remove (one or more) voters.
-		// When this version is active, voters that are being removed transition
-		// first into VOTER_DEMOTING (a joint configuration) and from there to
-		// LEARNER, before they are actually removed. This added intermediate
-		// step avoids losing quorum when the leaseholder crashes at an
-		// inopportune moment.
-		//
-		// For example, without this version active, with nodes n1-n4 and a
-		// range initially replicated on n1, n3, and n4, a rebalance operation
-		// that wants to swap n1 for n2 first transitions into the joint
-		// configuration `(n1 n3 n4) && (n2 n3 n4)`, that is, n2 is
-		// VOTER_OUTGOING. After this is committed and applied (say by
-		// everyone), the configuration entry for the final configuration
-		// `(n2 n3 n4)` is distributed:
-		//
-		//- the leader is n3
-		//- conf entry reaches n1, n2, n3 (so it is committed under the joint config)
-		//- n1 applies conf change and immediately disappears (via replicaGC,
-		//  since it's not a part of the latest config)
-		//- n3 crashes
-		//
-		// At this point, the remaining replicas n4 and n2 form a quorum of the
-		// latest committed configuration, but both still have the joint
-		// configuration active, which cannot reach quorum any more.
-		// The intermediate learner step added by this version makes sure that
-		// n1 is still available at this point to help n2 win an election, and
-		// due to the invariant that replicas never have more than one unappliable
-		// configuration change in their logs, the group won't lose availability
-		// when the leader instead crashes while removing the learner.
-		Key:     VersionChangeReplicasDemotion,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 3},
-	},
-	{
-		// VersionSecondaryIndexColumnFamilies is https://github.com/cockroachdb/cockroach/pull/42073.
-		//
-		// It allows secondary indexes to respect table level column family definitions.
-		Key:     VersionSecondaryIndexColumnFamilies,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 4},
-	},
-	{
-		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
-		//
-		// It represents the migration to a new system.namespace table that has an
-		// added parentSchemaID column. In addition to the new column, the table is
-		// no longer in the system config range -- implying it is no longer gossiped.
-		Key:     VersionNamespaceTableWithSchemas,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 5},
-	},
-	{
-		// VersionProtectedTimestamps introduces the system tables for the protected
-		// timestamps subsystem.
-		//
-		// In this version and later the system.protected_ts_meta and
-		// system.protected_ts_records tables are part of the system bootstap
-		// schema.
-		Key:     VersionProtectedTimestamps,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
-	},
-	{
-		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
-		//
-		// It allows online primary key changes of tables.
-		Key:     VersionPrimaryKeyChanges,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
-	},
-	{
-		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
-		// prefix 'local' and auth methods 'trust' and 'reject', for use
-		// in server.host_based_authentication.configuration.
-		//
-		// A separate cluster version ensures the new syntax is not
-		// introduced while previous-version nodes are still running, as
-		// this would block any new SQL client.
-		Key:     VersionAuthLocalAndTrustRejectMethods,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 8},
-	},
-	{
-		// VersionPrimaryKeyColumnsOutOfFamilyZero allows for primary key columns
-		// to exist in column families other than 0, in order to prepare for
-		// primary key changes that move primary key columns to different families.
-		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
-	},
-	{
-		// VersionRootPassword enables setting a password for the `root`
-		// user from SQL. Even though introducing a password for the root
-		// user in 20.1 does not prevent 19.2 nodes from using the root
-		// account, we need a cluster setting: the 19.2 nodes do not even
-		// *check* the password, so setting a pw in a hybrid 20.1/19.2
-		// cluster would yield different client auth successes in
-		// different nodes (which is poor UX).
-		Key:     VersionRootPassword,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 10},
-	},
-	{
-		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
-		//
-		// It represents the migration away from using explicit index IDs in foreign
-		// key constraints, and instead allows all places that need these IDs to select
-		// an appropriate index to uphold the foreign key relationship.
-		Key:     VersionNoExplicitForeignKeyIndexIDs,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
-	},
-	{
-		// VersionHashShardedIndexes is https://github.com/cockroachdb/cockroach/pull/42922
-		//
-		// It allows the creation of "hash sharded indexes", which construct a hidden
-		// shard column, computed from the set of index columns, and prefix the index's
-		// ranges with said shard column.
-		Key:     VersionHashShardedIndexes,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
-	},
-	{
-		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.
-		//
-		// It represents adding role management via CREATEROLE privilege.
-		// Added new column in system.users table to track hasCreateRole.
-		Key:     VersionCreateRolePrivilege,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 13},
-	},
-	{
-		// VersionStatementDiagnosticsSystemTables introduces the system tables for
-		// storing statement information (like traces, bundles).
-		// In this version and later the system.statement_diagnostics_requests,
-		// system.statement_diagnostics and system.statement_bundle_chunks tables
-		// are part of the system bootstap schema.
-		Key:     VersionStatementDiagnosticsSystemTables,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 14},
-	},
-	{
-		// VersionSchemaChangeJob is https://github.com/cockroachdb/cockroach/pull/45870.
-		//
-		// From this version on, schema changes are run as jobs instead of being
-		// scheduled by the SchemaChangeManager.
-		Key:     VersionSchemaChangeJob,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 15},
-	},
-	{
-		// VersionSavepoints enables the use of SQL savepoints, whereby
-		// the ignored seqnum list can become populated in transaction
-		// records.
-		Key:     VersionSavepoints,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 16},
-	},
-	{
-		// VersionTimeTZType enables the use of the TimeTZ data type.
-		Key:     VersionTimeTZType,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 17},
-	},
-	{
-		// VersionTimePrecision enables the use of precision with time/intervals.
-		Key:     VersionTimePrecision,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 18},
-	},
-	{
-		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
-		Key:     Version20_1,
-		Version: roachpb.Version{Major: 20, Minor: 1},
-	},
-	{
-		// VersionStart20_2 demarcates work towards CockroachDB v20.2.
-		Key:     VersionStart20_2,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 1},
-	},
-	{
-
-		// VersionGeospatialType enables the use of Geospatial features.
-		Key:     VersionGeospatialType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
-	},
-	{
-		// VersionEnums enables the use of ENUM types.
-		Key:     VersionEnums,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 3},
-	},
-	{
-
-		// VersionRangefeedLeases is the enablement of leases uses rangefeeds.
-		// All nodes with this versions will have rangefeeds enabled on all system
-		// ranges. Once this version is finalized, gossip is not needed in the
-		// schema lease subsystem. Nodes which start with this version finalized
-		// will not pass gossip to the SQL layer.
-		Key:     VersionRangefeedLeases,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 4},
-	},
-	{
-		// VersionAlterColumnTypeGeneral enables the use of alter column type for
-		// conversions that require the column data to be rewritten.
-		Key:     VersionAlterColumnTypeGeneral,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
-	},
-	{
-		// VersionAlterSystemJobsTable is a version which modified system.jobs table.
-		Key:     VersionAlterSystemJobsAddCreatedByColumns,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 6},
-	},
-	{
-		// VersionAddScheduledJobsTable is a version which adds system.scheduled_jobs table.
-		Key:     VersionAddScheduledJobsTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 7},
-	},
-	{
-		// VersionUserDefinedSchemas enables the creation of user defined schemas.
-		Key:     VersionUserDefinedSchemas,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
-	},
-	{
-		// VersionNoOriginFKIndexes allows for foreign keys to no longer need
-		// indexes on the origin side of the relationship.
-		Key:     VersionNoOriginFKIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
-	},
-	{
-		// VersionClientRangeInfosOnBatchResponse moves the response RangeInfos from
-		// individual response headers to the batch header.
-		Key:     VersionClientRangeInfosOnBatchResponse,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
-	},
-	{
-		// VersionNodeMembershipStatus gates the usage of the MembershipStatus
-		// enum in the Liveness proto. See comment on proto definition for more
-		// details.
-		Key:     VersionNodeMembershipStatus,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
-	},
-	{
-		// VersionRangeStatsRespHasDesc adds the RangeStatsResponse.RangeInfo field.
-		Key:     VersionRangeStatsRespHasDesc,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
-	},
-	{
-		// VersionMinPasswordLength adds the server.user_login.min_password_length setting.
-		Key:     VersionMinPasswordLength,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
-	},
-	{
-		// VersionAbortSpanBytes adds a field to MVCCStats
-		// (MVCCStats.AbortSpanBytes) that tracks the size of a
-		// range's abort span.
-		Key:     VersionAbortSpanBytes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
-	},
-	{
-		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
-		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 15},
-	},
-	{
-		// VersionMaterializedViews enables the use of materialized views.
-		Key:     VersionMaterializedViews,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 16},
-	},
-	{
-		// VersionBox2DType enables the use of the box2d type.
-		Key:     VersionBox2DType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 17},
+		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+		Key:     V21_1,
+		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
 
-	// Add new versions here (step two of two).
+	// Internal versions must be even.
 
-})
+	// v21.1PLUS version. This is a special v21.1.x release with extra changes,
+	// used internally for the 2021 Serverless offering.
+	//
+	// Any v21.1PLUS change that needs a migration will have a v21.2 version on
+	// master but a v21.1PLUS version on the v21.1PLUS branch.
+	{
+		Key: Start21_1PLUS,
+		// The Internal version starts out at 14 for historic reasons: at the time
+		// this was added, v21.2 versions were already defined up to 12.
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
+	},
+
+	// v21.2 versions.
+	{
+		Key:     Start21_2,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
+	},
+	{
+		Key:     JoinTokensTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1104},
+	},
+	{
+		Key:     AcquisitionTypeInLeaseHistory,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1106},
+	},
+	{
+		Key:     SerializeViewUDTs,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1108},
+	},
+	{
+		Key:     ExpressionIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1110},
+	},
+	{
+		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1112},
+	},
+	{
+		Key:     FixDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
+	},
+	{
+		Key:     SQLStatsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1116},
+	},
+	{
+		Key:     DatabaseRoleSettings,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
+	},
+	{
+		Key:     TenantUsageTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1120},
+	},
+	{
+		Key:     SQLInstancesTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1122},
+	},
+	{
+		Key:     NewRetryableRangefeedErrors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1124},
+	},
+	{
+		Key:     AlterSystemWebSessionsCreateIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1126},
+	},
+	{
+		Key:     SeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1128},
+	},
+	{
+		Key:     PostSeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1130},
+	},
+	{
+		Key:     RetryJobsWithExponentialBackoff,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1132},
+	},
+	{
+		Key:     RecordsBasedRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1134},
+	}, {
+		Key:     AutoSpanConfigReconciliationJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
+	},
+	{
+		Key:     PreventNewInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1138},
+	},
+	{
+		Key:     EnsureNoInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1140},
+	},
+	{
+		Key:     DefaultPrivileges,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1142},
+	},
+	{
+		Key:     ZonesTableForSecondaryTenants,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1144},
+	},
+	{
+		Key:     UseKeyEncodeForHashShardedIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1146},
+	},
+	{
+		Key:     DatabasePlacementPolicy,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1148},
+	},
+	{
+		Key:     GeneratedAsIdentity,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1150},
+	},
+	{
+		Key:     OnUpdateExpressions,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1152},
+	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1154},
+	},
+	{
+		Key:     BoundedStaleness,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
+	},
+	{
+		Key:     SQLStatsCompactionScheduledJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1158},
+	},
+	{
+		Key:     DateAndIntervalStyle,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
+	},
+	{
+		Key:     PebbleFormatVersioned,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
+	},
+	{
+		Key:     MarkerDataKeysRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
+	},
+	{
+		Key:     PebbleSetWithDelete,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
+	},
+	{
+		Key:     TenantUsageSingleConsumptionColumn,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
+	},
+	{
+		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
+		Key:     V21_2,
+		Version: roachpb.Version{Major: 21, Minor: 2},
+	},
+	// *************************************************
+	// Step (2): Add new versions here.
+	// Do not add new versions to a patch release.
+	// *************************************************
+}
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
@@ -589,14 +507,9 @@ var (
 	// binaryMinSupportedVersion is the earliest version of data supported by
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
-	// an error.
-	// We support everything after 19.1, including pre-release 19.2 versions.
-	// This is generally beneficial, but in particular it allows the
-	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading
-	// to HEAD; if we were to set binaryMinSupportedVersion to Version19_2,
-	// that wouldn't work since you'd have to go through the final 19.2 binary
-	// before going to HEAD.
-	binaryMinSupportedVersion = VersionByKey(Version20_1)
+	// an error. This typically trails the current release by one (see top-level
+	// comment).
+	binaryMinSupportedVersion = ByKey(V21_1)
 
 	// binaryVersion is the version of this binary.
 	//
@@ -604,8 +517,25 @@ var (
 	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
 )
 
-// VersionByKey returns the roachpb.Version for a given key.
+// ByKey returns the roachpb.Version for a given key.
 // It is a fatal error to use an invalid key.
-func VersionByKey(key VersionKey) roachpb.Version {
+func ByKey(key Key) roachpb.Version {
 	return versionsSingleton.MustByKey(key)
+}
+
+// ListBetween returns the list of cluster versions in the range
+// (from, to].
+func ListBetween(from, to ClusterVersion) []ClusterVersion {
+	return listBetweenInternal(from, to, versionsSingleton)
+}
+
+func listBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVersion {
+	var cvs []ClusterVersion
+	for _, keyedV := range vs {
+		// Read: "from < keyedV <= to".
+		if from.Less(keyedV.Version) && keyedV.Version.LessEq(to.Version) {
+			cvs = append(cvs, ClusterVersion{Version: keyedV.Version})
+		}
+	}
+	return cvs
 }

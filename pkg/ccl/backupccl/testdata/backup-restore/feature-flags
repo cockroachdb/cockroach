@@ -1,0 +1,38 @@
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+# Test running backup when BACKUP feature flag is disabled.
+exec-sql
+SET CLUSTER SETTING feature.backup.enabled = FALSE;
+BACKUP TO 'nodelocal://0/test-root/';
+----
+pq: feature BACKUP was disabled by the database administrator
+
+# Test running backup when feature flag is enabled.
+exec-sql
+SET CLUSTER SETTING feature.backup.enabled = TRUE;
+BACKUP TO 'nodelocal://0/test-root/';
+----
+
+exec-sql
+DROP TABLE d.t;
+----
+
+# Test running restore when feature flag is disabled.
+exec-sql
+SET CLUSTER SETTING feature.restore.enabled = FALSE;
+RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+----
+pq: feature RESTORE was disabled by the database administrator
+
+# Test running restore when feature flag is enabled.
+exec-sql
+SET CLUSTER SETTING feature.restore.enabled = TRUE;
+RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+----

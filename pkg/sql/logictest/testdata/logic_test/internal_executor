@@ -1,0 +1,7 @@
+# Regression tests for incorrect concurrent usage of the txn in the internal
+# executor (#62415).
+statement ok
+SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND  description like '%idx1%';
+
+statement ok
+SELECT a.job_id, b.job_id FROM [SHOW JOBS] a, [SHOW JOBS] b;

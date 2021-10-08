@@ -11,8 +11,8 @@
 package row
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -41,48 +41,41 @@ type PartialIndexUpdateHelper struct {
 // Meanwhile, partialIndexPutVals[3] evaluating to false indicates that the
 // third partial index should be ignored.
 func (pm *PartialIndexUpdateHelper) Init(
-	partialIndexPutVals tree.Datums,
-	partialIndexDelVals tree.Datums,
-	tabDesc *sqlbase.ImmutableTableDescriptor,
+	partialIndexPutVals tree.Datums, partialIndexDelVals tree.Datums, tabDesc catalog.TableDescriptor,
 ) error {
 	colIdx := 0
-	partialIndexOrds := tabDesc.PartialIndexOrds()
-	indexes := tabDesc.DeletableIndexes()
 
-	for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
-		index := &indexes[i]
-		if index.IsPartial() {
+	for _, idx := range tabDesc.PartialIndexes() {
 
-			// Check the boolean partial index put column, if it exists.
-			if colIdx < len(partialIndexPutVals) {
-				val, err := tree.GetBool(partialIndexPutVals[colIdx])
-				if err != nil {
-					return err
-				}
-				if !val {
-					// If the value of the column for the index predicate
-					// expression is false, the row should not be added to the
-					// partial index.
-					pm.IgnoreForPut.Add(int(index.ID))
-				}
+		// Check the boolean partial index put column, if it exists.
+		if colIdx < len(partialIndexPutVals) {
+			val, err := tree.GetBool(partialIndexPutVals[colIdx])
+			if err != nil {
+				return err
 			}
-
-			// Check the boolean partial index del column, if it exists.
-			if colIdx < len(partialIndexDelVals) {
-				val, err := tree.GetBool(partialIndexDelVals[colIdx])
-				if err != nil {
-					return err
-				}
-				if !val {
-					// If the value of the column for the index predicate
-					// expression is false, the row should not be removed from
-					// the partial index.
-					pm.IgnoreForDel.Add(int(index.ID))
-				}
+			if !val {
+				// If the value of the column for the index predicate
+				// expression is false, the row should not be added to the
+				// partial index.
+				pm.IgnoreForPut.Add(int(idx.GetID()))
 			}
-
-			colIdx++
 		}
+
+		// Check the boolean partial index del column, if it exists.
+		if colIdx < len(partialIndexDelVals) {
+			val, err := tree.GetBool(partialIndexDelVals[colIdx])
+			if err != nil {
+				return err
+			}
+			if !val {
+				// If the value of the column for the index predicate
+				// expression is false, the row should not be removed from
+				// the partial index.
+				pm.IgnoreForDel.Add(int(idx.GetID()))
+			}
+		}
+
+		colIdx++
 	}
 
 	return nil

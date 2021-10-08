@@ -1,0 +1,43 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Data structures and basic infrastructure for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto3";
+package cockroach.util.optional;
+option go_package = "optional";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// Uint stores an optional unsigned integer value. Optional means that it may
+// not be set, and one can differentiate between being unset and having a value
+// of zero.
+message Uint {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The underlying value is the logical value plus 1, so that zero remains the
+  // special case of having no value.
+  uint64 value_plus_one = 1;
+}
+
+// Duration stores an optional time.Duration. Optional means that it may not be
+// set, and one can differentiate between being unset and having a value of
+// zero.
+message Duration {
+  option (gogoproto.goproto_stringer) = false;
+  // ValuePlusOne is the logical value plus 1, so that zero remains the special
+  // case of having no value.
+  // DO NOT ACCESS THIS DIRECTLY. Use HasValue and Value instead.
+  google.protobuf.Duration value_plus_one = 1 [(gogoproto.nullable) = false,
+                                               (gogoproto.stdduration) = true];
+}

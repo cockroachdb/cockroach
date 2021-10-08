@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,10 +28,11 @@ import (
 type relocateNode struct {
 	optColumnsSlot
 
-	relocateLease bool
-	tableDesc     *sqlbase.ImmutableTableDescriptor
-	index         *descpb.IndexDescriptor
-	rows          planNode
+	relocateLease     bool
+	relocateNonVoters bool
+	tableDesc         catalog.TableDescriptor
+	index             catalog.Index
+	rows              planNode
 
 	run relocateRun
 }
@@ -78,7 +79,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			)
 		}
 		relocation := data[0].(*tree.DArray)
-		if len(relocation.Array) == 0 {
+		if !n.relocateNonVoters && len(relocation.Array) == 0 {
+			// We cannot remove all voters.
 			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 		}
 
@@ -91,7 +93,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				// Lookup the store in gossip.
 				var storeDesc roachpb.StoreDescriptor
 				gossipStoreKey := gossip.MakeStoreKey(storeID)
-				g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr()
+				g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
 				if err != nil {
 					return false, err
 				}
@@ -125,12 +127,22 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
+	existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
+	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	if n.relocateLease {
 		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
+	} else if n.relocateNonVoters {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, existingVoters, relocationTargets,
+		); err != nil {
+			return false, err
+		}
 	} else {
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(params.ctx, rowKey, relocationTargets); err != nil {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, relocationTargets, existingNonVoters,
+		); err != nil {
 			return false, err
 		}
 	}
@@ -141,7 +153,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 func (n *relocateNode) Values() tree.Datums {
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastRangeStartKey)),
-		tree.NewDString(keys.PrettyPrint(sqlbase.IndexKeyValDirs(n.index), n.run.lastRangeStartKey)),
+		tree.NewDString(keys.PrettyPrint(catalogkeys.IndexKeyValDirs(n.index), n.run.lastRangeStartKey)),
 	}
 }
 

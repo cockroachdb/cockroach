@@ -17,17 +17,37 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It
 // ensures that the log files are stored in a directory specific to a
-// test, and asserts that logging output is not written to this
+// test, and enforces that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir          string
-	stderrThreshold Severity
+	logDir    string
+	cleanupFn func()
+	previous  struct {
+		appliedConfig           string
+		stderrSinkInfoTemplate  sinkInfo
+		stderrSinkInfo          *sinkInfo
+		channels                map[Channel]*loggerT
+		debugLog                *loggerT
+		testingFd2CaptureLogger *loggerT
+		exitOverrideFn          func(exit.Code, error)
+		exitOverrideHideStack   bool
+
+		allSinkInfos []*sinkInfo
+		allLoggers   []*loggerT
+	}
 }
 
 // tShim is the part of testing.T used by TestLogScope.
@@ -41,11 +61,8 @@ type tShim interface {
 	Name() string
 	Log(...interface{})
 	Logf(fmt string, args ...interface{})
+	Helper()
 }
-
-// showLogs reflects the use of -show-logs on the command line and is
-// used for testing.
-var showLogs bool
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // temporary logging directory. If -show-logs was passed on the
@@ -55,8 +72,8 @@ var showLogs bool
 // See the documentation of ScopeWithoutShowLogs() for API usage and
 // restrictions.
 func Scope(t tShim) *TestLogScope {
-	if showLogs {
-		return (*TestLogScope)(nil)
+	if logging.showLogs {
+		return newLogScope(t, true /* mostlyInline */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -74,55 +91,55 @@ func Scope(t tShim) *TestLogScope {
 // directory.
 // When the scope ends, the previous configuration is restored.
 //
-// ScopeWithoutShowLogs() is only valid if file output was not yet
-// active. If it was, the test fails with an assertion error.
-// The motivation for this restriction is to simplify reasoning by
-// users of this facility: if a user has set up their code so that
-// logging goes to files already, they are signaling that they want
-// logging to go there and not elsewhere. In that case, it is
-// undesirable to come along with a new random directory and take
-// logging over there.
-//
-// ScopeWithoutShowLogs() is only valid if there were no secondary
-// loggers already active. If there were, the test fails with an
-// assertion error.
-// The reason for this restriction is ease of implementation: to
-// support TestLogScope "under" multiple loggers, we'd need to
-// extend the implementation to save/restore the state of all the loggers,
-// not just mainLog. This would be necessary because loggers don't
-// necessarily have the same config. Until that is implemented,
-// we prevent the use case altogether.
-//
 // ScopeWithoutShowLogs() does not enable redirection of internal
 // stderr writes to files. Tests that wish to use that facility should
 // call the other APIs in these package after setting up a
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
-	// Refuse to work "under" secondary loggers (saving+restoring
-	// state for secondary loggers is not implemented yet).
-	func() {
-		secondaryLogRegistry.mu.Lock()
-		defer secondaryLogRegistry.mu.Unlock()
-		if len(secondaryLogRegistry.mu.loggers) > 0 {
-			t.Fatal("can't use TestLogScope with secondary loggers active")
+	t.Helper()
+	return newLogScope(t, false /* mostlyInline */)
+}
+
+func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
+	t.Helper()
+	sc = &TestLogScope{}
+
+	// Remember a textual representation of the configuration.
+	// We'll use this as a double-check that our save and restore
+	// logic work properly.
+	sc.previous.appliedConfig = DescribeAppliedConfig()
+
+	logging.allSinkInfos.mu.Lock()
+	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	sc.previous.allLoggers = logging.allLoggers.mu.loggers
+	logging.allLoggers.mu.Unlock()
+
+	sc.previous.stderrSinkInfoTemplate = logging.stderrSinkInfoTemplate
+	logging.rmu.RLock()
+	sc.previous.stderrSinkInfo = logging.rmu.currentStderrSinkInfo
+	sc.previous.channels = logging.rmu.channels
+	logging.rmu.RUnlock()
+	sc.previous.debugLog = debugLog
+	sc.previous.testingFd2CaptureLogger = logging.testingFd2CaptureLogger
+	if cl := logging.testingFd2CaptureLogger; cl != nil {
+		// Temporarily give up the previous internal fd2 capture. We'll set
+		// up a new one with the new configuration below.
+		// The original will be restored in the Close() function.
+		if err := cl.getFileSink().relinquishInternalStderr(); err != nil {
+			// This should not fail. If it does, some caller messed up by
+			// switching over stderr redirection to a different file sink
+			// without our involvement. That's invalid API usage.
+			panic(err)
 		}
-	}()
-
-	// The challenge of a log scope is that it needs to "scoop up" all
-	// the logging output but then also restore the original
-	// configuration at the end. What does "scooping up" mean here? and
-	// what does "restore the original configuration" mean?
-	//
-	// - logging was not yet going to files and it must now go to files.
-	//   This means configuring a log directory and ensuring files for all the loggers.
-	//   => At the end, the log directory config must be reset and the log files closed.
-	// - if logging was configured to also go to stderr via stderrThreshold, that must stop.
-	//   => At the end, the stderrThreshold setting(s) must be restored.
-
-	sc = &TestLogScope{
-		// Remember the stderr threshold. Close() will restore it.
-		stderrThreshold: mainLog.stderrThreshold.get(),
 	}
+	logging.testingFd2CaptureLogger = nil
+	logging.mu.Lock()
+	sc.previous.exitOverrideFn = logging.mu.exitOverride.f
+	sc.previous.exitOverrideHideStack = logging.mu.exitOverride.hideStack
+	logging.mu.Unlock()
+
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
 		// We use the scope's Close() method as general-purpose finalizer,
@@ -139,118 +156,294 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Remember the directory name for the Close() function.
 	sc.logDir = tempDir
 
-	// Make the main logger switch over to files, into the new temp
-	// directory. The first argument "" asserts that file output was not
-	// active yet. This enforces the invariant of the API.
-	if err := dirTestOverride("", tempDir); err != nil {
+	// Obtain the standard test configuration, with the configured
+	// destination directory.
+	cfg := getTestConfig(&sc.logDir, mostlyInline)
+
+	// Reset the server identifiers, so that new servers
+	// can report their IDs through logging.
+	TestingClearServerIdentifiers()
+
+	// Switch to the new configuration.
+	TestingResetActive()
+	sc.cleanupFn, err = ApplyConfig(cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Override the stderr threshold for the main logger.
-	// From this point log entries do not show up on stderr any more;
-	// they only go to files.
-	mainLog.stderrThreshold.set(Severity_NONE)
-
-	t.Logf("test logs captured to: %s", tempDir)
+	t.Logf("test logs captured to: %s", sc.logDir)
 	return sc
+}
+
+// getTestConfig initialize the logging configuration to parameters
+// suitable for use in tests.
+//
+// fileDir is nil when the function is called without an output
+// directory, to construct the default log config upon init().
+// mostlyInline is true when -show-logs is specified.
+func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Config) {
+	testConfig = logconfig.DefaultConfig()
+
+	forcePanicsToStderr := func(c *logconfig.Config) {
+		// Disable the internal fd2 capture to file, to ensure that panic
+		// objects get reported to stderr.
+		c.CaptureFd2.Enable = false
+		// Since we are letting fd2 writes go to the external stderr,
+		// we cannot keep redaction markers there.
+		*c.Sinks.Stderr.Redactable = false
+	}
+
+	if logging.testLogConfig != "" {
+		// The person running the test has requested a custom logging configuration.
+		// Use their choice.
+		h := logconfig.Holder{Config: testConfig}
+		if err := h.Set(logging.testLogConfig); err != nil {
+			panic(errors.Wrap(err, "error in test log config spec"))
+		}
+
+		forcePanicsToStderr(&h.Config)
+
+		// Validate the configuration. This also ensures that if the
+		// user's choice does not set a target directory, we use the
+		// test-specific target directory instead.
+		if err := h.Config.Validate(fileDir); err != nil {
+			panic(errors.Wrap(err, "error in test log config spec"))
+		}
+
+		return h.Config
+	}
+
+	if fileDir == nil {
+		// File output is disabled; we use stderr for everything.
+		// This happens e.g. when a test is not using log.Scope().
+
+		// All messages go to stderr.
+		testConfig.Sinks.Stderr.Filter = severity.INFO
+		// Ensure all channels go to stderr.
+		testConfig.Sinks.Stderr.Channels = logconfig.SelectChannels(logconfig.AllChannels()...)
+		// Remove all sinks other than stderr.
+		testConfig.Sinks.FluentServers = nil
+		testConfig.Sinks.FileGroups = nil
+	} else {
+		// Output to files enabled.
+
+		// We have two desired cases: -show-logs (mostlyInline = true)
+		// and without -show-logs (default, mostlyInline = false).
+
+		// In both cases, we emit output to files, with the STORAGE and
+		// HEALTH channels split into separate files.  We do keep a copy
+		// of HEALTH and STORAGE warning and errors on the main file
+		// though.
+		testConfig.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+			"storage": {
+				Channels: logconfig.SelectChannels(channel.STORAGE),
+			},
+			"health": {
+				Channels: logconfig.SelectChannels(channel.HEALTH),
+			},
+			// Also add the WARNING+ events from STORAGE and CHANNEL into the
+			// default file group.
+			"default": {
+				Channels: logconfig.ChannelFilters{
+					Filters: map[logpb.Severity]logconfig.ChannelList{
+						severity.WARNING: {Channels: []logpb.Channel{channel.STORAGE, channel.HEALTH}},
+					},
+				},
+			},
+		}
+
+		// Then we need to choose what to do with the stderr sink.
+		if mostlyInline {
+			// User requested -show-logs.
+			//
+			// Include everything on stderr except STORAGE and HEALTH at
+			// severity below WARNING.
+			testConfig.Sinks.Stderr.Filter = severity.INFO
+			testConfig.Sinks.Stderr.Channels.Filters = map[logpb.Severity]logconfig.ChannelList{
+				logpb.Severity_INFO:    {Channels: selectAllChannelsExceptStorageAndHealth()},
+				logpb.Severity_WARNING: {Channels: []logpb.Channel{channel.HEALTH, channel.STORAGE}},
+			}
+		} else {
+			// Preferring file output only.
+			//
+			// Even though we use file output, make all logged fatal
+			// calls go to the external stderr, in addition to the log file.
+			//
+			// We want FATAL messages because those don't pertain to a
+			// specific test, but rather to the whole package / go test
+			// invocation because they stop the execution. They elucidate
+			// why the 'go test' invocation fails prematurely.
+			testConfig.Sinks.Stderr.Filter = severity.FATAL
+		}
+	}
+
+	if skip.UnderBench() {
+		// Avoid logging anything to stderr, to avoid polluting the output
+		// of benchmarks. This is necessary because 'go test' unhelpfully
+		// merges stdout and stderr writes together.
+		//
+		// This overrides any default set above.
+		testConfig.Sinks.Stderr.Filter = severity.NONE
+	}
+
+	forcePanicsToStderr(&testConfig)
+
+	if err := testConfig.Validate(fileDir); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error in predefined test log config"))
+	}
+	return testConfig
+}
+
+func selectAllChannelsExceptStorageAndHealth() []logpb.Channel {
+	res := logconfig.AllChannels()
+	k := 0
+	for _, ch := range res {
+		if ch == channel.HEALTH || ch == channel.STORAGE {
+			continue
+		}
+		res[k] = ch
+		k++
+	}
+	res = res[:k]
+	return res
+}
+
+// SetupSingleFileLogging modifies the configuration of the Scope
+// to ensure all the logging output gets redirected to one file.
+// By default, the logging output in tests gets split into
+// multiple files to avoid noise on the main logging output.
+//
+// This facility exists for tests like TestStatusLogsAPI which
+// inspect/assert the number of generated log files.
+//
+// Note: this is a no-op when the scope is currently redirected to
+// stderr, e.g. when instantiated via log.Scope() and run with
+// -show-logs.
+// To ensure that output always goes to one file, use
+// log.ScopeWithoutShowLogs().
+func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
+	if l.logDir == "" {
+		// No log directory: no-op.
+		return func() {}
+	}
+
+	// Set up a logging configuration with just one file sink.
+	cfg := logconfig.DefaultConfig()
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"default": {
+			Channels: logconfig.SelectChannels(logconfig.AllChannels()...)},
+	}
+	// Disable the -stderr.log output so there's really just 1 file.
+	cfg.CaptureFd2.Enable = false
+
+	// Derive a full config using the same directory as the
+	// TestLogScope.
+	if err := cfg.Validate(&l.logDir); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
+	}
+
+	// Apply the configuration.
+	TestingResetActive()
+	cleanup, err := ApplyConfig(cfg)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
+	}
+	return cleanup
+}
+
+// GetDirectory retrieves the log directory for this scope.
+func (l *TestLogScope) GetDirectory() string {
+	return l.logDir
 }
 
 // Rotate closes the current log files so that the next log call will
 // reopen them with current settings. This is useful when e.g. a test
 // changes the logging configuration after opening a test log scope.
 func (l *TestLogScope) Rotate(t tShim) {
+	t.Helper()
+	t.Logf("-- test log scope file rotation --")
 	// Ensure remaining logs are written.
 	Flush()
 
-	func() {
-		mainLog.mu.Lock()
-		defer mainLog.mu.Unlock()
-		if err := mainLog.closeFileLocked(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		func() {
-			l.logger.mu.Lock()
-			defer l.logger.mu.Unlock()
-			if err := l.logger.closeFileLocked(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-	}
-}
-
-// restoreStderrThreshold restores the stderr output threshold at the end
-// of a scope.
-// The threshold is restored on mainLog and all the secondary loggers.
-// Why not just mainLog, given that the ScopeWithoutShowLog() API has
-// "no secondary loggers" as a prerequisite? Well it may be that
-// the test code "under" the scope started some secondary loggers, and
-// those have not stopped yet. This is legitimate. So now we want
-// to do something about their individual stderr threshold.
-//
-// The question is however which threshold to use for which secondary
-// logger. Since we know that all these secondary loggers were forked
-// off mainLog (since they didn't exist before), we also know they all
-// have the same threshold setting: the one that was present on
-// mainLog originally. Therefore, if we restore the mainLog setting,
-// it is reasonable to also restore the mainLog setting onto all the
-// secondary loggers.
-func (l *TestLogScope) restoreStderrThreshold() {
-	mainLog.stderrThreshold.set(l.stderrThreshold)
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, secL := range secondaryLogRegistry.mu.loggers {
-		secL.logger.stderrThreshold.set(l.stderrThreshold)
+	if err := logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.closeFileLocked()
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
-	if l == nil || l.logDir == "" {
+	t.Helper()
+	if l == nil {
 		// Never initialized.
 		return
 	}
+	t.Logf("-- test log scope end --")
 
 	// Ensure any remaining logs are written to files.
 	Flush()
 
-	// Restore the stderr threshold (which log events are copied
-	// to external stderr).
-	l.restoreStderrThreshold()
-
-	defer func() {
-		// Check whether there is something to remove.
-		emptyDir, err := isDirEmpty(l.logDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		inPanic := calledDuringPanic()
-		if (t.Failed() && !emptyDir) || inPanic {
-			// If the test failed or there was a panic, we keep the log
-			// files for further investigation.
-			if inPanic {
-				fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-					"Details cannot be printed yet because we are still unwinding.\n"+
-					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+	if l.logDir != "" {
+		defer func() {
+			// Check whether there is something to remove.
+			emptyDir, err := isDirEmpty(l.logDir)
+			if err != nil {
+				t.Fatal(err)
 			}
-			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
-		} else {
-			// Clean up.
-			if err := os.RemoveAll(l.logDir); err != nil {
-				t.Error(err)
+			inPanic := calledDuringPanic()
+			if (t.Failed() && !emptyDir) || inPanic {
+				// If the test failed or there was a panic, we keep the log
+				// files for further investigation.
+				if inPanic {
+					fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+						"Details cannot be printed yet because we are still unwinding.\n"+
+						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+				}
+				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
+			} else {
+				// Clean up.
+				if err := os.RemoveAll(l.logDir); err != nil {
+					t.Error(err)
+				}
 			}
-		}
-	}()
+		}()
+	}
 
-	// Flush/Close the log files.
-	if err := dirTestOverride(l.logDir, ""); err != nil {
-		t.Fatal(err)
+	if l.cleanupFn != nil {
+		l.cleanupFn()
+	}
+	logging.stderrSinkInfoTemplate = l.previous.stderrSinkInfoTemplate
+	logging.setChannelLoggers(l.previous.channels, l.previous.stderrSinkInfo)
+	debugLog = l.previous.debugLog
+	logging.testingFd2CaptureLogger = l.previous.testingFd2CaptureLogger
+	if cl := logging.testingFd2CaptureLogger; cl != nil {
+		if err := cl.getFileSink().takeOverInternalStderr(cl); err != nil {
+			t.Error(err)
+		}
+	}
+	logging.mu.Lock()
+	logging.mu.exitOverride.f = l.previous.exitOverrideFn
+	logging.mu.exitOverride.hideStack = l.previous.exitOverrideHideStack
+	logging.mu.Unlock()
+
+	logging.allSinkInfos.mu.Lock()
+	logging.allSinkInfos.mu.sinkInfos = l.previous.allSinkInfos
+	logging.allSinkInfos.mu.Unlock()
+	logging.allLoggers.mu.Lock()
+	logging.allLoggers.mu.loggers = l.previous.allLoggers
+	logging.allLoggers.mu.Unlock()
+
+	// Sanity check: if the restore logic is complete, the applied
+	// configuration should be the same as when the scope started.
+	restoredConfig := DescribeAppliedConfig()
+	if restoredConfig != l.previous.appliedConfig {
+		t.Errorf(
+			"bug in TestLogScope - previous config:\n%s\nafter restore:\n%s",
+			l.previous.appliedConfig, restoredConfig)
 	}
 }
 
@@ -272,48 +465,10 @@ func calledDuringPanic() bool {
 	return false
 }
 
-// dirTestOverride sets the default value for the logging output directory
-// for use in tests.
-func dirTestOverride(expected, newDir string) error {
-	if err := mainLog.dirTestOverride(expected, newDir); err != nil {
-		return err
-	}
-	// Same with secondary loggers.
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		if err := l.logger.dirTestOverride(expected, newDir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *loggerT) dirTestOverride(expected, newDir string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.logDir.Lock()
-	// The following check is intended to catch concurrent uses of
-	// Scope() or TestLogScope.Close(), which would be invalid.
-	if l.logDir.name != expected {
-		l.logDir.Unlock()
-		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			l.logDir.name, expected)
-	}
-	l.logDir.name = newDir
-	l.logDir.Unlock()
-
-	// When we change the directory we close the current logging
-	// output, so that a rotation to the new directory is forced on
-	// the next logging event.
-	return l.closeFileLocked()
-}
-
 func isDirEmpty(dirname string) (bool, error) {
 	f, err := os.Open(dirname)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return true, nil
 		}
 		return false, err

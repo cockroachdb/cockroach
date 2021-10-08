@@ -1,5 +1,0 @@
-create_user_stmt ::=
-	'CREATE' 'USER' name opt_with role_options
-	| 'CREATE' 'USER' name 
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name opt_with role_options
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 

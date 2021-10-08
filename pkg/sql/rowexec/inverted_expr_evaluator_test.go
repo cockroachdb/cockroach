@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +65,10 @@ func fragmentedSpansToString(spans []invertedSpanRoutingInfo) string {
 		b.WriteString(" indexes (expr, set): ")
 		for _, indexes := range elem.exprAndSetIndexList {
 			fmt.Fprintf(&b, "(%d, %d) ", indexes.exprIndex, indexes.setIndex)
+		}
+		b.WriteString("(expr): ")
+		for _, indexes := range elem.exprIndexList {
+			fmt.Fprintf(&b, "%d ", indexes)
 		}
 		b.WriteString("\n")
 	}
@@ -138,31 +142,31 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 
 	leaf1 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{{Start: []byte("a"), End: []byte("d")}},
-		Operator:           invertedexpr.None,
+		Operator:           inverted.None,
 	}
 	leaf2 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{{Start: []byte("e"), End: []byte("h")}},
-		Operator:           invertedexpr.None,
+		Operator:           inverted.None,
 	}
 	l1Andl2 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{
 			{Start: []byte("i"), End: []byte("j")}, {Start: []byte("k"), End: []byte("n")}},
-		Operator: invertedexpr.SetIntersection,
+		Operator: inverted.SetIntersection,
 		Left:     leaf1,
 		Right:    leaf2,
 	}
 	leaf3 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{{Start: []byte("d"), End: []byte("f")}},
-		Operator:           invertedexpr.None,
+		Operator:           inverted.None,
 	}
 	leaf4 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{{Start: []byte("a"), End: []byte("c")}},
-		Operator:           invertedexpr.None,
+		Operator:           inverted.None,
 	}
 	l3Andl4 := &spanExpression{
 		FactoredUnionSpans: []invertedSpan{
 			{Start: []byte("g"), End: []byte("m")}},
-		Operator: invertedexpr.SetIntersection,
+		Operator: inverted.SetIntersection,
 		Left:     leaf3,
 		Right:    leaf4,
 	}
@@ -170,13 +174,13 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	// up to expr, by the factoring code in the invertedexpr package. But the
 	// evaluator does not care, and keeping them separate exercises more code.
 	exprUnion := &spanExpression{
-		Operator: invertedexpr.SetUnion,
+		Operator: inverted.SetUnion,
 		Left:     l1Andl2,
 		Right:    l3Andl4,
 	}
 
 	exprIntersection := &spanExpression{
-		Operator: invertedexpr.SetIntersection,
+		Operator: inverted.SetIntersection,
 		Left:     l1Andl2,
 		Right:    l3Andl4,
 	}
@@ -199,32 +203,37 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 
 	// The batchedInvertedExprEvaluators will construct their own
 	// invertedExprEvaluators.
-	protoUnion := invertedexpr.SpanExpressionProto{Node: *exprUnion}
+	protoUnion := inverted.SpanExpressionProto{Node: *exprUnion}
 	batchEvalUnion := &batchedInvertedExprEvaluator{
-		exprs: []*invertedexpr.SpanExpressionProto{&protoUnion, nil},
+		exprs: []*inverted.SpanExpressionProto{&protoUnion, nil},
 	}
-	protoIntersection := invertedexpr.SpanExpressionProto{Node: *exprIntersection}
+	protoIntersection := inverted.SpanExpressionProto{Node: *exprIntersection}
 	batchEvalIntersection := &batchedInvertedExprEvaluator{
-		exprs: []*invertedexpr.SpanExpressionProto{&protoIntersection, nil},
+		exprs: []*inverted.SpanExpressionProto{&protoIntersection, nil},
 	}
 	expectedSpans := "[a, n) "
 	expectedFragmentedSpans :=
-		"span: [a, c)  indexes (expr, set): (0, 6) (0, 2) \n" +
-			"span: [c, d)  indexes (expr, set): (0, 2) \n" +
-			"span: [d, e)  indexes (expr, set): (0, 5) \n" +
-			"span: [e, f)  indexes (expr, set): (0, 5) (0, 3) \n" +
-			"span: [f, g)  indexes (expr, set): (0, 3) \n" +
-			"span: [g, h)  indexes (expr, set): (0, 3) (0, 4) \n" +
-			"span: [h, i)  indexes (expr, set): (0, 4) \n" +
-			"span: [i, j)  indexes (expr, set): (0, 1) (0, 4) \n" +
-			"span: [j, k)  indexes (expr, set): (0, 4) \n" +
-			"span: [k, m)  indexes (expr, set): (0, 4) (0, 1) \n" +
-			"span: [m, n)  indexes (expr, set): (0, 1) \n"
+		"span: [a, c)  indexes (expr, set): (0, 6) (0, 2) (expr): 0 \n" +
+			"span: [c, d)  indexes (expr, set): (0, 2) (expr): 0 \n" +
+			"span: [d, e)  indexes (expr, set): (0, 5) (expr): 0 \n" +
+			"span: [e, f)  indexes (expr, set): (0, 5) (0, 3) (expr): 0 \n" +
+			"span: [f, g)  indexes (expr, set): (0, 3) (expr): 0 \n" +
+			"span: [g, h)  indexes (expr, set): (0, 3) (0, 4) (expr): 0 \n" +
+			"span: [h, i)  indexes (expr, set): (0, 4) (expr): 0 \n" +
+			"span: [i, j)  indexes (expr, set): (0, 1) (0, 4) (expr): 0 \n" +
+			"span: [j, k)  indexes (expr, set): (0, 4) (expr): 0 \n" +
+			"span: [k, m)  indexes (expr, set): (0, 4) (0, 1) (expr): 0 \n" +
+			"span: [m, n)  indexes (expr, set): (0, 1) (expr): 0 \n"
 
-	require.Equal(t, expectedSpans, spansToString(batchEvalUnion.init()))
+	invertedSpans, err := batchEvalUnion.init()
+	require.NoError(t, err)
+	require.Equal(t, expectedSpans, spansToString(invertedSpans))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalUnion.fragmentedSpans))
-	require.Equal(t, expectedSpans, spansToString(batchEvalIntersection.init()))
+
+	invertedSpans, err = batchEvalIntersection.init()
+	require.NoError(t, err)
+	require.Equal(t, expectedSpans, spansToString(invertedSpans))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalIntersection.fragmentedSpans))
 
@@ -248,8 +257,16 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 		indexRows[i], indexRows[j] = indexRows[j], indexRows[i]
 	})
 	for _, elem := range indexRows {
-		batchEvalUnion.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
-		batchEvalIntersection.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
+		add, err := batchEvalUnion.prepareAddIndexRow(inverted.EncVal(elem.key), nil /* encFull */)
+		require.NoError(t, err)
+		require.Equal(t, true, add)
+		err = batchEvalUnion.addIndexRow(elem.index)
+		require.NoError(t, err)
+		add, err = batchEvalIntersection.prepareAddIndexRow(inverted.EncVal(elem.key), nil /* encFull */)
+		require.NoError(t, err)
+		require.Equal(t, true, add)
+		err = batchEvalIntersection.addIndexRow(elem.index)
+		require.NoError(t, err)
 	}
 	require.Equal(t, expectedUnion, keyIndexesToString(batchEvalUnion.evaluate()))
 	require.Equal(t, expectedIntersection, keyIndexesToString(batchEvalIntersection.evaluate()))
@@ -258,9 +275,16 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	batchBoth := batchEvalUnion
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, &protoUnion, &protoIntersection)
-	batchBoth.init()
+	_, err = batchBoth.init()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, elem := range indexRows {
-		batchBoth.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
+		add, err := batchBoth.prepareAddIndexRow(inverted.EncVal(elem.key), nil /* encFull */)
+		require.NoError(t, err)
+		require.Equal(t, true, add)
+		err = batchBoth.addIndexRow(elem.index)
+		require.NoError(t, err)
 	}
 	require.Equal(t, "0: 0 3 4 5 6 7 8 \n1: 0 4 6 8 \n",
 		keyIndexesToString(batchBoth.evaluate()))
@@ -268,7 +292,9 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	// Reset and evaluate nil expressions.
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, nil, nil)
-	require.Equal(t, 0, len(batchBoth.init()))
+	invertedSpans, err = batchBoth.init()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(invertedSpans))
 	require.Equal(t, "0: \n1: \n", keyIndexesToString(batchBoth.evaluate()))
 }
 
@@ -277,40 +303,149 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 func TestFragmentedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	expr1 := invertedexpr.SpanExpressionProto{
+	expr1 := inverted.SpanExpressionProto{
 		Node: spanExpression{
 			FactoredUnionSpans: []invertedSpan{{Start: []byte("a"), End: []byte("g")}},
-			Operator:           invertedexpr.None,
+			Operator:           inverted.None,
 		},
 	}
-	expr2 := invertedexpr.SpanExpressionProto{
+	expr2 := inverted.SpanExpressionProto{
 		Node: spanExpression{
 			FactoredUnionSpans: []invertedSpan{{Start: []byte("d"), End: []byte("j")}},
-			Operator:           invertedexpr.None,
+			Operator:           inverted.None,
 		},
 	}
-	expr3 := invertedexpr.SpanExpressionProto{
+	expr3 := inverted.SpanExpressionProto{
 		Node: spanExpression{
 			FactoredUnionSpans: []invertedSpan{
 				{Start: []byte("e"), End: []byte("f")}, {Start: []byte("i"), End: []byte("l")},
 				{Start: []byte("o"), End: []byte("p")}},
-			Operator: invertedexpr.None,
+			Operator: inverted.None,
 		},
 	}
 	batchEval := &batchedInvertedExprEvaluator{
-		exprs: []*invertedexpr.SpanExpressionProto{&expr1, &expr2, &expr3},
+		exprs: []*inverted.SpanExpressionProto{&expr1, &expr2, &expr3},
 	}
-	require.Equal(t, "[a, l) [o, p) ", spansToString(batchEval.init()))
+	invertedSpans, err := batchEval.init()
+	require.NoError(t, err)
+	require.Equal(t, "[a, l) [o, p) ", spansToString(invertedSpans))
 	require.Equal(t,
-		"span: [a, d)  indexes (expr, set): (0, 0) \n"+
-			"span: [d, e)  indexes (expr, set): (0, 0) (1, 0) \n"+
-			"span: [e, f)  indexes (expr, set): (2, 0) (0, 0) (1, 0) \n"+
-			"span: [f, g)  indexes (expr, set): (0, 0) (1, 0) \n"+
-			"span: [g, i)  indexes (expr, set): (1, 0) \n"+
-			"span: [i, j)  indexes (expr, set): (1, 0) (2, 0) \n"+
-			"span: [j, l)  indexes (expr, set): (2, 0) \n"+
-			"span: [o, p)  indexes (expr, set): (2, 0) \n",
+		"span: [a, d)  indexes (expr, set): (0, 0) (expr): 0 \n"+
+			"span: [d, e)  indexes (expr, set): (0, 0) (1, 0) (expr): 0 1 \n"+
+			"span: [e, f)  indexes (expr, set): (0, 0) (1, 0) (2, 0) (expr): 0 1 2 \n"+
+			"span: [f, g)  indexes (expr, set): (0, 0) (1, 0) (expr): 0 1 \n"+
+			"span: [g, i)  indexes (expr, set): (1, 0) (expr): 1 \n"+
+			"span: [i, j)  indexes (expr, set): (1, 0) (2, 0) (expr): 1 2 \n"+
+			"span: [j, l)  indexes (expr, set): (2, 0) (expr): 2 \n"+
+			"span: [o, p)  indexes (expr, set): (2, 0) (expr): 2 \n",
 		fragmentedSpansToString(batchEval.fragmentedSpans))
+}
+
+type testPreFilterer struct {
+	t                  *testing.T
+	expectedPreFilters []interface{}
+	result             []bool
+}
+
+func (t *testPreFilterer) PreFilter(
+	enc inverted.EncVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	require.Equal(t.t, t.expectedPreFilters, preFilters)
+	rv := false
+	require.Equal(t.t, len(t.result), len(result))
+	for i := range result {
+		result[i] = t.result[i]
+		rv = rv || result[i]
+	}
+	return rv, nil
+}
+
+func TestInvertedExpressionEvaluatorPreFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Setup expressions such that the same expression appears multiple times
+	// in a span.
+	leaf1 := &spanExpression{
+		FactoredUnionSpans: []invertedSpan{{Start: []byte("a"), End: []byte("d")}},
+		Operator:           inverted.None,
+	}
+	leaf2 := &spanExpression{
+		FactoredUnionSpans: []invertedSpan{{Start: []byte("e"), End: []byte("h")}},
+		Operator:           inverted.None,
+	}
+	expr1 := &spanExpression{
+		Operator: inverted.SetIntersection,
+		Left: &spanExpression{
+			Operator: inverted.SetIntersection,
+			Left:     leaf1,
+			Right:    leaf2,
+		},
+		Right: leaf1,
+	}
+	expr1Proto := inverted.SpanExpressionProto{Node: *expr1}
+	expr2 := &spanExpression{
+		Operator: inverted.SetIntersection,
+		Left: &spanExpression{
+			Operator: inverted.SetIntersection,
+			Left:     leaf2,
+			Right:    leaf1,
+		},
+		Right: leaf2,
+	}
+	expr2Proto := inverted.SpanExpressionProto{Node: *expr2}
+	preFilters := []interface{}{"pf1", "pf2"}
+	batchEval := &batchedInvertedExprEvaluator{
+		exprs:          []*inverted.SpanExpressionProto{&expr1Proto, &expr2Proto},
+		preFilterState: preFilters,
+	}
+	invertedSpans, err := batchEval.init()
+	require.NoError(t, err)
+	require.Equal(t, "[a, d) [e, h) ", spansToString(invertedSpans))
+	require.Equal(t,
+		"span: [a, d)  indexes (expr, set): (0, 2) (0, 4) (1, 3) (expr): 0 1 \n"+
+			"span: [e, h)  indexes (expr, set): (0, 3) (1, 2) (1, 4) (expr): 0 1 \n",
+		fragmentedSpansToString(batchEval.fragmentedSpans))
+	feedIndexRows := func(indexRows []keyAndIndex, expectedAdd bool) {
+		for _, elem := range indexRows {
+			add, err := batchEval.prepareAddIndexRow(inverted.EncVal(elem.key), nil /* encFull */)
+			require.NoError(t, err)
+			require.Equal(t, expectedAdd, add)
+			if add {
+				err = batchEval.addIndexRow(elem.index)
+			}
+			require.NoError(t, err)
+		}
+
+	}
+	filterer := testPreFilterer{
+		t:                  t,
+		expectedPreFilters: preFilters,
+	}
+	batchEval.filterer = &filterer
+	// Neither row is pre-filtered, so 0 will appear in output.
+	filterer.result = []bool{true, true}
+	feedIndexRows([]keyAndIndex{{"a", 0}, {"e", 0}}, true)
+
+	// Row is excluded from second expression
+	filterer.result = []bool{true, false}
+	feedIndexRows([]keyAndIndex{{"a", 1}}, true)
+	filterer.result = []bool{true, true}
+	// Row is not excluded, but the previous exclusion means 1 will not appear
+	// in output of second expression.
+	feedIndexRows([]keyAndIndex{{"e", 1}}, true)
+
+	// Row is excluded from first expression
+	filterer.result = []bool{false, true}
+	feedIndexRows([]keyAndIndex{{"a", 2}}, true)
+	filterer.result = []bool{true, true}
+	// Row is not excluded, but the previous exclusion means 2 will not appear
+	// in output of first expression.
+	feedIndexRows([]keyAndIndex{{"e", 2}}, true)
+
+	// Rows are excluded from both expressions.
+	filterer.result = []bool{false, false}
+	feedIndexRows([]keyAndIndex{{"a", 3}, {"e", 3}}, false)
+
+	require.Equal(t, "0: 0 1 \n1: 0 2 \n", keyIndexesToString(batchEval.evaluate()))
 }
 
 // TODO(sumeer): randomized inputs for union, intersection and expression evaluation.

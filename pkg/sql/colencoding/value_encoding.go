@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -26,7 +26,7 @@ import (
 // the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	da *sqlbase.DatumAlloc,
+	da *rowenc.DatumAlloc,
 	vec coldata.Vec,
 	idx int,
 	typ encoding.Type,
@@ -57,7 +57,7 @@ func DecodeTableValueToCol(
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
 func decodeUntaggedDatumToCol(
-	da *sqlbase.DatumAlloc, vec coldata.Vec, idx int, t *types.T, buf []byte,
+	da *rowenc.DatumAlloc, vec coldata.Vec, idx int, t *types.T, buf []byte,
 ) ([]byte, error) {
 	var err error
 	switch t.Family() {
@@ -71,7 +71,7 @@ func decodeUntaggedDatumToCol(
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vec.Bytes().Set(idx, data)
-	case types.DateFamily, types.OidFamily:
+	case types.DateFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		vec.Int64()[idx] = i
@@ -94,6 +94,10 @@ func decodeUntaggedDatumToCol(
 			// We map these to 64-bit INT now. See #34161.
 			vec.Int64()[idx] = i
 		}
+	case types.JsonFamily:
+		var data []byte
+		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
+		vec.JSON().Bytes.Set(idx, data)
 	case types.UuidFamily:
 		var data uuid.UUID
 		buf, data, err = encoding.DecodeUntaggedUUIDValue(buf)
@@ -114,7 +118,7 @@ func decodeUntaggedDatumToCol(
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum
-		d, buf, err = sqlbase.DecodeUntaggedDatum(da, t, buf)
+		d, buf, err = rowenc.DecodeUntaggedDatum(da, t, buf)
 		if err != nil {
 			return buf, err
 		}

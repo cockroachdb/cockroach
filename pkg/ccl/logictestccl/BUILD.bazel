@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logictestccl",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/logictestccl",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "logictestccl_test",
+    size = "enormous",
+    srcs = [
+        "logic_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+        "@cockroach//c-deps:libgeos",
+    ],
+    embed = [":logictestccl"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/logictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

@@ -23,8 +23,6 @@ services:
     environment:
       - PGHOST=cockroach
       - PGPORT=26257
-      - PGSSLCERT=/certs/node.crt
-      - PGSSLKEY=/certs/node.key
     volumes:
       - ./kdc/krb5.conf:/etc/krb5.conf
       - ./psql/gss_test.go:/test/gss_test.go

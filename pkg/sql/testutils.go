@@ -14,12 +14,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -32,7 +36,7 @@ func CreateTestTableDescriptor(
 	parentID, id descpb.ID,
 	schema string,
 	privileges *descpb.PrivilegeDescriptor,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
 	if err != nil {
@@ -42,33 +46,44 @@ func CreateTestTableDescriptor(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
-		desc, err := MakeTableDesc(
+		db := dbdesc.NewInitial(parentID, "test", security.RootUserName())
+		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
 			nil, /* vs */
 			st,
 			n,
-			parentID, keys.PublicSchemaID, id,
+			db,
+			schemadesc.GetPublicSchema(),
+			id,
+			nil,             /* regionConfig */
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			nil, /* affected */
 			&semaCtx,
 			&evalCtx,
-			&sessiondata.SessionData{}, /* sessionData */
+			&sessiondata.SessionData{
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+					EnableUniqueWithoutIndexConstraints: true,
+					HashShardedIndexesEnabled:           true,
+				},
+			}, /* sessionData */
 			tree.PersistencePermanent,
 		)
-		return &desc, err
+		return desc, err
 	case *tree.CreateSequence:
-		desc, err := MakeSequenceTableDesc(
+		desc, err := NewSequenceTableDesc(
+			ctx,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil, /* params */
+			nil,   /* params */
+			false, /* isMultiRegion */
 		)
-		return &desc, err
+		return desc, err
 	default:
 		return nil, errors.Errorf("unexpected AST %T", stmt.AST)
 	}
@@ -97,11 +112,6 @@ func (r *StmtBufReader) AdvanceOne() {
 	r.buf.AdvanceOne()
 }
 
-// SeekToNextBatch skips to the beginning of the next batch of commands.
-func (r *StmtBufReader) SeekToNextBatch() error {
-	return r.buf.seekToNextBatch()
-}
-
 // Exec is a test utility function that takes a localPlanner (of type
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
@@ -113,7 +123,7 @@ func (dsp *DistSQLPlanner) Exec(
 		return err
 	}
 	p := localPlanner.(*planner)
-	p.stmt = &Statement{Statement: stmt}
+	p.stmt = makeStatement(stmt, ClusterWideID{} /* queryID */)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
@@ -124,13 +134,13 @@ func (dsp *DistSQLPlanner) Exec(
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
-		stmt.AST.StatementType(),
+		stmt.AST.StatementReturnType(),
 		execCfg.RangeDescriptorCache,
 		p.txn,
-		func(ts hlc.Timestamp) {
-			execCfg.Clock.Update(ts)
-		},
+		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
+		execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

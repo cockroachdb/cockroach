@@ -11,6 +11,7 @@
 package settings
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/errors"
@@ -51,12 +52,20 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
+// Default returns default value for setting.
+func (f *FloatSetting) Default() float64 {
+	return f.defaultValue
+}
+
+// Defeat the linter.
+var _ = (*FloatSetting).Default
+
 // Override changes the setting panicking if validation fails and also overrides
 // the default value.
 //
 // For testing usage only.
-func (f *FloatSetting) Override(sv *Values, v float64) {
-	if err := f.set(sv, v); err != nil {
+func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
+	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
 	sv.setDefaultOverrideInt64(f.slotIdx, int64(math.Float64bits(v)))
@@ -72,62 +81,59 @@ func (f *FloatSetting) Validate(v float64) error {
 	return nil
 }
 
-func (f *FloatSetting) set(sv *Values, v float64) error {
+func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(f.slotIdx, int64(math.Float64bits(v)))
+	sv.setInt64(ctx, f.slotIdx, int64(math.Float64bits(v)))
 	return nil
 }
 
-func (f *FloatSetting) setToDefault(sv *Values) {
+func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(f.slotIdx)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = f.set(sv, math.Float64frombits(uint64((val))))
+		_ = f.set(ctx, sv, math.Float64frombits(uint64((val))))
 		return
 	}
-	if err := f.set(sv, f.defaultValue); err != nil {
+	if err := f.set(ctx, sv, f.defaultValue); err != nil {
 		panic(err)
 	}
 }
 
-// Default returns the default value.
-func (f *FloatSetting) Default() float64 {
-	return f.defaultValue
+// WithPublic sets public visibility and can be chained.
+func (f *FloatSetting) WithPublic() *FloatSetting {
+	f.SetVisibility(Public)
+	return f
 }
+
+// WithSystemOnly indicates system-usage only and can be chained.
+func (f *FloatSetting) WithSystemOnly() *FloatSetting {
+	f.common.systemOnly = true
+	return f
+}
+
+// Defeat the linter.
+var _ = (*FloatSetting).WithSystemOnly
 
 // RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterNonNegativeFloatSetting defines a new setting with type float.
-func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterPositiveFloatSetting defines a new setting with type float.
-func RegisterPositiveFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v <= 0 {
-			return errors.Errorf("cannot set %s to a non-positive value: %f", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterValidatedFloatSetting defines a new setting with type float.
-func RegisterValidatedFloatSetting(
-	key, desc string, defaultValue float64, validateFn func(float64) error,
+func RegisterFloatSetting(
+	key, desc string, defaultValue float64, validateFns ...func(float64) error,
 ) *FloatSetting {
+	var validateFn func(float64) error
+	if len(validateFns) > 0 {
+		validateFn = func(v float64) error {
+			for _, fn := range validateFns {
+				if err := fn(v); err != nil {
+					return errors.Wrapf(err, "invalid value for %s", key)
+				}
+			}
+			return nil
+		}
+	}
+
 	if validateFn != nil {
 		if err := validateFn(defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
@@ -139,4 +145,20 @@ func RegisterValidatedFloatSetting(
 	}
 	register(key, desc, setting)
 	return setting
+}
+
+// NonNegativeFloat can be passed to RegisterFloatSetting.
+func NonNegativeFloat(v float64) error {
+	if v < 0 {
+		return errors.Errorf("cannot set to a negative value: %f", v)
+	}
+	return nil
+}
+
+// PositiveFloat can be passed to RegisterFloatSetting.
+func PositiveFloat(v float64) error {
+	if v <= 0 {
+		return errors.Errorf("cannot set to a non-positive value: %f", v)
+	}
+	return nil
 }

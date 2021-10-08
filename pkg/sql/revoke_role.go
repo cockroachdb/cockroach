@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -25,8 +25,8 @@ import (
 // RevokeRoleNode removes entries from the system.role_members table.
 // This is called from REVOKE <ROLE>
 type RevokeRoleNode struct {
-	roles       tree.NameList
-	members     tree.NameList
+	roles       []security.SQLUsername
+	members     []security.SQLUsername
 	adminOption bool
 
 	run revokeRoleRun
@@ -45,7 +45,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	sqltelemetry.IncIAMRevokeCounter(n.AdminOption)
 
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -56,15 +56,33 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range n.Roles {
+
+	inputRoles := make([]security.SQLUsername, len(n.Roles))
+	inputMembers := make([]security.SQLUsername, len(n.Members))
+	for i, role := range n.Roles {
+		normalizedRole, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		inputRoles[i] = normalizedRole
+	}
+	for i, member := range n.Members {
+		normalizedMember, err := security.MakeSQLUsernameFromUserInput(string(member), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		inputMembers[i] = normalizedMember
+	}
+
+	for _, r := range inputRoles {
 		// If the user is an admin, don't check if the user is allowed to add/drop
 		// roles in the role. However, if the role being modified is the admin role, then
 		// make sure the user is an admin with the admin option.
-		if hasAdminRole && string(r) != security.AdminRole {
+		if hasAdminRole && !r.IsAdminRole() {
 			continue
 		}
-		if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-			if string(r) == security.AdminRole {
+		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
+			if r.IsAdminRole() {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s is not a role admin for role %s", p.User(), r)
 			}
@@ -81,21 +99,21 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 
-	for _, r := range n.Roles {
-		if _, ok := roles[string(r)]; !ok {
+	for _, r := range inputRoles {
+		if _, ok := roles[r]; !ok {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
 		}
 	}
 
-	for _, m := range n.Members {
-		if _, ok := roles[string(m)]; !ok {
+	for _, m := range inputMembers {
+		if _, ok := roles[m]; !ok {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
 		}
 	}
 
 	return &RevokeRoleNode{
-		roles:       n.Roles,
-		members:     n.Members,
+		roles:       inputRoles,
+		members:     inputMembers,
 		adminOption: n.AdminOption,
 	}, nil
 }
@@ -115,7 +133,7 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 	var rowsAffected int
 	for _, r := range n.roles {
 		for _, m := range n.members {
-			if string(r) == security.AdminRole && string(m) == security.RootUser {
+			if r.IsAdminRole() && m.IsRootUser() {
 				// We use CodeObjectInUseError which is what happens if you tried to delete the current user in pg.
 				return pgerror.Newf(pgcode.ObjectInUse,
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
@@ -125,9 +143,9 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				memberStmt,
-				r, m,
+				r.Normalized(), m.Normalized(),
 			)
 			if err != nil {
 				return err

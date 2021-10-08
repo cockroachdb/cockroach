@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,9 +56,9 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		// report is sent to sentry below.
 		log.Errorf(ctx, "encountered internal error:\n%+v", err)
 
-		if log.ShouldSendReport(sv) {
+		if logcrash.ShouldSendReport(sv) {
 			event, extraDetails := errors.BuildSentryReport(err)
-			log.SendReport(ctx, log.ReportTypeError, event, extraDetails)
+			logcrash.SendReport(ctx, logcrash.ReportTypeError, event, extraDetails)
 		}
 	}
 }

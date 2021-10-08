@@ -25,10 +25,10 @@ statement ok
 CREATE TABLE bar (k INT PRIMARY KEY)
 
 # Verify that the table is indeed in "foo".
-query TTTI
+query TTTTIT
 SHOW TABLES FROM foo
 ----
-public  bar  table  0
+public  bar  table  root  0  NULL
 
 # Verify set to empty string.
 statement ok
@@ -40,17 +40,17 @@ SHOW database
 database
 ·
 
-statement error no database specified
+statement error no database or schema specified
 SHOW TABLES
 
 # Verify SHOW TABLES FROM works when there is no current database.
-query TTTI
+query TTTTIT
 SHOW TABLES FROM foo
 ----
-public  bar  table  0
+public  bar  table  root  0  NULL
 
 # SET statement succeeds, CREATE TABLE fails.
-statement error pgcode 42P07 relation \"bar\" already exists
+statement error pgcode 42P07 relation \"foo.public.bar\" already exists
 SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 
 query T colnames
@@ -60,10 +60,10 @@ database
 foo
 
 # SET succeeds
-query TTTI
+query TTTTIT
 SHOW TABLES from foo
 ----
-public  bar  table  0
+public  bar  table  root  0  NULL
 
 statement error invalid variable name: ""
 SET ROW (1, TRUE, NULL)
@@ -142,13 +142,77 @@ statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'other'
 
 statement ok
+SET escape_string_warning = 'ON'
+
+statement ok
+SET escape_string_warning = 'off'
+
+statement ok
 SET datestyle = 'ISO'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'ISO, MDY'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'mdy, iso'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle_enabled = true
+
+statement ok
+SET datestyle = 'ymd'
+
+query T
+SHOW datestyle
+----
+ISO, YMD
+
+statement ok
+SET datestyle = 'DMY,   ISo'
+
+query T
+SHOW datestyle
+----
+ISO, DMY
+
+statement error only ISO style is supported
+SET datestyle = 'postgres'
+
+statement error only ISO style is supported
+SET datestyle = 'german'
+
+statement error only ISO style is supported
+SET datestyle = 'sql'
 
 statement error invalid value for parameter "DateStyle": "other"
 SET datestyle = 'other'
 
 statement ok
 SET intervalstyle = 'postgres'
+
+statement ok
+SET intervalstyle_enabled = true
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+statement ok
+SET intervalstyle = 'sql_standard'
 
 statement error invalid value for parameter "IntervalStyle": "other"
 SET intervalstyle = 'other'
@@ -167,9 +231,6 @@ SET distsql = off
 
 statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
-
-statement ok
-SET vectorize = '201auto'
 
 statement ok
 SET vectorize = on
@@ -214,13 +275,13 @@ query T colnames
 SHOW server_version
 ----
 server_version
-9.5.0
+13.0.0
 
 query T colnames
 SHOW server_version_num
 ----
 server_version_num
-90500
+130000
 
 # Test read-only variables
 statement error parameter "max_index_keys" cannot be changed
@@ -283,12 +344,75 @@ SET statement_timeout = '0ms'
 # Test that statement_timeout can be set with an interval string, defaulting to
 # milliseconds as a unit.
 statement ok
-SET statement_timeout = '100'
+SET statement_timeout = '10000'
 
 query T
 SHOW statement_timeout
 ----
-100
+10000
+
+# Set the statement timeout to something absurdly small, so that no query would
+# presumably be able to go through. It should still be possible to get out of
+# this "bad state" by resetting the statement timeout.
+subtest impossible_statement_timeout_recovery
+
+statement ok
+SET statement_timeout = '1us'
+
+statement error query execution canceled due to statement timeout
+SHOW statement_timeout
+
+statement ok
+SET statement_timeout = 0
+
+query T
+SHOW statement_timeout
+----
+0
+
+statement ok
+SET lock_timeout = '1ms'
+
+query T
+SHOW lock_timeout
+----
+1
+
+statement ok
+SET lock_timeout = 0
+
+query T
+SHOW lock_timeout
+----
+0
+
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+statement ok
+SET idle_in_session_timeout = 0;
+SET idle_in_transaction_session_timeout = 123456
+
+query T
+SHOW idle_in_transaction_session_timeout
+----
+123456
+
+statement ok
+SET idle_in_transaction_session_timeout = 0
 
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.
@@ -393,3 +517,46 @@ SHOW enable_seqscan
 ----
 enable_seqscan
 on
+
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET TRANSACTION DEFERRABLE
+
+statement ok
+rollback
+
+statement ok
+SET standard_conforming_strings=true
+
+statement ok
+SET standard_conforming_strings='true'
+
+statement ok
+SET standard_conforming_strings='on'
+
+subtest backslash_quote_test
+
+statement ok
+SET backslash_quote = 'safe_encoding';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = 'on';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = 'off';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = '123';
+
+# Regression test for not being able to set sql.trace.txn.enable_threshold
+# cluster setting to non-zero value (#68005).
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='1s'
+
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='0s'

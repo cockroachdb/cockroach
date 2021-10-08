@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ptreconcile",
+    srcs = [
+        "metrics.go",
+        "reconciler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
+    ],
+)
+
+go_test(
+    name = "ptreconcile_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "reconciler_test.go",
+    ],
+    deps = [
+        ":ptreconcile",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

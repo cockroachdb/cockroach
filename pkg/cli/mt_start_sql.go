@@ -15,11 +15,11 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -55,39 +55,46 @@ well unless it can be verified using a trusted root certificate store. That is,
 - ca-client-tenant.crt needs to be present on the KV server.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runStartSQL),
+	RunE: clierrorplus.MaybeDecorateError(runStartSQL),
 }
 
 func runStartSQL(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	const clusterName = ""
-	stopper := stop.NewStopper()
+
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop(ctx)
 
 	st := serverCfg.BaseConfig.Settings
 
-	// TODO(tbg): this has to be passed in. See the upgrade strategy in:
-	// https://github.com/cockroachdb/cockroach/issues/47919
-	if err := clusterversion.Initialize(ctx, st.Version.BinaryVersion(), &st.SV); err != nil {
-		return err
-	}
-
-	tempStorageMaxSizeBytes := int64(base.DefaultInMemTempStorageMaxSizeBytes)
-	if err := diskTempStorageSizeValue.Resolve(
-		&tempStorageMaxSizeBytes, memoryPercentResolver,
+	// This value is injected in order to have something populated during startup.
+	// In the initial 20.2 release of multi-tenant clusters, no version state was
+	// ever populated in the version cluster setting. A value is populated during
+	// the activation of 21.1. See the documentation attached to the TenantCluster
+	// in migration/migrationcluster for more details on the tenant upgrade flow.
+	// Note that a the value of 21.1 is populated when a tenant cluster is created
+	// during 21.1 in crdb_internal.create_tenant.
+	//
+	// Note that the tenant will read the value in the system.settings table
+	// before accepting SQL connections.
+	if err := clusterversion.Initialize(
+		ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
 	); err != nil {
 		return err
 	}
 
-	serverCfg.SQLConfig.TempStorageConfig = base.TempStorageConfigFromEnv(
-		ctx,
-		st,
-		base.StoreSpec{InMemory: true},
-		"", // parentDir
-		tempStorageMaxSizeBytes,
-	)
+	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
+		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
+	); err != nil {
+		return err
+	}
 
-	addr, err := server.StartTenant(
+	initGEOS(ctx)
+
+	sqlServer, addr, httpAddr, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -97,7 +104,15 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "SQL server for tenant %s listening at %s", serverCfg.SQLConfig.TenantID, addr)
+
+	// Start up the diagnostics reporting loop.
+	// We don't do this in (*server.SQLServer).preStart() because we don't
+	// want this overhead and possible interference in tests.
+	if !cluster.TelemetryOptOut() {
+		sqlServer.StartDiagnostics(ctx)
+	}
+
+	log.Infof(ctx, "SQL server for tenant %s listening at %s, http at %s", serverCfg.SQLConfig.TenantID, addr, httpAddr)
 
 	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
 	// logging to files, periodic memory output, heap and goroutine dumps, debug
@@ -105,6 +120,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, drainSignals...)
-	sig := <-ch
-	return errors.Newf("received signal %v", sig)
+	select {
+	case sig := <-ch:
+		log.Flush()
+		return errors.Newf("received signal %v", sig)
+	case <-stopper.ShouldQuiesce():
+		return nil
+	}
 }

@@ -14,23 +14,23 @@ import "sort"
 
 type sortedSpans []Span
 
-func (s sortedSpans) Less(i, j int) bool {
+func (s *sortedSpans) Less(i, j int) bool {
 	// Sort first on the start key and second on the end key. Note that we're
 	// relying on EndKey = nil (and len(EndKey) == 0) sorting before other
 	// EndKeys.
-	c := s[i].Key.Compare(s[j].Key)
+	c := (*s)[i].Key.Compare((*s)[j].Key)
 	if c != 0 {
 		return c < 0
 	}
-	return s[i].EndKey.Compare(s[j].EndKey) < 0
+	return (*s)[i].EndKey.Compare((*s)[j].EndKey) < 0
 }
 
-func (s sortedSpans) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
+func (s *sortedSpans) Swap(i, j int) {
+	(*s)[i], (*s)[j] = (*s)[j], (*s)[i]
 }
 
-func (s sortedSpans) Len() int {
-	return len(s)
+func (s *sortedSpans) Len() int {
+	return len(*s)
 }
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
@@ -39,20 +39,20 @@ func (s sortedSpans) Len() int {
 // but the two are still merged.
 //
 // The input spans are not safe for re-use.
-func MergeSpans(spans []Span) ([]Span, bool) {
-	if len(spans) == 0 {
-		return spans, true
+func MergeSpans(spans *[]Span) ([]Span, bool) {
+	if len(*spans) == 0 {
+		return *spans, true
 	}
 
-	sort.Sort(sortedSpans(spans))
+	sort.Sort((*sortedSpans)(spans))
 
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "spans".
-	r := spans[:1]
+	r := (*spans)[:1]
 	distinct := true
 
-	for _, cur := range spans[1:] {
+	for _, cur := range (*spans)[1:] {
 		prev := &r[len(r)-1]
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) != 0 {

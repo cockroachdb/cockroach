@@ -89,14 +89,18 @@ func (ss *SequenceState) GetLastValueByID(seqID uint32) (int64, bool) {
 }
 
 // Export returns a copy of the SequenceState's state - the latestValues and
-// lastSequenceIncremented.
+// lastSequenceIncremented. If there are no values in latestValues, the returned
+// map will be nil.
 // lastSequenceIncremented is only defined if latestValues is non-empty.
 func (ss *SequenceState) Export() (map[uint32]int64, uint32) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
-	res := make(map[uint32]int64, len(ss.mu.latestValues))
-	for k, v := range ss.mu.latestValues {
-		res[k] = v
+	var res map[uint32]int64
+	if len(ss.mu.latestValues) > 0 {
+		res = make(map[uint32]int64, len(ss.mu.latestValues))
+		for k, v := range ss.mu.latestValues {
+			res[k] = v
+		}
 	}
 	return res, ss.mu.lastSequenceIncremented
 }

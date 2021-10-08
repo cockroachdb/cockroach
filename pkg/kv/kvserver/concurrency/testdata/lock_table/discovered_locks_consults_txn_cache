@@ -1,0 +1,114 @@
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0
+----
+
+new-txn txn=txn4 ts=10 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a,e
+----
+
+scan r=req1
+----
+start-waiting: false
+
+txn-finalized txn=txn2 status=aborted
+----
+
+# Don't consult finalizedTxnCache.
+add-discovered r=req1 k=a txn=txn2 consult-finalized-txn-cache=false
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+# Nothing to resolve yet.
+resolve-before-scanning r=req1
+----
+
+scan r=req1
+----
+start-waiting: true
+
+# The scan picks up the intent to resolve.
+guard-state r=req1
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000 status=ABORTED
+
+print
+----
+global: num=1
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+local: num=0
+
+scan r=req1
+----
+start-waiting: false
+
+txn-finalized txn=txn3 status=aborted
+----
+
+# Txn is finalized and finalizedTxnCache is consulted.
+add-discovered r=req1 k=b txn=txn3 consult-finalized-txn-cache=true
+----
+global: num=1
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+local: num=0
+
+# Txn is finalized and finalizedTxnCache is consulted.
+add-discovered r=req1 k=c txn=txn3 consult-finalized-txn-cache=true
+----
+global: num=1
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+local: num=0
+
+# Txn is not finalized and finalizedTxnCache is consulted.
+add-discovered r=req1 k=d txn=txn4 consult-finalized-txn-cache=true
+----
+global: num=2
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+# Locks for b and c were not added to lock table.
+resolve-before-scanning r=req1
+----
+Intents to resolve:
+ key="b" txn=00000000 status=ABORTED
+ key="c" txn=00000000 status=ABORTED
+
+scan r=req1
+----
+start-waiting: true
+
+guard-state r=req1
+----
+new: state=waitForDistinguished txn=txn4 key="d" held=true guard-access=write
+
+dequeue r=req1
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+local: num=0

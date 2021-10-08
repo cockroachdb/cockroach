@@ -24,10 +24,14 @@ import (
 // most recent version (before or at endTime) of that key. If the key was most
 // recently deleted, this is signaled with an empty value.
 //
-// MVCCIncrementalIterator will return an error if either of the following are
-// encountered:
-//   1. An inline value (non-user data)
-//   2. An intent whose timestamp lies within the time bounds
+// Inline values (non-user data) are handled according to the
+// MVCCIncrementalIterInlinePolicy. By default, an error will be
+// returned.
+//
+// Intents outside the time bounds are ignored. Intents inside the
+// time bounds are handled according to the provided
+// MVCCIncrementalIterIntentPolicy. By default, an error will be
+// returned.
 //
 // Note: The endTime is inclusive to be consistent with the non-incremental
 // iterator, where reads at a given timestamp return writes at that
@@ -64,11 +68,8 @@ import (
 // Since there is no delete across all sstables that deletes k@t#n1, there is
 // no delete in the subset of sstables used by timeBoundIter that deletes
 // k@t#n1, so the timeBoundIter will see k@t.
-//
-// NOTE: This is not used by CockroachDB and has been preserved to serve as an
-// oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
-	iter Iterator
+	iter MVCCIterator
 
 	// A time-bound iterator cannot be used by itself due to a bug in the time-
 	// bound iterator (#28358). This was historically augmented with an iterator
@@ -76,7 +77,7 @@ type MVCCIncrementalIterator struct {
 	// issues remained (#43799), so now the iterator above is the main iterator
 	// the timeBoundIter is used to check if any keys can be skipped by the main
 	// iterator.
-	timeBoundIter Iterator
+	timeBoundIter MVCCIterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -86,19 +87,72 @@ type MVCCIncrementalIterator struct {
 	// For allocation avoidance, meta is used to store the timestamp of keys
 	// regardless if they are metakeys.
 	meta enginepb.MVCCMetadata
+
+	// Configuration passed in MVCCIncrementalIterOptions.
+	intentPolicy MVCCIncrementalIterIntentPolicy
+	inlinePolicy MVCCIncrementalIterInlinePolicy
+
+	// Optional collection of intents created on demand when first intent encountered.
+	intents []roachpb.Intent
 }
 
-var _ SimpleIterator = &MVCCIncrementalIterator{}
+var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
+
+// MVCCIncrementalIterIntentPolicy controls how the
+// MVCCIncrementalInterator will handle intents that it encounters
+// when iterating.
+type MVCCIncrementalIterIntentPolicy int
+
+const (
+	// MVCCIncrementalIterIntentPolicyError will immediately
+	// return an error for any intent found inside the given time
+	// range.
+	MVCCIncrementalIterIntentPolicyError MVCCIncrementalIterIntentPolicy = iota
+	// MVCCIncrementalIterIntentPolicyAggregate will not fail on
+	// first encountered intent, but will proceed further. All
+	// found intents will be aggregated into a single
+	// WriteIntentError which would be updated during
+	// iteration. Consumer would be free to decide if it wants to
+	// keep collecting entries and intents or skip entries.
+	MVCCIncrementalIterIntentPolicyAggregate
+	// MVCCIncrementalIterIntentPolicyEmit will return intents to
+	// the caller if they are inside the time range. Intents
+	// outside of the time range will be filtered without error.
+	//
+	// TODO(ssd): If we relaxed the requirement that intents are
+	// filtered by time range, we could avoid parsing intents
+	// inside the iterator and leave it to the caller to deal
+	// with.
+	MVCCIncrementalIterIntentPolicyEmit
+)
+
+// MVCCIncrementalIterInlinePolicy controls how the
+// MVCCIncrementalIterator will handle inline values that it
+// encounters when iterating.
+type MVCCIncrementalIterInlinePolicy int
+
+const (
+	// MVCCIncrementalIterInlinePolicyError will immediately
+	// return an error for any inline value found.
+	MVCCIncrementalIterInlinePolicyError MVCCIncrementalIterInlinePolicy = iota
+	// MVCCIncrementalIterInlinePolicyEmit will return inline
+	// values to the caller.
+	MVCCIncrementalIterInlinePolicyEmit
+)
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	IterOptions IterOptions
+	EnableTimeBoundIteratorOptimization bool
+	EndKey                              roachpb.Key
 	// Keys visible by the MVCCIncrementalIterator must be within (StartTime,
 	// EndTime]. Note that if {Min,Max}TimestampHints are specified in
 	// IterOptions, the timestamp hints interval should include the start and end
 	// time.
 	StartTime hlc.Timestamp
 	EndTime   hlc.Timestamp
+
+	IntentPolicy MVCCIncrementalIterIntentPolicy
+	InlinePolicy MVCCIncrementalIterInlinePolicy
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -110,17 +164,27 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var iter Iterator
-	var timeBoundIter Iterator
-	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
+	var iter MVCCIterator
+	var timeBoundIter MVCCIterator
+	if opts.EnableTimeBoundIteratorOptimization {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.NewIterator(IterOptions{
-			UpperBound: opts.IterOptions.UpperBound,
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			UpperBound: opts.EndKey,
 		})
-		timeBoundIter = reader.NewIterator(opts.IterOptions)
+		// The timeBoundIter is only required to see versioned keys, since the
+		// intents will be found by iter.
+		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			UpperBound: opts.EndKey,
+			// The call to startTime.Next() converts our exclusive start bound into
+			// the inclusive start bound that MinTimestampHint expects.
+			MinTimestampHint: opts.StartTime.Next(),
+			MaxTimestampHint: opts.EndTime,
+		})
 	} else {
-		iter = reader.NewIterator(opts.IterOptions)
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			UpperBound: opts.EndKey,
+		})
 	}
 
 	return &MVCCIncrementalIterator{
@@ -128,12 +192,14 @@ func NewMVCCIncrementalIterator(
 		startTime:     opts.StartTime,
 		endTime:       opts.EndTime,
 		timeBoundIter: timeBoundIter,
+		intentPolicy:  opts.IntentPolicy,
+		inlinePolicy:  opts.InlinePolicy,
 	}
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
-// provided key. startKey should be a metadata key to ensure that the iterator
-// has a chance to observe any intents on the key if they are there.
+// provided key. startKey is not restricted to metadata key and could point to
+// any version within a history as required.
 func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.
@@ -151,9 +217,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.err = nil
@@ -174,12 +238,22 @@ func (i *MVCCIncrementalIterator) Close() {
 // key.
 func (i *MVCCIncrementalIterator) Next() {
 	i.iter.Next()
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.advance()
+}
+
+// checkValidAndSaveErr checks if the underlying iter is valid after the operation
+// and saves the error and validity state. Returns true if the underlying iterator
+// is valid.
+func (i *MVCCIncrementalIterator) checkValidAndSaveErr() bool {
+	if ok, err := i.iter.Valid(); !ok {
+		i.err = err
+		i.valid = false
+		return false
+	}
+	return true
 }
 
 // NextKey advances the iterator to the next key. This operation is distinct
@@ -187,9 +261,7 @@ func (i *MVCCIncrementalIterator) Next() {
 // key if the iterator is currently located at the last version for a key.
 func (i *MVCCIncrementalIterator) NextKey() {
 	i.iter.NextKey()
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.advance()
@@ -205,8 +277,8 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 		// If there is no time bound iterator, we cannot skip any keys.
 		return
 	}
-	tbiKey := i.timeBoundIter.Key().Key
-	iterKey := i.iter.Key().Key
+	tbiKey := i.timeBoundIter.UnsafeKey().Key
+	iterKey := i.iter.UnsafeKey().Key
 	if iterKey.Compare(tbiKey) > 0 {
 		// If the iterKey got ahead of the TBI key, advance the TBI Key.
 		//
@@ -226,7 +298,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			i.valid = false
 			return
 		}
-		tbiKey = i.timeBoundIter.Key().Key
+		tbiKey = i.timeBoundIter.UnsafeKey().Key
 
 		cmp := iterKey.Compare(tbiKey)
 
@@ -242,7 +314,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 				i.valid = false
 				return
 			}
-			tbiKey = i.timeBoundIter.Key().Key
+			tbiKey = i.timeBoundIter.UnsafeKey().Key
 			cmp = iterKey.Compare(tbiKey)
 		}
 
@@ -254,20 +326,90 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// expensive than a Next call.
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
-			if ok, err := i.iter.Valid(); !ok {
-				i.err = err
-				i.valid = false
+			if !i.checkValidAndSaveErr() {
 				return
 			}
 		}
 	}
 }
 
+// initMetaAndCheckForIntentOrInlineError initializes i.meta, and throws an
+// error if it encounters an intent in the timestamp span (startTime, endTime]
+// or an inline meta.
+// The method sets i.err with the error for future processing.
+func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error {
+	unsafeKey := i.iter.UnsafeKey()
+	if unsafeKey.IsValue() {
+		// The key is an MVCC value and not an intent or inline.
+		i.meta.Reset()
+		i.meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
+		return nil
+	}
+
+	// The key is a metakey (an intent or inline meta). If an inline meta, we
+	// will error below. If an intent meta, then this is used later to see if
+	// the timestamp of this intent is within the incremental iterator's time
+	// bounds.
+	if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
+		i.valid = false
+		return i.err
+	}
+
+	if i.meta.IsInline() {
+		switch i.inlinePolicy {
+		case MVCCIncrementalIterInlinePolicyError:
+			i.valid = false
+			i.err = errors.Errorf("unexpected inline value found: %s", unsafeKey.Key)
+			return i.err
+		case MVCCIncrementalIterInlinePolicyEmit:
+			return nil
+		default:
+			return errors.AssertionFailedf("unknown inline policy: %d", i.inlinePolicy)
+		}
+	}
+
+	if i.meta.Txn == nil {
+		i.valid = false
+		i.err = errors.Errorf("intent is missing a txn: %s", unsafeKey.Key)
+	}
+
+	metaTimestamp := i.meta.Timestamp.ToTimestamp()
+	if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
+		switch i.intentPolicy {
+		case MVCCIncrementalIterIntentPolicyError:
+			i.err = &roachpb.WriteIntentError{
+				Intents: []roachpb.Intent{
+					roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
+				},
+			}
+			i.valid = false
+			return i.err
+		case MVCCIncrementalIterIntentPolicyAggregate:
+			// We are collecting intents, so we need to save it and advance to its proposed value.
+			// Caller could then use a value key to update proposed row counters for the sake of bookkeeping
+			// and advance more.
+			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key))
+			return nil
+		case MVCCIncrementalIterIntentPolicyEmit:
+			// We will emit this intent to the caller.
+			return nil
+		default:
+			return errors.AssertionFailedf("unknown intent policy: %d", i.intentPolicy)
+		}
+	}
+	return nil
+}
+
 // advance advances the main iterator until it is referencing a key within
 // (start_time, end_time].
+//
 // It populates i.err with an error if either of the following was encountered:
-// a) an inline value
-// b) an intent with a timestamp within the incremental iterator's bounds
+//
+// a) an inline value when the inline policy is
+//    MVCCIncrementalIterInlinePolicyError; or
+//
+// b) an intent with a timestamp within the incremental iterator's bounds when
+//    the intent policy is MVCCIncrementalIterIntentPolicyError.
 func (i *MVCCIncrementalIterator) advance() {
 	for {
 		i.maybeSkipKeys()
@@ -275,55 +417,41 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
-		unsafeMetaKey := i.iter.UnsafeKey()
-		if unsafeMetaKey.IsValue() {
-			// They key is an MVCC value and note an intent.
-			// Intents are handled next.
-			i.meta.Reset()
-			i.meta.Timestamp = hlc.LegacyTimestamp(unsafeMetaKey.Timestamp)
-		} else {
-			// The key is a metakey (an intent), this is used later to see if the
-			// timestamp of this intent is within the incremental iterator's time
-			// bounds.
-			if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
-				i.valid = false
-				return
-			}
-		}
-
-		if i.meta.IsInline() {
-			// Inline values are only used in non-user data. They're not needed
-			// for backup, so they're not handled by this method. If one shows
-			// up, throw an error so it's obvious something is wrong.
-			i.valid = false
-			i.err = errors.Errorf("inline values are unsupported by MVCCIncrementalIterator: %s",
-				unsafeMetaKey.Key)
+		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
 			return
 		}
 
-		metaTimestamp := hlc.Timestamp(i.meta.Timestamp)
+		// If we have an inline value and the policy was to error, we
+		// would have errored in the call above. If our policy is to
+		// emit inline values, we don't want to advance past it. Inline
+		// values don't have timestamps that we can filter on.
+		if i.meta.IsInline() && i.inlinePolicy == MVCCIncrementalIterInlinePolicyEmit {
+			return
+		}
+
 		if i.meta.Txn != nil {
-			if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
-				i.err = &roachpb.WriteIntentError{
-					Intents: []roachpb.Intent{
-						roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
-					},
+			switch i.intentPolicy {
+			case MVCCIncrementalIterIntentPolicyEmit:
+				// If our policy is emit, we may want this
+				// intent. If it is outside our time bounds, it
+				// will be filtered below.
+			case MVCCIncrementalIterIntentPolicyError, MVCCIncrementalIterIntentPolicyAggregate:
+				// We have encountered an intent but it must lie
+				// outside the timestamp span (startTime,
+				// endTime] or we have aggregated it. In either
+				// case, we want to advance past it.
+				i.iter.Next()
+				if !i.checkValidAndSaveErr() {
+					return
 				}
-				i.valid = false
-				return
+				continue
 			}
-			i.iter.Next()
-			if ok, err := i.iter.Valid(); !ok {
-				i.err = err
-				i.valid = false
-				return
-			}
-			continue
 		}
 
 		// Note that MVCC keys are sorted by key, then by _descending_ timestamp
 		// order with the exception of the metakey (timestamp 0) being sorted
 		// first. See mvcc.h for more information.
+		metaTimestamp := i.meta.Timestamp.ToTimestamp()
 		if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
 		} else if metaTimestamp.LessEq(i.startTime) {
@@ -333,10 +461,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			// done.
 			break
 		}
-
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 	}
@@ -372,4 +497,50 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 // the next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
+}
+
+// NextIgnoringTime returns the next key/value that would be encountered in a
+// non-incremental iteration by moving the underlying non-TBI iterator forward.
+// This method throws an error if it encounters an intent in the time range
+// (startTime, endTime] or sees an inline value.
+func (i *MVCCIncrementalIterator) NextIgnoringTime() {
+	for {
+		i.iter.Next()
+		if !i.checkValidAndSaveErr() {
+			return
+		}
+
+		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
+			return
+		}
+
+		// We have encountered an intent but it does not lie in the timestamp span
+		// (startTime, endTime] so we do not throw an error, and attempt to move to
+		// the next valid KV.
+		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+			continue
+		}
+
+		// We have a valid KV or an intent to emit.
+		return
+	}
+}
+
+// NumCollectedIntents returns number of intents encountered during iteration.
+// This is only the case when intent aggregation is enabled, otherwise it is
+// always 0.
+func (i *MVCCIncrementalIterator) NumCollectedIntents() int {
+	return len(i.intents)
+}
+
+// TryGetIntentError returns roachpb.WriteIntentError if intents were encountered
+// during iteration and intent aggregation is enabled. Otherwise function
+// returns nil. roachpb.WriteIntentError will contain all encountered intents.
+func (i *MVCCIncrementalIterator) TryGetIntentError() error {
+	if len(i.intents) == 0 {
+		return nil
+	}
+	return &roachpb.WriteIntentError{
+		Intents: i.intents,
+	}
 }

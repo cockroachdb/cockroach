@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+
+	"github.com/cockroachdb/errors"
 )
 
 var _ sort.Interface = structSorter{}
@@ -106,14 +108,14 @@ func SortStructs(s interface{}, fieldNames ...string) {
 	// Verify that we've gotten a slice of structs or pointers to structs.
 	structs := reflect.ValueOf(s)
 	if structs.Kind() != reflect.Slice {
-		panic(fmt.Sprintf("expected slice, got %T", s))
+		panic(errors.AssertionFailedf("expected slice, got %T", s))
 	}
 	elemType := structs.Type().Elem()
 	if elemType.Kind() == reflect.Ptr {
 		elemType = elemType.Elem()
 	}
 	if elemType.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("%s is not a struct or pointer to struct", structs.Elem()))
+		panic(errors.AssertionFailedf("%s is not a struct or pointer to struct", structs.Elem()))
 	}
 
 	sort.Sort(structSorter{structs, fieldNames})

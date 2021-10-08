@@ -30,7 +30,7 @@ SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
 2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
 
 # insert duplicate value with different time zone offset
-statement error duplicate key value \(a\)=\('2015-08-30 03:34:45\.34567'\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\('2015-08-30 03:34:45\.34567'\) already exists\.
 INSERT INTO t VALUES
   ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
@@ -113,8 +113,8 @@ SELECT 'epoch'::date, 'infinity'::date, '-infinity'::date
 
 # Date edge cases.
 
-statement error year value 0 is out of range
-SELECT '0000-01-01'::date
+statement error only positive years are permitted in AD/BC notation
+SELECT '0000-01-01 BC'::date
 
 query TTTTT
 SELECT '4714-11-24 BC'::date, '5874897-12-31'::date, '2000-01-01'::date, '0001-01-01'::date, '0001-12-13 BC'::date
@@ -157,7 +157,7 @@ SELECT '5874897-12-31'::date - '4714-11-24 BC'::date
 query T
 SELECT age('2001-04-10 22:06:45', '1957-06-13')
 ----
-44 years 5 mons 17 days 22:06:45
+43 years 9 mons 27 days 22:06:45
 
 query B
 SELECT age('1957-06-13') - age(now(), '1957-06-13') = interval '0s'
@@ -1094,9 +1094,9 @@ query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
 a  INT8         false  NULL  ·  {primary}  false
-b  TIMESTAMP    true   NULL  ·  {}         false
-c  TIMESTAMPTZ  true   NULL  ·  {}         false
-d  TIMESTAMPTZ  true   NULL  ·  {}         false
+b  TIMESTAMP    true   NULL  ·  {primary}  false
+c  TIMESTAMPTZ  true   NULL  ·  {primary}  false
+d  TIMESTAMPTZ  true   NULL  ·  {primary}  false
 
 statement ok
 INSERT INTO tz VALUES
@@ -1153,7 +1153,7 @@ SET TIME ZONE -5
 query T
 SHOW TIME ZONE
 ----
--5
+<-05>+05
 
 statement ok
 SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE
@@ -1194,7 +1194,7 @@ SET TIME ZONE 0
 query T
 SHOW TIME ZONE
 ----
-0
+<-00>+00
 
 query T
 SELECT DATE '1999-01-01' + INTERVAL '4 minutes'
@@ -1457,14 +1457,14 @@ SELECT '-563-12-26'::DATE
 -0563-12-26 00:00:00 +0000 +0000
 
 query T
-SELECT '-56-12-26'::DATE
+SELECT '6-12-26 BC'::DATE
 ----
--0056-12-26 00:00:00 +0000 +0000
+-0025-06-12 00:00:00 +0000 +0000
 
 query T
-SELECT '-5-12-26'::DATE
+SELECT '5-12-26 BC'::DATE
 ----
--0005-12-26 00:00:00 +0000 +0000
+-0025-05-12 00:00:00 +0000 +0000
 
 # Update: dates now have a much more limited range such that the original
 # dates from this issue are no longer possible to express.
@@ -1522,8 +1522,8 @@ ORDER BY
 ----
 01:00:00               00:30:00          02:00:00                00:30:00          02:00:00                04:14:01.320914                 00:14:10.32
 1 day                  12:00:00          2 days                  12:00:00          2 days                  4 days 05:36:31.701948          05:40:07.68
-1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.058425   7 days 02:03:50.4
-1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.745978  7 days 14:20:47.04
+1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.0912     7 days 02:03:50.4
+1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.778753  7 days 14:20:47.04
 
 subtest tz_utc_normalization
 
@@ -1703,3 +1703,275 @@ query TT
 SELECT 'infinity'::timestamp, '-infinity'::timestamptz
 ----
 294276-12-31 23:59:59.999999 +0000 +0000  -4713-11-24 00:00:00 +0000 +0000
+
+# Verify that parse_timestamp can be used in computed column expressions.
+statement ok
+CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
+
+query error parse_timestamp\(\): relative timestamps are not supported
+INSERT INTO timestamps VALUES ('tomorrow')
+
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+SET TIME ZONE 'America/New_York'
+
+# Insert the same values again (stored columns are computed on insert).
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+RESET TIME ZONE
+
+# Regression test for panicking when comparing an infinite date coming from a
+# subquery to a timestamp (#64015).
+query B
+SELECT ((SELECT '-infinity'::DATE)) < '2021-04-21':::TIMESTAMP
+----
+true
+
+subtest datestyle_order
+
+statement error setting DateStyle is not enabled
+set datestyle = 'dmy'
+
+statement error setting DateStyle is not enabled
+set datestyle = 'ymd'
+
+statement ok
+set datestyle_enabled = true
+
+statement error context-dependent operators are not allowed in computed column\nHINT: TIMESTAMP to STRING casts are dependent on DateStyle; consider using to_char\(timestamp\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col string AS ('2020-05-12 10:12:13'::timestamp::string) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column\nHINT: DATE to STRING casts are dependent on DateStyle; consider using to_char\(date\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col string AS ('2020-05-12 10:12:13'::date::string) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now' and session settings such as DateStyle; use parse_timestamp\(string\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col timestamp AS ('2020-05-12 10:12:13'::string::timestamp) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column\nHINT: STRING to DATE casts depend on session DateStyle; use parse_date\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col date AS ('2020-05-12 10:12:13'::string::date) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIME casts depend on session DateStyle; use parse_time\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col time AS ('2020-05-12 10:12:13'::string::time) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIMETZ casts depend on session DateStyle; use parse_timetz\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col timetz AS ('2020-05-12 10:12:13'::string::timetz) STORED
+)
+
+statement ok
+set datestyle = 'dmy'
+
+query T
+SELECT '05-07-2020'::date
+----
+2020-07-05 00:00:00 +0000 +0000
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('15-09-2020 15:17:19.123'),
+  ('03-04-95 15:16:19.123'),
+  ('09-05-2020 15:17:19.123')
+) tbl(t)
+----
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+1995-04-03 15:16:19.123 +0000 UTC  1995-04-03 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-04-03 00:00:00 +0000 +0000
+2020-05-09 15:17:19.123 +0000 UTC  2020-05-09 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-05-09 00:00:00 +0000 +0000
+
+statement ok
+set datestyle = 'ymd'
+
+statement error field day value 2020 is out of range\nHINT: Perhaps you need a different "datestyle" setting.
+SELECT '05-07-2020'::date
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('95-03-04 15:16:19.123')
+) tbl(t)
+----
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+1995-03-04 15:16:19.123 +0000 UTC  1995-03-04 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-03-04 00:00:00 +0000 +0000
+
+statement ok
+set datestyle = 'mdy'
+
+query T
+SELECT '05-07-2020'::date
+----
+2020-05-07 00:00:00 +0000 +0000
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('09-15-2020 15:17:19.123'),
+  ('03-04-95 15:16:19.123'),
+  ('09-05-2020 15:17:19.123')
+) tbl(t)
+----
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+1995-03-04 15:16:19.123 +0000 UTC  1995-03-04 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-03-04 00:00:00 +0000 +0000
+2020-09-05 15:17:19.123 +0000 UTC  2020-09-05 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-05 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_timestamp('01-02-2020 01:02:03', 'postgres')
+
+query error could not parse
+SELECT parse_timestamp('foo')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('now')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('tomorrow')
+
+query error parse_timestamp\(\): relative timestamps are not supported
+SELECT parse_timestamp('now', 'mdy')
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::timestamp, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::timestamp),
+  to_char_with_style('2020-01-02 01:02:03'::timestamp, 'DMY')
+----
+2020-01-02 01:02:03  2020-01-02 01:02:03
+
+statement ok
+CREATE TABLE timestamp_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+INSERT INTO timestamp_datestyle_parse VALUES
+  (1, '07-09-12 11:30:45.123'),
+  (2, '07-09-12')
+
+query TTTT
+SELECT
+  parse_timestamp(s),
+  parse_timestamp(s, 'iso,mdy'),
+  parse_timestamp(s, 'iso,dmy'),
+  parse_timestamp(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 11:30:45.123 +0000 +0000  2012-07-09 11:30:45.123 +0000 +0000  2012-09-07 11:30:45.123 +0000 +0000  2007-09-12 11:30:45.123 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000      2012-07-09 00:00:00 +0000 +0000      2012-09-07 00:00:00 +0000 +0000      2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_date('01-02-2020 01:02:03', 'postgres')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('now')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('tomorrow', 'iso,mdy')
+
+query TTTT
+SELECT
+  parse_date(s),
+  parse_date(s, 'iso,mdy'),
+  parse_date(s, 'iso,dmy'),
+  parse_date(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::date, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::date),
+  to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
+----
+2020-01-02  2020-01-02
+
+statement ok
+CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+INSERT INTO time_datestyle_parse VALUES
+  (1, '2007-09-12 11:30:45.123+06'),
+  (2, '2007-09-12 11:30:45.123+03')
+
+statement error only ISO style is supported
+SELECT parse_time('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_time(s),
+  parse_time(s, 'iso,mdy'),
+  parse_time(s, 'iso,dmy'),
+  parse_time(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+
+statement error only ISO style is supported
+SELECT parse_timetz('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_timetz(s),
+  parse_timetz(s, 'iso,mdy'),
+  parse_timetz(s, 'iso,dmy'),
+  parse_timetz(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600
+0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300

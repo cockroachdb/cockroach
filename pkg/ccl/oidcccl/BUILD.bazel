@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "oidcccl",
+    srcs = [
+        "authentication_oidc.go",
+        "settings.go",
+        "state.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/ui",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_coreos_go_oidc//:go-oidc",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)
+
+go_test(
+    name = "oidcccl_test",
+    size = "small",
+    srcs = [
+        "authentication_oidc_test.go",
+        "settings_test.go",
+    ],
+    embed = [":oidcccl"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/utilccl",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

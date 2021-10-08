@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pretty",
+    srcs = [
+        "document.go",
+        "pretty.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/pretty",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "pretty_test",
+    size = "small",
+    srcs = ["pretty_test.go"],
+    deps = [":pretty"],
+)

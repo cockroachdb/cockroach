@@ -11,18 +11,14 @@
 package kvserver
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -35,12 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
@@ -129,19 +126,19 @@ func (r *Replica) CheckConsistency(
 	// There is an inconsistency if and only if there is a minority SHA.
 
 	if minoritySHA != "" {
-		var buf bytes.Buffer
-		_, _ = fmt.Fprintf(&buf, "\n") // New line to align checksums below.
+		var buf redact.StringBuilder
+		buf.Printf("\n") // New line to align checksums below.
 		for sha, idxs := range shaToIdxs {
-			minority := ""
+			minority := redact.Safe("")
 			if sha == minoritySHA {
-				minority = " [minority]"
+				minority = redact.Safe(" [minority]")
 			}
 			for _, idx := range idxs {
-				_, _ = fmt.Fprintf(&buf, "%s: checksum %x%s\n"+
+				buf.Printf("%s: checksum %x%s\n"+
 					"- stats: %+v\n"+
 					"- stats.Sub(recomputation): %+v\n",
 					&results[idx].Replica,
-					sha,
+					redact.Safe(sha),
 					minority,
 					&results[idx].Response.Persisted,
 					&results[idx].Response.Delta,
@@ -154,13 +151,12 @@ func (r *Replica) CheckConsistency(
 				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
 					report(*r.store.Ident, diff)
 				}
-				_, _ = fmt.Fprintf(&buf, "====== diff(%x, [minority]) ======\n", sha)
-				_, _ = diff.WriteTo(&buf)
+				buf.Printf("====== diff(%x, [minority]) ======\n%v", redact.Safe(sha), diff)
 			}
 		}
 
 		if isQueue {
-			log.Errorf(ctx, "%v", buf.String())
+			log.Errorf(ctx, "%v", &buf)
 		}
 		res.Detail += buf.String()
 	} else {
@@ -236,10 +232,10 @@ func (r *Replica) CheckConsistency(
 			// are consistent. Verify this only for clusters that started out on 19.1 or
 			// higher.
 			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
-				// If version >= 19.1 but < VersionAbortSpanBytes, we want to ignore any delta
-				// in AbortSpanBytes when comparing stats since older versions will not be
-				// tracking abort span bytes.
-				if v.Less(clusterversion.VersionByKey(clusterversion.VersionAbortSpanBytes)) {
+				// If version >= 19.1 but < 20.1-14 (AbortSpanBytes before its removal),
+				// we want to ignore any delta in AbortSpanBytes when comparing stats
+				// since older versions will not be tracking abort span bytes.
+				if v.Less(roachpb.Version{Major: 20, Minor: 1, Internal: 14}) {
 					delta.AbortSpanBytes = 0
 					haveDelta = delta != enginepb.MVCCStats{}
 				}
@@ -284,17 +280,24 @@ func (r *Replica) CheckConsistency(
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
 	}
-	log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", args.Terminate)
+	// args.Terminate is a slice of properly redactable values, but
+	// with %v `redact` will not realize that and will redact the
+	// whole thing. Wrap it as a ReplicaSet which is a SafeFormatter
+	// and will get the job done.
+	//
+	// TODO(knz): clean up after https://github.com/cockroachdb/redact/issues/5.
+	{
+		var tmp redact.SafeFormatter = roachpb.MakeReplicaSet(args.Terminate)
+		log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
+	}
 
-	// We've noticed in practice that if the snapshot diff is large, the log
-	// file in it is promptly rotated away, so up the limits while the diff
-	// printing occurs.
+	// We've noticed in practice that if the snapshot diff is large, the
+	// log file to which it is printed is promptly rotated away, so up
+	// the limits while the diff printing occurs.
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/issues/36861
-	oldLogLimit := atomic.LoadInt64(&log.LogFilesCombinedMaxSize)
-	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
-	defer atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+	defer log.TemporarilyDisableFileGCForMainLogger()()
 
 	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
@@ -357,7 +360,7 @@ func (r *Replica) RunConsistencyCheck(
 
 		// Move the local replica to the front (which makes it the "master"
 		// we're comparing against).
-		orderedReplicas = append(orderedReplicas, desc.Replicas().All()...)
+		orderedReplicas = append(orderedReplicas, desc.Replicas().Descriptors()...)
 
 		sort.Slice(orderedReplicas, func(i, j int) bool {
 			return orderedReplicas[i] == localReplica
@@ -562,14 +565,11 @@ func (r *Replica) sha512(
 	snap storage.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
-	limiter *limit.LimiterBurstDisabled,
+	limiter *quotapool.RateLimiter,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(storage.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
-	defer iter.Close()
-
 	var alloc bufalloc.ByteAllocator
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
@@ -578,7 +578,7 @@ func (r *Replica) sha512(
 
 	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		// Rate Limit the scan through the range
-		if err := limiter.WaitN(ctx, len(unsafeKey.Key)+len(unsafeValue)); err != nil {
+		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
 		}
 
@@ -604,7 +604,7 @@ func (r *Replica) sha512(
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
-		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
+		legacyTimestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
 		} else {
@@ -624,10 +624,19 @@ func (r *Replica) sha512(
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
 	if !statsOnly {
-		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-			spanMS, err := storage.ComputeStatsGo(
+		// Do not want the lock table ranges since the iter has been constructed
+		// using MVCCKeyAndIntentsIterKind.
+		//
+		// TODO(sumeer): When we have replicated locks other than exclusive locks,
+		// we will probably not have any interleaved intents so we could stop
+		// using MVCCKeyAndIntentsIterKind and consider all locks here.
+		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
+			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
+				storage.IterOptions{UpperBound: span.End.Key})
+			spanMS, err := storage.ComputeStatsForRange(
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
+			iter.Close()
 			if err != nil {
 				return nil, err
 			}

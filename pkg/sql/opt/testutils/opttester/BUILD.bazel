@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "opttester",
+    srcs = [
+        "explore_trace.go",
+        "forcing_opt.go",
+        "memo_groups.go",
+        "opt_steps.go",
+        "opt_tester.go",
+        "reorder_joins.go",
+        "stats_tester.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/exec/execbuilder",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/optgen/exprgen",
+        "//pkg/sql/opt/ordering",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/stats",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util",
+        "//pkg/util/timeutil",
+        "//pkg/util/treeprinter",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pmezard_go_difflib//difflib",
+    ],
+)
+
+go_test(
+    name = "opttester_test",
+    size = "small",
+    srcs = ["opt_tester_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":opttester",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils/testcat",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
+
+filegroup(
+    name = "testfixtures",
+    srcs = glob(["testfixtures/**"]),
+    visibility = ["//pkg/sql/opt:__subpackages__"],
+)

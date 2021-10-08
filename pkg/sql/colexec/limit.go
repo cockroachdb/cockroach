@@ -11,54 +11,48 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 )
 
 // limitOp is an operator that implements limit, returning only the first n
 // tuples from its input.
 type limitOp struct {
-	oneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 
-	limit int
+	limit uint64
 
 	// seen is the number of tuples seen so far.
-	seen int
+	seen uint64
 	// done is true if the limit has been reached.
 	done bool
 }
 
-var _ colexecbase.Operator = &limitOp{}
-var _ closableOperator = &limitOp{}
+var _ colexecop.Operator = &limitOp{}
+var _ colexecop.ClosableOperator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
-func NewLimitOp(input colexecbase.Operator, limit int) colexecbase.Operator {
+func NewLimitOp(input colexecop.Operator, limit uint64) colexecop.Operator {
 	c := &limitOp{
-		oneInputCloserHelper: makeOneInputCloserHelper(input),
-		limit:                limit,
+		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+		limit:                    limit,
 	}
 	return c
 }
 
-func (c *limitOp) Init() {
-	c.input.Init()
-}
-
-func (c *limitOp) Next(ctx context.Context) coldata.Batch {
+func (c *limitOp) Next() coldata.Batch {
 	if c.done {
 		return coldata.ZeroBatch
 	}
-	bat := c.input.Next(ctx)
+	bat := c.Input.Next()
 	length := bat.Length()
 	if length == 0 {
 		return bat
 	}
-	newSeen := c.seen + length
+	newSeen := c.seen + uint64(length)
 	if newSeen >= c.limit {
 		c.done = true
-		bat.SetLength(c.limit - c.seen)
+		bat.SetLength(int(c.limit - c.seen))
 		return bat
 	}
 	c.seen = newSeen

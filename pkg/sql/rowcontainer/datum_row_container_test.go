@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -26,30 +26,31 @@ import (
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	for _, numCols := range []int{0, 1, 2, 3, 5, 10, 15} {
 		for _, numRows := range []int{5, 10, 100} {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
-				resCol := make(sqlbase.ResultColumns, numCols)
+				resCol := make(colinfo.ResultColumns, numCols)
 				for i := range resCol {
-					resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
+					resCol[i] = colinfo.ResultColumn{Typ: types.Int}
 				}
 				st := cluster.MakeTestingClusterSettings()
 				m := mon.NewUnlimitedMonitor(
-					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
+					ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
-				rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
+				rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCol))
 				row := make(tree.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
 						row[j] = tree.NewDInt(tree.DInt(i*numCols + j))
 					}
-					if _, err := rc.AddRow(context.Background(), row); err != nil {
+					if _, err := rc.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
 					}
 				}
 
 				for i := 0; i < numPops; i++ {
-					rc.PopFirst()
+					rc.PopFirst(ctx)
 				}
 
 				// Given that we just deleted numPops rows, we have numRows -
@@ -68,8 +69,8 @@ func TestRowContainer(t *testing.T) {
 						}
 					}
 				}
-				rc.Close(context.Background())
-				m.Stop(context.Background())
+				rc.Close(ctx)
+				m.Stop(ctx)
 			}
 		}
 	}
@@ -83,8 +84,8 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
-	resCols := sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.Int}}
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCols), 0)
+	resCols := colinfo.ResultColumns{colinfo.ResultColumn{Typ: types.Int}}
+	rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCols))
 	defer rc.Close(ctx)
 
 	// Verify that a panic is thrown for out-of-range conditions.
@@ -110,12 +111,12 @@ func TestRowContainerZeroCols(t *testing.T) {
 	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(nil), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(nil))
 	defer rc.Close(ctx)
 
 	const numRows = 10
 	for i := 0; i < numRows; i++ {
-		if _, err := rc.AddRow(context.Background(), nil); err != nil {
+		if _, err := rc.AddRow(ctx, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -129,32 +130,53 @@ func TestRowContainerZeroCols(t *testing.T) {
 	if len(row) != 0 {
 		t.Fatalf("expected empty row")
 	}
+
+	// Clear and try again.
+	rc.Clear(ctx)
+
+	const numRowsAfterClear = 5
+	for i := 0; i < numRowsAfterClear; i++ {
+		if _, err := rc.AddRow(ctx, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rc.Len() != numRowsAfterClear {
+		t.Fatalf("expected %d rows, but found %d", numRowsAfterClear, rc.Len())
+	}
+	row = rc.At(0)
+	if row == nil {
+		t.Fatalf("expected non-nil row")
+	}
+	if len(row) != 0 {
+		t.Fatalf("expected empty row")
+	}
 }
 
 func BenchmarkRowContainerAt(b *testing.B) {
 	const numCols = 3
 	const numRows = 1024
 
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
+		ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 	)
-	defer m.Stop(context.Background())
+	defer m.Stop(ctx)
 
-	resCol := make(sqlbase.ResultColumns, numCols)
+	resCol := make(colinfo.ResultColumns, numCols)
 	for i := range resCol {
-		resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
+		resCol[i] = colinfo.ResultColumn{Typ: types.Int}
 	}
 
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
-	defer rc.Close(context.Background())
+	rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCol))
+	defer rc.Close(ctx)
 
 	row := make(tree.Datums, numCols)
 	for i := 0; i < numRows; i++ {
 		for j := range row {
 			row[j] = tree.NewDInt(tree.DInt(i*numCols + j))
 		}
-		if _, err := rc.AddRow(context.Background(), row); err != nil {
+		if _, err := rc.AddRow(ctx, row); err != nil {
 			b.Fatal(err)
 		}
 	}

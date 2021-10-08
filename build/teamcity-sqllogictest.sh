@@ -14,11 +14,15 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # Run SqlLite tests.
 # Need to specify the flex-types flag in order to skip past variations that have
 # numeric typing differences.
+# TODO(yuzefovich): remove crdb_test_off tag once sqllite tests have been
+# adjusted to run in reasonable time with batch size randomizations.
+# WARNING! Keep all of this (including the flags/tags that we pass to the test)
+# in sync w/ build/teamcity/cockroach/ci/tests/sqlite_logic_test_impl.sh.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$'
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' TAGS=crdb_test_off
 
 # Run the tests with a multitenant configuration.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/ccl/logictestccl' TESTS='^TestTenantSQLLiteLogic$$'
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/ccl/logictestccl' TESTS='^TestTenantSQLLiteLogic$$' TAGS=crdb_test_off

@@ -76,7 +76,7 @@ func NewChunkProgressLogger(
 			completed: startFraction,
 			reported:  startFraction,
 			Report: func(ctx context.Context, pct float32) error {
-				return j.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				return j.FractionProgressed(ctx, nil /* txn */, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 					if progressedFn != nil {
 						progressedFn(ctx, details)
 					}
@@ -96,8 +96,7 @@ func (jpl *ChunkProgressLogger) chunkFinished(ctx context.Context) error {
 }
 
 // Loop calls chunkFinished for every message received over chunkCh. It exits
-// when chunkCh is closed, when totalChunks messages have been received, or when
-// the context is canceled.
+// when chunkCh is closed or when the context is canceled.
 func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{}) error {
 	for {
 		select {
@@ -109,7 +108,9 @@ func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{
 				return err
 			}
 			if jpl.completedChunks == jpl.expectedChunks {
-				return jpl.batcher.Done(ctx)
+				if err := jpl.batcher.Done(ctx); err != nil {
+					return err
+				}
 			}
 		case <-ctx.Done():
 			return ctx.Err()

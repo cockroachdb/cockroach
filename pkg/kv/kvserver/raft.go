@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.
@@ -278,8 +278,8 @@ func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase
 	return ids
 }
 
-// traceLocalProposals logs a trace event with the provided string for each
-// locally proposed command which corresponds to an id in ids.
+// traceProposals logs a trace event with the provided string for each proposed
+// command which corresponds to an id in ids.
 func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 	ctxs := make([]context.Context, 0, len(ids))
 	r.mu.RLock()

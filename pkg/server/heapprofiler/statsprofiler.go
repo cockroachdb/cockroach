@@ -36,7 +36,11 @@ type StatsProfiler struct {
 	profiler
 }
 
-const statsFileNamePrefix = "memstats"
+// StatsFileNamePrefix is the prefix of memory stats dumps.
+const StatsFileNamePrefix = "memstats"
+
+// StatsFileNameSuffix is the suffix of memory stats dumps.
+const StatsFileNameSuffix = ".txt"
 
 // NewStatsProfiler creates a StatsProfiler. dir is the
 // directory in which profiles are to be stored.
@@ -53,7 +57,7 @@ func NewStatsProfiler(
 
 	hp := &StatsProfiler{
 		profiler{
-			store: newProfileStore(dumpStore, statsFileNamePrefix, st),
+			store: newProfileStore(dumpStore, StatsFileNamePrefix, StatsFileNameSuffix, st),
 		},
 	}
 	return hp, nil

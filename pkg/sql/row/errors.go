@@ -12,16 +12,18 @@ package row
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -34,31 +36,43 @@ type singleKVFetcher struct {
 
 // nextBatch implements the kvBatchFetcher interface.
 func (f *singleKVFetcher) nextBatch(
-	_ context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
+	ctx context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
 	if f.done {
-		return false, nil, nil, roachpb.Span{}, nil
+		return false, nil, nil, nil
 	}
 	f.done = true
-	return true, f.kvs[:], nil, roachpb.Span{}, nil
+	return true, f.kvs[:], nil, nil
 }
 
-// ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
-) error {
+// ConvertBatchError attempts to map a key-value error generated during a
+// key-value batch operating over the specified table to a user friendly SQL
+// error.
+func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
-	if origPErr.Index == nil {
-		return origPErr.GoError()
-	}
-	j := origPErr.Index.Index
-	if j >= int32(len(b.Results)) {
-		return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
-	}
-	result := b.Results[j]
-	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
+	switch v := origPErr.GetDetail().(type) {
+	case *roachpb.MinTimestampBoundUnsatisfiableError:
+		return pgerror.WithCandidateCode(
+			origPErr.GoError(),
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
+	case *roachpb.ConditionFailedError:
+		if origPErr.Index == nil {
+			break
+		}
+		j := origPErr.Index.Index
+		if j >= int32(len(b.Results)) {
+			return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
+		}
+		result := b.Results[j]
+		if len(result.Rows) == 0 {
+			break
+		}
 		key := result.Rows[0].Key
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, cErr.ActualValue)
+		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
+	case *roachpb.WriteIntentError:
+		key := v.Intents[0].Key
+		return NewLockNotAvailableError(ctx, tableDesc, key, v.Reason)
 	}
 	return origPErr.GoError()
 }
@@ -70,17 +84,26 @@ type KeyToDescTranslator interface {
 	// descriptor. An implementation can return (nil, false) if the translation
 	// failed because the key is not part of a table it was scanning, but is
 	// instead part of an interleaved relative (parent/sibling/child) table.
-	KeyToDesc(roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool)
+	KeyToDesc(roachpb.Key) (catalog.TableDescriptor, bool)
 }
 
-// ConvertFetchError attempts to a map key-value error generated during a
+// ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
 func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err error) error {
-	var wiErr *roachpb.WriteIntentError
-	if errors.As(err, &wiErr) {
-		key := wiErr.Intents[0].Key
+	var errs struct {
+		wi *roachpb.WriteIntentError
+		bs *roachpb.MinTimestampBoundUnsatisfiableError
+	}
+	switch {
+	case errors.As(err, &errs.wi):
+		key := errs.wi.Intents[0].Key
 		desc, _ := descForKey.KeyToDesc(key)
-		return NewLockNotAvailableError(ctx, desc, key)
+		return NewLockNotAvailableError(ctx, desc, key, errs.wi.Reason)
+	case errors.As(err, &errs.bs):
+		return pgerror.WithCandidateCode(
+			err,
+			pgcode.UnsatisfiableBoundedStaleness,
+		)
 	}
 	return err
 }
@@ -88,26 +111,27 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	key roachpb.Key,
-	value *roachpb.Value,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
-	index, datums, err := decodeRowInfo(ctx, tableDesc, key, value)
+	index, names, values, err := DecodeRowInfo(ctx, tableDesc, key, value, false)
 	if err != nil {
 		return pgerror.Newf(pgcode.UniqueViolation,
 			"duplicate key value: decoding err=%s", err)
 	}
 
-	datumStrs := make([]string, len(datums))
-	for i := range datums {
-		datumStrs[i] = datums[i].String()
-	}
-	return pgerror.Newf(pgcode.UniqueViolation,
-		"duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(datumStrs, ","),
-		index.Name)
+	// Exclude implicit partitioning columns and hash sharded index columns from
+	// the error message.
+	skipCols := index.ExplicitColumnStartIdx()
+	return errors.WithDetail(
+		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
+			"duplicate key value violates unique constraint %q", index.GetName(),
+		), index.GetName()),
+		fmt.Sprintf(
+			"Key (%s)=(%s) already exists.",
+			strings.Join(names[skipCols:], ","),
+			strings.Join(values[skipCols:], ","),
+		),
+	)
 }
 
 // NewLockNotAvailableError creates an error that represents an inability to
@@ -115,90 +139,125 @@ func NewUniquenessConstraintViolationError(
 // table descriptor corresponding to the key is unknown due to a table
 // interleaving.
 func NewLockNotAvailableError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, key roachpb.Key,
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	key roachpb.Key,
+	reason roachpb.WriteIntentError_Reason,
 ) error {
+	baseMsg := "could not obtain lock on row"
+	if reason == roachpb.WriteIntentError_REASON_LOCK_TIMEOUT {
+		baseMsg = "canceling statement due to lock timeout on row"
+	}
+
 	if tableDesc == nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
-			"could not obtain lock on row in interleaved table")
+			"%s in interleaved table", baseMsg)
 	}
 
-	index, datums, err := decodeRowInfo(ctx, tableDesc, key, nil)
+	index, colNames, values, err := DecodeRowInfo(ctx, tableDesc, key, nil, false)
 	if err != nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
-			"could not obtain lock on row: decoding err=%s", err)
+			"%s: decoding err=%s", baseMsg, err)
 	}
 
-	datumStrs := make([]string, len(datums))
-	for i := range datums {
-		datumStrs[i] = datums[i].String()
-	}
 	return pgerror.Newf(pgcode.LockNotAvailable,
-		"could not obtain lock on row (%s)=(%s) in %s@%s",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(datumStrs, ","),
-		tableDesc.Name,
-		index.Name)
+		"%s (%s)=(%s) in %s@%s",
+		baseMsg,
+		strings.Join(colNames, ","),
+		strings.Join(values, ","),
+		tableDesc.GetName(),
+		index.GetName())
 }
 
-// decodeRowInfo takes a table descriptor, a key, and an optional value and
+// DecodeRowInfo takes a table descriptor, a key, and an optional value and
 // returns information about the corresponding SQL row. If successful, the index
-// and datums corresponding to the provided key are returned.
-func decodeRowInfo(
+// and corresponding column names and values to the provided KV are returned.
+func DecodeRowInfo(
 	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	key roachpb.Key,
 	value *roachpb.Value,
-) (*descpb.IndexDescriptor, tree.Datums, error) {
+	allColumns bool,
+) (_ catalog.Index, columnNames []string, columnValues []string, _ error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
 	// to decode the corresponding datums and never escapes this function.
 	codec := keys.SystemSQLCodec
 	key, _, err := keys.DecodeTenantPrefix(key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	index, err := tableDesc.FindIndexByID(indexID)
+	index, err := tableDesc.FindIndexWithID(indexID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var rf Fetcher
 
-	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
-
-	colIdxMap := make(map[descpb.ColumnID]int, len(index.ColumnIDs))
-	cols := make([]descpb.ColumnDescriptor, len(index.ColumnIDs))
-	for i, colID := range index.ColumnIDs {
-		colIdxMap[colID] = i
-		col, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return nil, nil, err
+	var colIDs []descpb.ColumnID
+	if !allColumns {
+		colIDs = make([]descpb.ColumnID, index.NumKeyColumns())
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colIDs[i] = index.GetKeyColumnID(i)
 		}
-		cols[i] = *col
+	} else if index.Primary() {
+		publicColumns := tableDesc.PublicColumns()
+		colIDs = make([]descpb.ColumnID, len(publicColumns))
+		for i, col := range publicColumns {
+			colIDs[i] = col.GetID()
+		}
+	} else {
+		maxNumIDs := index.NumKeyColumns() + index.NumKeySuffixColumns() + index.NumSecondaryStoredColumns()
+		colIDs = make([]descpb.ColumnID, 0, maxNumIDs)
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colIDs = append(colIDs, index.GetKeyColumnID(i))
+		}
+		for i := 0; i < index.NumKeySuffixColumns(); i++ {
+			colIDs = append(colIDs, index.GetKeySuffixColumnID(i))
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			colIDs = append(colIDs, index.GetStoredColumnID(i))
+		}
+	}
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(colIDs)-1)
+
+	var colIdxMap catalog.TableColMap
+	cols := make([]catalog.Column, len(colIDs))
+	for i, colID := range colIDs {
+		colIdxMap.Set(colID, i)
+		col, err := tableDesc.FindColumnWithID(colID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		cols[i] = col
 	}
 
 	tableArgs := FetcherTableArgs{
 		Desc:             tableDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
+		ctx,
 		codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		0,     /* lockTimeout */
 		false, /* isCheck */
-		&sqlbase.DatumAlloc{},
+		&rowenc.DatumAlloc{},
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
 	if value != nil {
@@ -207,11 +266,27 @@ func decodeRowInfo(
 	// Use the Fetcher to decode the single kv pair above by passing in
 	// this singleKVFetcher implementation, which doesn't actually hit KV.
 	if err := rf.StartScanFrom(ctx, &f); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	datums, _, _, err := rf.NextRowDecoded(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return index, datums, nil
+
+	names := make([]string, len(cols))
+	values := make([]string, len(cols))
+	for i := range cols {
+		if cols[i].IsExpressionIndexColumn() {
+			names[i] = cols[i].GetComputeExpr()
+		} else {
+			names[i] = cols[i].GetName()
+		}
+		if datums[i] == tree.DNull {
+			continue
+		}
+		values[i] = datums[i].String()
+	}
+	return index, names, values, nil
 }
+
+func (f *singleKVFetcher) close(context.Context) {}

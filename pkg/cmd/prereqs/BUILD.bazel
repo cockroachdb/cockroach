@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "prereqs_lib",
+    srcs = ["prereqs.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/prereqs",
+    visibility = ["//visibility:private"],
+    deps = ["@org_golang_x_tools//go/packages"],
+)
+
+go_binary(
+    name = "prereqs",
+    embed = [":prereqs_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "prereqs_test",
+    size = "small",
+    srcs = ["prereqs_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":prereqs_lib"],
+    tags = ["broken_in_bazel"],
+    deps = ["//pkg/testutils"],
+)

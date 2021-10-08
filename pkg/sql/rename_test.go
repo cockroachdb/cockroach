@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,10 +53,10 @@ func TestRenameTable(t *testing.T) {
 
 	// Check the table descriptor.
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
-	if tableDesc.Name != oldName {
+	if tableDesc.GetName() != oldName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
-	if tableDesc.ParentID != oldDBID {
+	if tableDesc.GetParentID() != oldDBID {
 		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", oldDBID, tableDesc)
 	}
 
@@ -76,15 +75,15 @@ func TestRenameTable(t *testing.T) {
 
 	// Check the table descriptor again.
 	renamedDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test2", "bar")
-	if renamedDesc.Name != newName {
+	if renamedDesc.GetName() != newName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, tableDesc)
 	}
-	if renamedDesc.ParentID != newDBID {
+	if renamedDesc.GetParentID() != newDBID {
 		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", newDBID, tableDesc)
 	}
-	if renamedDesc.ID != tableDesc.ID {
+	if renamedDesc.GetID() != tableDesc.GetID() {
 		t.Fatalf("Wrong ID after rename, got %d, expected %d",
-			renamedDesc.ID, tableDesc.ID)
+			renamedDesc.GetID(), tableDesc.GetID())
 	}
 }
 
@@ -126,7 +125,10 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 		func(descriptor *descpb.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			id, version, name, _, _ := sqlbase.GetDescriptorMetadata(descriptor)
+			id, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if waitTableID != id {
 				return
 			}
@@ -149,7 +151,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	mu.Lock()
-	waitTableID = tableDesc.ID
+	waitTableID = tableDesc.GetID()
 	mu.Unlock()
 
 	txn, err := db.Begin()
@@ -194,7 +196,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// name is not deleted from the database until the async schema changer checks
 	// that there's no more leases on the old version).
 	if _, err := db.Exec("CREATE TABLE test.t (a INT PRIMARY KEY)"); !testutils.IsError(
-		err, `relation "t" already exists`) {
+		err, `relation "test.public.t" already exists`) {
 		t.Fatal(err)
 	}
 
@@ -211,7 +213,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	s.LeaseManager().(*lease.Manager).VisitLeases(func(
 		desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp,
 	) (wantMore bool) {
-		if desc.GetID() == tableDesc.ID && desc.GetName() == "t" {
+		if desc.GetID() == tableDesc.GetID() && desc.GetName() == "t" {
 			foundLease = true
 		}
 		return true
@@ -392,7 +394,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// schema changes and one increment for signaling of the completion of the
 	// drain. See the above comment for an explanation of why there's only one
 	// expected version update for draining names.
-	expectedVersion := tableDesc.Version + 3
+	expectedVersion := tableDesc.GetVersion() + 3
 
 	// Concurrently, rename the table.
 	start := startRename
@@ -415,7 +417,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 
 	// Table rename to t3 was successful.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
-	if version := tableDesc.Version; expectedVersion != version {
+	if version := tableDesc.GetVersion(); expectedVersion != version {
 		t.Fatalf("version mismatch: expected = %d, current = %d", expectedVersion, version)
 	}
 

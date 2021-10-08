@@ -43,7 +43,7 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 	if pErr == nil || re == "" {
 		return false
 	}
-	matched, merr := regexp.MatchString(re, pErr.Message)
+	matched, merr := regexp.MatchString(re, pErr.String())
 	if merr != nil {
 		return false
 	}

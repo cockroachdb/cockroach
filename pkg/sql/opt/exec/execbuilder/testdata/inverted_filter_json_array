@@ -1,0 +1,332 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB,
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[],
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+# Filter with a scalar.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • scan
+      missing stats
+      table: json_tab@foo_inv
+      spans: 2 spans
+
+# Filter with fully-specified arrays.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 4
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 4 spans
+
+# Filter with a path ending in an empty object.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 2 spans
+
+# Filter with a path ending in an empty array.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 2 spans
+
+# Filter with a nested array. This index expression is not tight.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
+│
+└── • index join
+    │ table: json_tab@primary
+    │
+    └── • sort
+        │ order: +a
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 4
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 4 spans
+
+# Combine predicates with OR.
+query T
+EXPLAIN SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 2 spans
+
+# Combine predicates with OR.
+query T
+EXPLAIN SELECT * FROM json_tab@foo_inv WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
+│
+└── • index join
+    │ table: json_tab@primary
+    │
+    └── • sort
+        │ order: +a
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 3
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 3 spans
+
+# More complex combination.
+query T
+EXPLAIN SELECT a FROM json_tab
+WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
+ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 6
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 6 spans
+
+# Combined with non-JSON predicates.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • filter
+    │ filter: (a % 2) = 0
+    │
+    └── • scan
+          missing stats
+          table: json_tab@foo_inv
+          spans: 1 span
+
+# The split disjunction rule allows us to use the index for this query.
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a
+│ order key: a
+│
+└── • union all
+    │
+    ├── • index join
+    │   │ table: json_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: json_tab@foo_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [/44 - /44]
+
+# We cannot use the index for this query.
+query error pq: index "foo_inv" is inverted and cannot be used for this query
+EXPLAIN SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
+
+query T
+EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (b @> '[1]') OR (sqrt(a::DECIMAL) = 2)
+│
+└── • scan
+      missing stats
+      table: json_tab@primary
+      spans: FULL SCAN
+
+# Array operations.
+query T
+EXPLAIN SELECT a FROM array_tab@foo_inv WHERE b @> '{}' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 1
+    │
+    └── • scan
+          missing stats
+          table: array_tab@foo_inv
+          spans: 1 span
+
+# Combined with non-Array predicates.
+query T
+EXPLAIN SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • filter
+    │ filter: (a % 2) = 0
+    │
+    └── • scan
+          missing stats
+          table: array_tab@foo_inv
+          spans: 1 span
+
+# The split disjunction rule allows us to use the index for this query.
+query T
+EXPLAIN SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a
+│ order key: a
+│
+└── • union all
+    │
+    ├── • index join
+    │   │ table: array_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: array_tab@foo_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: [/1 - /1]
+
+# We cannot use the index for this query.
+query error pq: index "foo_inv" is inverted and cannot be used for this query
+EXPLAIN SELECT a FROM array_tab@foo_inv WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
+
+query T
+EXPLAIN SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: ((b @> ARRAY[2]) AND (a = 3)) OR (a = b[0])
+│
+└── • scan
+      missing stats
+      table: array_tab@primary
+      spans: FULL SCAN

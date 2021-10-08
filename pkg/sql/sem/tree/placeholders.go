@@ -40,8 +40,8 @@ func (idx PlaceholderIdx) String() string {
 // placeholders in the statement. Entries that don't yet have a type are nil.
 type PlaceholderTypes []*types.T
 
-// Equals returns true if two PlaceholderTypes contain the same types.
-func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
+// Identical returns true if two PlaceholderTypes contain the same types.
+func (pt PlaceholderTypes) Identical(other PlaceholderTypes) bool {
 	if len(pt) != len(other) {
 		return false
 	}
@@ -50,7 +50,7 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 		case t == nil && other[i] == nil:
 		case t == nil || other[i] == nil:
 			return false
-		case !t.Equivalent(other[i]):
+		case !t.Identical(other[i]):
 			return false
 		}
 	}
@@ -100,12 +100,15 @@ type PlaceholderTypesInfo struct {
 
 // Type returns the known type of a placeholder. If there is no known type yet
 // but there is a type hint, returns the type hint.
-func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (_ *types.T, ok bool) {
+func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (_ *types.T, ok bool, _ error) {
+	if len(p.Types) <= int(idx) {
+		return nil, false, makeNoValueProvidedForPlaceholderErr(idx)
+	}
 	t := p.Types[idx]
-	if t == nil && len(p.TypeHints) >= int(idx) {
+	if t == nil && len(p.TypeHints) > int(idx) {
 		t = p.TypeHints[idx]
 	}
-	return t, (t != nil)
+	return t, t != nil, nil
 }
 
 // ValueType returns the type of the value that must be supplied for a placeholder.
@@ -202,8 +205,8 @@ func (p *PlaceholderInfo) Value(idx PlaceholderIdx) (TypedExpr, bool) {
 // whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	if t, ok := StripParens(expr).(*Placeholder); ok {
-		_, res := p.Type(t.Idx)
-		return !res
+		_, res, err := p.Type(t.Idx)
+		return !(err == nil && res)
 	}
 	return false
 }

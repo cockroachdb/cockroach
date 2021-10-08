@@ -34,7 +34,10 @@ make bin/roachprod bin/roachtest
 
 rm -fr vendor/github.com/cockroachdb/pebble
 git clone https://github.com/cockroachdb/pebble vendor/github.com/cockroachdb/pebble
-GOOS=linux go build -o pebble.linux github.com/cockroachdb/pebble/cmd/pebble
+pushd vendor/github.com/cockroachdb/pebble
+GOOS=linux go build -v -mod=vendor -o pebble.linux ./cmd/pebble
+popd
+mv vendor/github.com/cockroachdb/pebble/pebble.linux .
 export PEBBLE_BIN=pebble.linux
 
 # NB: We specify "true" for the --cockroach and --workload binaries to
@@ -57,6 +60,10 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   tag:pebble pebble; then
   exit_status=$?
 fi
+
+# Each roachtest's artifacts are zip'd. Unzip them all and remove the .zips.
+find $artifacts -name '*.zip' -execdir unzip {} \;
+find $artifacts -name '*.zip' -execdir rm {} \;
 
 # mkbench expects artifacts to be gzip compressed.
 find $artifacts -name '*.log' | xargs gzip -9

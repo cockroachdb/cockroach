@@ -30,13 +30,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -94,6 +96,16 @@ var testCases = []testCase{
 		name: "Protect - already exists",
 		ops: []op{
 			protectOp{spans: tableSpans(42)},
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				// When max_bytes or max_spans is set to 0 (i.e. unlimited), and a
+				// protect op fails because the record already exists, we should report
+				// that the record already exists, and not erroneously report that the
+				// max_bytes or max_spans has been exceeded.
+				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_bytes = $1", 0)
+				require.NoError(t, err)
+				_, err = tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 0)
+				require.NoError(t, err)
+			}),
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx.tc.Server(0).Clock().Now(), "", nil, tableSpan(42))
 				rec.ID = pickOneRecord(tCtx)
@@ -157,6 +169,50 @@ var testCases = []testCase{
 		},
 	},
 	{
+		name: "Protect - unlimited bytes",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_bytes = $1", 0)
+				require.NoError(t, err)
+			}),
+			protectOp{
+				spans: append(tableSpans(1, 2),
+					func() roachpb.Span {
+						s := tableSpan(3)
+						s.EndKey = append(s.EndKey, bytes.Repeat([]byte{'a'}, 2<<20 /* 2 MiB */)...)
+						return s
+					}()),
+			},
+			protectOp{
+				spans: tableSpans(1, 2),
+			},
+		},
+	},
+	{
+		name: "Protect - unlimited spans",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 0)
+				require.NoError(t, err)
+			}),
+			protectOp{
+				spans: func() []roachpb.Span {
+					const lotsOfSpans = 1 << 15
+					spans := make([]roachpb.Span, lotsOfSpans)
+					for i := 0; i < lotsOfSpans; i++ {
+						spans[i] = tableSpan(uint32(i))
+					}
+					return spans
+				}(),
+			},
+			protectOp{
+				spans: tableSpans(1, 2),
+			},
+		},
+	},
+	{
 		name: "GetRecord - does not exist",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
@@ -191,6 +247,30 @@ var testCases = []testCase{
 				idFunc: randomID,
 				expErr: protectedts.ErrNotExists.Error(),
 			},
+		},
+	},
+	{
+		name: "UpdateTimestamp",
+		ops: []op{
+			protectOp{spans: tableSpans(42)},
+			updateTimestampOp{
+				expectedRecordFn: func(record ptpb.Record) ptpb.Record {
+					record.Timestamp = hlc.Timestamp{WallTime: 1}
+					return record
+				},
+				updateTimestamp: hlc.Timestamp{WallTime: 1},
+			},
+		},
+	},
+	{
+		name: "UpdateTimestamp -- does not exist",
+		ops: []op{
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					return tCtx.pts.UpdateTimestamp(ctx, txn, randomID(tCtx), hlc.Timestamp{WallTime: 1})
+				})
+				require.EqualError(t, err, protectedts.ErrNotExists.Error())
+			}),
 		},
 	},
 	{
@@ -315,6 +395,29 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: p.spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
+	}
+}
+
+type updateTimestampOp struct {
+	expectedRecordFn func(record ptpb.Record) ptpb.Record
+	updateTimestamp  hlc.Timestamp
+	expErr           string
+}
+
+func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
+	id := pickOneRecord(tCtx)
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return tCtx.pts.UpdateTimestamp(ctx, txn, id, p.updateTimestamp)
+	})
+	if !testutils.IsError(err, p.expErr) {
+		t.Fatalf("expected error to match %q, got %q", p.expErr, err)
+	}
+	if err == nil {
+		i := sort.Search(len(tCtx.state.Records), func(i int) bool {
+			return bytes.Equal(id[:], tCtx.state.Records[i].ID[:])
+		})
+		tCtx.state.Records[i] = p.expectedRecordFn(tCtx.state.Records[i])
+		tCtx.state.Version++
 	}
 }
 
@@ -446,7 +549,7 @@ func TestCorruptData(t *testing.T) {
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 			"UPDATE system.protected_ts_records SET spans = $1 WHERE id = $2",
 			[]byte("junk"), rec.ID.String())
 		require.NoError(t, err)
@@ -470,7 +573,7 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
-			require.Equal(t, log.Severity_ERROR, e.Severity)
+			require.Equal(t, severity.ERROR, e.Severity)
 		}
 	})
 	t.Run("corrupt hlc timestamp", func(t *testing.T) {
@@ -496,7 +599,7 @@ func TestCorruptData(t *testing.T) {
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 			"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
 			d.String(), rec.ID.String())
 		require.NoError(t, err)
@@ -522,7 +625,7 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
-			require.Equal(t, log.Severity_ERROR, e.Severity)
+			require.Equal(t, severity.ERROR, e.Severity)
 		}
 	})
 }
@@ -603,45 +706,23 @@ func (ie *wrappedInternalExecutor) ExecEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	o sqlbase.InternalExecutorSessionDataOverride,
+	o sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	panic("unimplemented")
-}
-
-func (ie *wrappedInternalExecutor) QueryEx(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, error) {
 	if f := ie.getErrFunc(); f != nil {
 		if err := f(stmt); err != nil {
-			return nil, err
+			return 0, err
 		}
 	}
-	return ie.wrapped.QueryEx(ctx, opName, txn, session, stmt, qargs...)
-}
-
-func (ie *wrappedInternalExecutor) QueryWithCols(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	o sqlbase.InternalExecutorSessionDataOverride,
-	statement string,
-	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	panic("unimplemented")
+	return ie.wrapped.ExecEx(ctx, opName, txn, o, stmt, qargs...)
 }
 
 func (ie *wrappedInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
+	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
@@ -653,16 +734,60 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 	return ie.wrapped.QueryRowEx(ctx, opName, txn, session, stmt, qargs...)
 }
 
-func (ie *wrappedInternalExecutor) Query(
-	ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
-) ([]tree.Datums, error) {
-	panic("not implemented")
-}
-
 func (ie *wrappedInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
 	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryBuffered(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryIterator(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryIteratorEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	if f := ie.getErrFunc(); f != nil {
+		if err := f(stmt); err != nil {
+			return nil, err
+		}
+	}
+	return ie.wrapped.QueryIteratorEx(ctx, opName, txn, session, stmt, qargs...)
 }
 
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {

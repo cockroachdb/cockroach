@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "floatcmp",
+    srcs = ["floatcmp.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/floatcmp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_google_go_cmp//cmp",
+        "@com_github_google_go_cmp//cmp/cmpopts",
+    ],
+)
+
+go_test(
+    name = "floatcmp_test",
+    size = "small",
+    srcs = ["floatcmp_test.go"],
+    embed = [":floatcmp"],
+)

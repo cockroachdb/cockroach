@@ -18,30 +18,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func (p *planner) showStateMachineSetting(
-	ctx context.Context, st *cluster.Settings, s *settings.StateMachineSetting, name string,
+func (p *planner) showVersionSetting(
+	ctx context.Context, st *cluster.Settings, s *settings.VersionSetting, name string,
 ) (string, error) {
 	var res string
-	// For statemachine settings (at the time of writing, this is only the cluster version setting)
-	// we show the value from the KV store and additionally wait for the local Gossip instance to
-	// have observed the value as well. This makes sure that cluster version bumps become visible
-	// immediately while at the same time guaranteeing that a node reporting a certain version has
-	// also processed the corresponding Gossip update (which is important as only then does the node
-	// update its persisted state; see #22796).
+	// For the version setting we show the value from the KV store and
+	// additionally wait for the local setting instance to have observed the
+	// value as well (gets updated through the `BumpClusterVersion` RPC). This
+	// makes sure that cluster version bumps become visible immediately while at
+	// the same time guaranteeing that a node reporting a certain version has
+	// also processed the corresponding version bump (which is important as only
+	// then does the node update its persisted state; see #22796).
 	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("show cluster setting %s", name), 2*time.Minute,
 		func(ctx context.Context) error {
 			tBegin := timeutil.Now()
@@ -52,7 +57,7 @@ func (p *planner) showStateMachineSetting(
 					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
 						txn,
-						sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+						sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
 					if err != nil {
@@ -65,25 +70,38 @@ func (p *planner) showStateMachineSetting(
 							return errors.New("the existing value is not a string")
 						}
 						kvRawVal = []byte(string(*dStr))
+					} else if !p.execCfg.Codec.ForSystemTenant() {
+						// The tenant clusters in 20.2 did not ever initialize this value
+						// and utilized this hard-coded value instead. In 21.1, the builtin
+						// which creates tenants sets up the cluster version state. It also
+						// is set when the version is upgraded.
+						tenantDefaultVersion := clusterversion.ClusterVersion{
+							Version: roachpb.Version{Major: 20, Minor: 2},
+						}
+						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
+						if err != nil {
+							return errors.WithAssertionFailure(err)
+						}
+						kvRawVal = encoded
 					} else {
 						// There should always be a version saved; there's a migration
 						// populating it.
 						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					gossipRawVal := []byte(s.Get(&st.SV))
-					if !bytes.Equal(gossipRawVal, kvRawVal) {
+					localRawVal := []byte(s.Get(&st.SV))
+					if !bytes.Equal(localRawVal, kvRawVal) {
 						return errors.Errorf(
-							"value differs between gossip (%v) and KV (%v); try again later (%v after %s)",
-							gossipRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
+							"value differs between local setting (%v) and KV (%v); try again later (%v after %s)",
+							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
 					}
 
 					val, err := s.Decode(kvRawVal)
 					if err != nil {
 						return err
 					}
-					res = val.(fmt.Stringer).String()
 
+					res = val.String()
 					return nil
 				})
 			})
@@ -97,11 +115,6 @@ func (p *planner) showStateMachineSetting(
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
-
-	if err := p.RequireAdminRole(ctx, "SHOW CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
@@ -109,11 +122,15 @@ func (p *planner) ShowClusterSetting(
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
 
+	if err := checkPrivilegesForSetting(ctx, p, name, "show"); err != nil {
+		return nil, err
+	}
+
 	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting, *settings.EnumSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, *settings.EnumSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -127,7 +144,7 @@ func (p *planner) ShowClusterSetting(
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
 
-	columns := sqlbase.ResultColumns{{Name: name, Typ: dType}}
+	columns := colinfo.ResultColumns{{Name: name, Typ: dType}}
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
@@ -138,13 +155,6 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.StringSetting:
 				d = tree.NewDString(s.String(&st.SV))
-			case *settings.StateMachineSetting:
-				var err error
-				valStr, err := p.showStateMachineSetting(ctx, st, s, name)
-				if err != nil {
-					return nil, err
-				}
-				d = tree.NewDString(valStr)
 			case *settings.BoolSetting:
 				d = tree.MakeDBool(tree.DBool(s.Get(&st.SV)))
 			case *settings.FloatSetting:
@@ -157,6 +167,12 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDString(s.String(&st.SV))
 			case *settings.ByteSizeSetting:
 				d = tree.NewDString(s.String(&st.SV))
+			case *settings.VersionSetting:
+				valStr, err := p.showVersionSetting(ctx, st, s, name)
+				if err != nil {
+					return nil, err
+				}
+				d = tree.NewDString(valStr)
 			default:
 				return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 			}

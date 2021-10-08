@@ -1,24 +1,6 @@
 revoke_stmt ::=
-	'REVOKE' 'ALL' 'ON' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ALL' 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ALL' 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' name ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' name ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' name ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'CREATE' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'CREATE' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'CREATE' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'GRANT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'GRANT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'GRANT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'SELECT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'SELECT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'SELECT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' name ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'CREATE' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'GRANT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'SELECT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' name ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' 'CREATE' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' 'GRANT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' 'SELECT' ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* 'FROM' database_name ( ',' database_name )*
+	'REVOKE' 'ALL' 'PRIVILEGES' 'ON' targets 'FROM' name_list
+	| 'REVOKE' 'ALL'  'ON' targets 'FROM' name_list
+	| 'REVOKE' privilege_list 'ON' targets 'FROM' name_list
+	| 'REVOKE' privilege_list 'FROM' name_list
+	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list

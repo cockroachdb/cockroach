@@ -23,24 +23,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "does too much work under race, see: "+
+		"https://github.com/cockroachdb/cockroach/pull/56343#issuecomment-733577377")
+
 	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
-		"[async] drain",
-		"[async] storage.pendingLeaseRequest: requesting lease",
-		"[async] storage.Store: gossip on capacity change",
+		"drain",
+		"storage.pendingLeaseRequest: requesting lease",
+		"storage.Store: gossip on capacity change",
 		"outbox",
 		"request range lease",
 		"range lookup",
@@ -104,10 +107,10 @@ func TestTrace(t *testing.T) {
 
 				// Check that stat collection from the above SELECT statement is output
 				// to trace. We don't insert any rows in this test, thus the expected
-				// stat value is 0.
+				// num tuples value plus one is 1.
 				rows, err := sqlDB.Query(
 					"SELECT count(message) FROM crdb_internal.session_trace " +
-						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
+						"WHERE message LIKE '%component%num_tuples%value_plus_one:1%'",
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -223,7 +226,7 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := sqlDB.Exec("SET vectorize = on; SET vectorize_row_count_threshold=0"); err != nil {
+				if _, err := sqlDB.Exec("SET vectorize = on"); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
@@ -238,8 +241,8 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"exec stmt",
 				"flow",
-				"materializer",
-				"*colexec.CancelChecker",
+				"batch flow coordinator",
+				"colbatchscan",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
@@ -250,7 +253,7 @@ func TestTrace(t *testing.T) {
 
 	// Create a cluster. We'll run sub-tests using each node of this cluster.
 	const numNodes = 3
-	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
@@ -533,7 +536,7 @@ func TestKVTraceDistSQL(t *testing.T) {
 
 	// Test that kv tracing works in distsql.
 	const numNodes = 2
-	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
@@ -576,21 +579,22 @@ func TestKVTraceDistSQL(t *testing.T) {
 // running remotely are collected.
 func TestTraceDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	countStmt := "SELECT count(1) FROM test.a"
 	recCh := make(chan tracing.Recording, 2)
 
 	const numNodes = 2
-	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(sp opentracing.Span, stmt string) {
+					WithStatementTrace: func(trace tracing.Recording, stmt string) {
 						if stmt == countStmt {
-							recCh <- tracing.GetRecording(sp)
+							recCh <- trace
 						}
 					},
 				},
@@ -600,6 +604,10 @@ func TestTraceDistSQL(t *testing.T) {
 	defer cluster.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	// TODO(yuzefovich): tracing in the vectorized engine is very limited since
+	// only wrapped processors and the materializers use it outside of the
+	// stats information propagation. We should fix that (#55821).
+	r.Exec(t, "SET vectorize=off")
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY)")
 	// Put the table on the 2nd node so that the flow is planned on the 2nd node

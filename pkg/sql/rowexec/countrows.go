@@ -15,11 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // countAggregator is a simple processor that counts the number of rows it
@@ -36,8 +34,6 @@ var _ execinfra.RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []*types.T{types.Int}
-
 func newCountAggregator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -48,15 +44,15 @@ func newCountAggregator(
 	ag := &countAggregator{}
 	ag.input = input
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		ag.input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
 	if err := ag.Init(
 		ag,
 		post,
-		outputTypes,
+		[]*types.T{types.Int},
 		flowCtx,
 		processorID,
 		output,
@@ -71,12 +67,12 @@ func newCountAggregator(
 	return ag, nil
 }
 
-func (ag *countAggregator) Start(ctx context.Context) context.Context {
+func (ag *countAggregator) Start(ctx context.Context) {
+	ctx = ag.StartInternal(ctx, countRowsProcName)
 	ag.input.Start(ctx)
-	return ag.StartInternal(ctx, countRowsProcName)
 }
 
-func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == execinfra.StateRunning {
 		row, meta := ag.input.Next()
 		if meta != nil {
@@ -87,9 +83,9 @@ func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMet
 			return nil, meta
 		}
 		if row == nil {
-			ret := make(sqlbase.EncDatumRow, 1)
-			ret[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
-			rendered, _, err := ag.Out.ProcessRow(ag.Ctx, ret)
+			ret := make(rowenc.EncDatumRow, 1)
+			ret[0] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
+			rendered, _, err := ag.OutputHelper.ProcessRow(ag.Ctx, ret)
 			// We're done as soon as we process our one output row, so we
 			// transition into draining state. We will, however, return non-nil
 			// error (if such occurs during rendering) separately below.
@@ -104,24 +100,14 @@ func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMet
 	return nil, ag.DrainHelper()
 }
 
-func (ag *countAggregator) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
-}
-
-func (ag *countAggregator) ConsumerClosed() {
-	ag.InternalClose()
-}
-
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
-func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := opentracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &AggregatorStats{InputStats: is},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: ag.OutputHelper.Stats(),
 	}
 }

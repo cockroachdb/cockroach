@@ -152,7 +152,7 @@ func decimalEandM(d *apd.Decimal, tmp []byte) (int, []byte) {
 // The mantissa m can be stored in the spare capacity of appendTo.
 func encodeEandM(appendTo []byte, negative bool, e int, m []byte) []byte {
 	var buf []byte
-	if n := len(m) + maxVarintSize + 2; n <= cap(appendTo)-len(appendTo) {
+	if n := len(m) + MaxVarintLen + 2; n <= cap(appendTo)-len(appendTo) {
 		buf = appendTo[len(appendTo) : len(appendTo)+n]
 	} else {
 		buf = make([]byte, n)
@@ -710,9 +710,9 @@ func decodeNonsortingDecimalValueWithoutExp(dec *apd.Decimal, buf, tmp []byte) {
 func UpperBoundNonsortingDecimalSize(d *apd.Decimal) int {
 	// Makeup of upper bound size:
 	// - 1 byte for the prefix
-	// - maxVarintSize for the exponent
+	// - MaxVarintLen for the exponent
 	// - WordLen for the big.Int bytes
-	return 1 + maxVarintSize + WordLen(d.Coeff.Bits())
+	return 1 + MaxVarintLen + WordLen(d.Coeff.Bits())
 }
 
 // upperBoundNonsortingDecimalUnscaledSize is the same as
@@ -727,9 +727,9 @@ func upperBoundNonsortingDecimalUnscaledSize(unscaledLen int) int {
 	unscaledLenWordRounded := int(unscaledLenBase2Words) * bigWordSize
 	// Makeup of upper bound size:
 	// - 1 byte for the prefix
-	// - maxVarintSize for the exponent
+	// - MaxVarintLen for the exponent
 	// - unscaledLenWordRounded for the big.Int bytes
-	return 1 + maxVarintSize + unscaledLenWordRounded
+	return 1 + MaxVarintLen + unscaledLenWordRounded
 }
 
 // Taken from math/big/arith.go.

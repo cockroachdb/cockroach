@@ -16,7 +16,6 @@ package hlc
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -73,7 +72,12 @@ type Clock struct {
 
 	mu struct {
 		syncutil.Mutex
-		timestamp Timestamp
+
+		// timestamp is the current HLC time. The timestamp.WallTime field must
+		// be updated atomically, even though it is protected by a mutex - this
+		// enables a fast path for reading the wall time without grabbing the
+		// lock.
+		timestamp ClockTimestamp
 
 		// isMonitoringForwardClockJumps is a flag to ensure that only one jump monitoring
 		// goroutine is running per clock
@@ -117,6 +121,63 @@ func (m *ManualClock) Increment(incr int64) {
 // Set atomically sets the manual clock's timestamp.
 func (m *ManualClock) Set(nanos int64) {
 	atomic.StoreInt64(&m.nanos, nanos)
+}
+
+// HybridManualClock is a convenience type to facilitate
+// creating a hybrid logical clock whose physical clock
+// ticks with the wall clock, but that can be moved arbitrarily
+// into the future or paused. HybridManualClock is thread safe.
+type HybridManualClock struct {
+	mu struct {
+		syncutil.RWMutex
+		// nanos, if not 0, is the amount of time the clock was manually incremented
+		// by; it is added to physicalClock.
+		nanos int64
+		// nanosAtPause records the timestamp of the physical clock when it gets
+		// paused. 0 means that the clock is not paused.
+		nanosAtPause int64
+	}
+}
+
+// NewHybridManualClock returns a new instance, initialized with
+// specified timestamp.
+func NewHybridManualClock() *HybridManualClock {
+	return &HybridManualClock{}
+}
+
+// UnixNano returns the underlying hybrid manual clock's timestamp.
+func (m *HybridManualClock) UnixNano() int64 {
+	m.mu.RLock()
+	nanosAtPause := m.mu.nanosAtPause
+	nanos := m.mu.nanos
+	m.mu.RUnlock()
+	if nanosAtPause > 0 {
+		return nanos + nanosAtPause
+	}
+	return nanos + UnixNano()
+}
+
+// Increment increments the hybrid manual clock's timestamp.
+func (m *HybridManualClock) Increment(nanos int64) {
+	m.mu.Lock()
+	m.mu.nanos += nanos
+	m.mu.Unlock()
+}
+
+// Pause pauses the hybrid manual clock; the passage of time no longer causes
+// the clock to tick. Increment can still be used, though.
+func (m *HybridManualClock) Pause() {
+	m.mu.Lock()
+	m.mu.nanosAtPause = UnixNano()
+	m.mu.Unlock()
+}
+
+// Resume resumes the hybrid manual clock; the passage of time continues to
+// cause clock to tick.
+func (m *HybridManualClock) Resume() {
+	m.mu.Lock()
+	m.mu.nanosAtPause = 0
+	m.mu.Unlock()
 }
 
 // UnixNano returns the local machine's physical nanosecond
@@ -273,12 +334,20 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 	}
 }
 
-// Now returns a timestamp associated with an event from
-// the local machine that may be sent to other members
-// of the distributed network. This is the counterpart
-// of Update, which is passed a timestamp received from
-// another member of the distributed network.
+// Now returns a timestamp associated with an event from the local
+// machine that may be sent to other members of the distributed network.
 func (c *Clock) Now() Timestamp {
+	return c.NowAsClockTimestamp().ToTimestamp()
+}
+
+// NowAsClockTimestamp is like Now, but returns a ClockTimestamp instead
+// of a raw Timestamp.
+//
+// This is the counterpart of Update, which is passed a ClockTimestamp
+// received from another member of the distributed network. As such,
+// callers that intend to use the returned timestamp to update a peer's
+// HLC clock should use this method.
+func (c *Clock) NowAsClockTimestamp() ClockTimestamp {
 	physicalClock := c.getPhysicalClockAndCheck(context.TODO())
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -287,7 +356,7 @@ func (c *Clock) Now() Timestamp {
 		c.mu.timestamp.Logical++
 	} else {
 		// Use the physical clock, and reset the logical one.
-		c.mu.timestamp.WallTime = physicalClock
+		atomic.StoreInt64(&c.mu.timestamp.WallTime, physicalClock)
 		c.mu.timestamp.Logical = 0
 	}
 
@@ -329,7 +398,15 @@ func (c *Clock) PhysicalTime() time.Time {
 // the maximum clock offset. To receive an error response instead of forcing the
 // update in case the remote timestamp is too far into the future, use
 // UpdateAndCheckMaxOffset() instead.
-func (c *Clock) Update(rt Timestamp) {
+func (c *Clock) Update(rt ClockTimestamp) {
+
+	// Fast path to avoid grabbing the mutex if the remote time is behind. This
+	// requires c.mu.timestamp.WallTime to be written atomically, even though
+	// the writer has to hold the mutex lock as well.
+	if rt.WallTime < atomic.LoadInt64(&c.mu.timestamp.WallTime) {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -337,7 +414,7 @@ func (c *Clock) Update(rt Timestamp) {
 	if rt.WallTime > c.mu.timestamp.WallTime {
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
-		c.mu.timestamp.WallTime = rt.WallTime
+		atomic.StoreInt64(&c.mu.timestamp.WallTime, rt.WallTime)
 		c.mu.timestamp.Logical = rt.Logical
 	} else if rt.WallTime == c.mu.timestamp.WallTime {
 		// Both wall times are equal, and the larger logical
@@ -350,21 +427,36 @@ func (c *Clock) Update(rt Timestamp) {
 	c.enforceWallTimeWithinBoundLocked()
 }
 
+// NB: don't change the string here; this will cause cross-version issues
+// since this singleton is used as a marker.
+var errUntrustworthyRemoteWallTimeErr = errors.New("remote wall time is too far ahead to be trustworthy")
+
+// IsUntrustworthyRemoteWallTimeError returns true if the error came resulted
+// from a call to Clock.UpdateAndCheckMaxOffset due to the passed ClockTimestamp
+// being too far in the future.
+func IsUntrustworthyRemoteWallTimeError(err error) bool {
+	return errors.Is(err, errUntrustworthyRemoteWallTimeErr)
+}
+
 // UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
 // returns an error in the event that the supplied remote timestamp exceeds
 // the wall clock time by more than the maximum clock offset.
-func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt Timestamp) error {
-	var err error
+//
+// If an error is returned, it will be detectable with
+// IsUntrustworthyRemoteWallTimeError.
+func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
 	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
-		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
-		return err
+		return errors.Mark(
+			errors.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset),
+			errUntrustworthyRemoteWallTimeErr,
+		)
 	}
 
 	if physicalClock > rt.WallTime {
-		c.Update(Timestamp{WallTime: physicalClock})
+		c.Update(ClockTimestamp{WallTime: physicalClock})
 	} else {
 		c.Update(rt)
 	}
@@ -425,4 +517,49 @@ func (c *Clock) WallTimeUpperBound() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.mu.wallTimeUpperBound
+}
+
+// SleepUntil sleeps until the HLC reaches or exceeds the given timestamp. This
+// typically results in sleeping for the duration between the given timestamp's
+// nanosecond WallTime and the Clock's current WallTime time, but may result in
+// sleeping for longer or shorter, depending on the HLC clock's relation to its
+// physical time source (it may lead it) and whether it advances more rapidly
+// due to updates from other nodes.
+//
+// If the provided context is canceled, the method will return the cancellation
+// error immediately. If an error is returned, no guarantee is made that the HLC
+// will have reached the specified timestamp.
+func (c *Clock) SleepUntil(ctx context.Context, t Timestamp) error {
+	// Don't busy loop if the HLC clock is out ahead of the system's
+	// physical clock.
+	const minSleep = 25 * time.Microsecond
+	// Refresh every second in case there was a clock jump.
+	const maxSleep = 1 * time.Second
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		now := c.Now()
+		if t.LessEq(now) {
+			return nil
+		}
+		d := now.GoTime().Sub(t.GoTime())
+		if d < minSleep {
+			d = minSleep
+		} else if d > maxSleep {
+			d = maxSleep
+		}
+		// If we're going to sleep for at least 1ms, listen for context
+		// cancellation. Otherwise, don't bother with the select and the
+		// more expensive use of time.After.
+		if d < 1*time.Millisecond {
+			time.Sleep(d)
+		} else {
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
 }

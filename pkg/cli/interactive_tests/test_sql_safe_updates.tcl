@@ -17,7 +17,7 @@ eexpect "CREATE"
 eexpect root@
 
 send "delete from d.t;\r"
-eexpect "rejected: DELETE without WHERE clause (sql_safe_updates = true)"
+eexpect "rejected (sql_safe_updates = true): DELETE without WHERE clause"
 eexpect root@
 end_test
 
@@ -33,7 +33,7 @@ send "show sql_safe_updates;\r"
 eexpect "on"
 eexpect "\r\n"
 send "delete from d.t;\r"
-eexpect "rejected: DELETE without WHERE clause (sql_safe_updates = true)"
+eexpect "rejected (sql_safe_updates = true): DELETE without WHERE clause"
 send "\\q\r"
 eexpect ":/# "
 end_test
@@ -52,7 +52,7 @@ end_test
 
 start_test "Check that dangerous statements are properly rejected when using --safe-updates -e."
 send "$argv sql --safe-updates -e 'delete from d.t'\r"
-eexpect "rejected: DELETE without WHERE clause"
+eexpect "rejected (sql_safe_updates = true): DELETE without WHERE clause"
 eexpect ":/# "
 end_test
 

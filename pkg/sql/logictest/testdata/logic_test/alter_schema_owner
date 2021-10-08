@@ -1,0 +1,56 @@
+statement ok
+CREATE SCHEMA s;
+CREATE USER testuser2
+
+# Superusers can alter owner to any user.
+statement ok
+ALTER SCHEMA s OWNER TO testuser
+
+statement ok
+ALTER SCHEMA s OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of schema "s"
+ALTER SCHEMA s OWNER TO testuser
+
+# other users must be owner to alter the owner to the current owner again
+statement error must be owner of schema "s"
+ALTER SCHEMA s OWNER TO root
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER SCHEMA s OWNER TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER SCHEMA s OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER SCHEMA s OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+ALTER SCHEMA s OWNER TO testuser2
+
+query T
+SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 's';
+----
+testuser2

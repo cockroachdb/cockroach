@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gce",
+    srcs = [
+        "gcloud.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/config",
+        "//pkg/cmd/roachprod/vm",
+        "//pkg/cmd/roachprod/vm/flagstub",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

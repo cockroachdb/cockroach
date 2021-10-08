@@ -26,7 +26,7 @@ var backpressureLogLimiter = log.Every(500 * time.Millisecond)
 // backpressureRangeSizeMultiplier is the multiple of range_max_bytes that a
 // range's size must grow to before backpressure will be applied on writes. Set
 // to 0 to disable backpressure altogether.
-var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
+var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 	"kv.range.backpressure_range_size_multiplier",
 	"multiple of range_max_bytes that a range is allowed to grow to without "+
 		"splitting before writes to that range are blocked, or 0 to disable",

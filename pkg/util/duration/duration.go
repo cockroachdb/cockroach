@@ -35,6 +35,10 @@ const (
 	SecsPerHour = 3600
 	// SecsPerDay is the amount of seconds in a day.
 	SecsPerDay = 86400
+	// MinsPerHour is the amount of minutes in an hour.
+	MinsPerHour = 60
+	// HoursPerDay is the number of hours in a day.
+	HoursPerDay = 24
 	// DaysPerMonth is the assumed amount of days in a month.
 	// is always evaluated to 30, as it is in postgres.
 	DaysPerMonth = 30
@@ -102,13 +106,113 @@ func MakeDuration(nanos, days, months int64) Duration {
 	}
 }
 
-// MakeNormalizedDuration returns a normalized Duration.
-func MakeNormalizedDuration(nanos, days, months int64) Duration {
+// MakeDurationJustifyHours returns a duration where hours are moved
+// to days if the number of hours exceeds 24.
+func MakeDurationJustifyHours(nanos, days, months int64) Duration {
+	const nanosPerDay = int64(HoursPerDay * time.Hour)
+	extraDays := nanos / nanosPerDay
+	days += extraDays
+	nanos -= extraDays * nanosPerDay
 	return Duration{
 		Months: months,
 		Days:   days,
 		nanos:  rounded(nanos),
-	}.normalize()
+	}
+}
+
+// Age returns a Duration rounded to the nearest microsecond
+// from the time difference of (lhs - rhs).
+//
+// Note that we cannot use time.Time's sub, as time.Duration does not give
+// an accurate picture of day/month differences.
+//
+// This is lifted from Postgres' timestamptz_age. The following comment applies:
+// Note that this does not result in an accurate absolute time span
+// since year and month are out of context once the arithmetic
+// is done.
+func Age(lhs, rhs time.Time) Duration {
+	// Strictly compare only UTC time.
+	lhs = lhs.UTC()
+	rhs = rhs.UTC()
+
+	years := int64(lhs.Year() - rhs.Year())
+	months := int64(lhs.Month() - rhs.Month())
+	days := int64(lhs.Day() - rhs.Day())
+	hours := int64(lhs.Hour() - rhs.Hour())
+	minutes := int64(lhs.Minute() - rhs.Minute())
+	seconds := int64(lhs.Second() - rhs.Second())
+	nanos := int64(lhs.Nanosecond() - rhs.Nanosecond())
+
+	flip := func() {
+		years = -years
+		months = -months
+		days = -days
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		nanos = -nanos
+	}
+
+	// Flip signs so we're always operating from a positive.
+	if rhs.After(lhs) {
+		flip()
+	}
+
+	// For each field that is now negative, promote them to positive.
+	// We could probably use smarter math here, but to keep things simple and postgres-esque,
+	// we'll do the same way postgres does. We do not expect these overflow values
+	// to be too large from the math above anyway.
+	for nanos < 0 {
+		nanos += int64(time.Second)
+		seconds--
+	}
+	for seconds < 0 {
+		seconds += SecsPerMinute
+		minutes--
+	}
+	for minutes < 0 {
+		minutes += MinsPerHour
+		hours--
+	}
+	for hours < 0 {
+		hours += HoursPerDay
+		days--
+	}
+	for days < 0 {
+		// Get days in month preceding the current month of whichever is greater.
+		if rhs.After(lhs) {
+			days += daysInCurrentMonth(lhs)
+		} else {
+			days += daysInCurrentMonth(rhs)
+		}
+		months--
+	}
+	for months < 0 {
+		months += MonthsPerYear
+		years--
+	}
+
+	// Revert the sign back.
+	if rhs.After(lhs) {
+		flip()
+	}
+
+	return Duration{
+		Months: years*MonthsPerYear + months,
+		Days:   days,
+		nanos: rounded(
+			nanos +
+				int64(time.Second)*seconds +
+				int64(time.Minute)*minutes +
+				int64(time.Hour)*hours,
+		),
+	}
+}
+
+func daysInCurrentMonth(t time.Time) int64 {
+	// Take the first day of the month, add a month and subtract a day.
+	// This returns the last day of the month, which the number of days in the month.
+	return int64(time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, -1).Day())
 }
 
 // DecodeDuration returns a Duration without rounding nanos.
@@ -273,6 +377,25 @@ const (
 
 // Format emits a string representation of a Duration to a Buffer truncated to microseconds.
 func (d Duration) Format(buf *bytes.Buffer) {
+	d.FormatWithStyle(buf, IntervalStyle_POSTGRES)
+}
+
+// FormatWithStyle emits a string representation of a Duration to a Buffer
+// truncated to microseconds with a given style.
+func (d Duration) FormatWithStyle(buf *bytes.Buffer, style IntervalStyle) {
+	switch style {
+	case IntervalStyle_POSTGRES:
+		d.encodePostgres(buf)
+	case IntervalStyle_ISO_8601:
+		d.encodeISO8601(buf)
+	case IntervalStyle_SQL_STANDARD:
+		d.encodeSQLStandard(buf)
+	default:
+		d.encodePostgres(buf)
+	}
+}
+
+func (d Duration) encodePostgres(buf *bytes.Buffer) {
 	if d.nanos == 0 && d.Days == 0 && d.Months == 0 {
 		buf.WriteString("00:00:00")
 		return
@@ -287,20 +410,28 @@ func (d Duration) Format(buf *bytes.Buffer) {
 		return true
 	}
 
-	negDays := d.Months < 0 || d.Days < 0
-	if absGE(d.Months, 12) {
-		years := d.Months / 12
+	months := d.Months
+	if absGE(months, 12) {
+		years := months / 12
 		wrote = wrotePrev(wrote, buf)
 		fmt.Fprintf(buf, "%d year%s", years, isPlural(years))
-		d.Months %= 12
+		months %= 12
 	}
-	if d.Months != 0 {
+	if months != 0 {
 		wrote = wrotePrev(wrote, buf)
-		fmt.Fprintf(buf, "%d mon%s", d.Months, isPlural(d.Months))
+		fmt.Fprintf(buf, "%d mon%s", months, isPlural(months))
 	}
+
+	// Keep track of whether the previous unit was negative.
+	// If so, and the next one is positive, add `+` in front of the positive unit.
+	wasNegative := d.Months < 0
 	if d.Days != 0 {
 		wrote = wrotePrev(wrote, buf)
+		if wasNegative && d.Days > 0 {
+			buf.WriteString("+")
+		}
 		fmt.Fprintf(buf, "%d day%s", d.Days, isPlural(d.Days))
+		wasNegative = d.Days < 0
 	}
 
 	if d.nanos == 0 {
@@ -311,31 +442,201 @@ func (d Duration) Format(buf *bytes.Buffer) {
 
 	if d.nanos/nanosInMicro < 0 {
 		buf.WriteString("-")
-	} else if negDays {
+	} else if wasNegative {
 		buf.WriteString("+")
 	}
 
-	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
-	var nanos uint64
-	if d.nanos >= 0 {
-		nanos = uint64(d.nanos)
-	} else {
-		nanos = uint64(-d.nanos)
-	}
+	hours, minutes, seconds, micros := extractAbsTime(d.nanos)
+	fmt.Fprintf(buf, "%02d:%02d:%02d", hours, minutes, seconds)
 
-	hn := nanos / hourNanos
-	nanos %= hourNanos
-	mn := nanos / minuteNanos
-	nanos %= minuteNanos
-	sn := nanos / secondNanos
-	nanos %= secondNanos
-	fmt.Fprintf(buf, "%02d:%02d:%02d", hn, mn, sn)
-
-	micros := nanos / nanosInMicro
 	if micros != 0 {
 		s := fmt.Sprintf(".%06d", micros)
 		buf.WriteString(strings.TrimRight(s, "0"))
 	}
+}
+
+func (d Duration) encodeSQLStandard(buf *bytes.Buffer) {
+	hasNegative := d.Months < 0 || d.Days < 0 || d.nanos < 0
+	hasPositive := d.Months > 0 || d.Days > 0 || d.nanos > 0
+	hasYearMonth := d.Months != 0
+	hasDayTime := d.Days != 0 || d.nanos != 0
+	hasDay := d.Days != 0
+
+	// A SQL Standard value always has the same sign, and must only
+	// have Year-Month XOR (Days and/or Time) values.
+	sqlStandardValue := !(hasNegative && hasPositive) &&
+		!(hasYearMonth && hasDayTime)
+
+	var years, months, days int64
+	hours, minutes, seconds, micros := extractTime(d.nanos)
+	if absGE(d.Months, 12) {
+		years = d.Months / 12
+		d.Months %= 12
+	}
+	months = d.Months
+	days = d.Days
+
+	if hasNegative && sqlStandardValue {
+		buf.WriteByte('-')
+		years = -years
+		months = -months
+		days = -days
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		micros = -micros
+	}
+
+	switch {
+	case !hasNegative && !hasPositive:
+		buf.WriteByte('0')
+	case !sqlStandardValue:
+		yearSign := '+'
+		if years < 0 || months < 0 {
+			yearSign = '-'
+			years = -years
+			months = -months
+		}
+		daySign := '+'
+		if days < 0 {
+			daySign = '-'
+			days = -days
+		}
+		secSign := '+'
+		if d.nanos < 0 {
+			secSign = '-'
+			hours = -hours
+			minutes = -minutes
+			seconds = -seconds
+			micros = -micros
+		}
+		needSpace := false
+		if hasYearMonth {
+			fmt.Fprintf(
+				buf,
+				"%c%d-%d",
+				yearSign, years, months,
+			)
+			needSpace = true
+		}
+		if hasDayTime {
+			if needSpace {
+				buf.WriteString(" ")
+			}
+			fmt.Fprintf(
+				buf,
+				"%c%d %c%d:%02d:",
+				daySign, days,
+				secSign, hours, minutes,
+			)
+			writeSecondsMicroseconds(buf, seconds, micros)
+		}
+	case hasYearMonth:
+		fmt.Fprintf(buf, "%d-%d", years, months)
+	case hasDay:
+		fmt.Fprintf(buf, "%d %d:%02d:", days, hours, minutes)
+		writeSecondsMicroseconds(buf, seconds, micros)
+	default:
+		fmt.Fprintf(buf, "%d:%02d:", hours, minutes)
+		writeSecondsMicroseconds(buf, seconds, micros)
+	}
+}
+
+func (d Duration) encodeISO8601(buf *bytes.Buffer) {
+	if d.nanos == 0 && d.Days == 0 && d.Months == 0 {
+		buf.WriteString("PT0S")
+		return
+	}
+
+	buf.WriteByte('P')
+	years := d.Months / 12
+	writeISO8601IntPart(buf, years, 'Y')
+	d.Months %= 12
+
+	writeISO8601IntPart(buf, d.Months, 'M')
+	writeISO8601IntPart(buf, d.Days, 'D')
+	if d.nanos != 0 {
+		buf.WriteByte('T')
+	}
+
+	hnAbs, mnAbs, snAbs, microsAbs := extractAbsTime(d.nanos)
+	hours := int64(hnAbs)
+	minutes := int64(mnAbs)
+	seconds := int64(snAbs)
+	microsSign := ""
+
+	if d.nanos < 0 {
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		microsSign = "-"
+	}
+	writeISO8601IntPart(buf, hours, 'H')
+	writeISO8601IntPart(buf, minutes, 'M')
+
+	if microsAbs != 0 {
+		// the sign is captured by microsSign, hence using abs values here.
+		s := fmt.Sprintf("%s%d.%06d", microsSign, snAbs, microsAbs)
+		trimmed := strings.TrimRight(s, "0")
+		fmt.Fprintf(buf, "%sS", trimmed)
+	} else {
+		writeISO8601IntPart(buf, seconds, 'S')
+	}
+}
+
+// Return an ISO-8601-style interval field, but only if value isn't zero.
+func writeISO8601IntPart(buf *bytes.Buffer, value int64, units rune) {
+	if value == 0 {
+		return
+	}
+	fmt.Fprintf(buf, "%d%c", value, units)
+}
+
+func writeSecondsMicroseconds(buf *bytes.Buffer, seconds, micros int64) {
+	fmt.Fprintf(buf, "%02d", seconds)
+
+	if micros != 0 {
+		s := fmt.Sprintf(".%06d", micros)
+		buf.WriteString(strings.TrimRight(s, "0"))
+	}
+}
+
+// extractAbsTime returns positive amount of hours, minutes, seconds,
+// and microseconds contained in the given amount of nanoseconds.
+func extractAbsTime(nanosOrig int64) (hours, minutes, seconds, micros uint64) {
+	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
+	var nanos uint64
+	if nanosOrig >= 0 {
+		nanos = uint64(nanosOrig)
+	} else {
+		nanos = uint64(-nanosOrig)
+	}
+
+	hours = nanos / hourNanos
+	nanos %= hourNanos
+	minutes = nanos / minuteNanos
+	nanos %= minuteNanos
+	seconds = nanos / secondNanos
+	nanos %= secondNanos
+	micros = nanos / nanosInMicro
+	return
+}
+
+// extractTime returns signed amount of hours, minutes, seconds,
+// and microseconds contained in the given amount of nanoseconds.
+func extractTime(nanosOrig int64) (hours, minutes, seconds, micros int64) {
+	hnAbs, mnAbs, snAbs, microsAbs := extractAbsTime(nanosOrig)
+	hours = int64(hnAbs)
+	minutes = int64(mnAbs)
+	seconds = int64(snAbs)
+	micros = int64(microsAbs)
+	if nanosOrig < 0 {
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		micros = -micros
+	}
+	return
 }
 
 func isPlural(i int64) string {
@@ -361,12 +662,20 @@ func (d Duration) String() string {
 	return buf.String()
 }
 
+// ISO8601String returns an ISO 8601 representation ('P1Y2M3DT4H') of a Duration.
+func (d Duration) ISO8601String() string {
+	var buf bytes.Buffer
+	d.FormatWithStyle(&buf, IntervalStyle_ISO_8601)
+	return buf.String()
+}
+
 // StringNanos returns a string representation of a Duration including
 // its hidden nanoseconds value. To be used only by the encoding/decoding
-// packages for pretty printing of on-disk values.
+// packages for pretty printing of on-disk values. The encoded value is
+// expected to be in "postgres" interval style format.
 func (d Duration) StringNanos() string {
 	var buf bytes.Buffer
-	d.Format(&buf)
+	d.encodePostgres(&buf)
 	nanos := d.nanos % nanosInMicro
 	if nanos != 0 {
 		fmt.Fprintf(&buf, "%+dns", nanos)
@@ -417,6 +726,15 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 
 // Add returns the time t+d, using a configurable mode.
 func Add(t time.Time, d Duration) time.Time {
+	// Fast path adding units < 1 day.
+	// Avoiding AddDate(0,0,0) is required to prevent changing times
+	// on DST boundaries.
+	// For example, 2020-10-2503:00+03 and 2020-10-25 03:00+02 are both
+	// valid times, but `time.Date` in `time.AddDate` may translate
+	// one to the other.
+	if d.Months == 0 && d.Days == 0 {
+		return t.Add(time.Duration(d.nanos))
+	}
 	// We can fast-path if the duration is always a fixed amount of time,
 	// or if the day number that we're starting from can never result
 	// in normalization.
@@ -504,14 +822,37 @@ func (d Duration) MulFloat(x float64) Duration {
 
 // DivFloat returns a Duration representing a time length of d/x.
 func (d Duration) DivFloat(x float64) Duration {
-	monthInt, monthFrac := math.Modf(float64(d.Months) / x)
-	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * DaysPerMonth))
+	// In order to keep it compatible with PostgreSQL, we use the same logic.
+	// Refer to https://github.com/postgres/postgres/blob/e56bce5d43789cce95d099554ae9593ada92b3b7/src/backend/utils/adt/timestamp.c#L3266-L3304.
+	month := int32(float64(d.Months) / x)
+	day := int32(float64(d.Days) / x)
+
+	remainderDays := (float64(d.Months)/x - float64(month)) * DaysPerMonth
+	remainderDays = secRoundToEven(remainderDays)
+	secRemainder := (float64(d.Days)/x - float64(day) +
+		remainderDays - float64(int64(remainderDays))) * SecsPerDay
+	secRemainder = secRoundToEven(secRemainder)
+	if math.Abs(secRemainder) >= SecsPerDay {
+		day += int32(secRemainder / SecsPerDay)
+		secRemainder -= float64(int32(secRemainder/SecsPerDay) * SecsPerDay)
+	}
+	day += int32(remainderDays)
+	microSecs := float64(time.Duration(d.nanos).Microseconds())/x + secRemainder*MicrosPerMilli*MillisPerSec
+	retNanos := time.Duration(int64(math.RoundToEven(microSecs))) * time.Microsecond
 
 	return MakeDuration(
-		int64((float64(d.nanos)/x)+(dayFrac*float64(nanosInDay))),
-		int64(dayInt),
-		int64(monthInt),
+		retNanos.Nanoseconds(),
+		int64(day),
+		int64(month),
 	)
+}
+
+// secRoundToEven rounds the given float to the nearest second,
+// assuming the input float is a microsecond representation of
+// time
+// This maps to the TSROUND macro in Postgres.
+func secRoundToEven(f float64) float64 {
+	return math.RoundToEven(f*MicrosPerMilli*MillisPerSec) / (MicrosPerMilli * MillisPerSec)
 }
 
 // normalized returns a new Duration transformed using the equivalence rules.

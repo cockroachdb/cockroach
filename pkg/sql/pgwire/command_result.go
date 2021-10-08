@@ -12,13 +12,17 @@ package pgwire
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -45,13 +49,17 @@ const (
 type commandResult struct {
 	// conn is the parent connection of this commandResult.
 	conn *conn
-	// conv indicates the conversion settings for SQL values.
-	conv sessiondata.DataConversionConfig
+	// conv and location indicate the conversion settings for SQL values.
+	conv     sessiondatapb.DataConversionConfig
+	location *time.Location
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
-	// flushBeforeClose contains a list of functions to flush
-	// before a command is closed.
-	flushBeforeCloseFuncs []func(ctx context.Context) error
+
+	// buffer contains items that are sent before the connection is closed.
+	buffer struct {
+		notices            []pgnotice.Notice
+		paramStatusUpdates []paramStatusUpdate
+	}
 
 	err error
 	// errExpected, if set, enforces that an error had been set when Close is
@@ -63,7 +71,7 @@ type commandResult struct {
 	// CommandComplete message.
 	cmdCompleteTag string
 
-	stmtType     tree.StatementType
+	stmtType     tree.StatementReturnType
 	descOpt      sql.RowDescOpt
 	rowsAffected int
 
@@ -89,9 +97,18 @@ type commandResult struct {
 	released bool
 }
 
+// paramStatusUpdate is a status update to send to the client when a parameter is
+// updated.
+type paramStatusUpdate struct {
+	// param is the parameter name.
+	param string
+	// val is the new value of the given parameter.
+	val string
+}
+
 var _ sql.CommandResult = &commandResult{}
 
-// Close is part of the CommandResult interface.
+// Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
 	r.assertNotReleased()
 	defer r.release()
@@ -105,12 +122,22 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		return
 	}
 
-	for _, f := range r.flushBeforeCloseFuncs {
-		if err := f(ctx); err != nil {
-			panic(errors.AssertionFailedf("unexpected err when closing: %s", err))
+	for _, notice := range r.buffer.notices {
+		if err := r.conn.bufferNotice(ctx, notice); err != nil {
+			panic(errors.AssertionFailedf("unexpected err when sending notice: %s", err))
 		}
 	}
-	r.flushBeforeCloseFuncs = nil
+
+	for _, paramStatusUpdate := range r.buffer.paramStatusUpdates {
+		if err := r.conn.bufferParamStatus(
+			paramStatusUpdate.param,
+			paramStatusUpdate.val,
+		); err != nil {
+			panic(
+				errors.AssertionFailedf("unexpected err when sending parameter status update: %s", err),
+			)
+		}
+	}
 
 	// Send a completion message, specific to the type of result.
 	switch r.typ {
@@ -141,19 +168,19 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	}
 }
 
-// Discard is part of the CommandResult interface.
+// Discard is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Discard() {
 	r.assertNotReleased()
 	defer r.release()
 }
 
-// Err is part of the CommandResult interface.
+// Err is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Err() error {
 	r.assertNotReleased()
 	return r.err
 }
 
-// SetError is part of the CommandResult interface.
+// SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
 // SetError() calls. The error will only be serialized at Close() time.
@@ -162,8 +189,9 @@ func (r *commandResult) SetError(err error) {
 	r.err = err
 }
 
-// AddRow is part of the CommandResult interface.
-func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+// addInternal is the skeleton of AddRow and AddBatch implementations.
+// bufferData should update rowsAffected and buffer the data accordingly.
+func (r *commandResult) addInternal(bufferData func()) error {
 	r.assertNotReleased()
 	if r.err != nil {
 		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
@@ -176,9 +204,9 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.err != nil {
 		panic("can't send row after error")
 	}
-	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.types)
+	bufferData()
+
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -188,32 +216,48 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
-// DisableBuffering is part of the CommandResult interface.
+// AddRow is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	return r.addInternal(func() {
+		r.rowsAffected++
+		r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+	})
+}
+
+// AddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	return r.addInternal(func() {
+		r.rowsAffected += batch.Length()
+		r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.location)
+	})
+}
+
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SupportsAddBatch() bool {
+	return true
+}
+
+// DisableBuffering is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) DisableBuffering() {
 	r.assertNotReleased()
 	r.bufferingDisabled = true
 }
 
-// AppendParamStatusUpdate is part of the CommandResult interface.
-func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
-	r.flushBeforeCloseFuncs = append(
-		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error { return r.conn.bufferParamStatus(param, val) },
+// BufferParamStatusUpdate is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) BufferParamStatusUpdate(param string, val string) {
+	r.buffer.paramStatusUpdates = append(
+		r.buffer.paramStatusUpdates,
+		paramStatusUpdate{param: param, val: val},
 	)
 }
 
-// AppendNotice is part of the CommandResult interface.
-func (r *commandResult) AppendNotice(noticeErr error) {
-	r.flushBeforeCloseFuncs = append(
-		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error {
-			return r.conn.bufferNotice(ctx, noticeErr)
-		},
-	)
+// BufferNotice is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) BufferNotice(notice pgnotice.Notice) {
+	r.buffer.notices = append(r.buffer.notices, notice)
 }
 
-// SetColumns is part of the CommandResult interface.
-func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColumns) {
+// SetColumns is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.descOpt == sql.NeedRowDesc {
@@ -225,52 +269,52 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 	}
 }
 
-// SetInferredTypes is part of the DescribeResult interface.
+// SetInferredTypes is part of the sql.DescribeResult interface.
 func (r *commandResult) SetInferredTypes(types []oid.Oid) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferParamDesc(types)
 }
 
-// SetNoDataRowDescription is part of the DescribeResult interface.
+// SetNoDataRowDescription is part of the sql.DescribeResult interface.
 func (r *commandResult) SetNoDataRowDescription() {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferNoDataMsg()
 }
 
-// SetPrepStmtOutput is part of the DescribeResult interface.
-func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.ResultColumns) {
+// SetPrepStmtOutput is part of the sql.DescribeResult interface.
+func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, nil /* formatCodes */, &r.conn.writerState.buf)
 }
 
-// SetPortalOutput is part of the DescribeResult interface.
+// SetPortalOutput is part of the sql.DescribeResult interface.
 func (r *commandResult) SetPortalOutput(
-	ctx context.Context, cols sqlbase.ResultColumns, formatCodes []pgwirebase.FormatCode,
+	ctx context.Context, cols colinfo.ResultColumns, formatCodes []pgwirebase.FormatCode,
 ) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
-// IncrementRowsAffected is part of the CommandResult interface.
-func (r *commandResult) IncrementRowsAffected(n int) {
+// IncrementRowsAffected is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
 	r.rowsAffected += n
 }
 
-// RowsAffected is part of the CommandResult interface.
+// RowsAffected is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) RowsAffected() int {
 	r.assertNotReleased()
 	return r.rowsAffected
 }
 
-// ResetStmtType is part of the CommandResult interface.
+// ResetStmtType is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
-	r.stmtType = stmt.StatementType()
+	r.stmtType = stmt.StatementReturnType()
 	r.cmdCompleteTag = stmt.StatementTag()
 }
 
@@ -307,7 +351,8 @@ func (c *conn) newCommandResult(
 	pos sql.CmdPos,
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	location *time.Location,
 	limit int,
 	portalName string,
 	implicitTxn bool,
@@ -316,10 +361,11 @@ func (c *conn) newCommandResult(
 	*r = commandResult{
 		conn:           c,
 		conv:           conv,
+		location:       location,
 		pos:            pos,
 		typ:            commandComplete,
 		cmdCompleteTag: stmt.StatementTag(),
-		stmtType:       stmt.StatementType(),
+		stmtType:       stmt.StatementReturnType(),
 		descOpt:        descOpt,
 		formatCodes:    formatCodes,
 	}
@@ -375,7 +421,7 @@ type limitedCommandResult struct {
 	limit int
 }
 
-// AddRow is part of the CommandResult interface.
+// AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
 		return err
@@ -399,6 +445,12 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 	return nil
 }
 
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+// TODO(yuzefovich): implement limiting behavior for AddBatch.
+func (r *limitedCommandResult) SupportsAddBatch() bool {
+	return false
+}
+
 // moreResultsNeeded is a restricted connection handler that waits for more
 // requests for rows from the active portal, during the "execute portal" flow
 // when a limit has been specified.
@@ -419,24 +471,15 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 		}
 		switch c := cmd.(type) {
 		case sql.DeletePreparedStmt:
-			// The client wants to close a portal or statement. We
-			// support the case where it is exactly this
-			// portal. This is done by closing the portal in
-			// the same way implicit transactions do, but also
-			// rewinding the stmtBuf to still point to the portal
-			// close so that the state machine can do its part of
-			// the cleanup. We are in effect peeking to see if the
+			// The client wants to close a portal or statement. We support the case
+			// where it is exactly this portal. We are in effect peeking to see if the
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
 				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
 					"cannot close a portal while a different one is open")
 			}
-			r.typ = noCompletionMsg
-			// Rewind to before the delete so the AdvanceOne in
-			// connExecutor.execCmd ends up back on it.
-			r.conn.stmtBuf.Rewind(ctx, prevPos)
-			return sql.ErrLimitedResultClosed
+			return r.rewindAndClosePortal(ctx, prevPos)
 		case sql.ExecPortal:
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
@@ -452,6 +495,10 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// The client wants to see a ready for query message
 			// back. Send it then run the for loop again.
 			r.conn.stmtBuf.AdvanceOne()
+			// Trim old statements to reclaim memory. We need to perform this clean up
+			// here as the conn_executor cleanup is not executed because of the
+			// limitedCommandResult side state machine.
+			r.conn.stmtBuf.Ltrim(ctx, prevPos)
 			// We can hard code InTxnBlock here because we don't
 			// support implicit transactions, so we know we're in
 			// a transaction.
@@ -460,12 +507,92 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 				return err
 			}
 		default:
+			// If the portal is immediately followed by a COMMIT, we can proceed and
+			// let the portal be destroyed at the end of the transaction.
+			if isCommit, err := r.isCommit(); err != nil {
+				return err
+			} else if isCommit {
+				return r.rewindAndClosePortal(ctx, prevPos)
+			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
-				"cannot perform operation %T while a different portal is open",
-				errors.Safe(c))
+			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
 		}
 		prevPos = curPos
 	}
+}
+
+// isCommit checks if the statement buffer has a COMMIT at the current
+// position. It may either be (1) a COMMIT in the simple protocol, or (2) a
+// Parse/Bind/Execute sequence for a COMMIT query.
+func (r *limitedCommandResult) isCommit() (bool, error) {
+	cmd, _, err := r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 1: Check if cmd is a simple COMMIT statement.
+	if execStmt, ok := cmd.(sql.ExecStmt); ok {
+		if _, isCommit := execStmt.AST.(*tree.CommitTransaction); isCommit {
+			return true, nil
+		}
+	}
+
+	commitStmtName := ""
+	commitPortalName := ""
+	// Case 2a: Check if cmd is a prepared COMMIT statement.
+	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
+		if _, isCommit := prepareStmt.AST.(*tree.CommitTransaction); isCommit {
+			commitStmtName = prepareStmt.Name
+		} else {
+			return false, nil
+		}
+	} else {
+		return false, nil
+	}
+
+	r.conn.stmtBuf.AdvanceOne()
+	cmd, _, err = r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 2b: The next cmd must be a bind command.
+	if bindStmt, ok := cmd.(sql.BindStmt); ok {
+		// This bind command must be for the COMMIT statement that we just saw.
+		if bindStmt.PreparedStatementName == commitStmtName {
+			commitPortalName = bindStmt.PortalName
+		} else {
+			return false, nil
+		}
+	} else {
+		return false, nil
+	}
+
+	r.conn.stmtBuf.AdvanceOne()
+	cmd, _, err = r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 2c: The next cmd must be an exec portal command.
+	if execPortal, ok := cmd.(sql.ExecPortal); ok {
+		// This exec command must be for the portal that was just bound.
+		if execPortal.Name == commitPortalName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// rewindAndClosePortal closes the portal in the same way implicit transactions
+// do, but also rewinds the stmtBuf to still point to the portal close so that
+// the state machine can do its part of the cleanup.
+func (r *limitedCommandResult) rewindAndClosePortal(
+	ctx context.Context, rewindTo sql.CmdPos,
+) error {
+	// Don't send an CommandComplete for the portal; it got suspended.
+	r.typ = noCompletionMsg
+	// Rewind to before the delete so the AdvanceOne in connExecutor.execCmd ends
+	// up back on it.
+	r.conn.stmtBuf.Rewind(ctx, rewindTo)
+	return sql.ErrLimitedResultClosed
 }

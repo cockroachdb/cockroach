@@ -211,6 +211,27 @@ func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) 
 	return on
 }
 
+// ExtractJoinEqualityFilter returns the filter containing the given pair of
+// columns (one from the left side, one from the right side) which are
+// constrained to be equal in a join (and have equivalent types).
+func ExtractJoinEqualityFilter(
+	leftCol, rightCol opt.ColumnID, leftCols, rightCols opt.ColSet, on FiltersExpr,
+) FiltersItem {
+	for i := range on {
+		condition := on[i].Condition
+		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
+		if !ok {
+			continue
+		}
+		if left == leftCol && right == rightCol {
+			return on[i]
+		}
+	}
+	panic(errors.AssertionFailedf("could not find equality between columns %d and %d in filters %s",
+		leftCol, rightCol, on.String(),
+	))
+}
+
 func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
 	if eq, ok := condition.(*EqExpr); ok {
 		if leftVar, ok := eq.Left.(*VariableExpr); ok {
@@ -252,8 +273,14 @@ func ExtractJoinEquality(
 // ExtractRemainingJoinFilters calculates the remaining ON condition after
 // removing equalities that are handled separately. The given function
 // determines if an equality is redundant. The result is empty if there are no
-// remaining conditions.
+// remaining conditions. Panics if leftEq and rightEq are not the same length.
 func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) FiltersExpr {
+	if len(leftEq) != len(rightEq) {
+		panic(errors.AssertionFailedf("leftEq and rightEq have different lengths"))
+	}
+	if len(leftEq) == 0 {
+		return on
+	}
 	var newFilters FiltersExpr
 	for i := range on {
 		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
@@ -282,9 +309,7 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 
 // ExtractConstColumns returns columns in the filters expression that have been
 // constrained to fixed values.
-func ExtractConstColumns(
-	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext,
-) (fixedCols opt.ColSet) {
+func ExtractConstColumns(on FiltersExpr, evalCtx *tree.EvalContext) (fixedCols opt.ColSet) {
 	for i := range on {
 		scalar := on[i]
 		scalarProps := scalar.ScalarProps()
@@ -298,7 +323,7 @@ func ExtractConstColumns(
 // ExtractValueForConstColumn returns the constant value of a column returned by
 // ExtractConstColumns.
 func ExtractValueForConstColumn(
-	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext, col opt.ColumnID,
+	on FiltersExpr, evalCtx *tree.EvalContext, col opt.ColumnID,
 ) tree.Datum {
 	for i := range on {
 		scalar := on[i]

@@ -1,0 +1,165 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-calendar
+  @extends $text--body
+
+  // Calendar header
+  // Fix calendar positioning for year/month/decade panels
+  // when `showDateInput` set to false.
+  :global(.rc-calendar-year-panel),
+  :global(.rc-calendar-month-panel),
+  :global(.rc-calendar-decade-panel)
+    top 0
+
+  // Hide Prev/Next year navigation buttons in 'date' mode
+  // Allow only month navigation
+  :global(.rc-calendar-prev-year-btn),
+  :global(.rc-calendar-next-year-btn)
+    display none
+
+  :global(.rc-calendar-prev-month-btn),
+  :global(.rc-calendar-next-month-btn)
+    &:after
+      content ''
+      height 16px
+      width 12px
+      background-repeat no-repeat
+      position absolute
+      top 6px
+
+  :global(.rc-calendar-prev-month-btn)
+    &:after
+      background-image url("../../../assets/caret-left.svg")
+
+  :global(.rc-calendar-next-month-btn)
+    &:after
+      background-image url("../../../assets/caret-right.svg")
+
+  :global(.rc-calendar-body)
+    border-bottom none
+
+  :global(.rc-calendar-header)
+    border-bottom none
+    margin-top 16px
+
+  :global(.rc-calendar-my-select),
+  :global(.rc-calendar-my-select > .rc-calendar-month-select),
+  :global(.rc-calendar-my-select > .rc-calendar-year-select)
+    @extends $text--heading-5
+
+  :global(.rc-calendar-my-select > .rc-calendar-year-select)
+    padding-left 0
+  // Calendar header. End
+
+  // Calendar panel
+  :global(.rc-calendar-column-header > .rc-calendar-column-header-inner)
+    @extends $text--heading-5
+
+  :global(.rc-calendar-cell)
+    &:global(.rc-calendar-today > .rc-calendar-date)
+      border none
+      color $colors--primary-blue-3
+      font-weight $font-weight--bold
+
+    &:global(.rc-calendar-today.rc-calendar-in-range-cell > .rc-calendar-date)
+    &:global(.rc-calendar-today.rc-calendar-selected-start-date > .rc-calendar-date)
+    &:global(.rc-calendar-today.rc-calendar-selected-end-date > .rc-calendar-date)
+      color $colors--white
+
+    :global(.rc-calendar-date)
+      border-radius 50%
+      &:hover
+        background $colors--neutral-2
+
+  :global(.rc-calendar-selected-date.rc-calendar-today > .rc-calendar-date),
+  :global(.rc-calendar-selected-day > .rc-calendar-date)
+    background $colors--primary-blue-3
+    color $colors--white
+    &:hover
+      background $colors--primary-blue-4
+
+  :global(.rc-calendar-selected-start-date)
+    border-top-left-radius 16px
+    border-bottom-left-radius 16px
+    background $colors--primary-blue-3
+
+  :global(.rc-calendar-selected-end-date)
+    border-top-right-radius 16px
+    border-bottom-right-radius 16px
+    background $colors--primary-blue-3
+
+  :global(.rc-calendar-in-range-cell)
+    background $colors--primary-blue-3
+    :global(.rc-calendar-date)
+      color $colors--white
+      &:hover
+        background $colors--primary-blue-4
+
+  :global(.rc-calendar-last-month-cell > .rc-calendar-date)
+    color $colors--neutral-4
+
+  // Calendar panel. End
+
+  // Calendar footer
+  :global(.rc-calendar-footer-btn)
+    padding-left $spacing-smaller
+    padding-bottom $spacing-small
+    text-align: center
+    &:after
+      content ''
+
+  .crl-footer
+    display flex
+    flex-direction column
+    > div
+      display flex
+      flex-direction row
+      > div
+        margin 0 10px
+
+
+  .crl-time-picker-container
+    margin-bottom $spacing-medium
+    > div
+      width 50%
+
+
+  &.crl-calendar__no-borders
+    border none
+    box-shadow none
+
+// Timepicker
+.crl-time-picker
+  // antd timepicker doesn't allow to redefine its width without !important directive
+  width 100%!important
+  cursor pointer!important
+  :global(.ant-time-picker-input)
+    height 40px
+    cursor pointer
+
+.crl-time-picker-popup
+  :global(.ant-time-picker-panel-input-wrap)
+    display none
+
+.crl-date-preview
+  justify-content flex-start
+  align-self center
+  flex-grow 1
+
+.crl-action-buttons
+  text-align right
+  > button
+    margin-left $spacing-base
+
+
+

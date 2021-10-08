@@ -12,9 +12,11 @@ package rowcontainer
 
 import (
 	"context"
+	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -40,11 +42,9 @@ type RowContainer struct {
 	// index is performed using shifting.
 	rowsPerChunk      int
 	rowsPerChunkShift uint
-	// preallocChunks is the number of chunks we allocate upfront (on the first
-	// AddRow call).
-	preallocChunks int
-	chunks         [][]tree.Datum
-	numRows        int
+	chunks            [][]tree.Datum
+	firstChunk        [1][]tree.Datum // avoids allocation
+	numRows           int
 
 	// chunkMemSize is the memory used by a chunk.
 	chunkMemSize int64
@@ -71,11 +71,6 @@ type RowContainer struct {
 // this row container. Should probably be created by
 // Session.makeBoundAccount() or Session.TxnState.makeBoundAccount().
 //
-// The rowCapacity argument indicates how many rows are to be
-// expected; it is used to pre-allocate the outer array of row
-// references, in the fashion of Go's capacity argument to the make()
-// function.
-//
 // Note that we could, but do not (yet), report the size of the row
 // container itself to the monitor in this constructor. This is
 // because the various planNodes are not (yet) equipped to call
@@ -86,34 +81,57 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func NewRowContainer(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCapacity int) *RowContainer {
+func NewRowContainer(acc mon.BoundAccount, ti colinfo.ColTypeInfo) *RowContainer {
+	return NewRowContainerWithCapacity(acc, ti, 0)
+}
+
+// NewRowContainerWithCapacity is like NewRowContainer, but it accepts a
+// rowCapacity argument.
+//
+// If provided, rowCapacity indicates how many rows are to be expected.
+// The value is used to configure the size of chunks that are allocated
+// within the container such that if no more than the specific number of
+// rows is added to the container, only a single chunk will be allocated
+// and wasted space will be kept to a minimum.
+func NewRowContainerWithCapacity(
+	acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int,
+) *RowContainer {
 	c := &RowContainer{}
 	c.Init(acc, ti, rowCapacity)
 	return c
 }
 
+var rowsPerChunkShift = uint(util.ConstantWithMetamorphicTestValue(
+	"row-container-rows-per-chunk-shift",
+	6, /* defaultValue */
+	1, /* metamorphicValue */
+))
+
 // Init can be used instead of NewRowContainer if we have a RowContainer that is
 // already part of an on-heap structure.
-func (c *RowContainer) Init(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCapacity int) {
+func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int) {
 	nCols := ti.NumColumns()
 
 	c.numCols = nCols
 	c.memAcc = acc
-	c.preallocChunks = 1
 
-	if nCols != 0 {
+	if rowCapacity != 0 {
+		// If there is a row capacity provided, we use a single chunk with
+		// sufficient capacity. The following is equivalent to:
+		//
+		//  c.rowsPerChunkShift = ceil(log2(rowCapacity))
+		//
+		c.rowsPerChunkShift = 64 - uint(bits.LeadingZeros64(uint64(rowCapacity-1)))
+	} else if nCols != 0 {
 		// If the rows have columns, we use 64 rows per chunk.
-		c.rowsPerChunkShift = 6
-		c.rowsPerChunk = 1 << c.rowsPerChunkShift
-		if rowCapacity > 0 {
-			c.preallocChunks = (rowCapacity + c.rowsPerChunk - 1) / c.rowsPerChunk
-		}
+		c.rowsPerChunkShift = rowsPerChunkShift
 	} else {
-		// If there are no columns, every row gets mapped to the first chunk.
+		// If there are no columns, every row gets mapped to the first chunk,
+		// which ends up being a zero-length slice because each row contains no
+		// columns.
 		c.rowsPerChunkShift = 32
-		c.rowsPerChunk = 1 << c.rowsPerChunkShift
-		c.chunks = [][]tree.Datum{{}}
 	}
+	c.rowsPerChunk = 1 << c.rowsPerChunkShift
 
 	for i := 0; i < nCols; i++ {
 		sz, variable := tree.DatumTypeSize(ti.Type(i))
@@ -128,10 +146,14 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCap
 		}
 	}
 
-	// Precalculate the memory used for a chunk, specifically by the Datums in the
-	// chunk and the slice pointing at the chunk.
-	c.chunkMemSize = tree.SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-	c.chunkMemSize += tree.SizeOfDatums
+	if nCols > 0 {
+		// Precalculate the memory used for a chunk, specifically by the Datums
+		// in the chunk and the slice pointing at the chunk.
+		// Note that when there are no columns, we simply track the number of
+		// rows added in c.numRows and don't allocate any memory.
+		c.chunkMemSize = memsize.DatumOverhead * int64(c.rowsPerChunk*c.numCols)
+		c.chunkMemSize += memsize.DatumsOverhead
+	}
 }
 
 // Clear resets the container and releases the associated memory. This allows
@@ -176,7 +198,11 @@ func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 	}
 
 	if c.chunks == nil {
-		c.chunks = make([][]tree.Datum, 0, numChunks)
+		if numChunks == 1 {
+			c.chunks = c.firstChunk[:0:1]
+		} else {
+			c.chunks = make([][]tree.Datum, 0, numChunks)
+		}
 	}
 
 	datums := make([]tree.Datum, numChunks*datumsPerChunk)
@@ -213,19 +239,21 @@ func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums
 		panic(errors.AssertionFailedf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
+		if c.chunks == nil {
+			c.chunks = [][]tree.Datum{{}}
+		}
 		c.numRows++
 		return nil, nil
 	}
+	// Note that it is important that we perform the memory accounting before
+	// actually adding the row.
 	if err := c.memAcc.Grow(ctx, c.rowSize(row)); err != nil {
 		return nil, err
 	}
 	chunk, pos := c.getChunkAndPos(c.numRows)
 	if chunk == len(c.chunks) {
-		numChunks := c.preallocChunks
-		if len(c.chunks) > 0 {
-			// Grow the number of chunks by a fraction.
-			numChunks = 1 + len(c.chunks)/8
-		}
+		// Grow the number of chunks by a fraction.
+		numChunks := 1 + len(c.chunks)/8
 		if err := c.allocChunks(ctx, numChunks); err != nil {
 			return nil, err
 		}
@@ -245,7 +273,8 @@ func (c *RowContainer) NumCols() int {
 	return c.numCols
 }
 
-// At accesses a row at a specific index.
+// At accesses a row at a specific index. Note that it does *not* copy the row:
+// callers must copy the row if they wish to mutate it.
 func (c *RowContainer) At(i int) tree.Datums {
 	// This is a hot-path: do not add additional checks here.
 	chunk, pos := c.getChunkAndPos(i)
@@ -262,7 +291,7 @@ func (c *RowContainer) Swap(i, j int) {
 }
 
 // PopFirst discards the first row in the RowContainer.
-func (c *RowContainer) PopFirst() {
+func (c *RowContainer) PopFirst(ctx context.Context) {
 	if c.numRows == 0 {
 		panic("no rows added to container, nothing to pop")
 	}
@@ -280,10 +309,7 @@ func (c *RowContainer) PopFirst() {
 			c.chunks[0] = nil
 			c.deletedRows = 0
 			c.chunks = c.chunks[1:]
-
-			// We don't have a context plumbed here, but that's ok: it's not actually
-			// used in the shrink paths.
-			c.memAcc.Shrink(context.TODO(), size)
+			c.memAcc.Shrink(ctx, size)
 		}
 	}
 }
@@ -302,9 +328,4 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) e
 	}
 	copy(row, newRow)
 	return nil
-}
-
-// MemUsage returns the current accounted memory usage.
-func (c *RowContainer) MemUsage() int64 {
-	return c.memAcc.Used()
 }

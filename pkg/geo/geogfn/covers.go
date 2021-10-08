@@ -39,15 +39,15 @@ import (
 //       'multipolygon(((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)), ((1.0 0.0, 2.0 0.0, 2.0 1.0, 1.0 1.0, 1.0 0.0)))',
 //       'linestring(0.0 0.0, 2.0 0.0)'::geography
 //     );
-func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+func Covers(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(a, b)
 }
 
 // covers is the internal calculation for Covers.
-func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+func covers(a geo.Geography, b geo.Geography) (bool, error) {
 	// Rect "contains" is a version of covers.
 	if !a.BoundingRect().Contains(b.BoundingRect()) {
 		return false, nil
@@ -92,9 +92,9 @@ func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // CoveredBy returns whether geography A is covered by geography B.
 // See Covers for limitations.
-func CoveredBy(a *geo.Geography, b *geo.Geography) (bool, error) {
+func CoveredBy(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(b, a)
 }
@@ -148,7 +148,7 @@ func polylineCoversPoint(a *s2.Polyline, b s2.Point) bool {
 // If true, it will also return an index of the start of the edge where there
 // was an intersection.
 func polylineCoversPointWithIdx(a *s2.Polyline, b s2.Point) (bool, int) {
-	for edgeIdx := 0; edgeIdx < a.NumEdges(); edgeIdx++ {
+	for edgeIdx, aNumEdges := 0, a.NumEdges(); edgeIdx < aNumEdges; edgeIdx++ {
 		if edgeCoversPoint(a.Edge(edgeIdx), b) {
 			return true, edgeIdx
 		}
@@ -283,7 +283,7 @@ func polygonCoversPolyline(a *s2.Polygon, b *s2.Polyline) bool {
 func polygonIntersectsPolylineEdge(a *s2.Polygon, b *s2.Polyline) bool {
 	// Avoid using NumEdges / Edge of the Polygon type as it is not O(1).
 	for _, loop := range a.Loops() {
-		for loopEdgeIdx := 0; loopEdgeIdx < loop.NumEdges(); loopEdgeIdx++ {
+		for loopEdgeIdx, loopNumEdges := 0, loop.NumEdges(); loopEdgeIdx < loopNumEdges; loopEdgeIdx++ {
 			loopEdge := loop.Edge(loopEdgeIdx)
 			crosser := s2.NewChainEdgeCrosser(loopEdge.V0, loopEdge.V1, (*b)[0])
 			for _, nextVertex := range (*b)[1:] {

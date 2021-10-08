@@ -71,7 +71,7 @@ func (r *Registry) AddMetric(metric Iterable) {
 	defer r.Unlock()
 	r.tracked = append(r.tracked, metric)
 	if log.V(2) {
-		log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
+		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(), metric)
 	}
 }
 
@@ -90,7 +90,7 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 		tname := tfield.Name
 		if !vfield.CanInterface() {
 			if log.V(2) {
-				log.Infof(ctx, "Skipping unexported field %s", tname)
+				log.Infof(ctx, "skipping unexported field %s", tname)
 			}
 			continue
 		}
@@ -114,24 +114,24 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 func (r *Registry) addMetricValue(
 	ctx context.Context, val reflect.Value, name string, skipNil bool,
 ) {
+	if val.Kind() == reflect.Ptr && val.IsNil() {
+		if skipNil {
+			if log.V(2) {
+				log.Infof(ctx, "skipping nil metric field %s", name)
+			}
+		} else {
+			log.Fatalf(ctx, "found nil metric field %s", name)
+		}
+		return
+	}
 	switch typ := val.Interface().(type) {
 	case Iterable:
-		if val.Kind() == reflect.Ptr && val.IsNil() {
-			if skipNil {
-				if log.V(2) {
-					log.Infof(ctx, "Skipping nil metric field %s", name)
-				}
-			} else {
-				log.Fatalf(ctx, "Found nil metric field %s", name)
-			}
-			return
-		}
 		r.AddMetric(typ)
 	case Struct:
 		r.AddMetricStruct(typ)
 	default:
 		if log.V(2) {
-			log.Infof(ctx, "Skipping non-metric field %s", name)
+			log.Infof(ctx, "skipping non-metric field %s", name)
 		}
 	}
 }
@@ -139,6 +139,8 @@ func (r *Registry) addMetricValue(
 // WriteMetricsMetadata writes metadata from all tracked metrics to the
 // parameter map.
 func (r *Registry) WriteMetricsMetadata(dest map[string]Metadata) {
+	r.Lock()
+	defer r.Unlock()
 	for _, v := range r.tracked {
 		dest[v.GetName()] = v.GetMetadata()
 	}
@@ -157,6 +159,8 @@ func (r *Registry) Each(f func(name string, val interface{})) {
 
 // MarshalJSON marshals to JSON.
 func (r *Registry) MarshalJSON() ([]byte, error) {
+	r.Lock()
+	defer r.Unlock()
 	m := make(map[string]interface{})
 	for _, metric := range r.tracked {
 		metric.Inspect(func(v interface{}) {

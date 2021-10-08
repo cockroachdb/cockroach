@@ -14,16 +14,19 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
+
+//go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
@@ -31,6 +34,11 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
+	// dontConsiderConnHealth, if set, makes the transport not take into
+	// consideration the connection health when deciding the ordering for
+	// replicas. When not set, replicas on nodes with unhealthy connections are
+	// deprioritized.
+	dontConsiderConnHealth bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -38,14 +46,8 @@ type SendOptions struct {
 // function returns a Transport object which is used to send requests
 // to one or more replicas in the slice.
 //
-// In addition to actually sending RPCs, the transport is responsible
-// for ordering replicas in accordance with SendOptions.Ordering and
-// transport-specific knowledge such as connection health or latency.
-//
-// TODO(bdarnell): clean up this crufty interface; it was extracted
-// verbatim from the non-abstracted code.
-// TODO(andrei): This should take just []roachpb.ReplicaDescriptor; ReplicaSlice
-// has unneeded data in it.
+// The caller is responsible for ordering the replicas in the slice according to
+// the order in which the should be tried.
 type TransportFactory func(
 	SendOptions, *nodedialer.Dialer, ReplicaSlice,
 ) (Transport, error)
@@ -84,7 +86,16 @@ type Transport interface {
 	// already been tried, it will be retried. If the specified replica
 	// can't be found, this is a noop.
 	MoveToFront(roachpb.ReplicaDescriptor)
+
+	// Release releases any resources held by this Transport.
+	Release()
 }
+
+// These constants are used for the replica health map below.
+const (
+	healthUnhealthy = iota
+	healthHealthy
+)
 
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
 // Do not use this directly - use grpcTransportFactory instead.
@@ -94,37 +105,68 @@ type Transport interface {
 func grpcTransportFactoryImpl(
 	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
 ) (Transport, error) {
-	health := make(map[roachpb.ReplicaDescriptor]bool)
-	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
-	for i, rinfo := range rs {
-		r := rinfo.ReplicaDescriptor
-		replicas[i] = r
-		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+	transport := grpcTransportPool.Get().(*grpcTransport)
+	// Grab the saved slice memory from grpcTransport.
+	replicas := transport.replicas
+
+	if cap(replicas) < len(rs) {
+		replicas = make([]roachpb.ReplicaDescriptor, len(rs))
+	} else {
+		replicas = replicas[:len(rs)]
 	}
 
-	// Put known-healthy clients first, while otherwise respecting the existing
-	// ordering of the replicas.
-	splitHealthy(replicas, health)
+	// We'll map the index of the replica descriptor in its slice to its health.
+	var health util.FastIntMap
+	for i, r := range rs {
+		replicas[i] = r.ReplicaDescriptor
+		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+		if healthy {
+			health.Set(i, healthHealthy)
+		} else {
+			health.Set(i, healthUnhealthy)
+		}
+	}
 
-	return &grpcTransport{
+	if !opts.dontConsiderConnHealth {
+		// Put known-healthy clients first, while otherwise respecting the existing
+		// ordering of the replicas.
+		splitHealthy(replicas, health)
+	}
+
+	*transport = grpcTransport{
 		opts:       opts,
 		nodeDialer: nodeDialer,
 		class:      opts.class,
 		replicas:   replicas,
-	}, nil
+	}
+	return transport, nil
 }
 
 type grpcTransport struct {
-	opts        SendOptions
-	nodeDialer  *nodedialer.Dialer
-	class       rpc.ConnectionClass
-	clientIndex int
-	replicas    []roachpb.ReplicaDescriptor
+	opts       SendOptions
+	nodeDialer *nodedialer.Dialer
+	class      rpc.ConnectionClass
+
+	replicas []roachpb.ReplicaDescriptor
+	// nextReplicaIdx represents the index into replicas of the next replica to be
+	// tried.
+	nextReplicaIdx int
+}
+
+var grpcTransportPool = sync.Pool{
+	New: func() interface{} { return &grpcTransport{} },
+}
+
+func (gt *grpcTransport) Release() {
+	*gt = grpcTransport{
+		replicas: gt.replicas[0:],
+	}
+	grpcTransportPool.Put(gt)
 }
 
 // IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	return gt.clientIndex >= len(gt.replicas)
+	return gt.nextReplicaIdx >= len(gt.replicas)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -133,7 +175,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	r := gt.replicas[gt.clientIndex]
+	r := gt.replicas[gt.nextReplicaIdx]
 	ctx, iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
@@ -169,14 +211,12 @@ func (gt *grpcTransport) sendBatch(
 		}
 		// Import the remotely collected spans, if any.
 		if len(reply.CollectedSpans) != 0 {
-			span := opentracing.SpanFromContext(ctx)
+			span := tracing.SpanFromContext(ctx)
 			if span == nil {
 				return nil, errors.Errorf(
 					"trying to ingest remote spans but there is no recording span set up")
 			}
-			if err := tracing.ImportRemoteSpans(span, reply.CollectedSpans); err != nil {
-				return nil, errors.Wrap(err, "error ingesting remote spans")
-			}
+			span.ImportRemoteSpans(reply.CollectedSpans)
 		}
 	}
 	return reply, err
@@ -187,8 +227,8 @@ func (gt *grpcTransport) sendBatch(
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
 ) (context.Context, roachpb.InternalClient, error) {
-	r := gt.replicas[gt.clientIndex]
-	gt.clientIndex++
+	r := gt.replicas[gt.nextReplicaIdx]
+	gt.nextReplicaIdx++
 	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
 }
 
@@ -196,7 +236,7 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if gt.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return gt.replicas[gt.clientIndex]
+	return gt.replicas[gt.nextReplicaIdx]
 }
 
 // SkipReplica is part of the Transport interface.
@@ -204,23 +244,19 @@ func (gt *grpcTransport) SkipReplica() {
 	if gt.IsExhausted() {
 		return
 	}
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.moveToFront(replica)
-}
-
-func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.replicas {
 		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
-			if i < gt.clientIndex {
-				gt.clientIndex--
+			if i < gt.nextReplicaIdx {
+				gt.nextReplicaIdx--
 			}
 			// Swap the client representing this replica to the front.
-			gt.replicas[i], gt.replicas[gt.clientIndex] = gt.replicas[gt.clientIndex], gt.replicas[i]
+			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
 			return
 		}
 	}
@@ -231,36 +267,43 @@ func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 // be rearranged first in the slice, and unhealthy clients will be rearranged
 // last. Within these two groups, the rearrangement will be stable. The function
 // will then return the number of healthy clients.
-func splitHealthy(replicas []roachpb.ReplicaDescriptor, health map[roachpb.ReplicaDescriptor]bool) {
-	sort.Stable(byHealth{replicas: replicas, health: health})
+// The input FastIntMap maps index within the input replicas slice to an integer
+// healthHealthy or healthUnhealthy.
+func splitHealthy(replicas []roachpb.ReplicaDescriptor, health util.FastIntMap) {
+	sort.Stable(&byHealth{replicas: replicas, health: health})
 }
 
 // byHealth sorts a slice of batchClients by their health with healthy first.
 type byHealth struct {
 	replicas []roachpb.ReplicaDescriptor
-	health   map[roachpb.ReplicaDescriptor]bool
+	// This map maps replica index within the replicas slice to healthHealthy if
+	// healthy, and healthUnhealthy if unhealthy.
+	health util.FastIntMap
 }
 
-func (h byHealth) Len() int { return len(h.replicas) }
-func (h byHealth) Swap(i, j int) {
+func (h *byHealth) Len() int { return len(h.replicas) }
+func (h *byHealth) Swap(i, j int) {
 	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
+	oldI := h.health.GetDefault(i)
+	h.health.Set(i, h.health.GetDefault(j))
+	h.health.Set(j, oldI)
 }
-func (h byHealth) Less(i, j int) bool {
-	ih, ok := h.health[h.replicas[i]]
+func (h *byHealth) Less(i, j int) bool {
+	ih, ok := h.health.Get(i)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
 	}
-	jh, ok := h.health[h.replicas[j]]
+	jh, ok := h.health.Get(j)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
 	}
-	return ih && !jh
+	return ih == healthHealthy && jh != healthHealthy
 }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
-func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
+func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
 		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
 	) (Transport, error) {
@@ -271,7 +314,7 @@ func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) Transpo
 }
 
 type senderTransport struct {
-	tracer  opentracing.Tracer
+	tracer  *tracing.Tracer
 	sender  kv.Sender
 	replica roachpb.ReplicaDescriptor
 
@@ -291,9 +334,6 @@ func (s *senderTransport) SendNext(
 	}
 	s.called = true
 
-	ctx, cleanup := tracing.EnsureContext(ctx, s.tracer, "node" /* name */)
-	defer cleanup()
-
 	ba.Replica = s.replica
 	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
@@ -310,13 +350,11 @@ func (s *senderTransport) SendNext(
 
 	// Import the remotely collected spans, if any.
 	if len(br.CollectedSpans) != 0 {
-		span := opentracing.SpanFromContext(ctx)
+		span := tracing.SpanFromContext(ctx)
 		if span == nil {
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}
-		if err := tracing.ImportRemoteSpans(span, br.CollectedSpans); err != nil {
-			panic(err)
-		}
+		span.ImportRemoteSpans(br.CollectedSpans)
 	}
 
 	return br, nil
@@ -342,3 +380,5 @@ func (s *senderTransport) SkipReplica() {
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
+
+func (s *senderTransport) Release() {}

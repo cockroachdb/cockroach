@@ -13,9 +13,10 @@ package tpcc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/exp/rand"
 )
 
@@ -99,13 +100,9 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 		dID:       rng.Intn(10) + 1,
 	}
 
-	tx, err := s.mcp.Get().BeginEx(ctx, s.config.txOpts)
-	if err != nil {
-		return nil, err
-	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
-		func() error {
+	if err := crdbpgx.ExecuteTx(
+		ctx, s.mcp.Get(), s.config.txOpts,
+		func(tx pgx.Tx) error {
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(
 				ctx, tx, wID, d.dID,

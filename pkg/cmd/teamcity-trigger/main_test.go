@@ -64,26 +64,34 @@ func Example_runTC() {
 
 	// Output:
 	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
+	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
 	//   env.GOFLAGS:     -parallel=4
 	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
+	//   env.TESTTIMEOUT: 40m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.GOFLAGS:     -race -parallel=2
-	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 2
+	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
+	//   env.GOFLAGS:     -race -parallel=4
+	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 1
+	//   env.TESTTIMEOUT: 40m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/sql/logictest
 	//   env.GOFLAGS:     -parallel=2
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 2
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 3h0m0s -maxfails 1 -p 2
+	//   env.TESTTIMEOUT: 2h0m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/sql/logictest
-	//   env.GOFLAGS:     -race -parallel=1
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 1
+	//   env.GOFLAGS:     -race -parallel=2
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 3h0m0s -maxfails 1 -p 1
+	//   env.TESTTIMEOUT: 2h0m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/storage
 	//   env.GOFLAGS:     -parallel=4
 	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4
+	//   env.TESTTIMEOUT: 40m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/storage
-	//   env.GOFLAGS:     -race -parallel=2
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 2
+	//   env.GOFLAGS:     -race -parallel=4
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 1
+	//   env.TESTTIMEOUT: 40m0s
 }

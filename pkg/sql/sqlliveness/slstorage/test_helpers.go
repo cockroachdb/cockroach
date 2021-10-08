@@ -51,7 +51,7 @@ func (s *FakeStorage) Insert(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.mu.sessions[sid]; ok {
-		return errors.Errorf("Session %s already exists", sid)
+		return errors.Errorf("session %s already exists", sid)
 	}
 	s.mu.sessions[sid] = expiration
 	return nil

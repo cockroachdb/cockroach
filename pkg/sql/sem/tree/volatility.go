@@ -46,7 +46,7 @@ const (
 	// VolatilityImmutable means that the operator cannot modify the database, the
 	// transaction state, or any other state. It cannot depend on configuration
 	// settings and is guaranteed to return the same results given the same
-	// arguments in any context. Immutable operators can be constant folded.
+	// arguments in any context. ImmutableCopy operators can be constant folded.
 	// Examples: log, from_json.
 	VolatilityImmutable
 	// VolatilityStable means that the operator cannot modify the database or the

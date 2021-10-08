@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "caller",
+    srcs = ["resolver.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/caller",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/syncutil"],
+)
+
+go_test(
+    name = "caller_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "resolver_test.go",
+    ],
+    embed = [":caller"],
+    deps = ["//pkg/util/log"],
+)

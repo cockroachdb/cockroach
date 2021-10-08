@@ -13,85 +13,24 @@ package colexec
 import (
 	"context"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-var (
-	zeroBoolColumn   = make([]bool, coldata.MaxBatchSize)
-	zeroIntColumn    = make([]int, coldata.MaxBatchSize)
-	zeroUint64Column = make([]uint64, coldata.MaxBatchSize)
-
-	zeroDecimalValue  apd.Decimal
-	zeroFloat64Value  float64
-	zeroInt64Value    int64
-	zeroIntervalValue duration.Duration
-	zeroBytesValue    []byte
-)
-
-// overloadHelper is a utility struct that helps us avoid allocations
-// of temporary decimals on every overloaded operation with them as well as
-// plumbs through other useful information. In order for the templates to see
-// it correctly, a local variable named `_overloadHelper` of this type must be declared
-// before the inlined overloaded code.
-type overloadHelper struct {
-	tmpDec1, tmpDec2 apd.Decimal
-	binFn            tree.TwoArgFn
-	evalCtx          *tree.EvalContext
-}
-
-// makeWindowIntoBatch updates windowedBatch so that it provides a "window"
-// into inputBatch starting at tuple index startIdx. It handles selection
-// vectors on inputBatch as well (in which case windowedBatch will also have a
-// "windowed" selection vector).
-func makeWindowIntoBatch(
-	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []*types.T,
-) {
-	inputBatchLen := inputBatch.Length()
-	windowStart := startIdx
-	windowEnd := inputBatchLen
-	if sel := inputBatch.Selection(); sel != nil {
-		// We have a selection vector on the input batch, and in order to avoid
-		// deselecting (i.e. moving the data over), we will provide an adjusted
-		// selection vector to the windowed batch as well.
-		windowedBatch.SetSelection(true)
-		windowIntoSel := sel[startIdx:inputBatchLen]
-		copy(windowedBatch.Selection(), windowIntoSel)
-		maxSelIdx := 0
-		for _, selIdx := range windowIntoSel {
-			if selIdx > maxSelIdx {
-				maxSelIdx = selIdx
-			}
-		}
-		windowStart = 0
-		windowEnd = maxSelIdx + 1
-	} else {
-		windowedBatch.SetSelection(false)
-	}
-	for i := range inputTypes {
-		window := inputBatch.ColVec(i).Window(windowStart, windowEnd)
-		windowedBatch.ReplaceCol(window, i)
-	}
-	windowedBatch.SetLength(inputBatchLen - startIdx)
-}
+var zeroIntColumn = make([]int, coldata.MaxBatchSize)
 
 func newPartitionerToOperator(
-	allocator *colmem.Allocator,
-	types []*types.T,
-	partitioner colcontainer.PartitionedQueue,
-	partitionIdx int,
+	allocator *colmem.Allocator, types []*types.T, partitioner colcontainer.PartitionedQueue,
 ) *partitionerToOperator {
 	return &partitionerToOperator{
-		partitioner:  partitioner,
-		partitionIdx: partitionIdx,
-		batch:        allocator.NewMemBatchWithFixedCapacity(types, coldata.BatchSize()),
+		allocator:   allocator,
+		types:       types,
+		partitioner: partitioner,
 	}
 }
 
@@ -99,102 +38,46 @@ func newPartitionerToOperator(
 // partition on every call to Next. It is a converter from filled in
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecop.ZeroInputNode
+	colexecop.InitHelper
+	colexecop.NonExplainable
 
+	allocator    *colmem.Allocator
+	types        []*types.T
 	partitioner  colcontainer.PartitionedQueue
 	partitionIdx int
 	batch        coldata.Batch
 }
 
-var _ colexecbase.Operator = &partitionerToOperator{}
+var _ colexecop.Operator = &partitionerToOperator{}
 
-func (p *partitionerToOperator) Init() {}
+func (p *partitionerToOperator) Init(ctx context.Context) {
+	if !p.InitHelper.Init(ctx) {
+		return
+	}
+	// We will be dequeueing the batches from disk into this batch, so we
+	// need to have enough capacity to support the batches of any size.
+	p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
+}
 
-func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
-	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
+func (p *partitionerToOperator) Next() coldata.Batch {
+	var err error
+	// We need to perform the memory accounting on the dequeued batch. Note that
+	// such setup allows us to release the memory under the old p.batch (which
+	// is no longer valid) and to retain the memory under the just dequeued one.
+	p.allocator.PerformOperation(p.batch.ColVecs(), func() {
+		err = p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
+	})
+	if err != nil {
 		colexecerror.InternalError(err)
 	}
 	return p.batch
 }
 
-// newAppendOnlyBufferedBatch returns a new appendOnlyBufferedBatch that has
-// initial zero capacity and could grow arbitrarily large with append() method.
-// It is intended to be used by the operators that need to buffer unknown
-// number of tuples.
-// TODO(yuzefovich): consider whether it is beneficial to start out with
-// non-zero capacity.
-func newAppendOnlyBufferedBatch(
-	allocator *colmem.Allocator, typs []*types.T,
-) *appendOnlyBufferedBatch {
-	batch := allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
-	return &appendOnlyBufferedBatch{
-		Batch:   batch,
-		colVecs: batch.ColVecs(),
-		typs:    typs,
+func makeOrdering(cols []uint32) []execinfrapb.Ordering_Column {
+	res := make([]execinfrapb.Ordering_Column, len(cols))
+	for i, colIdx := range cols {
+		res[i].ColIdx = colIdx
 	}
-}
-
-// appendOnlyBufferedBatch is a wrapper around coldata.Batch that should be
-// used by operators that buffer many tuples into a single batch by appending
-// to it. It stores the length of the batch separately and intercepts calls to
-// Length() and SetLength() in order to avoid updating offsets on vectors of
-// types.Bytes type - which would result in a quadratic behavior - because
-// it is not necessary since coldata.Vec.Append maintains the correct offsets.
-//
-// Note: "appendOnly" in the name indicates that the tuples should *only* be
-// appended to the vectors (which can be done via explicit Vec.Append calls or
-// using utility append() method); however, this batch prohibits appending and
-// replacing of the vectors themselves.
-type appendOnlyBufferedBatch struct {
-	coldata.Batch
-
-	length  int
-	colVecs []coldata.Vec
-	typs    []*types.T
-}
-
-var _ coldata.Batch = &appendOnlyBufferedBatch{}
-
-func (b *appendOnlyBufferedBatch) Length() int {
-	return b.length
-}
-
-func (b *appendOnlyBufferedBatch) SetLength(n int) {
-	b.length = n
-}
-
-func (b *appendOnlyBufferedBatch) ColVec(i int) coldata.Vec {
-	return b.colVecs[i]
-}
-
-func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
-	return b.colVecs
-}
-
-func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
-	colexecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
-}
-
-func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
-	colexecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
-}
-
-// append is a helper method that appends all tuples with indices in range
-// [startIdx, endIdx) from batch (paying attention to the selection vector)
-// into b.
-// NOTE: this does *not* perform memory accounting.
-func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx int) {
-	for i, colVec := range b.colVecs {
-		colVec.Append(
-			coldata.SliceArgs{
-				Src:         batch.ColVec(i),
-				Sel:         batch.Selection(),
-				DestIdx:     b.length,
-				SrcStartIdx: startIdx,
-				SrcEndIdx:   endIdx,
-			},
-		)
-	}
-	b.length += endIdx - startIdx
+	return res
 }

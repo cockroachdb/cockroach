@@ -1,0 +1,72 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//proto:compiler.bzl", "go_proto_compiler")
+
+go_library(
+    name = "protoc-gen-gogoroach_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_gogo_protobuf//protoc-gen-gogo/descriptor",
+        "@com_github_gogo_protobuf//vanity",
+        "@com_github_gogo_protobuf//vanity/command",
+    ],
+)
+
+go_binary(
+    name = "protoc-gen-gogoroach",
+    embed = [":protoc-gen-gogoroach_lib"],
+    visibility = ["//visibility:public"],
+)
+
+# Ref:
+#   https://github.com/bazelbuild/rules_go/blob/master/proto/core.rst#go_proto_compiler
+
+go_proto_compiler(
+    name = "protoc-gen-gogoroach_compiler",
+    # Command-line options that are passed to the plugin.
+    options = [
+        # Note: These options (as well as those for
+        # protoc-gen-gogoroach_grpc_compiler below) were partially derived from
+        # the protoc invocation in the Makefile, with a couple custom options
+        # that fix compilation errors under Bazel as well. Without the
+        # -M options, the generated code will import the wrong go packages.
+        "Metcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb",
+        "Merrorspb/errors.proto=github.com/cockroachdb/errors/errorspb",
+        "Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types",
+        "Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types",
+        "Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types",
+    ],
+    plugin = ":protoc-gen-gogoroach",
+    valid_archive = True,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//sortkeys",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_proto_compiler(
+    name = "protoc-gen-gogoroach_grpc_compiler",
+    options = [
+        "plugins=grpc",
+        "Metcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb",
+        "Merrorspb/errors.proto=github.com/cockroachdb/errors/errorspb",
+        "Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations",
+        "Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types",
+        "Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types",
+        "Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types",
+    ],
+    plugin = ":protoc-gen-gogoroach",
+    valid_archive = True,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//sortkeys",
+        "@com_github_gogo_protobuf//types",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

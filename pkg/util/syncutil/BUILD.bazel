@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "syncutil",
+    srcs = [
+        "atomic.go",
+        "int_map.go",
+        "mutex_sync.go",
+        "mutex_sync_race.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "syncutil_test",
+    size = "small",
+    srcs = [
+        "atomic_test.go",
+        "int_map_bench_test.go",
+        "int_map_reference_test.go",
+        "int_map_test.go",
+        "mutex_sync_race_test.go",
+    ],
+    embed = [":syncutil"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

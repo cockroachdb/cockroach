@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build !race
+// +build !crdb_test
 
 package memo
 
 import "github.com/cockroachdb/cockroach/pkg/sql/opt"
 
-// CheckExpr is a no-op in non-race builds.
+// CheckExpr is a no-op in non-test builds.
 func (m *Memo) CheckExpr(e opt.Expr) {
 }

@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -29,7 +29,7 @@ import (
 func (p *planner) analyzeExpr(
 	ctx context.Context,
 	raw tree.Expr,
-	source *sqlbase.DataSourceInfo,
+	source *colinfo.DataSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
 	expectedType *types.T,
 	requireType bool,

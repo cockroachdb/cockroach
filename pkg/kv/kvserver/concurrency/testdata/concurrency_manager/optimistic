@@ -1,0 +1,190 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put  key=d value=d
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=d
+----
+[-] acquire lock: txn 00000001 @ d
+
+debug-lock-table
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=12,1
+  scan key=a endkey=e
+----
+
+# Optimistic locking for req2
+sequence req=req2 eval-kind=opt
+----
+[2] sequence req2: optimistically sequencing request
+[2] sequence req2: optimistically acquiring latches
+[2] sequence req2: optimistically scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# When checking with a span that does not include the existing lock, there is
+# no conflict.
+check-opt-no-conflicts req=req2
+  scan key=a endkey=c
+----
+no-conflicts: true
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+new-request name=req3 txn=txn2 ts=12,1
+  scan key=a endkey=e
+----
+
+# Optimistic locking for req3
+sequence req=req3 eval-kind=opt
+----
+[3] sequence req3: optimistically sequencing request
+[3] sequence req3: optimistically acquiring latches
+[3] sequence req3: optimistically scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# Wider span for req3 has a conflict.
+check-opt-no-conflicts req=req3
+  scan key=a endkey=e
+----
+no-conflicts: false
+
+# Sequence again -- latches are already held.
+sequence req=req3 eval-kind=pess-after-opt
+----
+[4] sequence req3: re-sequencing request after optimistic sequencing failed
+[4] sequence req3: optimistic failed, so waiting for latches
+[4] sequence req3: scanning lock table for conflicting locks
+[4] sequence req3: waiting in lock wait-queues
+[4] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "d" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req3: pushing timestamp of txn 00000001 above 12.000000000,1
+[4] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Conflicting transaction commits.
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[4] sequence req3: resolving intent "d" for txn 00000001 with COMMITTED status
+[4] sequence req3: lock wait-queue event: done waiting
+[4] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on "d" for 1.234s
+[4] sequence req3: acquiring latches
+[4] sequence req3: scanning lock table for conflicting locks
+[4] sequence req3: sequencing complete, returned guard
+
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+# Another transaction that writes, which will hold latches but not locks.
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req4 txn=txn3 ts=10,1
+  put  key=d value=d
+----
+
+sequence req=req4
+----
+[5] sequence req4: sequencing request
+[5] sequence req4: acquiring latches
+[5] sequence req4: scanning lock table for conflicting locks
+[5] sequence req4: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+new-request name=req5 txn=txn2 ts=12,1
+  scan key=a endkey=e
+----
+
+sequence req=req5 eval-kind=opt
+----
+[6] sequence req5: optimistically sequencing request
+[6] sequence req5: optimistically acquiring latches
+[6] sequence req5: optimistically scanning lock table for conflicting locks
+[6] sequence req5: sequencing complete, returned guard
+
+# When checking with a span that does not include the existing latch, there is
+# no conflict.
+check-opt-no-conflicts req=req5
+  scan key=a endkey=c
+----
+no-conflicts: true
+
+finish req=req5
+----
+[-] finish req5: finishing request
+
+new-request name=req6 txn=txn2 ts=12,1
+  scan key=a endkey=e
+----
+
+sequence req=req6 eval-kind=opt
+----
+[7] sequence req6: optimistically sequencing request
+[7] sequence req6: optimistically acquiring latches
+[7] sequence req6: optimistically scanning lock table for conflicting locks
+[7] sequence req6: sequencing complete, returned guard
+
+# Wider span for req6 has a conflict with the latch held by req4.
+check-opt-no-conflicts req=req6
+  scan key=a endkey=e
+----
+no-conflicts: false
+
+sequence req=req6 eval-kind=pess-after-opt
+----
+[8] sequence req6: re-sequencing request after optimistic sequencing failed
+[8] sequence req6: optimistic failed, so waiting for latches
+[8] sequence req6: waiting to acquire read latch {a-e}@12.000000000,1, held by write latch d@10.000000000,1
+[8] sequence req6: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# req4 finishing releases the latch and allows req6 to proceed.
+finish req=req4
+----
+[-] finish req4: finishing request
+[8] sequence req6: scanning lock table for conflicting locks
+[8] sequence req6: sequencing complete, returned guard
+
+finish req=req6
+----
+[-] finish req6: finishing request

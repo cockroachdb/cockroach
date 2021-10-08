@@ -15,20 +15,24 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -39,16 +43,167 @@ var csvOutputTypes = []*types.T{
 	types.Bytes,
 }
 
+const readImportDataProcessorName = "readImportDataProcessor"
+
+var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.pk_buffer_size",
+		"the initial size of the BulkAdder buffer handling primary index imports",
+		32<<20,
+	)
+	return s
+}()
+
+var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.max_pk_buffer_size",
+		"the maximum size of the BulkAdder buffer handling primary index imports",
+		128<<20,
+	)
+	return s
+}()
+
+var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.index_buffer_size",
+		"the initial size of the BulkAdder buffer handling secondary index imports",
+		32<<20,
+	)
+	return s
+}()
+
+var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.max_index_buffer_size",
+		"the maximum size of the BulkAdder buffer handling secondary index imports",
+		512<<20,
+	)
+	return s
+}()
+
+var importBufferIncrementSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.buffer_increment",
+		"the size by which the BulkAdder attempts to grow its buffer before flushing",
+		32<<20,
+	)
+	return s
+}()
+
+// ImportBufferConfigSizes determines the minimum, maximum and step size for the
+// BulkAdder buffer used in import.
+func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64, int64) {
+	if isPKAdder {
+		return importPKAdderBufferSize.Get(&st.SV),
+			func() int64 { return importPKAdderMaxBufferSize.Get(&st.SV) },
+			importBufferIncrementSize.Get(&st.SV)
+	}
+	return importIndexAdderBufferSize.Get(&st.SV),
+		func() int64 { return importIndexAdderMaxBufferSize.Get(&st.SV) },
+		importBufferIncrementSize.Get(&st.SV)
+}
+
+// readImportDataProcessor is a processor that does not take any inputs. It
+// starts a worker goroutine in Start(), which emits progress updates over an
+// internally maintained channel. Next() will read from this channel until
+// exhausted and then emit the summary that the worker goroutine returns. The
+// processor is built this way in order to manage parallelism internally.
 type readImportDataProcessor struct {
+	execinfra.ProcessorBase
+
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ReadImportDataSpec
 	output  execinfra.RowReceiver
+
+	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+
+	seqChunkProvider *row.SeqChunkProvider
+
+	importErr error
+	summary   *roachpb.BulkOpSummary
 }
 
 var _ execinfra.Processor = &readImportDataProcessor{}
+var _ execinfra.RowSource = &readImportDataProcessor{}
 
-func (cp *readImportDataProcessor) OutputTypes() []*types.T {
-	return csvOutputTypes
+func newReadImportDataProcessor(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec execinfrapb.ReadImportDataSpec,
+	post *execinfrapb.PostProcessSpec,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
+	cp := &readImportDataProcessor{
+		flowCtx: flowCtx,
+		spec:    spec,
+		output:  output,
+		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+	}
+	if err := cp.Init(cp, post, csvOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		execinfra.ProcStateOpts{
+			// This processor doesn't have any inputs to drain.
+			InputsToDrain: nil,
+		}); err != nil {
+		return nil, err
+	}
+
+	// Load the import job running the import in case any of the columns have a
+	// default expression which uses sequences. In this case we need to update the
+	// job progress within the import processor.
+	if cp.flowCtx.Cfg.JobRegistry != nil {
+		cp.seqChunkProvider = &row.SeqChunkProvider{JobID: cp.spec.Progress.JobID,
+			Registry: cp.flowCtx.Cfg.JobRegistry}
+	}
+
+	return cp, nil
+}
+
+// Start is part of the RowSource interface.
+func (idp *readImportDataProcessor) Start(ctx context.Context) {
+	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
+	// We don't have to worry about this go routine leaking because next we loop over progCh
+	// which is closed only after the go routine returns.
+	go func() {
+		defer close(idp.progCh)
+		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
+			idp.seqChunkProvider)
+	}()
+}
+
+// Next is part of the RowSource interface.
+func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if idp.State != execinfra.StateRunning {
+		return nil, idp.DrainHelper()
+	}
+
+	for prog := range idp.progCh {
+		p := prog
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
+	}
+
+	if idp.importErr != nil {
+		idp.MoveToDraining(idp.importErr)
+		return nil, idp.DrainHelper()
+	}
+
+	if idp.summary == nil {
+		err := errors.Newf("no summary generated by %s", readImportDataProcessorName)
+		idp.MoveToDraining(err)
+		return nil, idp.DrainHelper()
+	}
+
+	// Once the import is done, send back to the controller the serialized
+	// summary of the import operation. For more info see roachpb.BulkOpSummary.
+	countsBytes, err := protoutil.Marshal(idp.summary)
+	idp.MoveToDraining(err)
+	if err != nil {
+		return nil, idp.DrainHelper()
+	}
+
+	return rowenc.EncDatumRow{
+		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+	}, nil
 }
 
 func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
@@ -59,72 +214,20 @@ func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
 	ctx.TxnTimestamp = unixtime
 }
 
-func newReadImportDataProcessor(
-	flowCtx *execinfra.FlowCtx,
-	processorID int32,
-	spec execinfrapb.ReadImportDataSpec,
-	output execinfra.RowReceiver,
-) (execinfra.Processor, error) {
-	cp := &readImportDataProcessor{
-		flowCtx: flowCtx,
-		spec:    spec,
-		output:  output,
-	}
-	return cp, nil
-}
-
-func (cp *readImportDataProcessor) Run(ctx context.Context) {
-	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
-	defer tracing.FinishSpan(span)
-	defer cp.output.ProducerDone()
-
-	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-
-	var summary *roachpb.BulkOpSummary
-	var err error
-	// We don't have to worry about this go routine leaking because next we loop over progCh
-	// which is closed only after the go routine returns.
-	go func() {
-		defer close(progCh)
-		summary, err = runImport(ctx, cp.flowCtx, &cp.spec, progCh)
-	}()
-
-	for prog := range progCh {
-		// Take a copy so that we can send the progress address to the output processor.
-		p := prog
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
-	}
-
-	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
-
-	// Once the import is done, send back to the controller the serialized
-	// summary of the import operation. For more info see roachpb.BulkOpSummary.
-	countsBytes, err := protoutil.Marshal(summary)
-	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
-	cp.output.Push(sqlbase.EncDatumRow{
-		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, nil)
-}
-
 func makeInputConverter(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
+	seqChunkProvider *row.SeqChunkProvider,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
-	var singleTable *sqlbase.ImmutableTableDescriptor
+	var singleTable catalog.TableDescriptor
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
-			singleTable = sqlbase.NewImmutableTableDescriptor(*table.Desc)
+			singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
 				singleTableTargetCols[i] = tree.Name(colName)
@@ -136,35 +239,61 @@ func makeInputConverter(
 		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
 	}
 
+	if singleTable != nil {
+		if idx := catalog.FindDeletableNonPrimaryIndex(singleTable, func(idx catalog.Index) bool {
+			return idx.IsPartial()
+		}); idx != nil {
+			return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
+		}
+
+		// If we're using a format like CSV where data columns are not "named", and
+		// therefore cannot be mapped to schema columns, then require the user to
+		// use IMPORT INTO.
+		//
+		// We could potentially do something smarter here and check that only a
+		// suffix of the columns are computed, and then expect the data file to have
+		// #(visible columns) - #(computed columns).
+		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+			for _, col := range singleTable.VisibleColumns() {
+				if col.IsComputed() {
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+						"to use computed columns, use IMPORT INTO")
+				}
+			}
+		}
+	}
+
 	switch spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
 		for _, file := range spec.Uri {
-			if conf, err := cloudimpl.ExternalStorageConfFromURI(file, spec.User); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
+			if _, err := parseWorkloadConfig(file); err != nil {
 				isWorkload = false
 				break
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(kvCh, singleTable, evalCtx), nil
+			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh), nil
 		}
 		return newCSVInputReader(
-			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx), nil
+			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
+			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
-			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
+			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx)
+		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
+			spec.Format.MysqlDump)
 	case roachpb.IOFileFormat_PgCopy:
-		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
+		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
+		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
+			spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
-			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
+			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), evalCtx)
 	default:
 		return nil, errors.Errorf(
@@ -181,12 +310,12 @@ func ingestKvs(
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
 ) (*roachpb.BulkOpSummary, error) {
-	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
-	defer tracing.FinishSpan(span)
+	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
+	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
-	flushSize := func() int64 { return storageccl.MaxImportBatchSize(flowCtx.Cfg.Settings) }
+	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
@@ -197,7 +326,8 @@ func ingestKvs(
 	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
-	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
+	minBufferSize, maxBufferSize, stepSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
+		true /* isPKAdder */)
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "pkAdder",
 		DisallowShadowing: true,
@@ -212,7 +342,8 @@ func ingestKvs(
 	}
 	defer pkIndexAdder.Close(ctx)
 
-	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
+	minBufferSize, maxBufferSize, stepSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
+		false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "indexAdder",
 		DisallowShadowing: true,
@@ -241,12 +372,20 @@ func ingestKvs(
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
 
+	bulkSummaryMu := &struct {
+		syncutil.Mutex
+		summary roachpb.BulkOpSummary
+	}{}
+
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
-	pkIndexAdder.SetOnFlush(func() {
+	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
@@ -254,9 +393,12 @@ func ingestKvs(
 			}
 		}
 	})
-	indexAdder.SetOnFlush(func() {
+	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
 	})
 
@@ -283,6 +425,11 @@ func ingestKvs(
 				prog.ResumePos[file] = idx
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+			// Write down the summary of how much we've ingested since the last update.
+			bulkSummaryMu.Lock()
+			prog.BulkSummary = bulkSummaryMu.summary
+			bulkSummaryMu.summary.Reset()
+			bulkSummaryMu.Unlock()
 		}
 		progCh <- prog
 	}
@@ -331,7 +478,7 @@ func ingestKvs(
 		// number of L0 (and total) files, but with a lower memory usage.
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				_, _, indexID, indexErr := keys.TODOSQLCodec.DecodeIndexPrefix(kv.Key)
+				_, _, indexID, indexErr := flowCtx.Codec().DecodeIndexPrefix(kv.Key)
 				if indexErr != nil {
 					return indexErr
 				}

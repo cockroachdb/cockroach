@@ -27,10 +27,11 @@ package blobs
 
 import (
 	"context"
-	"os"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -51,7 +52,7 @@ func NewBlobService(externalIODir string) (*Service, error) {
 
 // GetStream implements the gRPC service.
 func (s *Service) GetStream(req *blobspb.GetRequest, stream blobspb.Blob_GetStreamServer) error {
-	content, err := s.localStorage.ReadFile(req.Filename)
+	content, _, err := s.localStorage.ReadFile(req.Filename, req.Offset)
 	if err != nil {
 		return err
 	}
@@ -71,7 +72,20 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 	}
 	reader := newPutStreamReader(stream)
 	defer reader.Close()
-	err := s.localStorage.WriteFile(filename[0], reader)
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	w, err := s.localStorage.Writer(ctx, filename[0])
+	if err != nil {
+		cancel()
+		return err
+	}
+	if _, err := io.Copy(w, reader); err != nil {
+		cancel()
+		return errors.CombineErrors(w.Close(), err)
+	}
+	err = w.Close()
+	cancel()
 	return err
 }
 
@@ -93,7 +107,7 @@ func (s *Service) Delete(
 // Stat implements the gRPC service.
 func (s *Service) Stat(ctx context.Context, req *blobspb.StatRequest) (*blobspb.BlobStat, error) {
 	resp, err := s.localStorage.Stat(req.Filename)
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		// gRPC hides the underlying golang ErrNotExist error, so we send back an
 		// equivalent gRPC error which can be handled gracefully on the client side.
 		return nil, status.Error(codes.NotFound, err.Error())

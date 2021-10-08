@@ -11,10 +11,8 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -24,19 +22,19 @@ import (
 // column containing a single integer, the count of rows received from the
 // upstream.
 type countOp struct {
-	OneInputNode
+	colexecop.OneInputHelper
 
 	internalBatch coldata.Batch
 	done          bool
 	count         int64
 }
 
-var _ colexecbase.Operator = &countOp{}
+var _ colexecop.Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexecbase.Operator {
+func NewCountOp(allocator *colmem.Allocator, input colexecop.Operator) colexecop.Operator {
 	c := &countOp{
-		OneInputNode: NewOneInputNode(input),
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 	}
 	c.internalBatch = allocator.NewMemBatchWithFixedCapacity(
 		[]*types.T{types.Int}, 1, /* capacity */
@@ -44,19 +42,13 @@ func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexec
 	return c
 }
 
-func (c *countOp) Init() {
-	c.input.Init()
-	c.count = 0
-	c.done = false
-}
-
-func (c *countOp) Next(ctx context.Context) coldata.Batch {
-	c.internalBatch.ResetInternalBatch()
+func (c *countOp) Next() coldata.Batch {
 	if c.done {
 		return coldata.ZeroBatch
 	}
+	c.internalBatch.ResetInternalBatch()
 	for {
-		bat := c.input.Next(ctx)
+		bat := c.Input.Next()
 		length := bat.Length()
 		if length == 0 {
 			c.done = true

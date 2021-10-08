@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "optgen_lib",
+    srcs = [
+        "exec_explain_gen.go",
+        "exec_factory_gen.go",
+        "explorer_gen.go",
+        "exprs_gen.go",
+        "factory_gen.go",
+        "main.go",
+        "match_writer.go",
+        "metadata.go",
+        "ops_gen.go",
+        "rule_gen.go",
+        "rule_names_gen.go",
+        "uniquifier.go",
+        "utils.go",
+        "validator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/optgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/sql/opt/optgen/lang",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "optgen",
+    embed = [":optgen_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "optgen_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":optgen_lib"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

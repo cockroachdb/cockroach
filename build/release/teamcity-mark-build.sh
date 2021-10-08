@@ -8,11 +8,13 @@ source "$(dirname "${0}")/teamcity-support.sh"
 mark_build() {
   tc_start_block "Variable Setup"
   build_label=$1
-  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+")"
+
+  # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
   if [[ -z "${DRY_RUN}" ]] ; then
-    google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
-    gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+    google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   else
     google_credentials=$GOOGLE_COCKROACH_RELEASE_CREDENTIALS
     gcr_repository="us.gcr.io/cockroach-release/cockroach-test"

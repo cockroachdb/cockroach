@@ -14,11 +14,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var deleteNodePool = sync.Pool{
@@ -33,7 +32,7 @@ type deleteNode struct {
 	// columns is set if this DELETE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run deleteRun
 }
@@ -63,11 +62,7 @@ type deleteRun struct {
 	rowIdxToRetIdx []int
 }
 
-// maxDeleteBatchSize is the max number of entries in the KV batch for
-// the delete operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxDeleteBatchSize = 10000
+var _ mutationPlanNode = &deleteNode{}
 
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
@@ -76,9 +71,9 @@ func (d *deleteNode) startExec(params runParams) error {
 	if d.run.rowsNeeded {
 		d.run.td.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
+			colinfo.ColTypeInfoFromResCols(d.columns))
 	}
-	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
+	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -96,8 +91,6 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	if d.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	d.run.td.clearLastBatch(params.ctx)
@@ -124,7 +117,8 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if d.run.td.currentBatchSize >= maxDeleteBatchSize {
+		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize ||
+			d.run.td.b.ApproximateMutationBytes() >= d.run.td.maxBatchByteSize {
 			break
 		}
 	}
@@ -140,6 +134,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := d.run.td.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -148,10 +143,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		d.run.td.tableDesc().ID,
-		d.run.td.lastBatchSize,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), d.run.td.lastBatchSize)
 
 	return d.run.td.lastBatchSize > 0, nil
 }
@@ -164,9 +156,9 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// satisfy the predicate and therefore do not exist in the partial index.
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := d.run.td.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
-		partialIndexDelVals := sourceVals[d.run.partialIndexDelValsOffset:]
+	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
+		offset := d.run.partialIndexDelValsOffset
+		partialIndexDelVals := sourceVals[offset : offset+n]
 
 		err := pm.Init(tree.Datums{}, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {
@@ -218,6 +210,10 @@ func (d *deleteNode) Close(ctx context.Context) {
 	d.run.td.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
+}
+
+func (d *deleteNode) rowsWritten() int64 {
+	return d.run.td.rowsWritten
 }
 
 func (d *deleteNode) enableAutoCommit() {

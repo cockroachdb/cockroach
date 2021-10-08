@@ -21,24 +21,18 @@ CREATE TABLE a
 opt
 SELECT k,f FROM a ORDER BY f DESC, k ASC LIMIT 10
 ----
-limit
+top-k
  ├── columns: k:1!null f:3
  ├── internal-ordering: -3,+1
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── ordering: -3,+1
- ├── sort
- │    ├── columns: k:1!null f:3
- │    ├── key: (1)
- │    ├── fd: (1)-->(3)
- │    ├── ordering: -3,+1
- │    ├── limit hint: 10.00
- │    └── scan a@s_idx
- │         ├── columns: k:1!null f:3
- │         ├── key: (1)
- │         └── fd: (1)-->(3)
- └── 10
+ └── scan a@s_idx
+      ├── columns: k:1!null f:3
+      ├── key: (1)
+      └── fd: (1)-->(3)
 
 opt
 SELECT k,f from a ORDER BY k DESC LIMIT 10
@@ -53,21 +47,21 @@ scan a,rev
 memo
 SELECT k,f FROM a ORDER BY k DESC LIMIT 10
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
- ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
+memo (optimized, ~4KB, required=[presentation: k:1,f:3] [ordering: -1])
+ ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev)) (top-k G2 &{10 -1})
  │    ├── [presentation: k:1,f:3] [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
- │    │    └── cost: 11.04
+ │    │    └── cost: 15.04
  │    └── []
  │         ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
- │         └── cost: 11.04
+ │         └── cost: 15.04
  ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
  │    ├── [ordering: -1] [limit hint: 10.00]
  │    │    ├── best: (scan a,rev,cols=(1,3))
- │    │    └── cost: 22.28
+ │    │    └── cost: 25.72
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,3))
- │         └── cost: 1060.02
+ │         └── cost: 1084.62
  └── G3: (const 10)
 
 
@@ -153,10 +147,10 @@ memo (optimized, ~2KB, required=[presentation: k:1] [ordering: +1])
  └── G1: (scan a,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@si_idx,cols=(1))
       ├── [presentation: k:1] [ordering: +1]
       │    ├── best: (scan a,cols=(1))
-      │    └── cost: 1060.02
+      │    └── cost: 1084.62
       └── []
            ├── best: (scan a@s_idx,cols=(1))
-           └── cost: 1050.02
+           └── cost: 1074.52
 
 # Scan of secondary index is lowest cost.
 opt
@@ -175,10 +169,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +4,+1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +4,+1]
       │    ├── best: (scan a@s_idx,cols=(1-4))
-      │    └── cost: 1080.02
+      │    └── cost: 1104.82
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1080.02
+           └── cost: 1104.82
 
 # No index-join should be generated for a@si_idx, since it is not constrained.
 exploretrace rule=GenerateIndexScans
@@ -222,58 +216,6 @@ scan p@secondary,partial
  ├── columns: i:1
  └── ordering: +1
 
-# --------------------------------------------------
-# GenerateConstrainedScans
-# --------------------------------------------------
-
-# Constrain the a@si_idx so that an index join is generated.
-exploretrace rule=GenerateConstrainedScans
-SELECT s, i, f FROM a WHERE s='foo' ORDER BY s, k, i
-----
-----
-================================================================================
-GenerateConstrainedScans
-================================================================================
-Source expression:
-  select
-   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
-   ├── key: (1)
-   ├── fd: ()-->(4), (1)-->(2,3)
-   ├── ordering: +1 opt(4) [actual: +1]
-   ├── scan a@s_idx
-   │    ├── columns: k:1!null i:2 f:3 s:4
-   │    ├── key: (1)
-   │    ├── fd: (1)-->(2-4)
-   │    └── ordering: +1 opt(4) [actual: +4,+1]
-   └── filters
-        └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-
-New expression 1 of 2:
-  scan a@s_idx
-   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
-   ├── constraint: /4/1: [/'foo' - /'foo']
-   ├── key: (1)
-   ├── fd: ()-->(4), (1)-->(2,3)
-   └── ordering: +1 opt(4) [actual: +1]
-
-New expression 2 of 2:
-  sort
-   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
-   ├── key: (1)
-   ├── fd: ()-->(4), (1)-->(2,3)
-   ├── ordering: +1 opt(4) [actual: +1]
-   └── index-join a
-        ├── columns: k:1!null i:2 f:3 s:4!null
-        ├── key: (1)
-        ├── fd: ()-->(4), (1)-->(2,3)
-        └── scan a@si_idx
-             ├── columns: k:1!null i:2 s:4!null
-             ├── constraint: /-4/-2/1: [/'foo' - /'foo']
-             ├── key: (1)
-             └── fd: ()-->(4), (1)-->(2)
-----
-----
-
 memo
 SELECT s, i, f FROM a ORDER BY f
 ----
@@ -281,10 +223,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +3]
       │    ├── best: (sort G1)
-      │    └── cost: 1289.35
+      │    └── cost: 1344.20
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1070.02
+           └── cost: 1094.72
 
 memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
@@ -293,43 +235,13 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1256.33
+      │    └── cost: 1321.83
       ├── [ordering: -4]
       │    ├── best: (scan a@s_idx,rev,cols=(2-4))
-      │    └── cost: 1169.68
+      │    └── cost: 1195.37
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1070.02
-
-memo
-SELECT s, i, f FROM a WHERE s='foo' ORDER BY s DESC, i
-----
-memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
- ├── G1: (select G2 G3) (scan a@s_idx,cols=(2-4),constrained) (index-join G4 a,cols=(2-4))
- │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
- │    │    ├── best: (sort G1)
- │    │    └── cost: 11.58
- │    └── []
- │         ├── best: (scan a@s_idx,cols=(2-4),constrained)
- │         └── cost: 10.71
- ├── G2: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
- │    ├── [ordering: +2 opt(4)]
- │    │    ├── best: (sort G2)
- │    │    └── cost: 1289.35
- │    └── []
- │         ├── best: (scan a@s_idx,cols=(2-4))
- │         └── cost: 1070.02
- ├── G3: (filters G5)
- ├── G4: (scan a@si_idx,cols=(1,2,4),constrained)
- │    ├── [ordering: +2 opt(4)]
- │    │    ├── best: (scan a@si_idx,rev,cols=(1,2,4),constrained)
- │    │    └── cost: 11.04
- │    └── []
- │         ├── best: (scan a@si_idx,cols=(1,2,4),constrained)
- │         └── cost: 10.71
- ├── G5: (eq G6 G7)
- ├── G6: (variable s)
- └── G7: (const 'foo')
+           └── cost: 1094.72
 
 # Force an index in order to ensure that an index join is created.
 opt
@@ -362,48 +274,22 @@ CREATE TABLE abc (
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +6])
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +7])
  ├── G1: (project G2 G3 d)
- │    ├── [presentation: d:4] [ordering: +6]
+ │    ├── [presentation: d:4] [ordering: +7]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1289.36
+ │    │    └── cost: 1334.02
  │    └── []
  │         ├── best: (project G2 G3 d)
- │         └── cost: 1070.03
+ │         └── cost: 1094.54
  ├── G2: (scan abc,cols=(4))
  │    └── []
  │         ├── best: (scan abc,cols=(4))
- │         └── cost: 1050.02
+ │         └── cost: 1074.52
  ├── G3: (projections G4)
  ├── G4: (function G5 lower)
  ├── G5: (scalar-list G6)
  └── G6: (variable d)
-
-memo
-SELECT j FROM a WHERE s = 'foo'
-----
-memo (optimized, ~7KB, required=[presentation: j:5])
- ├── G1: (project G2 G3 j)
- │    └── [presentation: j:5]
- │         ├── best: (project G2 G3 j)
- │         └── cost: 10.72
- ├── G2: (select G4 G5) (index-join G6 a,cols=(4,5)) (scan a@si_idx,cols=(4,5),constrained)
- │    └── []
- │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
- │         └── cost: 10.61
- ├── G3: (projections)
- ├── G4: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
- │    └── []
- │         ├── best: (scan a@si_idx,cols=(4,5))
- │         └── cost: 1060.02
- ├── G5: (filters G7)
- ├── G6: (scan a@s_idx,cols=(1,4),constrained)
- │    └── []
- │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
- │         └── cost: 10.61
- ├── G7: (eq G8 G9)
- ├── G8: (variable s)
- └── G9: (const 'foo')
 
 # Scan of primary index is lowest cost.
 opt
@@ -422,10 +308,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +1]
       │    ├── best: (scan a,cols=(1-4))
-      │    └── cost: 1090.02
+      │    └── cost: 1114.92
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1080.02
+           └── cost: 1104.82
 
 # Secondary index has right order
 opt
@@ -442,10 +328,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,j:5] [ordering: +4])
  └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
       ├── [presentation: s:4,j:5] [ordering: +4]
       │    ├── best: (scan a@si_idx,rev,cols=(4,5))
-      │    └── cost: 1159.68
+      │    └── cost: 1185.27
       └── []
            ├── best: (scan a@si_idx,cols=(4,5))
-           └── cost: 1060.02
+           └── cost: 1084.62
 
 # Consider three different indexes, and pick index with multiple keys.
 opt
@@ -469,35 +355,13 @@ memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1161.00
+      │    └── cost: 1225.50
       ├── [ordering: -4]
       │    ├── best: (scan a@si_idx,cols=(1,2,4))
-      │    └── cost: 1070.02
+      │    └── cost: 1094.72
       └── []
            ├── best: (scan a@s_idx,cols=(1,2,4))
-           └── cost: 1070.02
-
-memo
-SELECT i, k FROM a WHERE s >= 'foo'
-----
-memo (optimized, ~6KB, required=[presentation: i:2,k:1])
- ├── G1: (project G2 G3 k i)
- │    └── [presentation: i:2,k:1]
- │         ├── best: (project G2 G3 k i)
- │         └── cost: 360.02
- ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained)
- │    └── []
- │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 356.68
- ├── G3: (projections)
- ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
- │    └── []
- │         ├── best: (scan a@s_idx,cols=(1,2,4))
- │         └── cost: 1070.02
- ├── G5: (filters G6)
- ├── G6: (ge G7 G8)
- ├── G7: (variable s)
- └── G8: (const 'foo')
+           └── cost: 1094.72
 
 # GenerateIndexScans propagates row-level locking information.
 opt
@@ -509,242 +373,473 @@ scan a@s_idx
  ├── volatile
  └── ordering: +4
 
-# Collated strings are treated properly.
 exec-ddl
-CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)
-----
-
-opt
-SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
-----
-scan x
- ├── columns: s:1!null
- ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
- └── key: (1)
-
-opt
-SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
-----
-scan x
- ├── columns: s:1!null
- ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
- ├── cardinality: [0 - 1]
- ├── key: ()
- └── fd: ()-->(1)
-
-# Can't generate spans for other collations.
-opt
-SELECT s FROM x WHERE s COLLATE en = 'hello' COLLATE en
-----
-select
- ├── columns: s:1!null
- ├── key: (1)
- ├── scan x
- │    ├── columns: s:1!null
- │    └── key: (1)
- └── filters
-      └── s:1 COLLATE en = 'hello' COLLATE en [outer=(1)]
-
-# Realistic example where using constraints as filters help.
-# An even more realistic exmple would have a creation timestamp instead of a
-# seq_num integer, but that makes the plans much more cluttered.
-exec-ddl
-CREATE TABLE "orders" (
-  region STRING NOT NULL,
-  id INT NOT NULL,
-  total DECIMAL NOT NULL,
-  seq_num INT NOT NULL,
-  PRIMARY KEY (region, id),
-  UNIQUE INDEX orders_by_seq_num (region, seq_num, id) STORING (total),
-  CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
+CREATE TABLE fk_a (
+    a INT PRIMARY KEY,
+    t TIMESTAMPTZ DEFAULT NULL,
+    UNIQUE INDEX (a) WHERE t is NULL
 )
 ----
 
 exec-ddl
-ALTER TABLE "orders" INJECT STATISTICS '[
-  {
-    "columns": ["region"],
-    "distinct_count": 3,
-    "null_count": 0,
-    "row_count": 100,
-    "created_at": "2018-01-01 1:00:00.00000+00:00"
-  },
-  {
-    "columns": ["id"],
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100,
-    "created_at": "2018-01-01 1:00:00.00000+00:00"
-  },
-  {
-    "columns": ["total"],
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100,
-    "created_at": "2018-01-01 1:00:00.00000+00:00"
-  },
-  {
-    "columns": ["seq_num"],
-    "distinct_count": 50,
-    "null_count": 0,
-    "row_count": 100,
-    "created_at": "2018-01-01 1:00:00.00000+00:00"
-  }
-]'
+CREATE TABLE fk_b (
+    b INT PRIMARY KEY,
+    a INT NOT NULL REFERENCES fk_a (a)
+)
 ----
 
-opt
-SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200
+# Do not use a non-implied partial index for FK check scans.
+opt expect-not=(GenerateIndexScans, GeneratePartialIndexScans)
+INSERT INTO fk_b (b,a) VALUES (1,1)
 ----
-scalar-group-by
- ├── columns: sum:6
- ├── cardinality: [1 - 1]
+insert fk_b
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => b:1
+ │    └── column2:6 => fk_b.a:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6)
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: fk_b(a) -> fk_a(a)
+           └── anti-join (lookup fk_a)
+                ├── columns: a:7!null
+                ├── key columns: [7] = [8]
+                ├── lookup columns are key
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                ├── with-scan &1
+                │    ├── columns: a:7!null
+                │    ├── mapping:
+                │    │    └──  column2:6 => a:7
+                │    ├── cardinality: [1 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(7)
+                └── filters (true)
+
+# --------------------------------------------------
+# GenerateLocalityOptimizedScan
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    t INT NOT NULL CHECK (t IN (1, 2, 3)),
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE WITHOUT INDEX (c),
+    UNIQUE INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+      PARTITION east VALUES IN (('east', 1), ('east', 2)),
+      PARTITION west VALUES IN (('west', DEFAULT)),
+      PARTITION default VALUES IN (DEFAULT)
+    ),
+    INDEX d_idx (r, d) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]'
+----
+
+exec-ddl
+ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1
+----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(6)
- ├── scan orders@orders_by_seq_num
- │    ├── columns: total:3!null seq_num:4!null
- │    └── constraint: /1/4/2
- │         ├── [/'europe-west2'/100 - /'europe-west2'/199]
- │         ├── [/'us-east1'/100 - /'us-east1'/199]
- │         └── [/'us-west1'/100 - /'us-west1'/199]
- └── aggregations
-      └── sum [as=sum:6, outer=(3)]
-           └── total:3
+ ├── fd: ()-->(3)
+ └── locality-optimized-search
+      ├── columns: a:3!null b:4!null
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(11,12)
+      └── scan abc_part@b_idx
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(19,20)
 
-exec-ddl
-CREATE TABLE xyz (
-  x INT PRIMARY KEY,
-  y INT NOT NULL,
-  z STRING NOT NULL,
-  CHECK (x < 10 AND x > 1),
-  CHECK (y < 10 AND y > 1),
-  CHECK (z in ('first', 'second')),
-  INDEX secondary (y, x),
-  INDEX tertiary (z, y, x))
+opt locality=(region=west) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE b = 1
 ----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4!null c:5 d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── left columns: r:9 a:11 b:12
+      ├── right columns: r:17 a:19 b:20
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: r:9!null a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'west'/1 - /'west'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(9,11,12)
+      └── scan abc_part@b_idx
+           ├── columns: r:17!null a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'east'/1 - /'east'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17,19,20)
 
-opt
-SELECT x, y  FROM xyz WHERE x > 5
+opt locality=(region=central) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE b = 1
 ----
-select
- ├── columns: x:1!null y:2!null
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── scan xyz@tertiary
- │    ├── columns: x:1!null y:2!null
- │    ├── constraint: /3/2/1
- │    │    ├── [/'first'/2/6 - /'first'/9/9]
- │    │    └── [/'second'/2/6 - /'second'/9/9]
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- └── filters
-      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4!null c:5 d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── left columns: r:9 a:11 b:12
+      ├── right columns: r:17 a:19 b:20
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: r:9!null a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'central'/1 - /'central'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(9,11,12)
+      └── scan abc_part@b_idx
+           ├── columns: r:17!null a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'east'/1 - /'east'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17,19,20)
 
-# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
-#  would be used here. But it isn't the plan being picked. Curious.
-opt
-SELECT * FROM xyz WHERE x > 5
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
 ----
-select
- ├── columns: x:1!null y:2!null z:3!null
- ├── key: (1)
- ├── fd: (1)-->(2,3)
- ├── scan xyz@tertiary
- │    ├── columns: x:1!null y:2!null z:3!null
- │    ├── constraint: /3/2/1
- │    │    ├── [/'first'/2/6 - /'first'/9/9]
- │    │    └── [/'second'/2/6 - /'second'/9/9]
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- └── filters
-      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
+      │    │    ├── [/'east'/1/1 - /'east'/1/1]
+      │    │    └── [/'east'/2/1 - /'east'/2/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(9-11,13)
+      └── scan abc_part@c_idx
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
+           │    ├── [/'central'/1/1 - /'central'/1/1]
+           │    ├── [/'central'/2/1 - /'central'/2/1]
+           │    ├── [/'central'/3/1 - /'central'/3/1]
+           │    ├── [/'east'/3/1 - /'east'/3/1]
+           │    ├── [/'west'/1/1 - /'west'/1/1]
+           │    ├── [/'west'/2/1 - /'west'/2/1]
+           │    └── [/'west'/3/1 - /'west'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17-19,21)
 
-# Check constraint used only for the non nullable column. Constraints on x are ignored.
-exec-ddl
-CREATE TABLE xy (
-  x INT,
-  y INT NOT NULL,
-  CHECK (x < 10 AND x > 1),
-  CHECK (y < 10 AND y > 1),
-  INDEX secondary (y, x))
+opt locality=(region=west) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
 ----
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
+      │    │    ├── [/'west'/1/1 - /'west'/1/1]
+      │    │    ├── [/'west'/2/1 - /'west'/2/1]
+      │    │    └── [/'west'/3/1 - /'west'/3/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(9-11,13)
+      └── scan abc_part@c_idx
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
+           │    ├── [/'central'/1/1 - /'central'/1/1]
+           │    ├── [/'central'/2/1 - /'central'/2/1]
+           │    ├── [/'central'/3/1 - /'central'/3/1]
+           │    ├── [/'east'/1/1 - /'east'/1/1]
+           │    ├── [/'east'/2/1 - /'east'/2/1]
+           │    └── [/'east'/3/1 - /'east'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17-19,21)
 
-opt
-SELECT x, y FROM xy WHERE x > 5
+opt locality=(region=central) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE c = 1
 ----
-select
- ├── columns: x:1!null y:2!null
- ├── scan xy@secondary
- │    ├── columns: x:1 y:2!null
- │    └── constraint: /2/1/3: [/2/6 - /9]
- └── filters
-      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+index-join abc_part
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5!null d:6
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── locality-optimized-search
+      ├── columns: r:1!null t:2!null a:3!null c:5!null
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3,5)
+      ├── scan abc_part@c_idx
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
+      │    │    ├── [/'central'/1/1 - /'central'/1/1]
+      │    │    ├── [/'central'/2/1 - /'central'/2/1]
+      │    │    ├── [/'central'/3/1 - /'central'/3/1]
+      │    │    └── [/'east'/3/1 - /'east'/3/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(9-11,13)
+      └── scan abc_part@c_idx
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
+           │    ├── [/'east'/1/1 - /'east'/1/1]
+           │    ├── [/'east'/2/1 - /'east'/2/1]
+           │    ├── [/'west'/1/1 - /'west'/1/1]
+           │    ├── [/'west'/2/1 - /'west'/2/1]
+           │    └── [/'west'/3/1 - /'west'/3/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(17-19,21)
 
-# Check constraints that can evaluate to NULL are ignored.
-exec-ddl
-CREATE TABLE null_constraint (
-  y INT NOT NULL,
-  CHECK (y IN (1, 2, NULL)),
-  INDEX index_1 (y))
+# b is constrained to multiple values.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b IN (1, 2)
 ----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 2]
+ ├── key: (3)
+ └── locality-optimized-search
+      ├── columns: a:3!null b:4!null
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
+      ├── cardinality: [0 - 2]
+      ├── key: (3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/2]
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (11)
+      │    └── fd: (11)-->(12), (12)-->(11)
+      └── scan abc_part@b_idx
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/2]
+           │    └── [/'west'/1 - /'west'/2]
+           ├── cardinality: [0 - 4]
+           ├── key: (19)
+           └── fd: (19)-->(20), (20)-->(19)
 
-opt
-SELECT y FROM null_constraint WHERE y > 0
+# b is constrained to more than 100000 values (the kv batch size).
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b >= 0 AND b < 100001
 ----
-scan null_constraint@index_1
- ├── columns: y:1!null
- └── constraint: /1/2: [/1 - ]
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 100001]
+ ├── key: (3)
+ └── select
+      ├── columns: a:3!null b:4!null
+      ├── cardinality: [0 - 100001]
+      ├── key: (3)
+      ├── fd: (3)-->(4), (4)-->(3)
+      ├── index-join abc_part
+      │    ├── columns: a:3!null b:4
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (4)~~>(3)
+      │    └── scan abc_part@c_idx
+      │         ├── columns: a:3!null
+      │         ├── constraint: /1/2/5
+      │         │    ├── [/'central'/1 - /'central'/3]
+      │         │    ├── [/'east'/1 - /'east'/3]
+      │         │    └── [/'west'/1 - /'west'/3]
+      │         └── key: (3)
+      └── filters
+           └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
 
-exec-ddl
-CREATE TABLE null_constraint_2 (
-  y INT NOT NULL,
-  CHECK ((y IN (1, 2, NULL)) AND (y > 10)),
-  CHECK (y < 15),
-  INDEX index_1 (y))
+# The spans target all remote partitions.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1 AND r IN ('west', 'central')
 ----
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── scan abc_part@b_idx
+      ├── columns: r:1!null a:3!null b:4!null
+      ├── constraint: /1/4
+      │    ├── [/'central'/1 - /'central'/1]
+      │    └── [/'west'/1 - /'west'/1]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,3,4)
 
-opt
-SELECT y FROM null_constraint_2 WHERE y > 0
+# The scan is limited.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE d = 1 LIMIT 1
 ----
-scan null_constraint_2@index_1
- ├── columns: y:1!null
- └── constraint: /1/2: [/1 - /14]
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── scan abc_part@d_idx
+      ├── columns: a:3!null d:6!null
+      ├── constraint: /1/6/3
+      │    ├── [/'central'/1 - /'central'/1]
+      │    ├── [/'east'/1 - /'east'/1]
+      │    └── [/'west'/1 - /'west'/1]
+      ├── limit: 1
+      ├── key: ()
+      └── fd: ()-->(3,6)
 
-# Unvalidated constraints are ignored.
-exec-ddl
-CREATE TABLE check_constraint_validity (
- a int NOT NULL,
- INDEX secondary (a),
- CONSTRAINT "check:unvalidated" CHECK (a < 10),
- CONSTRAINT "check:validated" CHECK (a < 20))
+# The scan is limited, but b is known to be a key, so the limit is discarded.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part WHERE b = 1 LIMIT 1
 ----
-
-opt
-SELECT * FROM check_constraint_validity WHERE a > 6
-----
-scan check_constraint_validity@secondary
- ├── columns: a:1!null
- └── constraint: /1/2: [/7 - /19]
-
-# Test that we can constrain indexes using the results of now().
-exec-ddl
-CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
-----
-
-opt
-SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
-----
-scan with_time_index@secondary
- ├── columns: k:1!null time:2!null
- ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
- ├── key: (1)
- └── fd: (1)-->(2)
-
-opt
-SELECT * FROM with_time_index WHERE time >= 'today'
-----
-scan with_time_index@secondary
- ├── columns: k:1!null time:2!null
- ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
- ├── key: (1)
- └── fd: (1)-->(2)
+project
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── locality-optimized-search
+      ├── columns: a:3!null b:4!null
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── scan abc_part@b_idx
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(11,12)
+      └── scan abc_part@b_idx
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(19,20)

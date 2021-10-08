@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -71,7 +71,7 @@ func NewMetadataTestReceiver(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {
@@ -139,9 +139,9 @@ func (mtr *MetadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMeta
 }
 
 // Start is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
+func (mtr *MetadataTestReceiver) Start(ctx context.Context) {
+	ctx = mtr.StartInternal(ctx, metadataTestReceiverProcName)
 	mtr.input.Start(ctx)
-	return mtr.StartInternal(ctx, metadataTestReceiverProcName)
 }
 
 // Next is part of the RowSource interface.
@@ -149,7 +149,7 @@ func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
 // This implementation doesn't follow the usual patterns of other processors; it
 // makes more limited use of the ProcessorBase's facilities because it needs to
 // inspect metadata while draining.
-func (mtr *MetadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (mtr *MetadataTestReceiver) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
 		if mtr.State == StateTrailingMeta {
 			if meta := mtr.popTrailingMeta(); meta != nil {
@@ -212,7 +212,7 @@ func (mtr *MetadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.Produ
 		// We don't use ProcessorBase.ProcessRowHelper() here because we need
 		// special handling for errors: this proc never starts draining in order for
 		// it to be as unintrusive as possible.
-		outRow, ok, err := mtr.Out.ProcessRow(mtr.Ctx, row)
+		outRow, ok, err := mtr.OutputHelper.ProcessRow(mtr.Ctx, row)
 		if err != nil {
 			mtr.trailingMeta = append(mtr.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 			continue
@@ -235,15 +235,4 @@ func (mtr *MetadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.Produ
 
 		return outRow, nil
 	}
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) ConsumerDone() {
-	mtr.input.ConsumerDone()
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	mtr.InternalClose()
 }

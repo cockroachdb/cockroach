@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mutations",
+    srcs = ["mutations_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/mutations",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util"],
+)

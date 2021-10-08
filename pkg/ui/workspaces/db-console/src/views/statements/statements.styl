@@ -1,0 +1,385 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
+
+.statements-table
+  &__col-query-text
+    font-family $font-family--monospace
+    white-space pre-wrap
+
+.statements
+  &__last-hour-note
+    margin-left 3px
+    font-style italic
+    color $body-color
+
+.back-link
+  text-decoration none
+  color $link-color
+
+.cl-count-title, .last-cleared-title
+  font-family SourceSansPro-Regular
+  font-size 14px
+  padding 0px
+  margin 0px
+  color $placeholder
+  line-height 1.57
+  letter-spacing 0.1px
+  .label
+    font-family $font-family--bold
+    color $colors--neutral-7
+
+.last-cleared-tooltip, .numeric-stats-table, .plan-view-table
+  &__tooltip
+    width 36px  // Reserve space for 10px padding around centered 16px icon
+    height 16px
+    display inline-block
+
+    // Overrides to let the tooltip sit inside a table header.
+    text-transform none
+    font-weight normal
+    white-space normal
+    letter-spacing normal
+    font-size 14px
+
+  &__tooltip-hover-area
+    width 100%
+    padding 0px 10px
+
+  &__info-icon
+    width 16px
+    height 16px
+    border-radius 50%
+    border 1px solid $tooltip-color
+    font-size 12px
+    line-height 14px  // Visual tweak to vertically center the "i"
+    text-align center
+    color $tooltip-color
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $body-color
+    color $body-color
+
+.app-name
+  white-space nowrap
+
+  &__unset
+    color $tooltip-color
+    font-style italic
+
+.statements-table__col-time
+  white-space nowrap
+
+.statements-table__col-count
+  .bar-chart
+    width 100px
+
+.statements-table__col-retries
+  .bar-chart
+    width 80px
+
+.numeric-stats-table
+  .bar-chart
+    width 200px
+
+.statements-table__col-rows, .statements-table__col-latency
+  .bar-chart
+    min-width 150px
+
+.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
+  .bar-chart
+    margin-left 0
+
+    &__label
+      left 0
+      width 40px
+      min-width 40px
+
+.bar-chart
+  height 14px
+  position relative
+  display flex
+  align-items center
+  flex-direction row
+  > span
+    width 100%
+    display flex
+    align-items center
+    flex-direction row
+    
+  &__multiplebars
+    width calc(100% - 75px)
+    border-radius 3px
+    position relative
+    display flex
+    align-items center
+  
+  &__label
+    position relative
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.83
+    color $adminui-grey-1
+    width 75px
+
+  &__bar
+    display inline-block
+    height 13px
+    border-radius 3px
+
+    &--dev
+      position absolute
+      height 3px
+
+  .count-first-try, .count-total, .count-retry, .count-max-retries
+    border-radius 3px
+    position absolute
+    left 40px
+
+  .count-first-try, .count-total
+    background-color $grey-light
+  .count-retry, .count-max-retries
+    background-color $alert-color
+
+  .rows
+    background-color $grey-light
+    border-radius 3px
+
+  .rows-dev
+    background-color $colors--primary-blue-3
+
+  .bar-chart
+    &__parse, &__plan, &__run, &__overhead, &__overall
+      background-color $colors--neutral-4
+  
+  &-red
+    .bar-chart
+      &__parse, &__plan, &__run, &__overhead, &__overall
+        background-color $colors--functional-red-2
+
+  &__parse-dev, &__plan-dev, &__run-dev, &__overhead-dev, &__overall-dev
+      background-color $colors--primary-blue-3
+
+.numeric-stats-table
+  @extend $table-base
+
+  &__row--summary
+    color black
+    font-weight bold
+
+.details-bar
+  margin 12px 0
+
+.numeric-stat-legend
+  white-space nowrap
+  width 282px
+  font-family SourceSansPro-SemiBold
+  font-size 12px
+  line-height 1.67
+  letter-spacing 0.3px
+  color $adminui-grey-1
+  font-weight 600
+
+  th
+    position relative
+    display flex
+    align-items center
+
+  td
+    text-align right
+
+  &__bar
+    width 41px
+    border-radius 10px
+    margin-right 14px
+
+    &--mean
+      height 13px
+      background-color $grey-light
+
+    &--dev
+      height 3px
+      background-color $colors--primary-blue-3
+
+$plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
+
+.plan-view-table
+  @extend $table-base
+  .plan-view-table__cell
+    padding 0
+  .summary--card__title
+    font-size 16px
+    display inline-block
+    margin-bottom 10px
+    padding 0
+    text-transform none
+  &__row
+    &--body
+      border-top none
+      &:hover
+        background-color $adminui-white
+  &__tooltip
+    .hover-tooltip__text
+      width 520px
+      margin-left 15px
+
+.plan-view
+  color $body-color
+  position relative
+
+  .plan-view-container
+    height 100%
+    max-height 100%
+    overflow hidden
+
+    .plan-view-container-scroll
+      max-height 400px
+      overflow-y scroll
+
+    .plan-view-container-directions
+      text-align center
+      cursor pointer
+      text-transform uppercase
+      color $main-blue-color
+      font-size smaller
+
+  .node-icon
+    margin 0 10px 0 0
+    color $grey-light
+  .warning-icon
+    margin 0 4px 0 4px
+    position relative
+    top 3px
+    path
+      fill $colors--functional-orange-4
+
+  .warn
+    position relative
+    left -5px
+    color $colors--functional-orange-4
+    background-color $plan-node-warning-background-color
+    border-radius 2px
+    padding 2px
+
+  .nodeDetails
+    position relative
+    padding 6px 0
+    border 1px solid transparent
+    b
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.67
+      letter-spacing 0.3px
+      color $text-color
+
+  .nodeAttributes
+    color $adminui-grey-2
+    padding 7px 16px 0px 18px
+    margin-left 3px
+    border-left 1px solid $grey-light
+    font-family RobotoMono-Medium
+    font-size 12px
+    font-weight 500
+    line-height 1.83
+
+    .nodeAttributeKey
+      color $colors--primary-green-3
+
+  ul
+    padding 0
+    margin 0
+    li
+      padding 0
+      margin 0
+      position relative
+      list-style-type none
+
+      // vertical line, to previous node (above)
+      &:not(:first-child):after
+        content ''
+        width 1px
+        height 19px
+        background-color $grey-light
+        position absolute
+        top -10px
+        left 4px
+
+      ul
+        padding-left 27px
+        position relative
+        &:last-child
+          &:before
+            content ''
+            width 28px
+            height 29px
+            position absolute
+            border-left 1px solid $grey-light
+            border-bottom 1px solid $grey-light
+            top -10px
+            left 4px
+            border-bottom-left-radius 10px
+          li
+            &:before
+              content none
+            &:first-child:after
+              content none
+        li
+          // first node: horizontal line, to parent
+          .nodeDetails
+            margin-left 12px
+          &:not(:first-child):after
+            left 16px
+          &:last-child
+            .nodeAttributes
+              border-color transparent
+          &:first-child
+            &:after
+              content ''
+              height 1px
+              width 27px
+              background-color $grey-light
+              position absolute
+              top 18px
+              left -22px
+          &:before
+            content ''
+            width 1px
+            height 100%
+            background-color $grey-light
+            position absolute
+            top -10px
+            left -23px
+
+.cl-table-statistic
+  display flex
+  justify-content space-between
+  align-items center
+  margin-bottom 7px
+
+.cl-table__col-query-text a
+  font-family RobotoMono-Medium
+  font-size 12px
+  line-height 1.83
+  color $adminui-grey-1
+  width 400px
+  text-decoration none
+  cursor pointer
+  &:hover
+    color $colors--primary-blue-3
+    text-decoration underline
+
+.cl-table-link__statement-tooltip--fixed-width
+  max-width max-content
+  .ant-tooltip-content
+    max-width 500px

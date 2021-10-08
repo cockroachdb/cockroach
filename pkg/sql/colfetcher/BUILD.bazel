@@ -1,0 +1,76 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "colfetcher",
+    srcs = [
+        "cfetcher.go",
+        "colbatch_scan.go",
+        "index_join.go",
+        ":gen-fetcherstate-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colfetcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/typeconv",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/colconv",
+        "//pkg/sql/colencoding",
+        "//pkg/sql/colexec/colexecspan",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/memsize",
+        "//pkg/sql/row",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowinfra",
+        "//pkg/sql/scrub",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+stringer(
+    name = "gen-fetcherstate-stringer",
+    src = "cfetcher.go",
+    typ = "fetcherState",
+)
+
+go_test(
+    name = "colfetcher_test",
+    srcs = [
+        "main_test.go",
+        "vectorized_batch_size_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

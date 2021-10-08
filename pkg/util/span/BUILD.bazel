@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "span",
+    srcs = ["frontier.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/span",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+        "//pkg/util/interval",
+    ],
+)
+
+go_test(
+    name = "span_test",
+    size = "small",
+    srcs = ["frontier_test.go"],
+    embed = [":span"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+        "//pkg/util/interval",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

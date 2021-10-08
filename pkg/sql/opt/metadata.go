@@ -118,7 +118,8 @@ type Metadata struct {
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
 
-	// NOTE! When adding fields here, update Init, CopyFrom and TestMetadata.
+	// NOTE! When adding fields here, update Init (if reusing allocated
+	// data structures is desired), CopyFrom and TestMetadata.
 }
 
 type mdDep struct {
@@ -150,41 +151,45 @@ func (n *MDDepName) equals(other *MDDepName) bool {
 func (md *Metadata) Init() {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
-	for i := range md.schemas {
-		md.schemas[i] = nil
+	schemas := md.schemas
+	for i := range schemas {
+		schemas[i] = nil
 	}
-	md.schemas = md.schemas[:0]
 
-	for i := range md.cols {
-		md.cols[i] = ColumnMeta{}
+	cols := md.cols
+	for i := range cols {
+		cols[i] = ColumnMeta{}
 	}
-	md.cols = md.cols[:0]
 
-	for i := range md.tables {
-		md.tables[i] = TableMeta{}
+	tables := md.tables
+	for i := range tables {
+		tables[i] = TableMeta{}
 	}
-	md.tables = md.tables[:0]
 
-	for i := range md.sequences {
-		md.sequences[i] = nil
+	sequences := md.sequences
+	for i := range sequences {
+		sequences[i] = nil
 	}
-	md.sequences = md.sequences[:0]
 
-	for i := range md.deps {
-		md.deps[i] = mdDep{}
+	deps := md.deps
+	for i := range deps {
+		deps[i] = mdDep{}
 	}
-	md.deps = md.deps[:0]
 
-	for i := range md.views {
-		md.views[i] = nil
+	views := md.views
+	for i := range views {
+		views[i] = nil
 	}
-	md.views = md.views[:0]
 
-	md.currUniqueID = 0
-
-	md.withBindings = nil
-	md.userDefinedTypes = nil
-	md.userDefinedTypesSlice = nil
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*md = Metadata{}
+	md.schemas = schemas[:0]
+	md.cols = cols[:0]
+	md.tables = tables[:0]
+	md.sequences = sequences[:0]
+	md.deps = deps[:0]
+	md.views = views[:0]
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -192,7 +197,10 @@ func (md *Metadata) Init() {
 //
 // Table annotations are not transferred over; all annotations are unset on
 // the copy.
-func (md *Metadata) CopyFrom(from *Metadata) {
+//
+// copyScalarFn must be a function that returns a copy of the given scalar
+// expression.
+func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.deps) != 0 || len(md.views) != 0 ||
 		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 {
@@ -200,24 +208,27 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	}
 	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)
-	md.tables = append(md.tables, from.tables...)
 
-	if (md.userDefinedTypes) == nil {
-		md.userDefinedTypes = make(map[oid.Oid]struct{})
-	}
-	for i := range from.userDefinedTypesSlice {
-		typ := from.userDefinedTypesSlice[i]
-		md.userDefinedTypes[typ.Oid()] = struct{}{}
-		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
+	if len(from.userDefinedTypesSlice) > 0 {
+		if md.userDefinedTypes == nil {
+			md.userDefinedTypes = make(map[oid.Oid]struct{}, len(from.userDefinedTypesSlice))
+		}
+		for i := range from.userDefinedTypesSlice {
+			typ := from.userDefinedTypesSlice[i]
+			md.userDefinedTypes[typ.Oid()] = struct{}{}
+			md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
+		}
 	}
 
-	// Clear table annotations. These objects can be mutable and can't be safely
-	// shared between different metadata instances.
-	for i := range md.tables {
-		md.tables[i].clearAnnotations()
+	if cap(md.tables) >= len(from.tables) {
+		md.tables = md.tables[:len(from.tables)]
+	} else {
+		md.tables = make([]TableMeta, len(from.tables))
 	}
-	// TODO(radu): we aren't copying the scalar expressions in Constraints and
-	// ComputedCols..
+	for i := range from.tables {
+		// Note: annotations inside TableMeta are not retained.
+		md.tables[i].copyFrom(&from.tables[i], copyScalarFn)
+	}
 
 	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
@@ -394,7 +405,7 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 // ScalarExpr to new column IDs. It takes as arguments a ScalarExpr and a
 // mapping of old column IDs to new column IDs, and returns a new ScalarExpr.
 // This function is used when duplicating Constraints, ComputedCols, and
-// PartialIndexPredicates. DuplicateTable requires this callback function,
+// partialIndexPredicates. DuplicateTable requires this callback function,
 // rather than performing the remapping itself, because remapping column IDs
 // requires constructing new expressions with norm.Factory. The norm package
 // depends on opt, and cannot be imported here.
@@ -420,7 +431,7 @@ func (md *Metadata) DuplicateTable(
 		col := tab.Column(i)
 		oldColID := tabID.ColumnID(i)
 		newColID := md.AddColumn(string(col.ColName()), col.DatumType())
-		md.ColumnMeta(newColID).Table = tabID
+		md.ColumnMeta(newColID).Table = newTabID
 		colMap.Set(int(oldColID), int(newColID))
 	}
 
@@ -448,9 +459,9 @@ func (md *Metadata) DuplicateTable(
 	// Create new partial index predicate expressions by remapping the column
 	// IDs in each ScalarExpr.
 	var partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
-	if len(tabMeta.PartialIndexPredicates) > 0 {
-		partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(tabMeta.PartialIndexPredicates))
-		for idxOrd, e := range tabMeta.PartialIndexPredicates {
+	if len(tabMeta.partialIndexPredicates) > 0 {
+		partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(tabMeta.partialIndexPredicates))
+		for idxOrd, e := range tabMeta.partialIndexPredicates {
 			partialIndexPredicates[idxOrd] = remapColumnIDs(e, colMap)
 		}
 	}
@@ -462,7 +473,7 @@ func (md *Metadata) DuplicateTable(
 		IgnoreForeignKeys:      tabMeta.IgnoreForeignKeys,
 		Constraints:            constraints,
 		ComputedCols:           computedCols,
-		PartialIndexPredicates: partialIndexPredicates,
+		partialIndexPredicates: partialIndexPredicates,
 	})
 
 	return newTabID

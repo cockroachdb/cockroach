@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(49854)
+# LogicTest: !3node-tenant(49854) !fakedist-spec-planning
 # TODO(asubiotto): Possibly split out the test that attempts to set a zone
 # config in order to run the other ones.
 
@@ -101,6 +101,21 @@ SELECT upper('roacH7')
 ----
 upper
 ROACH7
+
+query T
+SELECT unaccent(str) FROM ( VALUES 
+   ('no_special_CHARACTERS1!'),
+   ('Żółć'),
+   ('⃞h̀ＥＬＬＯ`̀́⃞'),
+   ('Softhyphen­separator'),
+   ('some ̂thing')
+) tbl(str)
+----
+no_special_CHARACTERS1!
+Zolc
+hELLO`
+Softhyphen-separator
+something
 
 statement error unknown signature: upper\(decimal\)
 SELECT upper(2.2)
@@ -308,6 +323,31 @@ abc abc abc
 query error substring\(\): negative byte subarray length -1 not allowed
 SELECT substring('11100011'::bytea, 4, -1)
 
+query TTTTT
+SELECT
+  encode(substring(decode('ff0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 1, 1), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 1, 7), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 4), 'hex')
+----
+ff0001  ff  ff0001  0001  ·
+
+query TTTTTTTTTT
+SELECT
+  encode(substring(decode('5c0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('aa5c1a1a1a1a0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('5c0001', 'hex'), 1, 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 1, 2), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 2, 2), 'hex'),
+  encode(substring(decode('aa5c1a1a1a1a0001', 'hex'), 2, 2), 'hex'),
+  encode(substring(decode('5c0001', 'hex'), 1), 'escape'),
+  encode(substring(decode('aa5c0001', 'hex'), 2, 1), 'escape')
+----
+5c0001  aa5c0001  5c0001  5c1a1a1a1a0001  5c  aa5c  5c00  5c1a  \\\000\001  \\
+
 query error unknown signature: concat_ws\(\)
 SELECT concat_ws()
 
@@ -393,9 +433,19 @@ SELECT sha1('abc')
 a9993e364706816aba3e25717850c26c9cd0d89d
 
 query T
+SELECT sha224('abc')
+----
+23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7
+
+query T
 SELECT sha256('abc')
 ----
 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+
+query T
+SELECT sha384('abc')
+----
+cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7
 
 query IIII
 SELECT fnv32('abc'), fnv32a('abc'), fnv64('abc'), fnv64a('abc')
@@ -429,7 +479,17 @@ SELECT sha1(NULL::STRING)
 NULL
 
 query T
+SELECT sha224(NULL::STRING)
+----
+NULL
+
+query T
 SELECT sha256(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha384(NULL::STRING)
 ----
 NULL
 
@@ -1717,6 +1777,21 @@ SELECT array_length(ARRAY['a'], 2)
 NULL
 
 query I
+SELECT cardinality(ARRAY['a', 'b'])
+----
+2
+
+query I
+SELECT cardinality(ARRAY[]:::int[])
+----
+0
+
+query I
+SELECT cardinality(NULL:::int[])
+----
+NULL
+
+query I
 SELECT array_lower(ARRAY['a', 'b'], 1)
 ----
 1
@@ -1868,6 +1943,37 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+query IB
+SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
+----
+16 false
+
+query TTTT
+SELECT uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858'),
+       ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'),
+       ulid_to_uuid(uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858')),
+       uuid_to_ulid(ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'))
+----
+01F2AHSDK562KHK8N1H6CR6J2R  0178951c-b665-30a7-19a2-a18999834858  0178951c-b665-30a7-19a2-a18999834858  01F2AHSDK562KHK8N1H6CR6J2R
+
+let $ulid1
+SELECT gen_random_ulid()
+
+# Proper sorting of ULIDs inside the same millisecond is not guaranteed, we need this to enforce correct behavior.
+statement ok
+SELECT pg_sleep(0.001)
+
+let $ulid2
+SELECT gen_random_ulid()
+
+query BBBB
+SELECT '$ulid1' < '$ulid2',
+       '$ulid1' > '$ulid2',
+       uuid_to_ulid('$ulid1') < uuid_to_ulid('$ulid2'),
+       uuid_to_ulid('$ulid1') > uuid_to_ulid('$ulid2')
+----
+true  false  true  false
+
 query TTTTTT
 SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
        to_uuid('{63616665-6630-3064-6465-616462656566}'),
@@ -1886,7 +1992,7 @@ cafef00ddeadbeef
 query error uuid: incorrect UUID length
 SELECT to_uuid('63616665-6630-3064-6465')
 
-query error uuid: incorrect UUID length
+query error uuid: incorrect UUID format
 SELECT to_uuid('63616665-6630-3064-6465-616462656566-123')
 
 query error uuid: incorrect UUID format
@@ -1927,6 +2033,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
        (format_type('bytea'::regtype, -1)),
        (format_type('char'::regtype, -1)),
+       (format_type('"char"'::regtype, -1)),
        (format_type('date'::regtype, -1)),
        (format_type('decimal'::regtype, -1)),
        (format_type('float'::regtype, -1)),
@@ -1947,6 +2054,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('regnamespace'::regtype, -1)),
        (format_type('regproc'::regtype, -1)),
        (format_type('regprocedure'::regtype, -1)),
+       (format_type('regrole'::regtype, -1)),
        (format_type('regtype'::regtype, -1)),
        (format_type('string'::regtype, -1)),
        (format_type('time'::regtype, -1)),
@@ -1960,13 +2068,16 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('int[]'::regtype, -1)),
        (format_type('int2[]'::regtype, -1)),
        (format_type('string[]'::regtype, -1)),
-       (format_type('varchar[]'::regtype, -1))
+       (format_type('varchar[]'::regtype, -1)),
+       (format_type('pg_catalog.int4'::regtype, -1)),
+       (format_type('pg_catalog.int2'::regtype, -1))
 ----
 anyelement
 bit
 boolean
 bytea
 bpchar
+"char"
 date
 numeric
 double precision
@@ -1987,6 +2098,7 @@ regclass
 regnamespace
 regproc
 regprocedure
+regrole
 regtype
 text
 time without time zone
@@ -2001,6 +2113,8 @@ bigint[]
 smallint[]
 text[]
 character varying[]
+integer
+smallint
 
 query T
 VALUES (format_type('anyelement'::regtype, NULL)),
@@ -2064,12 +2178,32 @@ SELECT pg_catalog.pg_get_indexdef(0)
 NULL
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
+CREATE TYPE testenum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE test.pg_indexdef_test (
+    a INT,
+    e testenum,
+    UNIQUE INDEX pg_indexdef_idx (a ASC),
+    INDEX pg_indexdef_partial_idx (a) WHERE a > 0,
+    INDEX pg_indexdef_partial_enum_idx (a) WHERE e IN ('foo', 'bar'),
+    INDEX other (a DESC)
+)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
 CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
+----
+CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
+----
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2155,17 +2289,24 @@ CREATE TABLE test.pg_constraintdef_test (
   a int,
   b int unique,
   c int check (c > a),
+  d string,
+  UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
-)
+);
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT c CHECK (c > 0) NOT VALID;
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT fk FOREIGN KEY (c) REFERENCES test.pg_indexdef_test(a) NOT VALID;
 
 query T rowsort
 SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
-UNIQUE (b ASC)
-FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
+FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
 CHECK ((c > a))
+CHECK ((c > 0)) NOT VALID
+UNIQUE (b ASC)
+UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
@@ -2371,7 +2512,7 @@ SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
 query ITT
 SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
 ----
-1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SysBytes: SysCount: AbortSpanBytes:}
+1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: SysBytes: SysCount: AbortSpanBytes:}
 
 # Without explicit keys, scans all ranges (we don't test this too precisely to
 # avoid flaking the test when the range count changes, just want to know that
@@ -2420,7 +2561,7 @@ SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[
 ----
 2
 
-query error pq: width_bucket\(\): Operand and thresholds must be of the same type
+query error pq: width_bucket\(\): operand and thresholds must be of the same type
 SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
 
 # Regression for #40623
@@ -2543,12 +2684,12 @@ NULL
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+63
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+64
 
 query T
 SELECT crdb_internal.get_zone_config(-1)::string
@@ -2558,7 +2699,7 @@ NULL
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x280550015801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2598,17 +2739,17 @@ user testuser
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+63
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+64
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x280550015801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2662,6 +2803,38 @@ SELECT getdatabaseencoding()
 ----
 UTF8
 
+subtest get_byte
+
+query I
+SELECT get_byte('Th\000omas'::BYTEA, 4)
+----
+109
+
+query error byte index 10 out of valid range
+SELECT get_byte('abc'::BYTEA, 10)
+
+query error byte index -10 out of valid range
+SELECT get_byte('abc'::BYTEA, -10)
+
+subtest set_byte
+
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 64)
+----
+Th@omas
+
+# A substitute value that's larger than 8 bit will be truncated.
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 16448)
+----
+Th@omas
+
+query error byte index 10 out of valid range
+SELECT set_byte('abc'::BYTEA, 10, 123)
+
+query error byte index -10 out of valid range
+SELECT set_byte('abc'::BYTEA, -10, 123)
+
 subtest get_bit
 
 query I rowsort
@@ -2682,27 +2855,37 @@ SELECT get_bit(B'10110', 10)
 query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
-# Binary representation of 'l' is 01101100
-# Binary representation of \o145 is 01100101
-# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
-
-query I rowsort
-SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+query II
+SELECT i, get_bit('\x11'::BYTEA, i) FROM generate_series(0, 7) i ORDER BY i;
 ----
-0
-1
+0  1
+1  0
+2  0
+3  0
+4  1
+5  0
+6  0
+7  0
 
-query I rowsort
-SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+query II rowsort
+SELECT i, get_bit('\x11ef'::BYTEA, i) FROM generate_series(0, 15) i ORDER BY i;
 ----
-1
-0
-
-query I rowsort
-SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
-----
-1
-0
+0   1
+1   0
+2   0
+3   0
+4   1
+5   0
+6   0
+7   0
+8   1
+9   1
+10  1
+11  1
+12  0
+13  1
+14  1
+15  1
 
 query error get_bit\(\): bit index 8 out of valid range \(0..7\)
 SELECT get_bit(b'\x61', 8)
@@ -2727,27 +2910,43 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
-# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
-# Binary representation of \o145 is 1100101
-# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
-
-query T rowsort
-SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+query IT
+SELECT i, encode(set_bit('\x00'::BYTEA, i, 1), 'hex') FROM generate_series(0, 7) i ORDER BY i
 ----
-cb
-af
+0  01
+1  02
+2  04
+3  08
+4  10
+5  20
+6  40
+7  80
 
-query T rowsort
-SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+query IT
+SELECT i, encode(set_bit('\x0000'::bytea, i, 1), 'hex') FROM generate_series(0, 15) i ORDER BY i
 ----
-a
-af
+0   0100
+1   0200
+2   0400
+3   0800
+4   1000
+5   2000
+6   4000
+7   8000
+8   0001
+9   0002
+10  0004
+11  0008
+12  0010
+13  0020
+14  0040
+15  0080
 
 query error set_bit\(\): bit index 16 out of valid range \(0..15\)
 SELECT set_bit(b'ac', 16, 0)
@@ -2755,7 +2954,7 @@ SELECT set_bit(b'ac', 16, 0)
 query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(b'', 0, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
 subtest num_nulls_test
@@ -2820,3 +3019,181 @@ query T
 SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
 ----
 {3,0,1}
+
+subtest crdb_internal.trace_id
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error insufficient privilege
+SELECT * FROM crdb_internal.trace_id()
+
+user root
+
+query B
+SELECT count(*) = 1 FROM crdb_internal.trace_id()
+----
+true
+
+subtest crdb_internal.payloads_for_span
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+SELECT * FROM crdb_internal.payloads_for_span(0)
+
+user root
+
+query TT colnames
+SELECT * FROM crdb_internal.payloads_for_span(0)
+WHERE false
+----
+payload_type  payload_jsonb
+
+subtest crdb_internal.payloads_for_trace
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+SELECT * FROM crdb_internal.payloads_for_span(0)
+
+user root
+
+query TTT colnames
+SELECT * FROM crdb_internal.payloads_for_trace(0)
+WHERE false
+----
+span_id payload_type  payload_jsonb
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error insufficient privilege
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+
+user root
+
+query B
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+WHERE false
+----
+
+# set timezone to something other then UTC
+statement ok
+SET timezone = 'Europe/Berlin'
+
+query T
+select generate_series('2021-07-05'::timestamptz, '2021-07-06'::timestamptz, '1day'::interval)
+----
+2021-07-05 00:00:00 +0200 CEST
+2021-07-06 00:00:00 +0200 CEST
+
+statement ok
+SET TIME ZONE +0
+
+statement ok
+set timezone = 'Europe/Bucharest';
+
+# the following two queries should provide the same output
+query T
+select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from generate_series(0, 24) AS g(i);
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+query T
+select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIMESTAMPTZ, '1 hour');
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+statement ok
+SET TIME ZONE +0
+
+query B
+SELECT 'AAA'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+true
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape(NULL::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+true
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
+----
+NULL

@@ -12,14 +12,16 @@ package exec
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 )
 
 // Node represents a node in the execution tree
@@ -40,7 +42,7 @@ type ScanParams struct {
 	// At most one of IndexConstraint or InvertedConstraint is non-nil, depending
 	// on the index type.
 	IndexConstraint    *constraint.Constraint
-	InvertedConstraint invertedexpr.InvertedSpans
+	InvertedConstraint inverted.Spans
 
 	// If non-zero, the scan returns this many rows.
 	HardLimit int64
@@ -60,6 +62,11 @@ type ScanParams struct {
 	Locking *tree.LockingItem
 
 	EstimatedRowCount float64
+
+	// If true, we are performing a locality optimized search. In order for this
+	// to work correctly, the execution engine must create a local DistSQL plan
+	// for the main query (subqueries and postqueries need not be local).
+	LocalityOptimized bool
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
@@ -73,7 +80,7 @@ type ScanParams struct {
 //
 // The node must be able to support this output ordering given its other
 // configuration parameters.
-type OutputOrdering sqlbase.ColumnOrdering
+type OutputOrdering colinfo.ColumnOrdering
 
 // Subquery encapsulates information about a subquery that is part of a plan.
 type Subquery struct {
@@ -84,6 +91,9 @@ type Subquery struct {
 	// Root is the root Node of the plan for this subquery. This Node returns
 	// results as required for the specific Type.
 	Root Node
+	// RowCount is the estimated number of rows that Root will output, negative
+	// if the stats weren't available to make a good estimate.
+	RowCount int64
 }
 
 // SubqueryMode indicates how the results of the subquery are to be processed.
@@ -145,7 +155,7 @@ type AggInfo struct {
 // passed through to the execution engine.
 type WindowInfo struct {
 	// Cols is the set of columns that are returned from the windowing operator.
-	Cols sqlbase.ResultColumns
+	Cols colinfo.ResultColumns
 
 	// TODO(justin): refactor this to be a single array of structs.
 
@@ -167,14 +177,7 @@ type WindowInfo struct {
 	Partition []NodeColumnOrdinal
 
 	// Ordering is the set of input columns to order on.
-	Ordering sqlbase.ColumnOrdering
-
-	// RangeOffsetColumn is the column ID of a single column from ORDER BY clause
-	// when window frame has RANGE mode of framing and at least one 'offset'
-	// boundary. We store it separately because the ordering might be simplified
-	// (when that single column is in Partition), but the execution still needs
-	// to know the original ordering.
-	RangeOffsetColumn NodeColumnOrdinal
+	Ordering colinfo.ColumnOrdering
 }
 
 // ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).
@@ -211,7 +214,7 @@ type Cascade struct {
 	FKName string
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
-	// the mutation.
+	// the mutation. It is nil if the cascade does not require a buffer.
 	Buffer Node
 
 	// PlanFn builds the cascade query and creates the plan for it.
@@ -223,6 +226,9 @@ type Cascade struct {
 	// however, we allow the execution engine to provide a different copy or
 	// implementation of the node (e.g. to facilitate early cleanup of the
 	// original plan).
+	//
+	// If the cascade does not require input buffering (Buffer is nil), then
+	// bufferRef should be nil and numBufferedRows should be 0.
 	//
 	// This method does not mutate any captured state; it is ok to call PlanFn
 	// methods concurrently (provided that they don't use a single non-thread-safe
@@ -237,10 +243,6 @@ type Cascade struct {
 		allowAutoCommit bool,
 	) (Plan, error)
 }
-
-// InsertFastPathMaxRows is the maximum number of rows for which we can use the
-// insert fast path.
-const InsertFastPathMaxRows = 10000
 
 // InsertFastPathFKCheck contains information about a foreign key check to be
 // performed by the insert fast-path (see ConstructInsertFastPath). It
@@ -281,18 +283,57 @@ type ExplainAnnotationID int
 const (
 	// EstimatedStatsID is an annotation with a *EstimatedStats value.
 	EstimatedStatsID ExplainAnnotationID = iota
+
+	// ExecutionStatsID is an annotation with a *ExecutionStats value.
+	ExecutionStatsID
 )
 
-// EstimatedStats  contains estimated statistics about a given operator.
+// EstimatedStats contains estimated statistics about a given operator.
 type EstimatedStats struct {
 	// TableStatsAvailable is true if all the tables involved by this operator
 	// (directly or indirectly) had table statistics.
 	TableStatsAvailable bool
 	// RowCount is the estimated number of rows produced by the operator.
 	RowCount float64
+	// TableStatsRowCount is set only for scans; it is the estimated total number
+	// of rows in the table we are scanning.
+	TableStatsRowCount uint64
+	// TableStatsCreatedAt is set only for scans; it is the time when the latest
+	// table statistics were collected.
+	TableStatsCreatedAt time.Time
 	// Cost is the estimated cost of the operator. This cost includes the costs of
 	// the child operators.
 	Cost float64
+}
+
+// ExecutionStats contain statistics about a given operator gathered from the
+// execution of the query.
+//
+// TODO(radu): can/should we just use execinfrapb.ComponentStats instead?
+type ExecutionStats struct {
+	// RowCount is the number of rows produced by the operator.
+	RowCount optional.Uint
+
+	// VectorizedBatchCount is the number of vectorized batches produced by the
+	// operator.
+	VectorizedBatchCount optional.Uint
+
+	KVTime           optional.Duration
+	KVContentionTime optional.Duration
+	KVBytesRead      optional.Uint
+	KVRowsRead       optional.Uint
+
+	StepCount         optional.Uint
+	InternalStepCount optional.Uint
+	SeekCount         optional.Uint
+	InternalSeekCount optional.Uint
+
+	// Nodes on which this operator was executed.
+	Nodes []string
+
+	// Regions on which this operator was executed.
+	// Only being generated on EXPLAIN ANALYZE.
+	Regions []string
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

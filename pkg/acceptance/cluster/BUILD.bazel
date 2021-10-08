@@ -1,0 +1,62 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cluster",
+    srcs = [
+        "certs.go",
+        "cluster.go",
+        "docker.go",
+        "dockercluster.go",
+        "http.go",
+    ],
+    embed = [":cluster_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/cluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/config/zonepb",
+        "//pkg/security",
+        "//pkg/util/contextutil",
+        "//pkg/util/log",
+        "//pkg/util/log/logflags",
+        "//pkg/util/log/severity",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_containerd_containerd//platforms",
+        "@com_github_docker_distribution//reference",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+        "@com_github_docker_docker//api/types/events",
+        "@com_github_docker_docker//api/types/filters",
+        "@com_github_docker_docker//api/types/network",
+        "@com_github_docker_docker//client",
+        "@com_github_docker_docker//pkg/jsonmessage",
+        "@com_github_docker_docker//pkg/stdcopy",
+        "@com_github_docker_go_connections//nat",
+        "@com_github_mattn_go_isatty//:go-isatty",
+        "@com_github_opencontainers_image_spec//specs-go/v1:specs-go",
+    ],
+)
+
+proto_library(
+    name = "cluster_proto",
+    srcs = ["testconfig.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "cluster_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/cluster",
+    proto = ":cluster_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)

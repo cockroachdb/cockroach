@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "testfilter_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/testfilter",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_binary(
+    name = "testfilter",
+    embed = [":testfilter_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "testfilter_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":testfilter_lib"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

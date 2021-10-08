@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "flagstub",
+    srcs = ["flagstub.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

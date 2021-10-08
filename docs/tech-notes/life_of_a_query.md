@@ -1,664 +1,858 @@
 # Life of a SQL Query
 
-Original author: Andrei Matei
+Original author: Andrei Matei (updated June 2021)
 
 ## Introduction
 
-This document aims to explain the execution of an SQL query against
-CockroachDB, explaining the code paths through the various layers of
-the system (network protocol, SQL session management, parsing,
-execution planning, syntax tree transformations, query running,
-interface with the KV code, routing of KV requests, request
-processing, Raft, on-disk storage engine). The idea is to provide a
-high-level unifying view of the structure of the various components;
-no one will be explored in particular depth but pointers to other
-documentation will be provided where such documentation exists. Code
-pointers will abound.
+This document aims to explain the execution of a SQL query in CockroachDB,
+following the code paths through the various layers of the system: network
+protocol, SQL session management, query parsing, planning and optimization,
+execution, key/value service, transaction management, request routing, request
+processing, Raft consensus, on-disk storage engine, etc. The idea is to provide
+a high-level unifying view of the structure of the various components; none will
+be explored in particular depth but pointers to other documentation will be
+provided where such documentation exists. Code pointers will abound.
 
-This document will generally not discuss design decisions; it will
-rather focus on tracing through the actual (current) code.
+This document will generally not discuss design decisions, but rather focus on
+tracing through the actual (current) code. In the interest of brevity, it only
+covers the most significant and common parts of query execution, and omits a
+large amount of detail and special cases.
 
-The intended audience for this post is folks curious about a dive
-through the architecture of a modern, albeit young, database presented
-differently than in a [design
+The intended audience is folks curious about a walk through the architecture of
+a modern database, presented differently than in a [design
 doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md). It
-will hopefully also be helpful for open source contributors and new
-Cockroach Labs engineers.
+will hopefully also be helpful for open source contributors and new Cockroach
+Labs engineers.
 
-## Limitations
+## PostgreSQL Client Protocol
 
-This document does not cover some important aspects of query execution,
-in particular major developments that have occurred after the document
-was initially authored; including but not limited to:
+A SQL query arrives at the server through the [PostgreSQL wire
+protocol](https://www.postgresql.org/docs/current/protocol.html).
+CockroachDB uses this protocol for compatibility with existing client drivers
+and applications.
 
-- how are transaction and SQL session timestamps assigned
-- proposer-evaluated KV
-- concurrent statement execution inside a SQL transaction
-- 1PC optimizations for UPDATE and INSERT
-- column families
-- composite encoding for collated strings and DECIMAL values in PK and indexes
-- txn contention handling via pusher queues
+The protocol is implemented by the [`pgwire` package](https://github.com/cockroachdb/cockroach/tree/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire).
+Once a client [connects](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/server/server.go#L2250),
+it is represented by [`pgwire.conn`](https://github.com/cockroachdb/cockroach/blob/89621764d4c2d438d1781238f10e9ef27ef2c392/pkg/sql/pgwire/conn.go#L55),
+which wraps a [`net.Conn`](https://golang.org/pkg/net/#Conn) socket interface.
+[`conn.serveImpl`](https://github.com/cockroachdb/cockroach/blob/89621764d4c2d438d1781238f10e9ef27ef2c392/pkg/sql/pgwire/conn.go#L211)
+implements the main ["read, parse, execute" loop](https://github.com/cockroachdb/cockroach/blob/992812623e3719c25659f0a0d1c2b169fb196f76/pkg/sql/pgwire/conn.go#L327):
+for the lifetime of the connection, we
+[read](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L330)
+a message (usually containing one or more SQL statements),
+[parse](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L737)
+the queries, [pass
+them](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L779)
+to `connExecutor` for execution, [serialize and
+buffer](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L1229)
+the results, and
+[send](https://github.com/cockroachdb/cockroach/blob/89621764d4c2d438d1781238f10e9ef27ef2c392/pkg/sql/pgwire/conn.go#L1451)
+a result message to the client.
 
-## Postgres Wire Protocol
+## SQL Processing
 
-A SQL query arrives at the server through the Postgres wire protocol
-(CockroachDB speaks the Postgres protocol for compatibility with
-existing client drivers and applications). The `pgwire` package
-implements protocol-related functionality; once a client connection is
-authenticated, it is represented by a
-[`pgwire.conn`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L54)
-struct (it wraps a [`net.Conn`](https://golang.org/pkg/net/#Conn)
-interface - Go's
-sockets).
-[`conn.serveImpl`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L207)
-implements the "read query - parse it - push it to `connExecutor` for
-execution" loop. The protocol is message-oriented: for the lifetime of the
-connection, we
-[read a message](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L323)
-usually representing one or more SQL statements, parse the queries, pass them
-to the `connExecutor` for executing all the statements in the batch and, once
-that's done and the results have been produced,
-[serialize and buffer them](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L1109)
-and then possibly
-[send the buffered results to the client](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L1333).
+CockroachDB's SQL engine sits between the client connection and the core
+key/value service, translating SQL queries into key/value operations. It
+broadly goes through the following stages:
 
-Notice that the results are not streamed to the client and, moreover, a whole
-batch of statements might be executed before any results are sent back.
-
-## connExecutor
-
-The
-[`connExecutor`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L62)
-is responsible for parsing and executing statements pushed into its
-[statement buffer](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L910)
-by a given client connection as well as pushing the results back to the
-`pgwire.conn`. The main entry point is
-[`connExecutor.execCmd`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L1320),
-which reads the current
-[command](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_io.go#L115)
-from the statement buffer and executes a query if necessary (not all commands
-require query execution). The execution of the queries is done in the context
-of a
-[`sessiondata.SessionData`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/sessiondata/session_data.go#L25)
-object which accumulates information about the state of the connection
-(e.g. the database that has been selected, the various variables that
-can be set) as well as of
-[transaction state](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L918).
-The `connExecutor` also manipulates a
-[`planner`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/planner.go#L123)
-struct which provides the functionality around actually planning and
-executing a query.
-
-`connExecutor` implements a state-machine by receiving batches of statements
-from `pgwire`, executing them one by one, updating its transaction state (did a
-new transaction just begin or an old transaction just end? did we encounter an
-error which forces us to abort the current transaction?) and notifying
-[ClientComm](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_io.go#L574)
-about any results or errors.
+Parsing → Logical Planning & Optimization → Physical Planning → Execution
 
 ### Parsing
 
-Parsing is
-[performed](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L685),
-by `pgwire.conn` and uses a LALR parser generated by `go-yacc` from a
-[Yacc-like grammar file](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/parser/sql.y),
-originally copied from Postgres and stripped down, and then gradually
-grown organically with ever-more SQL support. The process of parsing
-transforms a `string` into an array of ASTs (Abstract Syntax Trees),
-one for each statement. The AST nodes are structs defined in the
-`sql/sem/tree` package, generally of two types - statements and
-expressions. Expressions implement a common interface useful for
-applying tree transformations. These ASTs will later be transformed by
-the cost-based optimizer into an execution plan.
+Parsing transforms the original SQL statement, represented as a `string`, into
+an [Abstract Syntax Tree](https://en.wikipedia.org/wiki/Abstract_syntax_tree)
+(AST) that is easier to work with. CockroachDB uses an
+[LALR parser](https://en.wikipedia.org/wiki/LALR_parser) that is
+[generated](https://github.com/cockroachdb/cockroach/blob/60916fb31b1bb0562d1707a338aad536e4713744/Makefile#L1506-L1507)
+by [goyacc](https://pkg.go.dev/golang.org/x/tools/cmd/goyacc) from a Yacc-like
+[grammar file](https://github.com/cockroachdb/cockroach/blob/d96babaa3d484d4df156293010f922bd3fb2d970/pkg/sql/parser/sql.y).
+This file specifies CockroachDB's SQL dialect, and was originally copied from
+PostgreSQL and then modified.
+
+As we've already seen, `pgwire.conn` [parses](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L737)
+client statements using a [`parser.Parser`](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L81) instance.
+The parser begins by [scanning](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L167)
+the string into tokens — individual pieces such as a
+[string](https://github.com/cockroachdb/cockroach/blob/231953322e558dada2ae75c1b49771eee544aba2/pkg/sql/parser/scan.go#L133-L135)
+or [number](https://github.com/cockroachdb/cockroach/blob/231953322e558dada2ae75c1b49771eee544aba2/pkg/sql/parser/scan.go#L389-L392).
+It does this [one by one](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L153)
+until it [reaches a semicolon](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L154)
+which terminates the statement. These tokens are then
+[lexed](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L186)
+for some simple post-processing, and the lexer is
+[passed](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L188)
+to the generated parser which iterates over the tokens and applies the SQL
+grammar to them.
+
+The result of this process is a [`parser.Statement`](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L35),
+which [wraps](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/parser/parse.go#L37)
+an AST [`tree.Statement`](https://github.com/cockroachdb/cockroach/blob/6349791f060743b515c7638b81ab3de2ee7bc0c4/pkg/sql/sem/tree/stmt.go#L86),
+a tree structure that models the SQL syntax. For example,
+[`tree.SelectClause`](https://github.com/cockroachdb/cockroach/blob/8b14ea8b7109d61ef9ba3a099a24468ae8367be5/pkg/sql/sem/tree/select.go#L78-L79)
+models the familiar `SELECT` clause, with recognizable fields such as `From` and
+`Where`. Many parts of the AST also contains
+[`tree.Expr`](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/sem/tree/expr.go#L27),
+nested algebraic expressions such as `tax / total * 100`.
+
+Note that the AST only represents the _syntax_ of the query, and says nothing
+about how, or even if, it can be executed — for example, it has no idea whether
+a table exists or what datatype a column has. Figuring that out is the job of
+the planner.
+
+### Session Management
+
+Once `pgwire.conn` has parsed the statement, it's placed in an `sql.ExecStmt`
+command and [pushed](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L744) into a
+[statement buffer](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/conn_io.go#L89).
+On the other side of this buffer is a [`sql.connExecutor`](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L988)
+which was created during [connection setup](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/pgwire/conn.go#L655-L656).
+It [processes](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1502)
+the commands in the statement buffer by repeatedly calling
+[`execCmd()`](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1525),
+[executing](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1578)
+any statements.
+
+As [`execStmt()`](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L69)
+executes statements, it records various
+[session data](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1167)
+such as the current database and user-defined settings,
+and [implements](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L101)
+a [finite state machine](https://en.wikipedia.org/wiki/Finite-state_machine)
+to track the [transaction state](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1027):
+did a transaction just begin or end, or did we encounter an error?
+It then branches off depending on the state of the SQL transaction:
+[open](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L244),
+[aborted](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1198),
+[waiting for retry](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1252),
+or [none](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1148). 
+
+Simple statements are primarily handled here. For example, a
+[`BEGIN` statement](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1152)
+will [open](https://github.com/cockroachdb/cockroach/blob/af9e6460c83a812ac320d3329f4c55a9b94367a1/pkg/sql/txn_state.go#L190)
+a new [`kv.Txn` transaction](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L46)
+in the key/value service (which we'll get back to later), and a
+[`COMMIT` statement](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L467-L470)
+will [commit](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L776)
+that transaction. If a query runs outside of a transaction,
+it will use an [implicit transaction](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1183).
+Query execution uses this transaction to dispatch key/value requests. 
 
 ### Statement Execution
 
-With a list of statements in hand, `Executor.execRequest()` goes
-through them in order and executes one transaction's worth of
-statements at a time (i.e. groups of statements between a `BEGIN` and
-`COMMIT/ROLLBACK` statements, or single statements executed outside of
-a transaction). If the session had an open transaction after execution
-of the previous batch, we continue consuming statements until a
-`COMMIT/ROLLBACK`. This "consuming of statements" is done by the call
-to
-[`runTxnAttempt`](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/executor.go#L587);
-this function returns after executing statements until the
-`COMMIT/ROLLBACK` has been encountered.
+Now that we have figured out what (KV) transaction we're running inside of, we
+are concerned with executing statements one at a time.
 
-There is an impedance mismatch that has to be explained here, around
-the interfacing of the SQL `Executor/session` code, which is
-stream-oriented (with statements being executed one at a time possibly
-within the scope of SQL transactions) and CockroachDB's Key/Value (KV)
-interface, which is request oriented with transactions explicitly
-attached to every request. The most interesting interface for the KV
-layer of the database is the
-[`Txn.Exec()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L465)
-method. `Txn` lives in the `internal/client` package, which contains
-the KV client interface (the "client" and the server in this context
-are both internal to CockroachDB, although we used to expose the KV
-interface externally in the past and it's not out of the question that
-we'll do it again in the future). `Txn` represents a KV transaction;
-there's generally one associated with the SQL session, reused between
-client ping-pongs.
+There is an impedance mismatch when interfacing SQL `connExecutor` code,
+which is stream-oriented (with statements being executed one at a time
+possibly within the scope of a SQL transaction), and CockroachDB's
+key/value (KV) interface, which is request-oriented (with transactions
+explicitly attached to every request).
 
-The `Txn.Exec` interface takes a callback and some execution options
-and, based on those options, executes the callback possibly multiple
-times and commits the transaction afterwards. If allowed by the
-options, the callback might be called multiple times, to deal with
-retries of transactions that are [sometimes
-necessary](https://www.cockroachlabs.com/docs/stable/transactions.html#transaction-retries)
-in CockroachDB (usually because of data contention). The SQL
-`Executor` might or might not want to let the KV client perform such
-retries automatically.
+To hint at the complications: it is
+[sometimes necessary](https://www.cockroachlabs.com/docs/stable/transactions.html#transaction-retries)
+to retry statements in CockroachDB, usually because of serializability
+violations or data contention. A single SQL statement executed outside of a SQL
+transaction (i.e. an implicit transaction) can be retried automatically.
+However, it is not safe to retry a SQL transaction spanning multiple client
+statements, since they may be conditional on client logic (i.e. different
+`SELECT` results may trigger different subsequent statements). In this case, we
+bubble up a [retryable error](https://www.cockroachlabs.com/docs/stable/transactions.html#client-side-intervention)
+to the client.
 
-To hint at the complications: a single SQL
-statement executed outside of a SQL transaction (i.e. an "implicit
-transaction") can be safely retried. However, a SQL transaction
-spanning multiple client requests will have different statements
-executed in different callbacks passed to `Txn.Exec()`; as such, it is
-not sufficient to retry one of these callbacks - we have to retry all
-the statements in the transaction, and generally some of these
-statements might be conditional on the client's logic and thus cannot
-be retried verbatim (i.e. different results for a `SELECT` might
-trigger different subsequent statements). In this case, we bubble up a
-retryable error to the client; more details about this can be read in
-our [transaction
-documentation](https://www.cockroachlabs.com/docs/stable/transactions.html#client-side-intervention). This
-complexity is captured in
-[`Executor.execRequest()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L495),
-which has logic for setting the different execution options and
-contains a [suitable
-callback](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L604)
-[passed to
-`Txn.Exec()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L643);
-this callback will call
-[`runTxnAttempt()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L621). The
-statement execution code path continues inside the callback, but it is
-worth noting that, from this moment on, we have interfaced with the
-(client of the) KV layer and everything below is executing in the
-context of a KV transaction.
+`connExecutor` serves as a coordinator between different components during
+SQL statement execution. This primarily happens in
+[`execStmtInOpenState()`](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L244),
+which dispatches to the execution engine in
+[`dispatchToExecutionEngine()`](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L806).
+During this process, it
+[builds and optimizes](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L831)
+a logical plan, then [builds and executes](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L925-L927)
+a physical plan. Once executed, the statement
+[result](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/conn_executor.go#L1565)
+is returned to the client via a
+[`ClientComm`](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/conn_io.go#L576`).
 
-### Building execution plans
+### Logical Planning and Optimization
 
-Now that we have figured out what (KV) transaction we're running inside
-of, we are concerned with executing SQL statements one at a
-time. `runTxnAttempt()` has a few layers below it dealing with the
-various states a SQL transaction can be in
-([open](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L966s)
-/
-[aborted](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L887)
-/ [waiting for a user
-retry](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L944),
-etc.), but the interesting one is
-[execStmt](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/executor.go#L1258). This
-guy [creates an "execution
-plan"](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/executor.go#L1261)
-for a statement and runs it.
+We're now getting to the heart of the SQL engine. Query planning is the process
+of converting the SQL query AST into a tree of
+[relational algebra operators](https://en.wikipedia.org/wiki/Relational_algebra)
+that will produce the desired result. There can be a large number of
+functionally equivalent plans for a given query, with very different performance
+characteristics, and the optimizer will try to figure out the most efficient
+plan. Query planning is a complex topic that could easily fill several articles
+of its own, so we won't go into any depth here — see the
+[`opt` package documentation](https://github.com/cockroachdb/cockroach/blob/c097a16427f65e9070991f062716d222ea5903fe/pkg/sql/opt/doc.go)
+for further details.
 
-An execution plan in CockroachDB is a tree of
-[`planNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad/pkg/sql/plan.go#L72)
-nodes, similar in spirit to the AST but, this time, containing
-semantic information and also runtime state. This tree is built by
-[`planner.makePlan()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/plan.go#L199),
-which takes a parsed statement and returns the root of the `planNode`
-tree after having performed all the semantic analysis and various
-transformations. The nodes in this tree are actually "executable"
-(they have `Start()` and `Next()` methods), and each one will consume
-data produced by its children (e.g. a `JoinNode` has [`left and
-right`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/join.go#L125)
-children whose data it consumes).
-
-Currently building the execution plan, performing semantic analysis
-and applying various transformations is a pretty ad-hoc process, but
-we are working on replacing the code with a more structured process and
-separating the IR (Intermediate Representation) used for analysis and
-transforms from the runtime structures (see this WIP
-RFC)[https://github.com/cockroachdb/cockroach/pull/10055/files#diff-542aa8b21b245d1144c920577333ceed].
-
-In the meantime, the `planner` [looks at the type of the
-statement](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/plan.go#L248)
-at the top of the AST and, for each statement type, invokes a specific
-method that builds the execution plan. For example, the tree for a
-`SELECT` statement is produced by
-[`planner.SelectClause()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/select.go#L257). Notice
-how different aspects of a `SELECT` statement are handled there: a
-`scanNode` is created
-(`renderNode.initFrom()`->...->
-[`planner.Scan()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/data_source.go#L441))
-to scan a table, a `WHERE` clause is transformed into an expression
-and assigned to a
-`filterNode`,
-an `ORDER BY` clause is [turned into a
-`sortNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/select.go#L296),
-etc. In the end, a
-[`selectTopNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/select.go#L320)
-is produced, which in fact is a tree of a `groupNode`, a `windowNode`,
-a `sortNode`, a `distinctNode` and a `renderNode` wrapping a
-`scanNode` acting as an original data source).
-
-Finally, the execution plan is simplified and optimized somewhat; this
-includes removing the `selectTopNode` wrappers and eliding all no-op
-intermediate nodes.
-
-To make this notion of the execution plan more concrete, consider one
-actually "rendered" by the `EXPLAIN` statement:
+The query plan for a SQL statement can be inspected via `EXPLAIN`. Let's
+have a look at a concrete example:
 
 ```sql
-root@:26257> create table customers(
-name string primary key,
-address string,
-state string,
-index SI (state)
+CREATE TABLE countries (id STRING PRIMARY KEY, name STRING);
+INSERT INTO countries VALUES
+    ('us', 'United States'), ('cn', 'China'), ('de', 'Germany');
+CREATE TABLE companies (
+    name STRING,
+    country STRING REFERENCES countries(id),
+    employees INT
 );
+INSERT INTO companies VALUES
+    ('McDonalds', 'us', 1.9e6),
+    ('Apple', 'us', 0.15e6),
+    ('State Grid', 'cn', 1.5e6),
+    ('Sinopec', 'cn', 0.58e6),
+    ('Volkswagen', 'de', 0.67e6);
 
-root@:26257> insert into customers values
-('Google', '1600 Amphitheatre Parkway', 'CA'),
-('Apple', '1 Infinite Loop', 'CA'),
-('IBM', '1 New Orchard Road ', 'NY');
+EXPLAIN
+    SELECT companies.name AS company, countries.name AS country, employees
+    FROM companies JOIN countries ON companies.country = countries.id
+    WHERE employees > 1e6
+    ORDER BY employees DESC;
 
-root@:26257> EXPLAIN(EXPRS,NOEXPAND,NOOPTIMIZE,METADATA) SELECT * FROM customers WHERE address like '%Infinite%' ORDER BY state;
-+-------+--------+----------+---------------------------+------------------------+----------+
-| Level |  Type  |  Field   |        Description        |        Columns         | Ordering |
-+-------+--------+----------+---------------------------+------------------------+----------+
-|     0 | select |          |                           | (name, address, state) | +state   |
-|     1 | nosort |          |                           | (name, address, state) | +state   |
-|     1 |        | order    | +@3                       |                        |          |
-|     1 | render |          |                           | (name, address, state) |          |
-|     1 |        | render 0 | name                      |                        |          |
-|     1 |        | render 1 | address                   |                        |          |
-|     1 |        | render 2 | state                     |                        |          |
-|     2 | filter |          |                           | (name, address, state) |          |
-|     2 |        | filter   | address LIKE '%Infinite%' |                        |          |
-|     3 | scan   |          |                           | (name, address, state) |          |
-|     3 |        | table    | customers@primary         |                        |          |
-+-------+--------+----------+---------------------------+------------------------+----------+
+  • sort
+  │ estimated row count: 3
+  │ order: -employees
+  │
+  └── • lookup join
+      │ estimated row count: 3
+      │ table: countries@primary
+      │ equality: (country) = (id)
+      │ equality cols are key
+      │
+      └── • filter
+          │ estimated row count: 3
+          │ filter: employees > 1000000
+          │
+          └── • scan
+                estimated row count: 5 (100% of the table; stats collected 12 seconds ago)
+                table: companies@primary
+                spans: FULL SCAN
 ```
 
-You can see data being produced by a `scanNode`, being filtered by a
-`filterNode` (presented as "filter"), and then sorted by a `sortNode`
-(presented as "nosort", because we have turned off order analysis with
-NOEXPAND and the sort node doesn't know yet whether sorting is
-needed), wrapped in a `selectTopNode` (presented as "select").
+Each node in the plan is a relational operator, and results flow upwards from
+one node to the next. We can see that the optimizer has decided to do a full table
+`scan` of the `companies` table, `filter` the rows on `employees`, perform a
+`lookup join` with the `countries` table, and finally `sort` the results
+by `employees` in descending order. The optimizer could instead have chosen to e.g.
+use a `hash join`, or do the `sort` right after the `scan`, but it thought this
+plan would be more efficient.
 
-With plan simplification turned on, the EXPLAIN output becomes:
+The `connExecutor` builds a plan by using a [`sql.planner`](https://github.com/cockroachdb/cockroach/blob/5ae7430a1bc5497229386d124a62e75e2805b8ae/pkg/sql/planner.go#L132)
+and [calling `makeOptimizerPlan()`](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L950)
+on it. Internally, it starts by [converting](https://github.com/cockroachdb/cockroach/blob/df67aa9707fbf0193ec8b3ca4062240c360fc808/pkg/sql/plan_opt.go#L194)
+the AST into a "memo".
+
+[`memo.Memo`](https://github.com/cockroachdb/cockroach/blob/a15efbfec8704526cd6475dd4a5ebdd0be149124/pkg/sql/opt/memo/memo.go#L107)
+is a data structure that can efficiently represent all of the different possible
+query plan trees that the optimizer explores by using
+[memoization](https://en.wikipedia.org/wiki/Memoization). Briefly, it does this
+by representing each query expression (either a relational expression
+`opt.RelExpr` such as `scan` or scalar expression `opt.ScalarExpr` such as `=`)
+as a "memo group" with references between them. The optimizer can then expand
+out each group into other equivalent expressions, such that each group
+represents many different methods to achieve the same result, and try to figure
+out which one would be best. Because it uses references between groups, it can
+compute and store the equivalent expressions once for each group instead of
+recursively repeating them for all possible combinations. For example, consider
+the following query and corresponding memo groups:
 
 ```
-root@:26257> EXPLAIN (EXPRS,METADATA) SELECT * FROM customers WHERE address LIKE '%Infinite%' ORDER BY state;
-+-------+------+--------+---------------------------+------------------------+--------------+
-| Level | Type | Field  |        Description        |        Columns         |   Ordering   |
-+-------+------+--------+---------------------------+------------------------+--------------+
-|     0 | sort |        |                           | (name, address, state) | +state       |
-|     0 |      | order  | +state                    |                        |              |
-|     1 | scan |        |                           | (name, address, state) | +name,unique |
-|     1 |      | table  | customers@primary         |                        |              |
-|     1 |      | spans  | ALL                       |                        |              |
-|     1 |      | filter | address LIKE '%Infinite%' |                        |              |
-+-------+------+--------+---------------------------+------------------------+--------------+
+SELECT * FROM companies, countries WHERE companies.country = countries.id
+
+G6: [inner-join [G1 G2 G5]]
+G5: [eq [G3 G4]]
+G4: [variable countries.id]
+G3: [variable companies.country]
+G2: [scan countries]
+G1: [scan companies]
 ```
 
-#### Expressions
+Since there are many different ways of doing the join, we can expand out G6 to
+represent multiple possible plans, but without having to duplicate and recompute
+the other groups for each join:
 
-A subset of ASTs are
-[`parser.Expr`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/parser/expr.go#L25),
-representing various "expressions" - parts of statements that can
-occur in many various places - in a `WHERE` clause, in a `LIMIT`
-clause, in an `ORDER BY` clause, as the projections of a `SELECT`
-statement, etc. Expressions nodes implement a common interface so that
-a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern) can
-be applied to them for different transformations and
-analysis. Regardless of where they appear in the query, all
-expressions need some common processing (e.g. names appearing in them
-need to be resolved to columns from data sources). These tasks are
-performed by
-[`planner.analyzeExpr`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/analyze.go#L1596). Each
-`planNode` is responsible for calling `analyzeExpr` on the expressions
-it contains, usually at node creation time (again, we hope to unify
-our execution planning more in the future).
+```
+G6: [inner-join [G1 G2 G5]] [inner-join [G2 G1 G5]] [lookup-join [G1 G2 G5]] ...
+G5: [eq [G3 G4]]
+G4: [variable countries.id]
+G3: [variable companies.country]
+G2: [scan countries]
+G1: [scan companies]
+```
 
-`planner.analyzeExpr` performs the following tasks:
+[`buildExecMemo()`](https://github.com/cockroachdb/cockroach/blob/df67aa9707fbf0193ec8b3ca4062240c360fc808/pkg/sql/plan_opt.go#L463)
+first uses an [`optbuilder.Builder`](https://github.com/cockroachdb/cockroach/blob/fff814fca119dbc37f88ea368a554f1613096c9a/pkg/sql/opt/optbuilder/builder.go#L59)
+to [build](https://github.com/cockroachdb/cockroach/blob/df67aa9707fbf0193ec8b3ca4062240c360fc808/pkg/sql/plan_opt.go#L521)
+an initial normalized memo from the AST. If we keep tracing the internal
+calls we eventually get somewhere interesting:
+[`buildSelectClause()`](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L924)
+which converts the `SELECT` clause from a `tree.SelectClause` AST into
+a set of memo groups. Let's keep going deeper into
+[building the `FROM` clause](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2156c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L931)
+until we get to where it builds a [table name](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L73).
+This first [resolves](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L103)
+the table name in the system catalog, which e.g. makes sure that the table
+exists and that the user has access to it. It then uses the memo
+factory to [construct a `ScanExpr`](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L543)
+for the scan. Similarly,
+[building the `WHERE` clause](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L934)
+will [resolve and build](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L1052)
+a `ScalarExpr` for the predicate and
+[place it](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L1063)
+in a `FiltersExpr`.
 
-1. resolving names (the `colA` in `select 3 * colA from MyTable` needs
-   to be replaced by an index within the rows produced by the underlying
-   data source (usually a `scanNode`))
-2. normalization (e.g. `a = 1 + 1` -> `a = 2`, ` a not between b and c` -> `(a < b) or (a > c)`)
-3. type checking (see [the typing
-   RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160203_typing.md)
-   for an in-depth discussion of Cockroach's typing system).
+Other AST nodes are built in a similar manner. Of particular note, scalar
+expressions (algebraic expressions such as `tax / total * 100`) are originally
+represented by nested `tree.Expr` AST nodes and implement a
+[visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern)
+for analysis and transformation. These can be found in many parts of a query
+(e.g. `SELECT`, `WHERE`, and `ORDER BY`) and need common processing. This
+typically happens in [`resolveAndBuildScalar()`](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/util.go#L415),
+which recursively [resolves names and types](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/util.go#L429)
+to yield `tree.TypedExpr` (which can be [recursively evaluated](https://github.com/cockroachdb/cockroach/blob/31dcbfc964f22ede5b7f827f4e6c0091ccfb132f/pkg/sql/sem/tree/expr.go#L62)
+to a scalar value), and then [builds](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/util.go#L430)
+a `ScalarExpr` memo expression for it.
 
-   1. constant folding (e.g. `1 + 2` becomes `3`): we perform exact
-      arithmetic using [the same library used by the Go
-      compiler](https://golang.org/pkg/go/constant/) and classify all the
-      constants into two categories: [numeric -
-      `NumVal`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/parser/constant.go#L108)
-      or [string-like -
-      `StrVal`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/parser/constant.go#L281). These
-      representations of the constants are smart enough to figure out the
-      set of types that can represent the value
-      (e.g. [`NumVal.AvailableTypes`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/parser/constant.go#L188)
-      - `5` can be represented as `int, decimal or float`, but `5.4` can
-      only be represented as `decimal or float`) This will come in useful
-      in the next step.
+When `optbuilder.Builder.Build()` returns a memo, it will have carried out the
+following analysis and preparation of the memo group expressions:
 
-   2. type inference and propagation: this analysis phase assigns a
-      result type to an expression, and in the process types all the
-      sub-expressions. Typed expressions are represented by the
-      [`TypedExpr`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/parser/expr.go#L48)
-      interface, and they are finally able to evaluate themselves to a
-      result value through the `Eval` method. The typing algorithm is
-      presented in detail in the typing RFC: the general idea is that
-      it's a recursive algorithm operating on sub-expressions; each level
-      of the recursion may take a hint about the desired outcome, and
-      each expression node takes that hint into consideration while
-      weighting what options it has. In the absence of a hint, there's
-      also a set of "natural typing" rules. For example, a `NumVal`
-      described above
-      [checks](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/parser/constant.go#L61)
-      whether the hint is compatible with its list of possible
-      types. This process also deals with [`overload
-      resolution`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/parser/type_check.go#L371)
-      for function calls and operators.
-4. replacing sub-query syntax nodes by a `sql.subquery` execution plan
-   node.
+* Name resolution
+* Type inference and checking (see also the [typing RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160203_typing.md))
+* Normalization
 
-A note about sub-queries: consider a query like `select * from
-Employees where DepartmentID in (select DepartmentID from Departments
-where NumEmployees > 100)`. The query on the `Departments` table is
-called a sub-query. Subqueries are recognized and replaced with an
-execution node by
-[`subqueryVisitor`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/subquery.go#L294). The
-subqueries are then run and replaced by their results through the
-[`subqueryPlanVisitor`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/subquery.go#L194). This
-is usually done by various top-level nodes when they start execution
-(e.g. `renderNode.Start()`).
+Normalization deserves further discussion. The typical example is constant
+folding, where a given constant scalar expression such as `1 + 2 * 3` can be
+pre-evaluated (normalized) to `7` to avoid re-computing it during query
+execution. We apply a large number of such normalization rules, and during plan
+exploration and optimization we also need to apply similar transformation rules
+to generate equivalent expressions for memo groups. We express these rules in a
+custom domain-specific language called Optgen. We don't have time to go into
+any detail here (see the
+[`optgen` package documentation](https://github.com/cockroachdb/cockroach/blob/917fb6cef298c01684ed92311714526836b95804/pkg/sql/opt/optgen/lang/doc.go)),
+but let's have a look at a simple normalization rule,
+[`FoldInEmpty`](https://github.com/cockroachdb/cockroach/blob/83d5a776c10ece496f3039fee3ad031acaac67a9/pkg/sql/opt/norm/rules/fold_constants.opt#L50):
 
-### Notable `planNodes`
+```
+[FoldInEmpty, Normalize]
+(In * (Tuple []))
+=>
+(False)
+```
 
-As hinted throughout, execution plan nodes are responsible for
-executing parts of a query. Each one consumes data from lower-level
-nodes, performs some logic, and feeds data into a higher-level one.
+This looks for `IN` operators with an empty tuple on the right-hand side, and
+replaces any matching expressions with `FALSE` since an empty tuple can never
+contain anything — i.e. `SELECT 'foo' IN ()` is equivalent to `SELECT FALSE`.
 
-After being constructed, their main methods are
-[`Start`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/plan.go#L142),
-which initiates the processing, and
-[`Next`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/plan.go#L149),
-which is called repeatedly to produce the next row.
+These [normalization rules](https://github.com/cockroachdb/cockroach/blob/83d5a776c10ece496f3039fee3ad031acaac67a9/pkg/sql/opt/norm/rules/)
+are [compiled](https://github.com/cockroachdb/cockroach/blob/60916fb31b1bb0562d1707a338aad536e4713744/Makefile#L1681)
+into Go code along with a
+[`norm.Factory`](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/norm/factory.go#L64)
+that builds normalized memo expressions. We've seen this factory before:
+the `Builder` [used it](https://github.com/cockroachdb/cockroach/blob/2e5cce372e402faa2155c6f6e85410a9c7bdd238/pkg/sql/opt/optbuilder/select.go#L543)
+to construct a normalized `ScanExpr` node for a `FROM` clause table name.
+Note that since `ConstructScan()` and the other factory methods immediately
+apply the normalization rules, they may end up returning a different
+kind of expression than the method name indicates — we never construct
+a non-normalized memo expression.
 
-To tie this to the [SQL Executor](#sql-executor) section above,
-`executor.execLocal()`,
-the method responsible for executing one statement, calls
-`plan.Next()` repeatedly and accumulates the results.
+Now that we've built a normalized memo, `buildExecMemo()` goes on to
+[optimize](https://github.com/cockroachdb/cockroach/blob/df67aa9707fbf0193ec8b3ca4062240c360fc808/pkg/sql/plan_opt.go#L525) the plan using
+[`xform.Optimizer`](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L53).
+This explores possible query plans by applying Optgen
+[transformation rules](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/opt/xform/rules)
+to generate equivalent memo groups, and tries to pick the best combination through
+[cost-based optimization](https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html)
+based on [table statistics](https://www.cockroachlabs.com/docs/stable/create-statistics).
 
-Consider some `planNode`s involved in running a `SELECT`
-statement, using the table defined above and
+The optimizer [starts](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L226)
+with the root memo group and recursively calls
+[`optimizeGroup()`](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L433)
+on group members. While recursing, it
+[calls `exploreGroup()`](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L469)
+to generate equivalent memo group expressions, repeating the process until
+all possibilities have been searched.
+It also [computes the cost](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L524)
+of each memo group expression using a
+[`Coster`](https://github.com/cockroachdb/cockroach/blob/9e1fb0dcabf6653924cfaa491ceb3e60b298fe7d/pkg/sql/opt/xform/coster.go#L54),
+which takes into account a number of factors such as the
+[relative costs](https://github.com/cockroachdb/cockroach/blob/9e1fb0dcabf6653924cfaa491ceb3e60b298fe7d/pkg/sql/opt/xform/coster.go#L100-L102)
+of CPU usage, sequential IO, and random IO as well as
+[table statistics](https://github.com/cockroachdb/cockroach/blob/9e1fb0dcabf6653924cfaa491ceb3e60b298fe7d/pkg/sql/opt/xform/coster.go#L544-L545).
+For example, the [cost of a scan](https://github.com/cockroachdb/cockroach/blob/9e1fb0dcabf6653924cfaa491ceb3e60b298fe7d/pkg/sql/opt/xform/coster.go#L624)
+is roughly the estimated number of rows multiplied by the sequential
+IO cost and per-row processing cost.
+Finally, the optimizer [picks](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L231)
+the lowest-cost memo tree and returns it.
+
+Back in `planner.makeOptimizerPlan()`, we now have an optimized memo and
+go on to [convert it](https://github.com/cockroachdb/cockroach/blob/df67aa9707fbf0193ec8b3ca4062240c360fc808/pkg/sql/plan_opt.go#L262)
+into a [query plan](https://github.com/cockroachdb/cockroach/blob/1d2fadff2299166292cd5274b54bf7fad5df53c3/pkg/sql/plan.go#L285).
+This plan is primarily made up of
+[`planNode`s](https://github.com/cockroachdb/cockroach/blob/1d2fadff2299166292cd5274b54bf7fad5df53c3/pkg/sql/plan.go#L73)
+(such as [`scanNode`](https://github.com/cockroachdb/cockroach/blob/c9e116e586f24c5f3a831ac653f14fd03f588b93/pkg/sql/scan.go#L40)
+and [`filterNode`](https://github.com/cockroachdb/cockroach/blob/892b63e105413eca1f0b22efec55a056f2f18c02/pkg/sql/filter.go#L23))
+that correspond to the memo expressions. Since this process is mostly
+a direct transcription of the memo, we won't go into any detail here.
+
+In the past, these `planNode`s would execute the query themselves
+by recursively calling
+[`Next()`](https://github.com/cockroachdb/cockroach/blob/1d2fadff2299166292cd5274b54bf7fad5df53c3/pkg/sql/plan.go#L84)
+to retrieve the next result row. However, they are now mostly a historical
+artifact, and temporarily serve as an intermediate representation of the logical
+query plan. The plan will be handed off to the DistSQL (distributed SQL) engine
+which will generate a distributed physical query plan and execute it.
+
+### Physical Planning and Execution
+
+Now that we have an optimized logical query plan, we're getting ready to
+actually execute it. However, CockroachDB is a distributed system, and fetching
+large amounts of data over the network can be slow. We'd much rather send the
+computation to the data, for example by doing `WHERE` filtering on the nodes
+containing the data.
+
+This is managed by the [DistSQL engine](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160421_distributed_sql.md),
+which was inspired by [Sawzall](http://research.google.com/archive/sawzall.html)
+and  [MapReduce](https://en.wikipedia.org). The node running the DistSQL planner
+is called the "gateway node", and it will set up a _flow_ for the query
+consisting of _processors_ that exchange data via _streams_. To do so, it
+figures out which nodes contain the data we're interested in and configures them
+by sending RPC requests. Streams transmit row data either in memory between
+local processors or across the network via RPC, and converge on the gateway node
+where they are combined into the final result.
+
+Let's use the example from the logical planning section, but move the
+`companies` table to node 2 and `countries` to node 3, using node 1 as the gateway
+node (having started the nodes with appropriate `--locality node=X` flags):
 
 ```sql
-SELECT * FROM customers WHERE State LIKE 'C%' AND strpos(address, 'Infinite') != 0 ORDER BY Name;
+ALTER TABLE companies CONFIGURE ZONE USING num_replicas=1, constraints='[+node=2]';
+ALTER TABLE countries CONFIGURE ZONE USING num_replicas=1, constraints='[+node=3]';
 ```
 
-as a slightly contrived example. This is supposed to return customers
-from states starting with "C" and whose address contains the string
-"Infinite". To get excited, let's see the query plan for this
-statement:
+We can then obtain a DistSQL plan by using `EXPLAIN(DISTSQL)`, which will
+output a URL for a graphical diagram of the flow. We'll use the
+[join hint](https://www.cockroachlabs.com/docs/stable/cost-based-optimizer#join-hints)
+`INNER HASH JOIN` to produce a more illustrative example.
 
 ```sql
-root@:26257> EXPLAIN(EXPRS) SELECT * FROM customers WHERE State LIKE 'C%' and strpos(address, 'Infinite') != 0 order by name;
-+-------+------------+--------+----------------------------------+
-| Level |    Type    | Field  |           Description            |
-+-------+------------+--------+----------------------------------+
-|     0 | sort       |        |                                  |
-|     0 |            | order  | +name                            |
-|     1 | index-join |        |                                  |
-|     2 | scan       |        |                                  |
-|     2 |            | table  | customers@SI                     |
-|     2 |            | spans  | /"C"-/"D"                        |
-|     2 |            | filter | state LIKE 'C%'                  |
-|     2 | scan       |        |                                  |
-|     2 |            | table  | customers@primary                |
-|     2 |            | filter | strpos(address, 'Infinite') != 0 |
-+-------+------------+--------+----------------------------------+
+EXPLAIN(DISTSQL)
+    SELECT companies.name AS company, countries.name AS country, employees
+    FROM companies INNER HASH JOIN countries ON companies.country = countries.id
+    WHERE employees > 1e6
+    ORDER BY employees DESC;
+
+  • sort
+  │ estimated row count: 3
+  │ order: -employees
+  │
+  └── • hash join
+      │ estimated row count: 3
+      │ equality: (country) = (id)
+      │ right cols are key
+      │
+      ├── • filter
+      │   │ estimated row count: 3
+      │   │ filter: employees > 1000000
+      │   │
+      │   └── • scan
+      │         estimated row count: 5 (100% of the table; stats collected 30 minutes ago)
+      │         table: companies@primary
+      │         spans: FULL SCAN
+      │
+      └── • scan
+            estimated row count: 3 (100% of the table; stats collected 30 minutes ago)
+            table: countries@primary
+            spans: FULL SCAN
 ```
 
-So the plan produced for this query, from top (highest-level) to
-bottom, looks like:
+[![DistSQL Plan](images/distsql-plan.png)](https://cockroachdb.github.io/distsqlplan/decode.html#eJy8U11vmzAUfd-vsO5TK7kLH0laWapE11KFqiMdRNqmjQcKdwkSwcw20qIq_30KoAIRoWPSljfu9fnwOc4LyJ8pMLC_PD3eOC45u3P8lf_p8Zz49qN9uyIR3-ZhlqB8n4VbJDd-PdlREvEiU6K7Okx2lOA2T_kOUZJ7b_mxISGO69oeWdz4C_KwdNyGgyzdllZNRK5bIklMPi9sz26Rfy80zUSi45wsvTvbIx--trZ3tn8LFDIeoxtuUQL7BjpQMICCCQGFXPAIpeTisHopDzrxL2AahSTLC1WNVaJSBAZcxCgwBgoxqjBJSz7LuIBgH1CIuEBgzWmXX_B8ctk9vSwUI5ZOLZNaBgR7CrxQtVBAQapwjcDme9oyo7fM9OiswucUPQxjFBOtq_Yap5WLZBuKHVDw8zCTjFwAbcwY1DJPmtHHmLlPUoUCxUTvOqnmjFjma2Va-WOMOe7q6ki9IXzekU0oN8eZV5HXDo2TDhueIutrLzgg3zrSc81FKDcPPMlQTMyutRR_qDPLOL8WyXqjziz9vB20Sa3ZyaCnY4L2uVAoJrO-x9hPP-vQG3_-qIzjR1X_H_se1bga9U6N5kmD_6HG6T-q8Y2c6xrnf1ujNkzvocx5JvE4rV5m7RARxmusIpe8EBE-CR6VMtXnssSVgxilqrZX1YeTVauDwTZYHwQbw2DjGKy3wWYHrI8Dz4fB5qDt6bDt6SBYG1aejbizMQ48HwbPB21fDt_5ctSdg_273wEAAP__qAfGJg==)
 
-```
-sortNode -> indexJoinNode -> scanNode (index)
-			  -> scanNode (PK)
-```
+Here, we see that it sets up a `TableReader` processor for `companies` on
+node 2, passing rows to a local `Filterer` processor that applies
+`employees > 1e6`. Similarly, a `TableReader` for `countries` is set up on
+node 3. The results are split using a deterministic hash, and sent to
+`HashJoiner` processors on either node 2 or 3 which join the partial results
+before sorting them via a local `Sorter` — this parallelizes these operations
+across multiple nodes. Finally, the partial sorted results are sent to the
+gateway node (node 1) which uses a `No-op` processor to combine them and return
+the final result to the client.
 
-Before we inspect the nodes in turn, one thing deserves explanation:
-how did the `indexJoinNode` (which indicates that the query is going
-to use the "SI" index) come to be? The fact that this query uses an
-index is not apparent in the syntactical structure of the `SELECT`
-statement, and so this plan is not simply a product of the mechanical
-tree building hinted to above. Indeed, there's a step that we haven't
-mentioned before: ["plan
-expansion"](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/expand_plan.go#L28). Among
-other things, this step performs "index selection" (more information
-about the algorithms currently used for index selection can be found
-in [Radu's blog
-post](https://www.cockroachlabs.com/blog/index-selection-cockroachdb-2/)). We're
-looking for indexes that can be scanned to efficiently retrieve only
-rows that match (part of) the filter. In our case, the "SI" index
-(indexing the state) can be scanned to efficiently retrieve only the
-rows that are candidates for satisfying the `state LIKE 'C%'`
-expression (in an ecstasy to agony moment, we see that our index
-selection / expression normalization code [is smart
-enough](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/analyze.go#L1436)
-to infer that `state LIKE 'C%'` implies `state >= 'C' AND state <
-'D'`, but is not smart enough to infer that the two expressions are in
-fact equivalent and thus the filter can be elided altogether). We
-won't go into plan expansion or index selection here, but the index
-selection process happens [in the expansion of the
-`SelectNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/expand_plan.go#L283)
-and, as a byproduct, produces `indexJoinNode`s configured with the
-index spans to be scanned.
+Distributed SQL planning and execution is carried out by
+[`DistSQLPlanner`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L73).
+Once `connExecutor` has obtained the logical plan and
+[determined](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L878-L879)
+to what extent it should be distributed (it may not always make sense to
+fully distribute execution), it
+[passes the plan](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1063-L1065)
+to [`DistSQLPlanner.PlanAndRun()`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L1245)
+along with the SQL session's KV transaction for accessing the KV service.
 
-Now let's see how these `planNode`s run:
+The DistSQL planner begins by [creating](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L1255)
+a [`PhysicalPlan`](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L113)
+that specifies the query flow, including specifications for
+[processors](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L76)
+and [streams](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L87).
+Planning mainly involves recursing into the `planNode`s of the logical
+plan and
+[building](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2713)
+`PhysicalPlan` nodes for them (any physical plan node is also a valid plan).
+Let's consider how it builds the example plan above, starting from the deepest
+node:
 
-1. [`sortNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sort.go#L31):
-   The `sortNode` sorts the rows produced by its child and corresponds to
-   the `ORDER BY` SQL clause. The
-   [constructor](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sort.go#L60)
-   has a bunch of logic related to the quirky rules for name resolution
-   from SQL92/99. Another interesting fact is that, if we're sorting by a
-   non-trivial expression (e.g. `SELECT a, b ... ORDER BY a + b`), we
-   need the `a + b` values (for every row) to be produced by a
-   lower-level node. This is achieved through a pattern that's also
-   present in other node: the lower node capable of evaluating
-   expressions and rendering their results is the `renderNode`; the
-   `sortNode` constructor checks if the expressions it needs are already
-   rendered by that node and, if they are not, asks for them to be
-   produced through the
-   [`renderNode.addOrMergeRenders()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sort.go#L206)
-   method.  The actual sorting is performed in the `sortNode.Next()`
-   method. The first time it is called, [it consumes all the data
-   produced by the child
-   node](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sort.go#L359)
-   and accumulates it into `n.sortStrategy` (an interface hiding multiple
-   sorting algorithms). When the last row is consumed,
-   `n.sortStrategy.Finish()` is called, at which time the sorting
-   algorithm finishes its processing. Subsequent calls to
-   `sortNode.Next()` simply iterate through the results of sorting
-   algorithm.
+* [`scanNode(companies)`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2785-L2786):
+  [Creates](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L1256)
+  an initial [`TableReaderSpec`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/execinfrapb/processors_sql.proto#L65)
+  and then [plans](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L1262)
+  its execution by [figuring out](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L1316)
+  which node contains the data. This is [looked up](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L955)
+  with the help of a [`SpanResolverIterator`](https://github.com/cockroachdb/cockroach/blob/0ac8ab9046d01e8f89d953c439e738bd3e7f75e1/pkg/sql/physicalplan/span_resolver.go#L69),
+  [using a `kvcoord.RangeIterator`](https://github.com/cockroachdb/cockroach/blob/0ac8ab9046d01e8f89d953c439e738bd3e7f75e1/pkg/sql/physicalplan/span_resolver.go#L173)
+  under the hood — we'll get back to this guy when we dive into the KV service,
+  but for now let's just say that "KV told us" which nodes have the data. If the table is
+  spread across many nodes we [set up multiple table readers](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L1331).
 
-2. [`indexJoinNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/index_join.go#L30):
-   The `indexJoinNode` implements joining of results from an index with
-   the rows of a table. It is used when an index can be used for a query,
-   but it doesn't contain all the necessary columns; columns not
-   available in the index need to be retrieved from the Primary Key (PK)
-   key-values. The `indexJoinNode` sits on top of two scan nodes - one
-   configured to scan the index, and one that is constantly reconfigured
-   to do "point lookups" by PK. In the case of our query, we can see that
-   the "SI" index is used to read a compact set of rows that match the
-   "state" filter but, since it doesn't contain the "address" columns,
-   the PK also needs to be used. Each index KV pair contains the primary
-   key of the row, so there is enough information to do PK
-   lookups. [`indexJoinNode.Next`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/index_join.go#L273)
-   keeps reading rows from the index and, for each one, adds a spans to
-   be read by the PK. Once enough such spans have been batched, they are
-   all [read from the
-   PK](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/index_join.go#L257). As
-   described in the section on [SQL rows to KV
-   pairs](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv))
-   from the design doc, each SQL row is represented as a single KV pair
-   in the indexes, but as multiple consecutive rows in the PK
-   (represented by a "key span").
+* [`filterNode(employees > 1e6)`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2721):
+  [Attaches](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L707)
+  a [`FiltererSpec`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/execinfrapb/processors_sql.proto#L157)
+  as a local post-processor for the `TableReaderSpec`.
 
-   An interesting detail has to do with
-   how filters are handled: note that the `state LIKE 'C%'` condition is
-   evaluated by the index scan, and the `strpos(address, 'Infinite') !=
-   0` condition is evaluated by the PK scan. This is nice because it
-   means that we will be filtering as much as we can on the index side and
-   we will be doing fewer expensive PK lookups. The code that figures out
-   which conjunction is to be evaluated where is in `splitFilter()`,
-   called by the [`indexJoinNode`
-   constructor](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/index_join.go#L180).
+* [`scanNode(countries)`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2785-L2786):
+  Same procedure as `scanNode(companies)`.
 
-3. [`scanNode`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/scan.go#L33):
-   The `scanNode` generally constitutes the source of a `renderNode` or `filterNode`;
-   it is responsible for scanning over the key/value pairs for a table or
-   index and reconstructing them into rows. This node is starting to
-   smell like rubber meeting a road, because we are getting closer to the
-   actual data - the monolithic, distributed KV map. You'll see that the
-   [`Next()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/scan.go#L214)
-   method is not particularly climactic, since it delegates the work to a
-   `rowFetcher`, described below. There's one interesting thing that the
-   `scanNode` does: it [runs a filter
-   expression](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/scan.go#L233),
-   just like the `filterNode`. That is because we are trying to push down
-   parts of the `WHERE` clause as far as possible. This is generally a
-   work in progress, see `filter_opt.go`. The idea is
-   that a query like
-```sql
-/* Select the orders placed by each customer in the first year of membership. */
-SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Orders.amount > 10 AND Customers.State = 'NY' AND age(c.JoinDate, o.Date) < INTERVAL '1 year'
-```
-   is going to be compiled into two `scanNode`s, one for `Customers`,
-   one for `Orders`. Each one of them can do the part of filtering
-   that refers exclusively to their respective tables, and then the
-   higher-level `joinNode` only needs to evaluate expressions that
-   need data from both (i.e. `age(c.JoinDate, o.Date) < INTERVAL '1
-   year'`).
+* [`joinNode`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2750-L2751):
+  [Merges](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2658)
+  the plans for the left and right subplans,
+  [figures out](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2668)
+  which nodes to run the join processors on,
+  [creates](https://github.com/cockroachdb/cockroach/blob/a86faebfa7f6589738134653e5c6713e5447e669/pkg/sql/distsql_plan_join.go#L59)
+  a base [`HashJoinerSpec`](https://github.com/cockroachdb/cockroach/blob/a86faebfa7f6589738134653e5c6713e5447e669/pkg/sql/distsql_plan_join.go#L59)
+  for the joiners, and [adds a join stage](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2683).
+  This [creates one join processor](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L925)
+  on each node, [hashes](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L939)
+  the parent nodes' outputs to distribute across the joiners, and
+  [merges](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L965-L969)
+  them into the correct join process.
 
-   Let's continue downwards, looking at the structures that the
-   `scanNode` uses for actually reading data.
+* [`sortNode(-employees)`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L2788-L2794):
+  [Attaches](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L1445)
+  a local [`SorterSpec`](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/execinfrapb/processors_sql.proto#L412)
+  to the parent hash joiner processors.
 
-   1. [`rowFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/rowfetcher.go#L35):
-      The `rowFetcher` is responsible for iterating through key-value
-      pairs, figuring out where a SQL table or index row ends (remember
-      that a SQL row is potentially encoded in multiple KV entries), and
-      decoding all the keys and values in SQL column values, dealing with
-      differences between the primary index and other indexes and with
-      the [layout of a
-      table](https://www.cockroachlabs.com/docs/stable/column-families.html). For
-      details on the mapping between SQL rows and KV pairs, see the
-      [corresponding section from the Design
-      Doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv) and the [encoding tech note](encoding.md).
+The plan is then [finalized](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L1260)
+by [adding](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L415)
+a final [`NoopCoreSpec`](https://github.com/cockroachdb/cockroach/blob/5041b220fe1b9ee60d882565b389e2f7d878a929/pkg/sql/execinfrapb/processors.proto#L133)
+stage on the gateway node which [merges](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/physicalplan/physical_plan.go#L398)
+the results from the parent processors (preserving order) and
+[adds a projection](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/distsql_physical_planner.go#L3757)
+to generate the final result.
 
-      The `rowFetcher` also [performs
-      decoding](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/table.go#L953)
-      from on-disk byte arrays to the representation of data that we do
-      most processing on: implementation of the
-      [`parser.Datum`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/parser/datum.go#L57)
-      interface. For details on what the on-disk format is for different
-      data types, browse around the [`util/encoding
-      directory`](https://github.com/cockroachdb/cockroach/tree/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/util/encoding).
+The physical plan is now ready, and `DistSQLPlanner` starts
+[executing it](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L1262).
+It first [generates](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L433)
+a [`FlowSpec`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/execinfrapb/api.proto#L58)
+for each node based on the physical plan by collecting the relevant
+[`ProcessorSpec`s](https://github.com/cockroachdb/cockroach/blob/5041b220fe1b9ee60d882565b389e2f7d878a929/pkg/sql/execinfrapb/processors.proto#L52),
+[sets them up](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L491-L493)
+by [sending](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L337)
+parallel [`SetupFlowRequest`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/execinfrapb/api.proto#L28)
+RPCs, and [waits](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L346)
+until the nodes are ready. It also
+[sets up and returns](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L367)
+the local end of the flow on the gateway node. Let's have a look at what
+happens on the remote nodes.
 
-      For actually reading a KV pair from the database, the `rowFetcher` delegates to the `kvBatchFetcher`.
+[`distsql.ServerImpl`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql/server.go#L61)
+implements the [`DistSQL` gRPC service](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/execinfrapb/api.proto#L140).
+The [`SetupFlow()`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql/server.go#L515)
+method ends up [dispatching](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql/server.go#L462)
+to [`colflow.NewVectorizedFlow()`](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L166)
+which sets up the flow using the [vectorized execution engine](https://www.cockroachlabs.com/docs/stable/vectorized-execution.html)
+(the only engine we'll discuss here). This engine represents processors and
+stream infrastructure as
+[`colexecop.Operator`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexecop/operator.go#L26),
+where the [`Next()`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexecop/operator.go#L50)
+method returns a set of processed results as a
+[`Batch`](https://github.com/cockroachdb/cockroach/blob/33006d5f81fd74935edee2fb23deeef22aa811a8/pkg/col/coldata/batch.go#L28)
+of column vectors — this is typically called recursively on any child
+operators to obtain input data.
 
-   2. [`kvBatchFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L84):
-      The `kvBatchFetcher` finally reads data from the KV database. It
-      understands nothing of SQL concepts, such as tables, rows or
-      columns. When it is created, it is configured with a number of "key
-      spans" that it needs to read (these might be, for example, a single
-      span for reading a whole table, or a couple of spans for reading
-      parts of the PK or of an index).
+The vectorized flow setup [iterates](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1113)
+over the flow processor specs, first setting
+up any [processor inputs](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1122).
+For local inputs it simply
+[returns a reference](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L865-L866)
+to the operator, but for remote inputs it
+[creates](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L885)
+an [`colrpc.Inbox`](https://github.com/cockroachdb/cockroach/blob/9bcc860b904ac2cc6b7290fac0542f636f683aff/pkg/sql/colflow/colrpc/inbox.go#L54)
+operator which receives data through a gRPC
+[`ProducerMessage`](https://github.com/cockroachdb/cockroach/blob/c4022daffac23749fa46c8043a286c89b9713f47/pkg/sql/execinfrapb/data.proto#L235)
+stream set up with a [`FlowStream()`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/execinfrapb/api.proto#L164)
+call. The processor setup then
+[creates](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1149)
+an operator
+[based on](https://github.com/cockroachdb/cockroach/blob/7869b781b66823c44f1b30047d0fcbcc2dbe8e0f/pkg/sql/colexec/colbuilder/execplan.go#L734)
+the processor spec type — we'll get back to these shortly when we run the flow.
+Finally, it sets up any
+[processor outputs](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1191-L1192),
+by either [linking it](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1004)
+to local operators (as we saw for inputs) or
+[creating](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L1007-L1010)
+a [`colrpc.Outbox`](https://github.com/cockroachdb/cockroach/blob/03a2d500202af3e9c4a054821cb5a80721c97bab/pkg/sql/colflow/colrpc/outbox.go#L46)
+that sends batches to a remote `Inbox` operator
+[serialized](https://github.com/cockroachdb/cockroach/blob/03a2d500202af3e9c4a054821cb5a80721c97bab/pkg/sql/colflow/colrpc/outbox.go#L93)
+as [Apache Arrow](https://arrow.apache.org). In the case of multiple outputs
+(as seen with the `HashJoiners` in our example), it
+[sets up](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L779)
+a [`HashRouter`](https://github.com/cockroachdb/cockroach/blob/dd48ea52e6fbd304f48e4995c448364bc5b71321/pkg/sql/colflow/routers.go#L408)
+which hashes the input data and routes it to the appropriate output
+operator.
 
-      To actually read data from the KV database, the `kvBatchFetcher` uses the
-      KV layer's "client" interface, namely
-      [`client.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/batch.go#L30). This
-      is where the "SQL layer" interfaces with the "KV layer" - the
-      `kvBatchFetcher` will
-      [build](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L197)
-      such `Batch`es of requests, [send them for
-      execution](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L203)
-      in the context of the KV transaction (remember the `Transaction`
-      mentioned in the [Statement Execution
-      section](#StatementExecution)), [read the
-      results](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L220)
-      and return them to the hierarchy of `planNodes`. The requests being
-      sent to the KV layer, in the case of this read-only query, are
-      [`ScanRequest`s](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L204).
+The gateway node has now set up a flow of processors and streams, implemented as
+vectorized operators exchanging column batches over gRPC streams. What happens
+when the DistSQL processor
+[runs the flow](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L525)?
 
-The rest of this document will walk through the "execution" of KV
-requests, such as the ones sent by the `kvBatchFetcher`.
+At the root of the vectorized flow sits a
+[`BatchFlowCoordinator`](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L210).
+When it's
+[run](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L254)
+it continually [pulls](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L282)
+a batch from its [input operator](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L189)
+by [calling `Next()`](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L127)
+and [pushes it](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L294)
+to its [output `BatchReceiver`](https://github.com/cockroachdb/cockroach/blob/9c86c8f937e3c5d4728079d2bdb2a98943a7d872/pkg/sql/colflow/flow_coordinator.go#L190) —
+a [`DistSQLReceiver`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql_running.go#L556)
+which was connected to the client session
+[way back in `connExecutor.execWithDistSQLEngine()`](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L1005).
+This triggers a cascade of recursive `Next()` calls on child operators all
+the way down to the flow leaves. Using the example from earlier (see diagram),
+these operators are:
 
-## KV
+* `Noop`: implemented by [`noopOperator`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexecop/operator.go#L355)
+  which [does nothing](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexecop/operator.go#L368).
+* `ordered`: uses an
+[`OrderedSynchronizer`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexec/ordered_synchronizer.eg.go#L34)
+  operator to [combine](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexec/ordered_synchronizer.eg.go#L121)
+  the ordered inputs from the two remote input streams.
+* Remote stream: implemented as `Inbox`/`Outbox` operator pairs that
+  [receive](https://github.com/cockroachdb/cockroach/blob/9bcc860b904ac2cc6b7290fac0542f636f683aff/pkg/sql/colflow/colrpc/inbox.go#L293)/[send](https://github.com/cockroachdb/cockroach/blob/03a2d500202af3e9c4a054821cb5a80721c97bab/pkg/sql/colflow/colrpc/outbox.go#L292)
+  batches of data across gRPC streams.
+* `Sorter`: implemented by [`sortOp`](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/sort.go#L186)
+  which [buffers](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/sort.go#L266)
+  the input data and then [sorts it](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/sort.go#L269).
+* `HashJoiner`: implemented by [`hashJoiner`](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecjoin/hashjoiner.go#L168)
+  which [builds](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecjoin/hashjoiner.go#L283)
+  a hash table from the left input and then [probes it](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecjoin/hashjoiner.go#L293)
+  with data from the right input,
+  [emitting](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecjoin/hashjoiner.go#L308) any matching combinations.
+* `by hash`: implemented by `HashRouter`, which [distributes](https://github.com/cockroachdb/cockroach/blob/dd48ea52e6fbd304f48e4995c448364bc5b71321/pkg/sql/colflow/routers.go#L653)
+  the input data across its outputs.
+* `Filterer`: implemented by a selection operator such as
+  [`BoolVecToSelOp`](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecutils/bool_vec_to_sel.go#L42),
+  which [selects](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/colexecutils/bool_vec_to_sel.go#L70)
+  batch members that satisfy the filter predicate.
+* `TableReader`: implemented by [`ColBatchScan`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colfetcher/colbatch_scan.go#L47)
+  which [fetches](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colfetcher/colbatch_scan.go#L97)
+  table data from the KV service
+  [using a `cFetcher`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colfetcher/colbatch_scan.go#L53).
 
-The KV layer of CockroachDB deals with execution of "requests". The
-protocol-buffer-based API is defined in
-[api.proto](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto),
-listing the various types of requests and response. In practice, the
-KV's client always sends
-[`BatchRequest`s](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L848),
+An interesting side note is that in order to avoid the overhead of runtime type
+assertions and reflection normally needed because of Go's lack of generics, the
+vectorized execution engine instead uses
+"[`execgen`](https://github.com/cockroachdb/cockroach/blob/d4610afe3db5d6ee3df14b0ecc5585155cdb0159/pkg/sql/colexec/execgen/)
+templates" to [generate](https://github.com/cockroachdb/cockroach/blob/60916fb31b1bb0562d1707a338aad536e4713744/Makefile#L1659-L1661)
+typed operators for all combinations of input datatypes. See for example
+[`sort_tmpl.go`](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/sort_tmpl.go)
+which is the input template for the type-specific sort operators in
+[`sort.eg.go`](https://github.com/cockroachdb/cockroach/blob/3771c58e9f286bf26b264c9afa076924889fffeb/pkg/sql/colexec/sort.eg.go).
+
+We've now gotten to where the rubber meets the road — or rather, where
+the SQL engine meets the KV service: the
+[`cFetcher`](https://github.com/cockroachdb/cockroach/blob/ff28a1c72a8f2544e1b00c1cd55567fcd1fc0505/pkg/sql/colfetcher/cfetcher.go#L227).
+We won't explore the mapping of KV data to SQL data here (see the 
+[encoding tech note](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/encoding.md)
+for details), but for our purposes we can say that, in broad terms, each row in
+a table is stored as a serialized binary value with a key consisting of a table
+identifier followed by the row's primary key value — something like
+`/companies/Apple`. All rows for a table are therefore stored as a contiguous
+_key span_ ordered by primary key under a common prefix.
+
+Recall that the `TableReaderSpec` already [includes](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/execinfrapb/processors_sql.pb.go#L571)
+the key span of the table scan from back when the `DistSQLPlanner` was figuring
+out which nodes contained the table. The `ColBatchScan` operator
+[passes](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colfetcher/colbatch_scan.go#L87-L89)
+this span to the `cFetcher` via
+[`StartScan()`](https://github.com/cockroachdb/cockroach/blob/ff28a1c72a8f2544e1b00c1cd55567fcd1fc0505/pkg/sql/colfetcher/cfetcher.go#L657).
+The `cFetcher` itself is primarily concerned with
+[decoding](https://github.com/cockroachdb/cockroach/blob/ff28a1c72a8f2544e1b00c1cd55567fcd1fc0505/pkg/sql/colfetcher/cfetcher.go#L859)
+KV data into SQL data structures, and
+[delegates](https://github.com/cockroachdb/cockroach/blob/ff28a1c72a8f2544e1b00c1cd55567fcd1fc0505/pkg/sql/colfetcher/cfetcher.go#L687)
+to [`KVFetcher`](https://github.com/cockroachdb/cockroach/blob/5c00812b5d495749133beb1e217639e03fd02246/pkg/sql/row/kv_fetcher.go#L29).
+It, in turn, is also primarily concerned with
+[decoding](https://github.com/cockroachdb/cockroach/blob/5c00812b5d495749133beb1e217639e03fd02246/pkg/sql/row/kv_fetcher.go#L115) — this time of MVCC metadata  — and
+delegates further to [`txnKVFetcher`](https://github.com/cockroachdb/cockroach/blob/d6d394bf5c4974d79e21efe8c03f65ebf0bc10fa/pkg/sql/row/kv_batch_fetcher.go#L68)
+where the actual fetching happens.
+`txnKVFetcher`, as the name implies, uses the `kv.Txn` transaction that
+was originally set up for the SQL session back in the `connExecutor`
+to [send](https://github.com/cockroachdb/cockroach/blob/d6d394bf5c4974d79e21efe8c03f65ebf0bc10fa/pkg/sql/row/kv_batch_fetcher.go#L225)
+KV gRPC requests. Specifically, it
+[submits](https://github.com/cockroachdb/cockroach/blob/d6d394bf5c4974d79e21efe8c03f65ebf0bc10fa/pkg/sql/row/kv_batch_fetcher.go#L388)
+[`roachpb.ScanRequest`s](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L384)
+for the requested key span and
+[returns](https://github.com/cockroachdb/cockroach/blob/d6d394bf5c4974d79e21efe8c03f65ebf0bc10fa/pkg/sql/row/kv_batch_fetcher.go#L551)
+the [`roachpb.ScanResponse`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L408)
+results.
+
+We'll now leave the SQL engine behind, and dive into the key/value service.
+
+## KV: Key/Value Storage Service
+
+The KV layer of CockroachDB is a transactional, distributed key/value
+storage service. A full description of its architecture is outside of the
+scope of this article, see the
+[architecture overview](https://www.cockroachlabs.com/docs/stable/architecture/overview.html)
+for details.
+
+Briefly, the KV service maintains a single ordered key/value map, split into
+multiple contiguous ranges with a target size of 512 MB. Each range corresponds
+to a separate [Raft](https://raft.github.io) consensus cluster, where each Raft
+node is called a replica. A single CockroachDB node contains many replicas
+belonging to many ranges, using a common underlying on-disk data store.
+Cross-range transactions are achieved through a
+[distributed 2-phase commit protocol](https://www.cockroachlabs.com/docs/stable/architecture/transaction-layer.html)
+coordinated by the KV client.
+
+The KV service is request-oriented, with a
+[Protocol Buffers](https://developers.google.com/protocol-buffers)-based
+[gRPC](https://grpc.io) API defined in [`api.proto`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto).
+In practice, the KV client always sends
+[`roachpb.BatchRequest`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L2023),
 a generic request containing a collection of other requests. All
 requests have a
-[Header](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L788)
-which contains routing information (which replica a request is
+[`Header`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L1841)
+which contains routing information (e.g. which replica a request is
 destined for) and [transaction
 information](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L818)
-- in the context of which transaction is the request to be executed.
+(which transaction's context to execute the request in). The
+corresponding response is, unsurprisingly,
+[`roachpb.BatchResponse`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L2035).
 
-### The KV client interface
+### The KV Client Interface
 
-Clients "send" KV requests using a client interface (currently this
-interface is internal, used by SQL, but we might offer it directly to
-users in some form in the future). This client interface contains
-primitives for [starting a (KV)
-transaction](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/db.go#L452)
-(remember, the SQL `Executor` uses this to run every statement in the
-context of a transaction). Afterwards, a
-[`Txn`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L36)
-object is available for [executing requests in the context of that
-transaction](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L295)
-- this is what, for example, the `kvBatchFetcher` uses. If you trace what
-happens inside that `Txn.Run()` method you eventually get to
-[`txn.db.sender.Send(...,
-batch)`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L587):
-the request starts percolating through a hierarchy of
-[`Sender`s](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/sender.go#L27)
-- objects that perform various peripheral tasks and ultimately route
-the request to a replica for execution. `Sender`s have a single method
-- `Send()` - which ultimately passes the request to the lower
-level. Let's go down this "sending" rabbit hole: `TxnCoordSender ->
-DistSender -> Node -> Stores -> Store -> Replica`. The first two run
-on the same node as the that received the SQL query and is doing the
-SQL processing (the "gateway node"), the others run on the nodes
-responsible for the data that is being accessed (the "range node").
+Clients send KV requests via the internal
+[`kv.DB`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/db.go#L250-L251)
+client interface, typically by obtaining a
+[`kv.Txn`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L46)
+transaction handle from
+[`DB.NewTxn()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/db.go#L755)
+and calling methods on it such as
+[`Get()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L399)
+and [`Put()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L452).
+Recall the SQL engine using this to execute statements in the context of a
+transaction. KV transactions are [ACID](https://en.wikipedia.org/wiki/ACID)-compliant
+with [serializable](https://www.cockroachlabs.com/docs/stable/demo-serializable.html)
+isolation, so their writes only take effect after calling
+[`Commit()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L675),
+and they can be discarded with [`Rollback()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L751).
+
+Since we often want to send multiple operations in the same request
+(for performance), they are grouped in a
+[`kv.Batch`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/batch.go#L33-L34)
+which can be obtained via [`Txn.NewBatch()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L388).
+Calling e.g. [`Batch.Get()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/batch.go#L357)
+and [`Batch.Put()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/batch.go#L399)
+adds those operations to the batch, and
+[`Txn.Run()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L631)
+sends the batch to the server as a `BatchRequest`, populating
+[`Batch.Results`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/batch.go#L48)
+with the results. Convenience methods such as `Txn.Get()` simply
+create an internal batch with a single request and run it.
+
+Let's see what happens inside `Txn.Run()`. Tracing the code, we
+eventually get to
+[`txn.db.sendUsingSender(ctx, batchRequest, txn.mu.sender)`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L982)
+which [calls `sender.Send(ctx, batchRequest)`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/db.go#L817) on the
+passed sender. At this point, the request starts percolating through
+a hierarchy of [`Sender`s](https://github.com/cockroachdb/cockroach/blob/cfb4b95d94e717e985423d5313c58187fbde5da4/pkg/kv/sender.go#L54) —
+objects that perform various peripheral tasks before routing
+the request to a replica for execution.
+
+`Sender`s have a single method, `Send()`, which ultimately passes
+the request to the next sender. Let's go down this "sending" rabbit
+hole:
+
+`TxnCoordSender` → `DistSender` → `Node` → `Stores` → `Store` → `Replica`
+
+The first two run on the same node that received the SQL query and is doing the
+SQL processing (the "gateway node"), the others run on the nodes responsible for
+the data that is being accessed (the "range node").
+
+Note that in the case of a DistSQL flow (see earlier section), additional
+"leaf" transactions (of type [`LeafTxn`](https://github.com/cockroachdb/cockroach/blob/cfb4b95d94e717e985423d5313c58187fbde5da4/pkg/kv/sender.go#L45))
+are [set up](https://github.com/cockroachdb/cockroach/blob/265a805622b0f2111082928568178780d1aa6d00/pkg/sql/distsql/server.go#L262)
+on the remote processing nodes for interacting with KV, using their own local
+`TxnCoordSender`s. However, writes always go via the "root" transaction on the
+gateway node. We won't dwell on leaf transactions here, and only consider a root
+transaction executing on the gateway node.
 
 ### TxnCoordSender
 
-The top-most `client.Sender` is the
-[`TxnCoordSender`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/txn_coord_sender.go#L140). A
-TxnCoordSender is responsible for dealing with transactions' state
-(see the [Transaction Management section of the design
-doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)). After
-a transaction is started, the TxnCoordSender starts asynchronously
-sending heartbeat messages to that transaction's "txn record", to keep
-it live. It also keeps track of each written key or key range over the
-course of the transaction. When the transaction is committed or
-aborted, it clears accumulated write intents for the transaction. All
-requests being performed as part of a transaction have to go through
-the same `TxnCoordSender` so that all write intents are accounted for
-and eventually cleaned up.  After performing this bookkeeping, the
-request is [passed to the
-`DistSender`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/txn_coord_sender.go#L418).
+The top-most sender is the
+[`TxnCoordSender`](https://github.com/cockroachdb/cockroach/blob/cfb4b95d94e717e985423d5313c58187fbde5da4/pkg/kv/kvclient/kvcoord/txn_coord_sender.go#LL95),
+which is responsible for managing transaction state (see the
+"Transaction Management" section of the 
+[design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)).
+All operations for a transaction go through a `TxnCoordSender` instance,
+and if it crashes then the transaction is aborted.
+
+Internally it is subdivided into an [interceptor stack](https://github.com/cockroachdb/cockroach/blob/cfb4b95d94e717e985423d5313c58187fbde5da4/pkg/kv/kvclient/kvcoord/txn_coord_sender.go#L140-L150)
+consisting of [`lockedSender`s](https://github.com/cockroachdb/cockroach/blob/f176a39446e5235c9985a07f2550583dc106c26c/pkg/kv/kvclient/kvcoord/txn_lock_gatekeeper.go#L23-L24) —
+basically senders that share the `TxnCoordSender.mu` mutex and make up
+a single [critical section](https://en.wikipedia.org/wiki/Critical_section).
+These interceptors are, from top to bottom:
+
+* [`txnHeartbeater`](https://github.com/cockroachdb/cockroach/blob/cc83f59eed96e4ecc829b40d3fa53b85e55fcfb0/pkg/kv/kvclient/kvcoord/txn_interceptor_heartbeater.go#L55):
+creates and periodically [heartbeats](https://github.com/cockroachdb/cockroach/blob/615ddd04f27b5c3729a17be406b143b45dae65a5/pkg/kv/kvclient/kvcoord/txn_interceptor_heartbeater.go#L357)
+  the transaction record to [mark](https://github.com/cockroachdb/cockroach/blob/b7fb524c899c38e3e92c80d6b88f45afc9df7ca2/pkg/kv/kvserver/batcheval/cmd_heartbeat_txn.go#L80)
+  the transaction as alive, and
+  [detects](https://github.com/cockroachdb/cockroach/blob/615ddd04f27b5c3729a17be406b143b45dae65a5/pkg/kv/kvclient/kvcoord/txn_interceptor_heartbeater.go#L439-L443)
+  external aborts of the transaction (e.g. by a conflicting transaction).
+
+* [`txnSeqNumAllocator`](https://github.com/cockroachdb/cockroach/blob/5e7f8bd7a511f58204a1419452fd4d439f9ccec8/pkg/kv/kvclient/kvcoord/txn_interceptor_seq_num_allocator.go#L60):
+  [assigns](https://github.com/cockroachdb/cockroach/blob/5e7f8bd7a511f58204a1419452fd4d439f9ccec8/pkg/kv/kvclient/kvcoord/txn_interceptor_seq_num_allocator.go#L98-L101)
+  sequence numbers to the operations within a transaction, for ordering and
+  idempotency.
+
+* [`txnPipeliner`](https://github.com/cockroachdb/cockroach/blob/1bfd8cceb2b7f06970a26e800eacee372a203523/pkg/kv/kvclient/kvcoord/txn_interceptor_pipeliner.go#L179):
+  [pipelines writes](https://www.cockroachlabs.com/blog/transaction-pipelining/)
+  by [asynchronously](https://github.com/cockroachdb/cockroach/blob/1bfd8cceb2b7f06970a26e800eacee372a203523/pkg/kv/kvclient/kvcoord/txn_interceptor_pipeliner.go#L468)
+  submitting them to consensus and [coordinating them](https://github.com/cockroachdb/cockroach/blob/1bfd8cceb2b7f06970a26e800eacee372a203523/pkg/kv/kvclient/kvcoord/txn_interceptor_pipeliner.go#L252)
+  with later operations that depend on their results.
+
+* [`txnSpanRefresher`](https://github.com/cockroachdb/cockroach/blob/ee23325c42c4464aa24e863d9cadf1a2e244a842/pkg/kv/kvclient/kvcoord/txn_interceptor_span_refresher.go#L104):
+keeps track of transactional reads, and in the case of serialization errors
+checks if its past reads are still valid at a higher transaction timestamp.
+If they are, the transaction can continue at the higher timestamp without
+propagating the error to the client and retrying the entire transaction.
+
+* [`txnCommitter`](https://github.com/cockroachdb/cockroach/blob/ee23325c42c4464aa24e863d9cadf1a2e244a842/pkg/kv/kvclient/kvcoord/txn_interceptor_committer.go#L112):
+manages commits and rollbacks and, in particular, implements the
+[parallel commit protocol](https://www.cockroachlabs.com/blog/parallel-commits/).
+
+* [`txnMetricRecorder`](https://github.com/cockroachdb/cockroach/blob/5e7f8bd7a511f58204a1419452fd4d439f9ccec8/pkg/kv/kvclient/kvcoord/txn_interceptor_metric_recorder.go#L27):
+records various transaction metrics.
+
+* [`txnLockGatekeeper`](https://github.com/cockroachdb/cockroach/blob/f176a39446e5235c9985a07f2550583dc106c26c/pkg/kv/kvclient/kvcoord/txn_lock_gatekeeper.go#L41):
+unlocks the `TxnCoordSender.mu` while requests are in flight, and enforces
+a synchronous client protocol for relevant requests.
+
+After traversing the `TxnCoordSender` stack, the request is passed on
+to the `DistSender`.
 
 ### DistSender
 
-The
-[`DistSender`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L133)
+The [`DistSender`](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L235-L236)
 is truly a workhorse: it handles the communication between the gateway
 node and the (possibly many) range nodes, putting the "distributed" in
 "distributed database". It receives `BatchRequest`s, looks at the
@@ -669,554 +863,512 @@ the requests there and then collects and reassembles the results.
 Let's go through the code a bit:
 
 1. The request is subdivided into ranges: `DistSender.Send()` calls
-   [`DistSender.divideAndSendBatchToRanges()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L620)
+   [`DistSender.divideAndSendBatchToRanges()`](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L755)
    which
-   [iterates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L720)
-   over the constituent ranges of requests by using a
-   [`RangeIterator`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_iter.go#L27)
-   (a single request, such as a `ScanRequest` can refer to a key span
-   that might straddle potentially many ranges). A lot of things hide
-   behind this innocent-looking iteration: the cluster's range metadata
-   needs to be accessed in order to find the mapping of keys to ranges
-   (info on this metadata can be found [in the Range Metadata
+   [iterates](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1110)
+   over the constituent ranges of the request by using a
+   [`RangeIterator`](https://github.com/cockroachdb/cockroach/blob/ac572af5be4e35dbdd58a95e32e5d1f6c24bc24c/pkg/kv/kvclient/kvcoord/range_iter.go#L28).
+   Recall that a single request, such as a `ScanRequest`, can refer to a key
+   span that might straddle many ranges.
+   
+   A lot of things hide behind this innocent-looking iteration: the cluster's
+   range metadata needs to be accessed in order to find the mapping of keys to
+   ranges (info on this metadata can be found in the [Range Metadata
    section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#range-metadata)
    of the design doc). Range metadata is stored as regular data in the
    cluster, in a two-level index mapping range end keys to descriptors
    about the replicas of the respective range (the ranges storing this
    index are called "meta-ranges"). The `RangeIterator` logically
-   iterates over these descriptors, in range key order. Brace yourselves:
-   for moving from one range to the next, the iterator [calls back into
-   the
-   `DistSender`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_iter.go#L156),
+   iterates over these descriptors, in range key order.
+   
+   Brace yourself: when moving from one range to the next, the iterator [calls
+   back into the `DistSender`](https://github.com/cockroachdb/cockroach/blob/ac572af5be4e35dbdd58a95e32e5d1f6c24bc24c/pkg/kv/kvclient/kvcoord/range_iter.go#L193),
    which knows how to find the descriptor of the range responsible for
    one particular key. The `DistSender`
-   [delegates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L441)
-   resolving a key to a descriptor to the
-   [`rangeDescriptorCache`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_cache.go#L76)
-   (a LRU tree cache, indexed by range end key). This cache
-   desynchronized with reality as ranges in a cluster split or move
+   [delegates](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L550)
+   range descriptor lookup to the
+   [`RangeCache`](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L75)
+   (a LRU tree cache indexed by range end key). This cache
+   desynchronizes with reality as ranges in a cluster split or move
    around; when an entry is discovered to be stale, we'll see below that
    the `DistSender` removes it from the cache.
 
-   In the happy case, the cache has information about a descriptor
-   covering the key we're interested in and [it returns
-   it](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_cache.go#L295). In
-   the unhappy case, it needs to [perform a
-   scan](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_cache.go#L323)
-   of a meta-range. To do so, we need to know the descriptor of the
-   meta-range containing the descriptor we're interested in, which is
-   retrieved using [a recursive call into the
-   cache](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_cache.go#L431). This
-   recursion cannot go on forever - the descriptor of a regular range is
-   in a meta2-range (a 2nd level index range), and the descriptors for
-   meta2-ranges are present in the (one and only) meta1-range. Once the
-   meta-descriptor of the range we want to scan is known, the cache
-   [delegates back again to the
-   `DistSender`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/range_cache.go#L439),
-   which [sends a
-   `RangeLookupRequest`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L305)
-   KV command addressed directly to the meta range (so the `DistSender`
-   is not recursively involved in routing this request).
-
+   In the happy case, the cache has information about a descriptor covering the
+   key we're interested in and it [returns it](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L620).
+   In the unhappy case, it needs to [look up](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L649)
+   the range descriptor in the range database `RangeCache.db`. This is an
+   [interface](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L57)
+   which [hides the `DistSender` itself](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L349),
+   which will recursively [look up the range's meta-key](https://github.com/cockroachdb/cockroach/blob/9b449c55c9af9ba4975fea51b1d798254955008f/pkg/kv/range_lookup.go#L197) by [calling into `DistSender.Send()`](https://github.com/cockroachdb/cockroach/blob/9b449c55c9af9ba4975fea51b1d798254955008f/pkg/kv/range_lookup.go#L312), which calls into the range cache, and so on.
+   
+   This recursion cannot go on forever. The descriptor of a regular range is in
+   a meta2-range (a second-level index range), and the descriptors for meta2-ranges
+   are present in the (one and only) [meta1-range](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L791),
+   which is [provided](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/server/server.go#L404) by [`Gossip.GetFirstRangeDescriptor()`](https://github.com/cockroachdb/cockroach/blob/8c5253bbccea8966fe20e3cb8cc6111712f6f509/pkg/gossip/gossip.go#L1596).
+   
 2. Each sub-request (partial batch) is sent to its range. This is done
-   through the call to
-   [`DistSender.sendPartialBatchAsync()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L793)
+   through a call to
+   [`DistSender.sendPartialBatchAsync()`](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1259)
    which
-   [truncates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L894)
-   all the requests in the batch to the current range and then it
-   [sends](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L926)
-   the truncated batch to a range. All these partial batches are sent
-   concurrently.
+   [truncates](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1416)
+   all the requests in the batch to the current range and then
+   [sends](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1478)
+   the truncated batch to it. All these partial batches are sent concurrently.
 
-   `sendPartialBatch()` is the level at which error stemming from stale
-   `rangeDescriptorCache` information are handled: the range descriptor
-   that's detected to be stale is
-   [evicted](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L974)
-   from the cache and the partial batch is
-   [reprocessed](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L982).
+   `sendPartialBatch()` is where errors stemming from stale `RangeCache`
+   information is handled: the stale range descriptor is
+   [evicted](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1523)
+   from the cache and the partial batch is retried.
 
-3. Sending a partial batch to a single range implies selecting the
-   right replica of that range and performing an RPC to it. By default,
-   each range is replicated three ways, but only one of the three
-   replicas is the "lease holder" - the temporarily designed owner of
-   that range, in charge of coordinating all reads and writes to it (see
-   the [Range Leases
+3. Sending a partial batch to a single range involves selecting the appropriate
+   replica for that range and making an RPC call to it. By default, each range is
+   replicated three ways, but only one of the three replicas is the "lease holder" —
+   the temporarily designated owner of that range, in charge of coordinating all
+   reads and writes to it (see the [Range Leases
    section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#range-leases)
-   in the design doc). Figuring out which replica has the lease is done
-   through another cache - the
-   [`leaseHolderCache`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/leaseholder_cache.go#L28),
-   whose information can also get stale.
+   in the design doc). The leaseholder is also [cached in `RangeCache`](https://github.com/cockroachdb/cockroach/blob/d5f73c6a05c99f7c6b40b80dea80e8ed8ab15cac/pkg/kv/kvclient/rangecache/range_cache.go#L299), and the information can get stale.
 
-   The method of the `DistSender` dealing with this is
-   [`sendSingleRange`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L451). It
-   will use the cache to send the request to the lease holder, but it's
+   The `DistSender` method dealing with this is
+   [`sendToReplicas`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L451). It
+   will use the cache to send the request to the lease holder, but is
    also prepared to try the other replicas, in [order of
-   "proximity"](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L461). The
+   "proximity"](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1764). The
    replica that the cache says is the leaseholder is simply [moved to the
-   front](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L467)
+   front](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1772)
    of the list of replicas to be tried and then an [RPC is
-   sent](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L474)
-   to all of them, in order.
+   sent](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1860)
+   to all of them, in order, until one succeeds. If the leaseholder
+   fails, we assume it is stale and [evict it from the cache](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1936).
 
-4. Sending the RPCs is initiated by
-   [`sendToReplicas`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L1095),
-   which sends the request to the [first
-   one](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L1136)
-   and subsequently to [the
-   other](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L1234),
-   until one succeeds or returns a processing error. Processing errors
-   are distinguished from routing errors by
-   [`handlePerReplicaError`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L1258)
-   which, among others, handles [wrong information in the
-   `leaseHolderCache`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L1273).
+4. Actually sending the RPCs is hidden behind the
+   [`Transport` interface](https://github.com/cockroachdb/cockroach/blob/4c76e19157ced57ba082ea0ab8cf5b317bdb5e1f/pkg/kv/kvclient/kvcoord/transport.go#L51).
+   Concretely, [`grpcTransport.SendNext()`](https://github.com/cockroachdb/cockroach/blob/4c76e19157ced57ba082ea0ab8cf5b317bdb5e1f/pkg/kv/kvclient/kvcoord/transport.go#L165)
+   makes gRPC calls to the nodes containing the destination replicas, via the
+   [`Internal` service](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L2224).
 
-5. Actually sending the RPCs is hidden behind the [`Transport
-   interface`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/transport.go#L87). Concretely,
-   [`grpcTransport.SendNext()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/transport.go#L159)
-   does [gRPC](http://www.grpc.io/) calls to the nodes containing the
-   destination replicas, namely to a service implementing the [`Internal`
-   service](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/roachpb/api.proto#L892).
+5. The (async) responses from the different replicas are
+   [combined](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1199)
+   into a single `BatchResponse`, which is ultimately returned from
+   `DistSender.Send()`.
 
-6. The (async) responses from the different replicas are
-   [combined](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/kv/dist_sender.go#L691)
-   into a single `BatchResponse`, which is ultimately returned from the
-   `Send()` method.
+We've now gone through the relevant things that happen on the gateway node.
+Next, we'll have a look at what happens on the "remote" side — on each of the
+ranges.
 
-We've now gone through the relevant things that happen on the gateway
-node. Further, we're going to look at what happens on the "remote"
-side - on each of the ranges.
+### RPC Server: Node
 
-### RPC server - Node and Stores
+We've seen how the `DistSender` splits `BatchRequest` into partial batches, each
+containing commands local to a single replica, and how these commands are sent
+to the lease holders of their ranges through RPCs. We're now moving to the
+server side of these RPCs.
 
-We've seen how the `DistSender` splits `BatchRequest` into partial
-batches, each containing commands local to a single replica, and how
-these commands are sent to the lease holders of their ranges through
-RPCs. We're now moving to the "server" end of these RPCs. The struct
-that implements the RPC service is
-[`Node`](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/server/node.go#L850). The
-`Node` doesn't do anything of great relevance; it
-[delegates](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/server/node.go#L825)
-the request to its
-[`Stores`](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/stores.go#L36)
-member which represents a collection of "stores" (on-disk databases
-imagined to be one per physical disk, see [the Architecture
-section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#architecture)
-of the design doc). The `Stores` implements the `Sender` interface,
-just like the gateway layers that we've seen before, resuming the
-pattern of wrapping another `Sender` and passing requests down through
-the `Send()` method.
-
-`Stores.Send()`
-[identifies](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/stores.go#L160)
+The [`Internal` RPC service](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L2224)
+is implemented by [`Node`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/server/node.go#L156).
+It doesn't do anything of great relevance itself, but
+[delegates](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/server/node.go#L878)
+the request to
+[`Stores`](https://github.com/cockroachdb/cockroach/blob/e8f925edd18d8800671a1a606f32d3ed9e299b3f/pkg/kv/kvserver/stores.go#L39)
+— a collection of on-disk data stores
+(see the [Architecture section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#architecture)
+of the design doc). `Stores` implements the `Sender` interface, just like the
+layers we've seen before, and
+[identifies](https://github.com/cockroachdb/cockroach/blob/e8f925edd18d8800671a1a606f32d3ed9e299b3f/pkg/kv/kvserver/stores.go#L186)
 which particular store contains the destination replica (based on
-routing info filled into the request by the `DistSender`) and
-[routes](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/stores.go#L187)
-the request there. One interesting thing that the `Stores` does, in
-case requests from the current transactions have already been
-processed on this node, is [update the upper
-bound](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/stores.go#L166)
-on the uncertainty interval to be used by the current request (see the
-["Choosing a Timestamp" section of the design
-doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md))
-for details on uncertainty intervals). The uncertainty interval
-dictates which timestamps for values are ambiguous because of clock
-skew between nodes (the values for which don't know if they were
-written before or after the serialization point of the current
-txn). This code realizes that, if a request from the current txn has
-been processed on this node before, no value written after that node's
-timestamp at the time of that other request processing is ambiguous.
+[request routing info](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L1852)
+filled in by the `DistSender`) before
+[routing](https://github.com/cockroachdb/cockroach/blob/e8f925edd18d8800671a1a606f32d3ed9e299b3f/pkg/kv/kvserver/stores.go#L191)
+the request there.
 
-### Store - intent resolution
 
-A
-[`Store`](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L366)
-represents one physical disk device. For our purposes, a `Store`
-mostly
-[delegates](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2485)
-the request to a `replica`, but it has one important role - in case
-the request runs into "write intents" (i.e. uncommitted values), it
-deals with those intents. This handles read-write and write-write
-conflicts between transactions. Notice that the code calling the
-`replica` is inside [a big infinite retry
-loop](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2454)
-and that a bunch of the code inside it deals with
-[`WriteIntentError`](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2494). When
-we see such an error, we [try to "resolve"
-it](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2522)
-using the
-[`intentResolver`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/intent_resolver.go#L43). Resolving
-means figuring out if the transaction to which the intent belongs is
-still pending (it might already be committed or aborted, in which case
-the intent is "resolved"), or possibly "pushing" the transaction in
-question (forcing it to restart at a higher timestamp, such that it
-doesn't conflict with the current txn). If the conflicting txn is no
-longer pending or if it was pushed, then the intents can be properly
-resolved (i.e. either replaced by a committed value, or simply
-discarded). The first part - figuring out the txn status or pushing it
-- is done in
-[`intentResolver.maybePushTransaction`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/intent_resolver.go#L220):
-we can see that a series of `PushTxnRequest`s are batched and sent to
-the cluster (meaning the hierarchy of `Sender`s on the current node
-will be used, top to bottom, to route the requests to the various
-transaction records - see the ["Transaction execution flow"
-section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
-of the design doc). In case the transaction we're trying to push is
-still pending, the decision about whether or not the push is
-successful is done [deep in the processing of the
-`PushTxnRequest`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L1380)
-(several levels below the `Store` level we're discussing here, in the
-stack for the spinned-off `PushTxnRequest`) based on the relative
-priorities of the pusher/pushee txns.
+### Store
 
-The second part - replacing the intents that can now be resolved, is
-done through a call to
-[`intentResolver.resolveIntents`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/intent_resolver.go#L97).
-Back where we left off in
-[`Store.Send()`](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2522),
-the call to the `intentResolver`, if successful, will change the
-`resolved` field of the `WriteIntentError` which will cause us to
-[retry
-immediately](https://github.com/cockroachdb/cockroach/blob/801a90b25b217e4ed5a833b15151c252bde0d1b0/pkg/storage/store.go#L2533). Otherwise,
-we'll retry according to an exponential backoff, waiting for the still
-pending transaction that we couldn't push to complete - we don't want
-to retry too soon, as we'd almost surely run into the same intent
-again (we're working to replace this "polling"-based mechanism for
-waiting for a conflicting txn to finish with something more reactive).
 
-### Replica - executing reads, proposing Raft commands
+A [`Store`](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvserver/store.go#L388)
+typically represents one physical disk device. For our purposes, it mostly
+[delegates](https://github.com/cockroachdb/cockroach/blob/cdd48a011e849edd404a29b5a8bd52793f019c7d/pkg/kv/kvserver/store_send.go#L195)
+the request to a `Replica`, but one other interesting thing it does is to
+[update the upper bound](https://github.com/cockroachdb/cockroach/blob/cdd48a011e849edd404a29b5a8bd52793f019c7d/pkg/kv/kvserver/store_send.go#L156)
+on the uncertainty interval for the current request in case other requests from
+this transaction have already been processed on this node.
 
-A
-[`Replica`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L246)
-represents one copy of range, which in turn is a contiguous keyspace
-managed by one instance of the Raft consensus algorithm. The system
-tries to keep ranges around 64MB, by default.  The `Replica` is the
-final `Sender` in our hierarchy. The role of all the other `Sender`s
-was, mostly, to route requests to the `Replica` currently acting as
-the lease holder for the range (a _primus inter pares_ `Replica` that
-takes on a bunch of coordination responsibilities we'll explore
-below).  A replica deals with read requests differently than write
-requests. Reads are evaluated directly, whereas writes will enter
-another big chapter in their life and go through the Raft consensus
-protocol.
+The uncertainty interval dictates which values are ambiguous due to clock skew
+between nodes, i.e. values that we don't know whether were written before or
+after the serialization point of the current transaction. This code realizes
+that, if a request from the current transaction has been processed on this node
+before, then no value written after that node's timestamp at the time of that
+other request being processed is ambiguous. For more details on uncertainty
+intervals, see the "Choosing a Timestamp" section of the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
-The difference between the paths of read requests vs write requests is
-seen immediately: `replica.Send()` quickly [branches
-off](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1322)
-based on the request type. We'll talk about the read/write paths in
-turn.
+### Replica: Executing Requests
 
-### Read request path
+Recall that a range is a contiguous slice of the KV keyspace managed by
+one instance of the [Raft consensus algorithm](https://raft.github.io/raft.pdf).
+A [`Replica`](https://github.com/cockroachdb/cockroach/blob/1041afb50f9bd2f7b3ccf704efb9cc2eac619b86/pkg/kv/kvserver/replica.go#L184)
+is one node in the range's Raft cluster, maintaining one copy of the range
+state.
 
-The first thing that is done for a read request is checking if the
-request got to the right place (i.e. the current replica is the lease
-holder); remember that a lot of the routing was done based on caches
-or out-right guesses. This check is performed by
-[`replica.redirectOnOrAcquireLease()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1783),
-a rabbit hole in its own right. Let's just say that, in case the
-current replica is not the lease holder, `redirectOnOrAcquireLease`
-either
-[redirects](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L992)
-to the lease holder, if there is a valid lease (remember that the
-`DistSender` will handle such redirections), or [requests a new
-lease](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L981)
-otherwise, in the hope that it will become the lease
-holder. Requesting a lease is done through the
-[`pendingLeaseRequest`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_range_lease.go#L33)
+The `Replica` is the final `Sender` in our hierarchy. The role of all the other
+`Sender`s was, mostly, to route requests to the `Replica` currently acting as
+the lease holder for the range (a _primus inter pares_ `Replica` that takes on a
+bunch of coordination responsibilities that we'll explore below).
+
+A replica deals with read requests differently than write requests: reads are
+evaluated directly, whereas writes will enter another big chapter in their life
+and go through the Raft consensus protocol. This is readily apparent as
+`Replica.Send()` quickly [branches off](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L100-L107)
+based on the request type. We'll talk about each of these paths in turn.
+
+Before that, however, both paths are wrapped in
+[`executeBatchWithConcurrencyRetries()`](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L325)
+which handles concurrency control for the request batch: in a big
+[retry loop](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L346) it will attempt to
+[acquire latches](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L357)
+(internal locks) via `concurrency.Manager.SequenceReq()` and then
+[execute the batch](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L375).
+Any concurrency-related errors will be handled here, if possible, before
+retrying the batch, such as [write intent resolution](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L400-L404),
+[transaction conflicts](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L405-L409),
+[lease errors](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L418-L427),
+and so on.
+
+#### Concurrency Control
+
+Our request will most likely not arrive at the replica by itself, but along with
+a variety of other requests sent by many different nodes, clients, and
+transactions. The
+[`concurrency.Manager`](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_control.go#L148)
+is responsible for deciding who goes when and in what order. Broadly, it will
+allow readers to run concurrently while writers run alone, in FIFO order and
+taking into account e.g. key spans, MVCC timestamps, and transaction isolation.
+It supports "latches", single-request internal locks taken out for the duration
+of request evaluation and replication, and "locks", cross-request transactional
+locks (e.g. for an uncommitted write) that persist until the transaction is
+finalized — both with read-only and read/write access modes.
+
+First, the replica [figures out](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L330)
+which latches and locks need to be taken out for the requests. 
+To do this, it [looks up](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L330)
+the command for each request, and [calls](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L829)
+its `DeclareKeys` method with the request header. This method is provided during
+[command registration](https://github.com/cockroachdb/cockroach/blob/b7fb524c899c38e3e92c80d6b88f45afc9df7ca2/pkg/kv/kvserver/batcheval/command.go#L87)
+(see e.g. the [`Put` command](https://github.com/cockroachdb/cockroach/blob/702d8bb2d2432c35aee90a543f7b2facc7c9c65e/pkg/kv/kvserver/batcheval/cmd_put.go#L23-L39)),
+and will often delegate to either [`DefaultDeclareKey`](https://github.com/cockroachdb/cockroach/blob/a7472e3c109224d9dae3f739fe1d99fb12c22327/pkg/kv/kvserver/batcheval/declare.go#L24)
+(taking out latches) or
+[`DefaultDeclareIsolatedKeys`](https://github.com/cockroachdb/cockroach/blob/a7472e3c109224d9dae3f739fe1d99fb12c22327/pkg/kv/kvserver/batcheval/declare.go#L39)
+(taking out locks and latches) for the keys
+[listed](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L50-L57)
+in the header.
+
+Once the necessary latches and locks are known, the request will pass these to
+the concurrency manager and
+[wait for its turn](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L357)
+by calling `Manager.SequenceReq()`. This will first attempt to
+[acquire latches](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L206)
+in the [latch manager](https://github.com/cockroachdb/cockroach/blob/fd30130e281d712a52c7cf65988278a354e39250/pkg/kv/kvserver/spanlatch/manager.go#L58), which may require it to
+[wait](https://github.com/cockroachdb/cockroach/blob/fd30130e281d712a52c7cf65988278a354e39250/pkg/kv/kvserver/spanlatch/manager.go#L207)
+for them to be released by other requests first. It then goes on to
+[acquire locks](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L226)
+in the [lock table](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_control.go#L488),
+[waiting](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L230)
+for any conflicting transactions to complete — this will also attempt to [push](https://github.com/cockroachdb/cockroach/blob/8132781d23003c0c6fa597d944fd94f665229093/pkg/kv/kvserver/concurrency/lock_table_waiter.go#L430) the lock holder's timestamp forward, which may allow our transaction to run "before it", or even abort it depending on transaction priorities.
+
+Once the request has acquired its latches and locks, it is ready to
+[execute](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L375).
+At this point, the request no longer has to worry about concurrent requests, as
+it is fully isolated. There is one notable exception, however: write intents
+(new values) written by concurrent transactions, which have not yet been fully
+migrated into the concurrency manager, and must be handled as they are encountered.
+We'll get back to these later.
+
+#### Lease Acquisition and Redirection
+
+The first thing both `Replica.executeReadBatch()` and `Replica.executeWriteBatch()`
+does is to call
+[`Replica.checkExecutionCanProceed()`](https://github.com/cockroachdb/cockroach/blob/1041afb50f9bd2f7b3ccf704efb9cc2eac619b86/pkg/kv/kvserver/replica.go#L1258)
+to perform a few pre-flight checks. Most importantly, it checks that the request
+got to the right place, i.e. that the replica is the current lease holder —
+remember that a lot of the routing was done based on caches or outright guesses.
+
+The leaseholder check is performed by [`Replica.leaseGoodToGoRLocked()`](https://github.com/cockroachdb/cockroach/blob/1041afb50f9bd2f7b3ccf704efb9cc2eac619b86/pkg/kv/kvserver/replica.go#L1318), a rabbit hole in its own right. Let's just say that, if the
+current replica isn't the lease holder, it returns either
+[`InvalidLeaseError`](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L979),
+which will [cause](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L425)
+the replica to try [acquiring the lease](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L576),
+or [`NotLeaseholderError`](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L1023-L1024),
+which is [returned to](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1977) the `DistSender` and [redirects](https://github.com/cockroachdb/cockroach/blob/904807640f6a28aa82c5e63f0b62de2dbf27b3a0/pkg/kv/kvclient/kvcoord/dist_sender.go#L1988)
+the request to the real leaseholder.
+
+Requesting a lease is done through the
+[`pendingLeaseRequest`](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L122)
 helper struct, which coalesces multiple requests for the same lease
 and eventually constructs a
-[`RequestLeaseRequest`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_range_lease.go#L140)
-and [sends it for
-execution](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_range_lease.go#L205)
-directly to the replica (as we've seen in other cases, bypassing all
-the senders to avoid recursing infinitely). In case a lease is
-requested, `redirectOnOrAcquireLease` will
-[wait](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1012)
-for that request to complete and check if it was successful.
+[`RequestLeaseRequest`](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L269)
+that is [sent for execution](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L423)
+directly to the replica (as we've seen in other cases, bypassing all the senders
+to avoid recursing infinitely). In case a lease is requested,
+`redirectOnOrAcquireLease` will
+[wait](https://github.com/cockroachdb/cockroach/blob/1f31803e9d158cae636b35856fb01aed9187ed93/pkg/kv/kvserver/replica_range_lease.go#L1182)
+for that request to complete and check if it was successful. If it was, the
+batch will be retried. If not, the request is redirected to the actual
+leaseholder.
 
-Once the lease situation has been settled, the next thing to do for
-the read is synchronizing it with possible in-flight writes - if a
-write to an overlapping key span is in progress, the read might need
-to see its value, so we can't race with it; we must wait until the
-write is done. This synchronization is done through the
-[`CommandQueue`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/command_queue.go#L32)
-struct - an interval tree maintaining all the in-flight requests,
-indexed by the key or span of keys that they touch. Waiting for the
-writes is done inside
-[`replica.beginCmds()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1525). Notice
-that immediately after figuring out which commands we need to wait
-for, we atomically [add the current
-read](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1527)
-to the command queue in order to block future writes. This overlaps in
-spirit with the use of the `TimestampCache` structure described below
-and in fact there is a
-[proposal](https://forum.cockroachlabs.com/t/why-do-we-keep-read-commands-in-the-command-queue/360)
-for not putting reads in the queue. Removal of commands from the queue
-is [done
-later](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1811)
-through the callback returned by `beginCmds`. This epilogue also does
-something else that's important: it [records the
-read](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1429)
-in the
-[`TimestampCache`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/timestamp_cache.go#L85),
-a bounded in-memory cache from key range to the latest timestamp at
-which it was read. This structure serves to protect against violations
-of the Snapshot Isolation transaction isolation level (the lowest that
-CockroachDB provides) which require that the outcome of reads must be
-preserved, i.e. a write of a key at a lower timestamp than a previous
-read must not succeed (see the Read-Write Conflicts – Read Timestamp
-Cache section in [Matt's blog
-post](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)). As
-we'll see in the writes section, writes consult this structure to make
-sure they're not writing "under" a read that has already been
-performed.
+#### Read Request Path
 
- Now we're reading to actually evaluate the read - control moves to
- [`replica.evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5225)
- which calls
- [`replica.evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5286)
- for each request in the batch. `evaluateCommand` switches over the request
- types using a [helper request to method
- map](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L84)
- and [passes
- execution](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L160)
- to the request-specific method. One typical read request is a
- [`ScanRequest`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L204);
- this is evaluated by
- [`evalScan`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L343). The
- code is very brief - it immediately
- [calls](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L374)
- a corresponding on the `engine` - a handle to the on-disk
- [RocksDB](http://rocksdb.org/) database. Before we dig a bit into
- this `engine`, let's look at what `evalScan` will do next: it will
- [return
- intents](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L360)
- to the higher levels. These are intents that the scanning
- encountered, but they didn't prohibit it from continuing
- (e.g. intents with a timestamp higher than the timestamp at which
- we're reading - the read doesn't care if those intents are committed
- or not); this is in contrast with intents that do block the read -
- those, as we'll see below, are transformed into `WriteIntentError`s
- which we've seen that they're handled by the [`Store`](#Store). These
- non-interfering intents are collected for cleanup purposes - they
- might be garbage left-over by dead transactions and we want to
- proactively clean them up. They're returned up the stack until
- `replica.addReadOnlyCmd` [tries to clean them
- up](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1837)
- using our old friend, the `intentResolver`.
+Once the lease situation has been settled, `Replica.executeReadOnlyBatch()`
+is ready to actually start reading. It [grabs](https://github.cm/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L57)
+a storage engine handle and [executes](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L83)
+the batch on it, eventually moving control to
+[`Replica.evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L146)
+which [calls `Replica.evaluateCommand()`](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L271-L272)
+for each request in the batch. This
+[looks up](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L497)
+the command for the request method in a [command registry](https://github.com/cockroachdb/cockroach/blob/b7fb524c899c38e3e92c80d6b88f45afc9df7ca2/pkg/kv/kvserver/batcheval/command.go#L69-L70),
+and [passes execution](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L506-L510)
+to it.
 
-### Engine
+One typical read request is a [`ScanRequest`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.proto#L384),
+which is evaluated by
+[`batcheval.Scan`](https://github.com/cockroachdb/cockroach/blob/261fc356765e61215478ba697d4fe252b9466c8f/pkg/kv/kvserver/batcheval/cmd_scan.go#L31).
+The code is rather brief, and mostly
+[calls](https://github.com/cockroachdb/cockroach/blob/261fc356765e61215478ba697d4fe252b9466c8f/pkg/kv/kvserver/batcheval/cmd_scan.go#L54-L55)
+a corresponding function for the underlying storage engine.
 
-We're getting to the bottom of the CockroachDB stack - the
-[`Engine`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/engine.go#L159)
-is an interface abstracting away different on-disk stores. The only
-implementation we currently use is
-[`RocksDB`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/rocksdb.go#L265),
-which is a wrapper around the RocksDB C++ library. We won't go into
-this wrapper other than to say that it uses
-[cgo](https://golang.org/cmd/cgo/) for interfacing with C++ code. We
-also won't go into the RocksDB code which, although it's obviously an
-important part of servicing a request, is not something that
-CockroachDB devs generally deal with.
+#### Engine: On-Disk Storage
 
-For reads, the entry point into the `engine` package is
-[`mvccScanInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1480). This
-performs a scan over the KV database, dealing with the data
-representation we use for [MultiVersion Concurrency
-Control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
-(MVCC). It iterates over the key/vals of the requested range and
-[appends](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1511)
-each one to the results. The MVCC details, such as the fact that we
-keep multiple versions of each key (for different timestamps) and the
-intents, are handled by
-[`MVCCIterate()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1555),
-which uses an iterator provided by the `Engine` to scan over
-key/vals. It delegates reading key/vals and advancing the iterator to
-[`mvccGetInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L659).
+We're getting to the bottom of the CockroachDB stack. The
+[`Engine`](https://github.com/cockroachdb/cockroach/blob/83185789481f23bd6c4938a3588203f4cd4eef89/pkg/storage/engine.go#L640)
+is an interface abstracting away different on-disk data stores. From
+version 21.1 onwards we only support [Pebble](https://github.com/cockroachdb/pebble),
+an embedded key/value database developed in-house based on
+[RocksDB](https://rocksdb.org)/[LevelDB](https://github.com/google/leveldb).
+RocksDB was used previously, but got replaced in pursuit of
+[performance, stability, and tighter integration](https://www.cockroachlabs.com/blog/pebble-rocksdb-kv-store/).
+Although the storage engine is a crucial part of servicing a request, for the
+sake of brevity we won't go into any details on Pebble's internals here.
 
-### Write request path
+For reads, we typically make use of the
+[`storage.Reader`](https://github.com/cockroachdb/cockroach/blob/83185789481f23bd6c4938a3588203f4cd4eef89/pkg/storage/engine.go#L349)
+interface, a subset of `Engine`. The `Scan` command from the previous
+section passes this `Reader` to [`storage.MVCCScanToBytes()`](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/mvcc.go#L2585),
+which is a helper function that fetches a list of key/value pairs in a
+given key span from the storage engine.
 
-Write requests are conceptually more interesting than reads because
-they're not simply serviced by one node/replica. Instead, they go
-through the Raft consensus algorithm, which maintains an ordered
-commit log, and are then applied by all of a range's replicas (see the
-[Raft
-section](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#raft---consistency-of-range-replicas)
-of the design doc for more details). The replica that initiates this
-process is, just like in the read case, the lease holder. Execution on
-this lease holder is thus broken into two stages - before ("upstream
-of" in code) Raft and below ("downstream of") Raft. The upstream stage
-will eventually block for the corresponding Raft command to be applied
-*locally* (after the command has been applied locally, future reads
-are guaranteed to see its effects).
+The CockroachDB storage layer uses [Multi-Version Concurrency Control (MVCC)](https://en.wikipedia.org/wiki/Multiversion_concurrency_control),
+storing multiple versions of Protobuf-encoded [`Value`s](https://github.com/cockroachdb/cockroach/blob/0254e86051c310d38e5668cf82ba128ff4c1ab28/pkg/roachpb/data.proto#L84)
+for a given key. Each version is identified by the value's
+[`Timestamp`](https://github.com/cockroachdb/cockroach/blob/0254e86051c310d38e5668cf82ba128ff4c1ab28/pkg/roachpb/data.proto#L90),
+and the latest version visible to a given transaction is given by its
+[read timestamp](https://github.com/cockroachdb/cockroach/blob/0254e86051c310d38e5668cf82ba128ff4c1ab28/pkg/roachpb/data.proto#L388).
+As a special case, new values (called write intents) are written
+without a timestamp, and once the transaction commits these will
+have to be cleaned up by rewriting them with the transaction's final
+[write timestamp](https://github.com/cockroachdb/cockroach/blob/175e2daacc94cb47350be4c668e4236664515bbd/pkg/storage/enginepb/mvcc3.proto#L91) —
+more on this later.
 
-For what follows we'll introduce some terminology. We've already seen
-that a `replica` (and the KV subsystem in general) receives
-*requests*. In what follows, these requests will be _evaluated_, which
-transforms them to Raft _commands_. The commands in turn are
-_proposed_ to the Raft consensus group and, after the Raft group
-accepts the proposals and commits them, control comes back to the
-`Replica`s (all of the replicas of a range this time, not just the
-lease holder), which _apply_ them.
+The workhorse of MVCC reads is the
+[`storage.MVCCIterator`](https://github.com/cockroachdb/cockroach/blob/83185789481f23bd6c4938a3588203f4cd4eef89/pkg/storage/engine.go#L92),
+which iterates over MVCC key/value pairs in order. `MVCCScanToBytes`
+[makes use of it](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/mvcc.go#L2592-L2593)
+with the help of [`pebbleMVCCScanner`](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/mvcc.go#L2385)
+to [scan](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/pebble_mvcc_scanner.go#L215) over the key/value versions
+in the storage engine, [collect](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/pebble_mvcc_scanner.go#L329)
+the appropriate version of each key, and
+[return them](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/mvcc.go#L2403)
+to the caller.
 
-Execution of write commands, mirroring the reads, starts in
-[`replica.addWriteCmd()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1857). This
-method just contains a retry loop that deals with exceptional cases in
-which requests need to be evaluated repeatedly and delegates to
-[`replica.tryAddWriteCmd`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1872). This
-guy does a number of things:
+However, if the scan [encounters conflicting write intents](https://github.com/cockroachdb/cockroach/blob/129b2dcaecfce350d4ed3a4b1f6b4b654b0bd11e/pkg/storage/mvcc.go#L2400-L2402)
+from a different transaction, these will have to be dealt with first.
 
-1. It [waits until overlapping in-flight requests are
-   done](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1959)
-   and adds the current as an in-flight request to the `CommandQueue`
-   (similar to the reads).
+#### Intent Resolution
 
-2. It checks that the current replica is the lease holder by [calling
-   the `redirectOnOrAcquireLease`
-   method](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1983),
-   just like the reads.
+Whenever a request runs into write intents (i.e. uncommitted values) that
+weren't written by its own transaction, it's facing a possible conflict with
+another transaction. To resolve this conflict, the MVCC storage operation
+returns a `WriteIntentError` containing the intents. This is
+[caught](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L400-L404)
+further up the stack by `Replica.executeBatchWithConcurrencyRetries`, which
+[delegates](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L518)
+conflict resolution to [`concurrency.Manager.HandleWriterIntentError`](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L309).
+This will first [add the intents to the lock table](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L325), 
+since it clearly did not know about them yet (or the request wouldn't have failed),
+and then [wait](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/concurrency/concurrency_manager.go#L346) 
+for the conflicting transaction to complete. As part of this waiting, it will try to
+[push](https://github.com/cockroachdb/cockroach/blob/8132781d23003c0c6fa597d944fd94f665229093/pkg/kv/kvserver/concurrency/lock_table_waiter.go#L430)
+the lock holder using the
+[`IntentResolver`](https://github.com/cockroachdb/cockroach/blob/3575dea3e6b084a63a1432672705f949572bc211/pkg/kv/kvserver/intentresolver/intent_resolver.go#L132)
+to resolve the conflicting intents.
 
-3. It ["applies the timestamp
-   cache"](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2002)
-   - meaning that the `TimestampCache` we've discussed above is checked
-   to see if the write can proceed at the timestamp at which it's trying
-   to modify that database. If it can't (because there's been a more
-   recent overlapping read), the write's timestamp [is
-   bumped](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1688)
-   to a timestamp later than any overlapping read).
+To resolve an intent, we first need to figure out if the transaction that owns it
+is still pending — it might already have committed or aborted. If it is, then we
+can try to push it such that it restarts at a higher timestamp or gets aborted.
+If successful then the intents can be resolved by either replacing them with a
+committed value or discarding them, depending on the final transaction state.
+Otherwise, the current transaction must wait for it to complete.
 
-4. It evaluates the request and proposes resulting Raft commands. It
-   all starts with [this call to
-   replica.propose()](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2036). We'll
-   describe the process below (it will be fun) but, before we do, let's
-   see what the current method will do afterwards.
+Figuring out the other transaction's status and pushing it happens in
+[`IntentResolver.MaybePushTransaction`](https://github.com/cockroachdb/cockroach/blob/3575dea3e6b084a63a1432672705f949572bc211/pkg/kv/kvserver/intentresolver/intent_resolver.go#L379),
+where a series of `PushTxnRequest`s are batched and sent to the cluster (using
+the hierarchy of `Sender`s to route them to the various transactions records). If
+the conflicting transaction is still pending, the decision about whether or not
+it gets pushed is made
+[deep in the `PushTxnRequest` processing](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/batcheval/cmd_push_txn.go#L254)
+based on the relative priorities of the transactions. Resolving the intents themselves
+is done through calls to
+[`IntentResolve.ResolveIntent`](https://github.com/cockroachdb/cockroach/blob/8132781d23003c0c6fa597d944fd94f665229093/pkg/kv/kvserver/concurrency/lock_table_waiter.go#L480).
 
-5. The call to `replica.propose` returns a channel that [we'll wait
-   on](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2051). This
-   is the decoupling point that we've anticipated above - the point where
-   we cede control to the Raft machinery. The `replica` doing the
-   proposals accepts its role as merely one of many replicas and waits
-   for the consensus group to make progress in lock-step. The channel
-   will receive a result when the (local) replica has applied the
-   respective commands, which can happen only after the commands have
-   been committed to the shared Raft log (a global operation).
+Once the conflicting intents are resolved, either by pushing the other
+transaction or waiting for it to complete, we can continue where we left off
+back in `Replica.executeBatchWithConcurrencyRetries` and
+[retry](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_send.go#L346)
+the request.
 
-6. As in the reads case, at the end of the `tryAddWriteCmd` method,
-   [an
-   epilogue](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L1968)
-   will remove the request from the `CommandQueue` and add it to the
-   timestamp cache.
+#### Write Request Path
 
-#### Evaluation of requests and application of Raft commands
+Write requests are conceptually more interesting than reads because they're not
+simply serviced by one node/replica. Instead, they go through the Raft consensus
+protocol which eventually commits them to a replicated ordered command log
+that gets applied by all of the range's replicas (see the Raft section of the
+[design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
+for details). The replica that initiates this process is, just like in the read
+case, the lease holder. Execution on the lease holder is thus broken into two
+stages: before ("upstream of") Raft and below ("downstream of") Raft. The
+upstream stage will eventually block until the submitted Raft command is applied
+*locally*, at which point future reads are guaranteed to see its effects.
 
-As promised, let's see what happens inside `replica.propose()`. The
-first thing is the process of evaluation, i.e. turning a KV *request*
-into a Raft *command*. This is done through the call to
-[`requestToProposal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2270),
+Write requests go through much of the same preparation as reads, such as
+concurrency control and lease acquisition/redirection. However, it has one
+additional step that is closely linked to the read path: it
+[consults](https://github.com/cockroachdb/cockroach/blob/08322ffa1b3060a2d4cb7e3ff3ee8a0b370cf1e6/pkg/kv/kvserver/replica_write.go#L119)
+the [timestamp cache](https://github.com/cockroachdb/cockroach/blob/e6e428f8029e4e90f391cb746e2339ec6fe7a581/pkg/kv/kvserver/tscache/cache.go#L53),
+and [moves the transaction's timestamp forward](https://github.com/cockroachdb/cockroach/blob/e6e428f8029e4e90f391cb746e2339ec6fe7a581/pkg/kv/kvserver/replica_tscache.go#L316)
+if necessary. This structure is a bounded in-memory cache containing the latest
+timestamp a given key span was read, and serves to protect against violations
+of snapshot isolation: a key write at a lower timestamp than a previous read
+must not succeed (see the "Read-Write Conflicts – Read Timestamp
+Cache" section in [Matt's blog
+post](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)).
+This cache is updated during the
+[read path epilogue](https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/kv/kvserver/replica_read.go#L124)
+and [write path proposal epilogue](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L144).
+
+With that out of the way, we can [evaluate the request and propose resulting Raft commands](https://github.com/cockroachdb/cockroach/blob/08322ffa1b3060a2d4cb7e3ff3ee8a0b370cf1e6/pkg/kv/kvserver/replica_write.go#L149).
+We'll describe the process below (it will be fun), but before we do, let's see
+what the current method does afterwards. The call returns a channel that
+we'll [wait on](https://github.com/cockroachdb/cockroach/blob/08322ffa1b3060a2d4cb7e3ff3ee8a0b370cf1e6/pkg/kv/kvserver/replica_write.go#L207).
+This is the decoupling point that we've anticipated above — the point where we
+cede control to the Raft machinery. The `Replica` submitting the proposals
+accepts its role as merely one of many replicas and waits for the consensus
+group to make progress in lock-step. The channel will receive a result when the
+(local) replica has applied the respective commands, which can happen only after
+the commands have been committed to the shared Raft log (a global operation).
+
+#### Request Evaluation
+
+As promised, let's see what happens inside `Replica.evalAndPropose()`.
+We first evaluate the KV request, which turns it into a Raft command.
+This is done by calling
+[`requestToProposal()`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L89),
 which quickly calls
-[`evaluateProposal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2119),
-which in turn quickly calls the surprisingly-named
-[`applyRaftCommandInBatch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2158). This
-last method [simulates the execution of the
-request](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3737),
-if you will, and records all the would-be changes to the `Engine` into
-a "batch" (these batches are how RocksDB models transactions). This
-batch will be
-[serialized](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3778)
+[`evaluateProposal()`](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L917),
+which in turn calls
+[`evaluateWriteBatch()`](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L784).
+This last method "simulates" the execution of the request, if you will, and
+records all the would-be changes to the `Engine` into a "batch" (these batches
+are how Pebble models transactions). This batch will be
+[serialized](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L834)
 into a Raft command. If we were to commit this batch now, the changes
-would be live, but just on this one replica, which would be a
-potential data consistency violation. Instead, we [abort
-it](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3784). It
-will resurrect again when the command "comes out of Raft", as we'll
-see.
+would be live, but just on this one replica — a potential data consistency
+violation. Instead, we [abort it](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L790).
+It will be resurrected when the command "comes out of Raft", as we'll see.
 
-The simulation part takes place inside the
-[`executeWriteBatch()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3822)
-method. This takes in the `roachpb.BatchRequest` (the KV request we've
-been dealing with all along), [allocates an
-`engine.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3835)
+The simulation part takes place inside
+[`evaluateWriteBatchWrapper()`](https://github.com/cockroachdb/cockroach/blob/08322ffa1b3060a2d4cb7e3ff3ee8a0b370cf1e6/pkg/kv/kvserver/replica_write.go#L693).
+This takes in the `roachpb.BatchRequest` (the KV request we've
+been dealing with all along), [allocates an `engine.Batch`](https://github.com/cockroachdb/cockroach/blob/08322ffa1b3060a2d4cb7e3ff3ee8a0b370cf1e6/pkg/kv/kvserver/replica_write.go#L702),
 and delegates to
-[`evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica.go#L5225). This
+[`evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L146). This
 fellow finally
-[iterates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4041)
+[iterates](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L235)
 over the individual requests in the batch and, for each one, calls
-[`evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/75c26e5498ef26a4adde9425cb43682d38ec8ee4/pkg/storage/replica_command.go#L63). We've
-seen `evaluateCommand` before, on the read path. It switches over the
-different types of requests and [calls a method specific to each
-type](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L160). One
-such method would be
-[`evalPut`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L225),
-which writes a value for a key. Inside it we'll see a [call to the
-engine](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L249)
-to perform this write (but remember, it's all performed inside a
-RocksDB transaction, the `engine.Batch`).
+[`evaluateCommand()`](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L4823). We've
+seen `evaluateCommand` before, on the read path: it looks up the
+corresponding command for each request's method and
+[calls it](https://github.com/cockroachdb/cockroach/blob/759fdac56ec59c75aa872e8e00d0a614bcc593a3/pkg/kv/kvserver/replica_evaluate.go#L507).
+One such method would be
+[`batcheval.Put`](https://github.com/cockroachdb/cockroach/blob/702d8bb2d2432c35aee90a543f7b2facc7c9c65e/pkg/kv/kvserver/batcheval/cmd_put.go#L42-L44),
+which writes a value for a key. Inside it we see a [call to the
+engine](https://github.com/cockroachdb/cockroach/blob/702d8bb2d2432c35aee90a543f7b2facc7c9c65e/pkg/kv/kvserver/batcheval/cmd_put.go#L57)
+to perform the write — but remember, it's all performed inside a Pebble
+transaction, the `storage.Batch`.
 
-This was all for the purposes of recording the engine changes that
-need to be proposed to Raft. Let's unwind the stack to
-`replica.propose` (the method that started this section), and see what
-happens with the result of
-[`requestToProposal`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2270). For
-one, it gets [inserted
-into](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2292)
-the "pending proposals map" - a structure that will make the
-connection between a command being *applied* and `tryAddWriteCmd`
-which will be blocked on a channel waiting for the local
-application. More importantly, it gets passed to
-[`replica.submitProposalLocked`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2294)
-which, eventually, calls
-[`raftGroup.Propose()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2396). This
-`raftGroup` is a handle to a consensus group, implemented by the [Etcd
-Raft library](https://github.com/coreos/etcd/tree/master/raft), a
-black box to which we submit proposals to have them serialized through
-majority voting into a coherent distributed log. This library is
-responsible for passing the commands in order to all the replicas for
-*application*.
+This was all for the purposes of recording the engine changes that need to be
+proposed to Raft. Let's unwind the stack to `evalAndPropose()` (where we started
+this section), and see what happens with the result of
+[`requestToProposal()`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L89).
 
-This concludes the discussion of the part specific to the lease holder
-replica: how commands are proposed to Raft and how the lease holder is
-waiting for them to be applied before returning a reply to the (KV)
-client. What's missing is the discussion on how exactly they are
-applied.
+For one, we grab [`proposalCh`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L107),
+the channel which will be returned to the caller to wait for the proposal's
+local application. This gets [inserted into](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2292)
+the pending proposals map — a structure that will make the connection between a
+command being *applied* and `executeWriteBatch()` which will be blocked on a
+channel waiting for the local application. More importantly, the proposal is
+passed to [`Replica.propose`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L209)
+which inserts it into the
+[proposal buffer](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L365)
+where it eventually ends up being [proposed to `raftGroup`](https://github.com/cockroachdb/cockroach/blob/8de3463817826d431bf0c6433ad3eb81bf06c9b3/pkg/kv/kvserver/replica_proposal_buf.go#L692).
 
-#### Raft command application
+This `raftGroup` is a handle for the Raft consensus cluster, implemented by the
+[Etcd Raft library](https://github.com/coreos/etcd/tree/master/raft). We treat
+this as a black box that we submit command proposals to, and it deals with
+running them through Raft consensus, committing them to the replicated command
+log, and applying them onto every replica.
 
-We've seen how commands are "put into" Raft. But how do they "come
-out"? The Etcd Raft library implements a distributed state machine
-whose description is beyond the present scope. Suffice to say that we
-have a
-[`raftProcessor`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/scheduler.go#L112)
-interface that state transitions from this library call to. Our older
-friend the `Store` implements this interface and the important method
-is
-[`Store.processReady()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/store.go#L3337). This
-will eventually call back into a specific `replica` (the replica of a
-range that's being modified by each command), namely it will call
-[`handleRaftReadyRaftMuLocked`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2484). This
-will [iterate through newly committed
-commands](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L2616)
-calling
-[`processRaftCommand`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3247)
-for each one. This will in take the serialized `engine.Batch` and call
-[`replica.applyRaftCommand`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3467)
-with it. Here the batch is [deserialized and applied to the
-engine](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3644)
-and, this time, unlike on the proposed side in
-`applyRaftCommandInBatch`, the changes are actually [committed to
-storage](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3683). The
-command has now been applied (on one particular replica, but keep in
-mind that the process described in this section happens on *every*
-replica).
+One notable exception here is requests with the
+[`AsyncConsensus` flag](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/roachpb/api.pb.go#L6270) set. These
+are used by [pipelined writes](https://www.cockroachlabs.com/blog/transaction-pipelining/)
+and the [parallel commit protocol](https://www.cockroachlabs.com/blog/parallel-commits/)
+to avoid waiting for writes to go through Raft, which significantly improves
+write throughput. Instead, as we briefly touched on earlier, the
+`TxnCoordSender` will check that these writes went through as necessary -- in
+particular, when committing the transaction. For these requests,
+`evalAndPropose()` [immediately sends a result](https://github.com/cockroachdb/cockroach/blob/88d9b291f33abaf654f816400418fb33357e74ba/pkg/kv/kvserver/replica_raft.go#L153)
+via `proposalCh`, causing `executeWriteBatch()` to return instead of
+waiting for Raft application.
 
-We've glossed over something in `processRaftCommand` that's important:
-after applying the command, if the current replica is proposer
-(i.e. the lease holder), we need to signal the proposer (which, as we
-saw in the previous section, is blocked in `tryAddWriteCmd`). This
-happens at the [very
-end](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3513). We've
-now come full circle - the proposer will now be unblocked and receive
-a response on the channel it was waiting on, and it can unwind the
-stack letting its client know that the request is complete. This reply
-can travel through the hierarchy of `Sender`s, back from the lease
-holder node to the SQL gateway node, to a SQL tree of `planNode`s, to
-the SQL Executor, and, through the `pgwire` implementation, to the SQL
-client.
+#### Raft Command Application
 
+We've seen how commands are "put into" Raft, but how do they "come out"? To
+integrate with the Etcd Raft library we implement a state machine that it
+applies log commands to. A complete description of this is beyond the scope of
+this article, but suffice it to say that this involves the
+[`raftProcessor`](https://github.com/cockroachdb/cockroach/blob/8c5253bbccea8966fe20e3cb8cc6111712f6f509/pkg/kv/kvserver/scheduler.go#L135)
+interface, which is implemented by our old friend `Store`.
+
+The important method is
+[`Store.processReady()`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/store_raft.go#L506),
+which eventually calls back into the `Replica` being modified via
+[`handleRaftReadyRaftMuLocked()`](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L495).
+This [applies committed entries](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_raft.go#L839)
+by taking in the serialized `storage.Batch` and [applying it to the
+state machine](https://github.com/cockroachdb/cockroach/blob/6e4c3ae05d92f4104b7b9fbb33f9d1cecf055fd3/pkg/kv/kvserver/apply/task.go#L286)
+by [committing the batch to Pebble](https://github.com/cockroachdb/cockroach/blob/6b9168de33628257f3f1fdb17af1f8205ee21d32/pkg/kv/kvserver/replica_application_state_machine.go#L894).
+The command has now been applied on this particular replica, but keep in
+mind that this process happens on _every_ replica.
+
+Let's not forget about the waiting proposer, who is still blocked on the
+proposal channel back in `executeWriteBatch()`. After applying the command, on
+the proposing replica (i.e. typically the lease holder), we need to return the
+result back through the channel. This happens
+[at the end](https://github.com/cockroachdb/cockroach/blob/6e4c3ae05d92f4104b7b9fbb33f9d1cecf055fd3/pkg/kv/kvserver/apply/task.go#L297)
+of command application, where [`AckOutcomeAndFinish()`](https://github.com/cockroachdb/cockroach/blob/6e4c3ae05d92f4104b7b9fbb33f9d1cecf055fd3/pkg/kv/kvserver/replica_application_cmd.go#L166)
+gets called on every command: if the command was local, it will eventually
+[signal](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L145)
+the proposer by [sending](https://github.com/cockroachdb/cockroach/blob/e4bb550d9abae97ab09c099592f32f88ad895177/pkg/kv/kvserver/replica_proposal.go#L161)
+the result.
+
+We've now come full circle: the proposer unblocks and receives its result,
+unwinding the stack to let the client know that the request is complete. The
+response travels back through the hierarchy of `Sender`s, from the lease holder
+node to the gateway node, through the DistSQL flow and transaction coordinator,
+via the session manager and `pgwire` implementation, before finally reaching the
+SQL client.

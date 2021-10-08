@@ -16,10 +16,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -126,7 +129,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	for _, rng := range ranges {
 		if rng.end != nil {
-			if err := txn.DelRange(ctx, rng.start, rng.end); err != nil {
+			if _, err := txn.DelRange(ctx, rng.start, rng.end, false /* returnKeys */); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -142,137 +145,6 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	lockSpans := tc.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
 	if len(lockSpans) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", lockSpans)
-	}
-}
-
-// TestTxnCoordSenderCondenseLockSpans verifies that lock spans are condensed
-// along range boundaries when they exceed the maximum intent bytes threshold.
-func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
-	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
-	c := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key(nil)}
-	d := roachpb.Span{Key: roachpb.Key("dddddd"), EndKey: roachpb.Key(nil)}
-	e := roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key(nil)}
-	aToBClosed := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()}
-	cToEClosed := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e").Next()}
-	fTof0 := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("f0")}
-	g := roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key(nil)}
-	g0Tog1 := roachpb.Span{Key: roachpb.Key("g0"), EndKey: roachpb.Key("g1")}
-	fTog1Closed := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g1")}
-	testCases := []struct {
-		span         roachpb.Span
-		expLocks     []roachpb.Span
-		expLocksSize int64
-	}{
-		{span: a, expLocks: []roachpb.Span{a}, expLocksSize: 1},
-		{span: b, expLocks: []roachpb.Span{a, b}, expLocksSize: 2},
-		{span: c, expLocks: []roachpb.Span{a, b, c}, expLocksSize: 3},
-		{span: d, expLocks: []roachpb.Span{a, b, c, d}, expLocksSize: 9},
-		// Note that c-e condenses and then lists first.
-		{span: e, expLocks: []roachpb.Span{cToEClosed, a, b}, expLocksSize: 5},
-		{span: fTof0, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0}, expLocksSize: 8},
-		{span: g, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expLocksSize: 9},
-		{span: g0Tog1, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expLocksSize: 9},
-		// Add a key in the middle of a span, which will get merged on commit.
-		{span: c, expLocks: []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}, expLocksSize: 9},
-	}
-	splits := []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-		{Key: roachpb.Key("c"), EndKey: roachpb.Key("f")},
-		{Key: roachpb.Key("f"), EndKey: roachpb.Key("j")},
-	}
-	descs := []roachpb.RangeDescriptor{testMetaRangeDescriptor}
-	for i, s := range splits {
-		descs = append(descs, roachpb.RangeDescriptor{
-			RangeID:          roachpb.RangeID(2 + i),
-			StartKey:         roachpb.RKey(s.Key),
-			EndKey:           roachpb.RKey(s.EndKey),
-			InternalReplicas: []roachpb.ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
-		})
-	}
-	descDB := mockRangeDescriptorDBForDescs(descs...)
-	s := createTestDB(t)
-	st := s.Store.ClusterSettings()
-	trackedWritesMaxSize.Override(&st.SV, 10) /* 10 bytes and it will condense */
-	defer s.Stop()
-
-	// Check end transaction locks, which should be condensed and split
-	// at range boundaries.
-	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
-	var sendFn simpleSendFn = func(
-		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
-		resp := args.CreateReply()
-		resp.Txn = args.Txn
-		if req, ok := args.GetArg(roachpb.EndTxn); ok {
-			if !req.(*roachpb.EndTxnRequest).Commit {
-				t.Errorf("expected commit to be true")
-			}
-			et := req.(*roachpb.EndTxnRequest)
-			if a, e := et.LockSpans, expLocks; !reflect.DeepEqual(a, e) {
-				t.Errorf("expected end transaction to have locks %+v; got %+v", e, a)
-			}
-			resp.Txn.Status = roachpb.COMMITTED
-		}
-		return resp, nil
-	}
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx: ambient,
-		Clock:      s.Clock,
-		NodeDescs:  s.Gossip,
-		RPCContext: s.Cfg.RPCContext,
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(sendFn),
-		},
-		RangeDescriptorDB: descDB,
-		Settings:          cluster.MakeTestingClusterSettings(),
-	})
-	tsf := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   st,
-			Clock:      s.Clock,
-			Stopper:    s.Stopper(),
-		},
-		ds,
-	)
-	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
-	ctx := context.Background()
-
-	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	// Disable txn pipelining so that all write spans are immediately
-	// added to the transaction's lock footprint.
-	if err := txn.DisablePipelining(); err != nil {
-		t.Fatal(err)
-	}
-	for i, tc := range testCases {
-		if tc.span.EndKey != nil {
-			if err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			if err := txn.Put(ctx, tc.span.Key, []byte("value")); err != nil {
-				t.Fatal(err)
-			}
-		}
-		tcs := txn.Sender().(*TxnCoordSender)
-		locks := tcs.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
-		if a, e := locks, tc.expLocks; !reflect.DeepEqual(a, e) {
-			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
-		}
-		locksSize := int64(0)
-		for _, i := range locks {
-			locksSize += int64(len(i.Key) + len(i.EndKey))
-		}
-		if a, e := locksSize, tc.expLocksSize; a != e {
-			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
-		}
-	}
-	if err := txn.Commit(ctx); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -414,8 +286,8 @@ func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...
 			}
 		}
 		meta := &enginepb.MVCCMetadata{}
-		//lint:ignore SA1019 historical usage of deprecated eng.GetProto is OK
-		ok, _, _, err := eng.GetProto(storage.MakeMVCCMetadataKey(key), meta)
+		//lint:ignore SA1019 historical usage of deprecated eng.MVCCGetProto is OK
+		ok, _, _, err := eng.MVCCGetProto(storage.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}
@@ -467,22 +339,17 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Prev()) {
-					t.Fatalf("did not update deadline")
-				}
-
+				err := txn.UpdateDeadline(ctx, pushedTimestamp.Prev())
+				require.NoError(t, err, "Deadline update to past failed")
 			case 2:
 				// Equal deadline.
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp) {
-					t.Fatalf("did not update deadline")
-				}
+				err := txn.UpdateDeadline(ctx, pushedTimestamp)
+				require.NoError(t, err, "Deadline update to equal failed")
 
 			case 3:
 				// Future deadline.
-
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Next()) {
-					t.Fatalf("did not update deadline")
-				}
+				err := txn.UpdateDeadline(ctx, pushedTimestamp.Next())
+				require.NoError(t, err, "Deadline update to future failed")
 			}
 			err = txn.CommitOrCleanup(ctx)
 
@@ -511,6 +378,83 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		}
 		verifyCleanup(key, s.Eng, t, txn.Sender().(*TxnCoordSender))
 	}
+}
+
+// TestTxnCoordSenderCommitCanceled is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/68643. It makes sure that an
+// EndTxn(commit=false) sent by the caller in response to a client context
+// cancellation isn't passed through TxnCoordSender concurrently with an
+// asynchronous EndTxn(commit=true) request sent by txnCommitter to make an
+// implicitly committed transaction explicit.
+func TestTxnCoordSenderCommitCanceled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// blockCommits is used to block commit responses for a given txn. The key is
+	// a txn ID, and the value is a ready channel (chan struct) that will be
+	// closed when the commit has been received and blocked.
+	var blockCommits sync.Map
+	responseFilter := func(_ context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+		if arg, ok := ba.GetArg(roachpb.EndTxn); ok && ba.Txn != nil {
+			et := arg.(*roachpb.EndTxnRequest)
+			readyC, ok := blockCommits.Load(ba.Txn.ID)
+			if ok && et.Commit && len(et.InFlightWrites) == 0 {
+				close(readyC.(chan struct{})) // notify test that commit is received and blocked
+				<-ctx.Done()                  // wait for test to complete (NB: not the passed context)
+			}
+		}
+		return nil
+	}
+
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		TestingResponseFilter: responseFilter,
+	})
+	defer s.Stop()
+	ctx, _ = s.Stopper().WithCancelOnQuiesce(ctx)
+
+	// Set up a new txn, and write a couple of values.
+	txn := kv.NewTxn(ctx, s.DB, 0)
+	require.NoError(t, txn.Put(ctx, "a", "1"))
+	require.NoError(t, txn.Put(ctx, "b", "2"))
+
+	// Read back a. This is crucial to reproduce the original bug. We need
+	// txnPipeliner to record the lock in its lock footprint, but it doesn't do
+	// that if the intents are proven together with the commit EndTxn request
+	// (because it incorrectly assumes no further requests will be sent). If the
+	// lock footprint isn't updated, the TxnCoordSender will incorrectly believe
+	// the txn hasn't taken out any locks, and will elide the final
+	// EndTxn(commit=false) rollback request. For details, see:
+	// https://github.com/cockroachdb/cockroach/issues/68643
+	_, err := txn.Get(ctx, "a")
+	require.NoError(t, err)
+
+	// Commit the transaction, but ask the response filter to block the final
+	// async commit sent by txnCommitter to make the implicit commit explicit.
+	readyC := make(chan struct{})
+	blockCommits.Store(txn.ID(), readyC)
+	require.NoError(t, txn.Commit(ctx))
+	<-readyC
+
+	// From the TxnCoordSender's point of view, the txn is implicitly committed,
+	// and the commit response is on its way back up the stack. However, if the
+	// client were to disconnect before receiving the response (canceling the
+	// context), and something rolls back the transaction because of that, then
+	// txn.Rollback() would send an asynchronous rollback request using a separate
+	// context.
+	//
+	// However, this is hard to test since txn.Rollback() in this case sends the
+	// EndTxn(commit=false) async. We instead replicate what Txn.Rollback() would
+	// do here (i.e. send a EndTxn(commit=false)) and assert that we receive the
+	// expected error.
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.EndTxnRequest{Commit: false})
+	_, pErr := txn.Send(ctx, ba)
+	require.NotNil(t, pErr)
+	require.IsType(t, &roachpb.TransactionStatusError{}, pErr.GetDetail())
+	txnErr := pErr.GetDetail().(*roachpb.TransactionStatusError)
+	require.Equal(t, roachpb.TransactionStatusError_REASON_TXN_COMMITTED, txnErr.Reason)
 }
 
 // TestTxnCoordSenderAddLockOnError verifies that locks are tracked if the
@@ -697,48 +641,67 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
-	plus10 := origTS.Add(10, 10)
-	plus20 := origTS.Add(20, 0)
+	plus10 := origTS.Add(10, 10).WithSynthetic(false)
+	plus20 := origTS.Add(20, 0).WithSynthetic(false)
 	testCases := []struct {
 		// The test's name.
-		name             string
-		pErrGen          func(txn *roachpb.Transaction) *roachpb.Error
-		expEpoch         enginepb.TxnEpoch
-		expPri           enginepb.TxnPriority
-		expTS, expOrigTS hlc.Timestamp
+		name                  string
+		pErrGen               func(txn *roachpb.Transaction) *roachpb.Error
+		expEpoch              enginepb.TxnEpoch
+		expPri                enginepb.TxnPriority
+		expWriteTS, expReadTS hlc.Timestamp
 		// Is set, we're expecting that the Transaction proto is re-initialized (as
 		// opposed to just having the epoch incremented).
 		expNewTransaction bool
-		nodeSeen          bool
 	}{
 		{
 			// No error, so nothing interesting either.
-			name:      "nil",
-			pErrGen:   func(_ *roachpb.Transaction) *roachpb.Error { return nil },
-			expEpoch:  0,
-			expPri:    1,
-			expTS:     origTS,
-			expOrigTS: origTS,
+			name:       "nil",
+			pErrGen:    func(_ *roachpb.Transaction) *roachpb.Error { return nil },
+			expEpoch:   0,
+			expPri:     1,
+			expWriteTS: origTS,
+			expReadTS:  origTS,
 		},
 		{
-			// On uncertainty error, new epoch begins and node is seen.
-			// Timestamp moves ahead of the existing write.
-			name: "ReadWithinUncertaintyIntervalError",
+			// On uncertainty error, new epoch begins. Timestamp moves ahead of
+			// the existing write and LocalUncertaintyLimit, if one exists.
+			name: "ReadWithinUncertaintyIntervalError without LocalUncertaintyLimit",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				const nodeID = 1
-				txn.UpdateObservedTimestamp(nodeID, plus10)
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						hlc.Timestamp{}, hlc.Timestamp{}, nil),
+						origTS,          // readTS
+						plus10,          // existingTS
+						hlc.Timestamp{}, // localUncertaintyLimit
+						txn,
+					),
 					txn)
-				pErr.OriginNode = nodeID
 				return pErr
 			},
-			expEpoch:  1,
-			expPri:    1,
-			expTS:     plus10,
-			expOrigTS: plus10,
-			nodeSeen:  true,
+			expEpoch:   1,
+			expPri:     1,
+			expWriteTS: plus10.Next(),
+			expReadTS:  plus10.Next(),
+		},
+		{
+			// On uncertainty error, new epoch begins. Timestamp moves ahead of
+			// the existing write and LocalUncertaintyLimit, if one exists.
+			name: "ReadWithinUncertaintyIntervalError with LocalUncertaintyLimit",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				pErr := roachpb.NewErrorWithTxn(
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						origTS, // readTS
+						plus10, // existingTS
+						plus20, // localUncertaintyLimit
+						txn,
+					),
+					txn)
+				return pErr
+			},
+			expEpoch:   1,
+			expPri:     1,
+			expWriteTS: plus20,
+			expReadTS:  plus20,
 		},
 		{
 			// On abort, nothing changes but we get a new priority to use for
@@ -751,8 +714,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			},
 			expNewTransaction: true,
 			expPri:            10,
-			expTS:             plus20,
-			expOrigTS:         plus20,
+			expWriteTS:        plus20,
+			expReadTS:         plus20,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
@@ -765,10 +728,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					},
 				}, txn)
 			},
-			expEpoch:  1,
-			expPri:    9,
-			expTS:     plus10,
-			expOrigTS: plus10,
+			expEpoch:   1,
+			expPri:     9,
+			expWriteTS: plus10,
+			expReadTS:  plus10,
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
@@ -778,10 +741,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{}, txn)
 			},
-			expEpoch:  1,
-			expPri:    10,
-			expTS:     plus10,
-			expOrigTS: plus10,
+			expEpoch:   1,
+			expPri:     10,
+			expWriteTS: plus10,
+			expReadTS:  plus10,
 		},
 	}
 
@@ -818,12 +781,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			)
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
-			now := clock.Now()
+			now := clock.NowAsClockTimestamp()
 			origTxnProto := roachpb.MakeTransaction(
 				"test txn",
 				key,
 				roachpb.UserPriority(0),
-				now,
+				now.ToTimestamp(),
 				clock.MaxOffset().Nanoseconds(),
 			)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
@@ -857,17 +820,13 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Errorf("expected priority = %d; got %d",
 					test.expPri, proto.Priority)
 			}
-			if proto.WriteTimestamp != test.expTS {
+			if proto.WriteTimestamp != test.expWriteTS {
 				t.Errorf("expected timestamp to be %s; got %s",
-					test.expTS, proto.WriteTimestamp)
+					test.expWriteTS, proto.WriteTimestamp)
 			}
-			if proto.ReadTimestamp != test.expOrigTS {
+			if proto.ReadTimestamp != test.expReadTS {
 				t.Errorf("expected orig timestamp to be %s; got %s",
-					test.expOrigTS, proto.ReadTimestamp)
-			}
-			if ns := proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
-				t.Errorf("expected nodeSeen=%t, but list of hosts is %v",
-					test.nodeSeen, ns)
+					test.expReadTS, proto.ReadTimestamp)
 			}
 		})
 	}
@@ -963,7 +922,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	db := kv.NewDB(ambient, factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	// Acquire locks on a-b, c, u-w before the final batch.
+	// Acquire locks on a-b, c, m, u-w before the final batch.
 	_, pErr := txn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -972,23 +931,30 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"))
+	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false /* returnKeys */)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// The final batch overwrites key c and overlaps part of the a-b and u-w ranges.
+	// The final batch overwrites key c, reads key n, and overlaps part of the a-b and u-w ranges.
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
 	b.Put(roachpb.Key("d"), []byte("value"))
+	b.GetForUpdate(roachpb.Key("n"))
 	b.ReverseScanForUpdate(roachpb.Key("v"), roachpb.Key("z"))
 
-	// The expected locks are a-b, c, and u-z.
+	// The expected locks are a-b, c, m, n, and u-z.
 	expectedLockSpans = []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()},
 		{Key: roachpb.Key("c"), EndKey: nil},
 		{Key: roachpb.Key("d"), EndKey: nil},
+		{Key: roachpb.Key("m"), EndKey: nil},
+		{Key: roachpb.Key("n"), EndKey: nil},
 		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
 	}
 
@@ -1060,9 +1026,7 @@ func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetr
 
 	metrics := MakeTxnMetrics(metric.TestSampleInterval)
 	s.DB.GetFactory().(*TxnCoordSenderFactory).metrics = metrics
-	return s, metrics, func() {
-		s.Stop()
-	}
+	return s, metrics, s.Stop
 }
 
 // Test a normal transaction. This and the other metrics tests below use real KV operations,
@@ -1134,25 +1098,32 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
-
-	value := []byte("value")
-
 	const intentionalErrText = "intentional error to cause abort"
-	// Test aborted transaction.
-	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		key := []byte("key-abort")
 
-		if err := txn.Put(ctx, key, value); err != nil {
-			t.Fatal(err)
-		}
+	// Test aborted read-write transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := txn.Put(ctx, "key", "value")
+		require.NoError(t, err)
 
 		return errors.New(intentionalErrText)
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 1 /* aborts */, 0)
+
+	// Test aborted read-only transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.Get(ctx, "key")
+		require.NoError(t, err)
+
+		return errors.New(intentionalErrText)
+	}); !testutils.IsError(err, intentionalErrText) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 2 /* aborts */, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -1252,6 +1223,176 @@ func TestTxnDurations(t *testing.T) {
 	}
 }
 
+// TestTxnCommitWait tests the commit-wait sleep phase of transactions under
+// various conditions. It verifies that transactions sleep for the correct
+// amount of time and verifies that metrics are correctly updated to reflect
+// these commit-wait sleeps. For more, see TxnCoordSender.maybeCommitWait.
+func TestTxnCommitWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Testing parameters:
+	//
+	// - linearizable: is linearizable mode enabled?
+	// - commit:       does the transaction commit or rollback?
+	// - readOnly:     does the transaction perform any writes?
+	// - futureTime:   does the transaction commit in the future?
+	// - deferred:     does the caller assume responsibility for commit waiting?
+	//
+	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime, deferred bool) {
+		s, metrics, cleanupFn := setupMetricsTest(t)
+		s.DB.GetFactory().(*TxnCoordSenderFactory).linearizable = linearizable
+		defer cleanupFn()
+
+		// maxClockOffset defines the maximum clock offset between nodes in the
+		// cluster. When in linearizable mode, all writing transactions must
+		// wait this additional duration after committing to ensure that their
+		// commit timestamp is below the current HLC clock time of any other
+		// node in the system. In doing so, all causally dependent transactions
+		// are guaranteed to start with higher timestamps, regardless of the
+		// gateway they use. This ensures that all causally dependent
+		// transactions commit with higher timestamps, even if their read and
+		// writes sets do not conflict with the original transaction's. This, in
+		// turn, prevents the "causal reverse" anamoly which can be observed by
+		// a third, concurrent transaction. See the following blog post for
+		// more: https://www.cockroachlabs.com/blog/consistency-model/.
+		maxClockOffset := s.Clock.MaxOffset()
+		// futureOffset defines how far in the future the test transaction will
+		// commit, if futureTime is true. We set it to less than the maximum
+		// clock offset as a convenience, so that a value this far in the future
+		// falls within the uncertainty interval of a read, which allows the
+		// test to cause a read-only transaction to commit with a future
+		// timestamp, if readOnly is true.
+		futureOffset := maxClockOffset / 2
+
+		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		readyC := make(chan struct{})
+		deferredWaitC := make(chan struct{})
+		errC := make(chan error, 1)
+		go func() {
+			var commitWaitFn func(context.Context) error
+			if deferred {
+				// If the test wants the caller to assume responsibility for commit
+				// waiting, we expect the transaction to return immediately after a
+				// commit. However, the commit-wait function returned here will then
+				// block for the duration of the commit-wait.
+				commitWaitFn = txn.DeferCommitWait(ctx)
+			}
+
+			// Run the transaction.
+			err := func() error {
+				key := roachpb.Key("a")
+
+				// If we want the transaction to commit in the future, we
+				// perform a write in its near future. If the transaction is
+				// read-only, it will restart due to uncertainty. If the
+				// transaction is read-write, it will need to bump its write
+				// timestamp above the other value.
+				if futureTime {
+					ts := txn.TestingCloneTxn().WriteTimestamp.
+						Add(futureOffset.Nanoseconds(), 0).
+						WithSynthetic(true)
+					h := roachpb.Header{Timestamp: ts}
+					put := roachpb.NewPut(key, roachpb.Value{})
+					if _, pErr := kv.SendWrappedWith(ctx, s.DB.NonTransactionalSender(), h, put); pErr != nil {
+						return pErr.GoError()
+					}
+				}
+
+				if readOnly {
+					if _, err := txn.Get(ctx, key); err != nil {
+						return err
+					}
+				} else {
+					if err := txn.Put(ctx, key, "val"); err != nil {
+						return err
+					}
+				}
+
+				close(readyC)
+				if !commit {
+					return txn.Rollback(ctx)
+				}
+				return txn.Commit(ctx)
+			}()
+
+			if commitWaitFn != nil {
+				close(deferredWaitC)
+				_ = commitWaitFn(ctx) // NOTE: blocks
+			}
+
+			errC <- err
+		}()
+
+		// Wait until the transaction is about to commit / rollback.
+		<-readyC
+
+		// If the test deferred the commit wait, the transaction commit should
+		// return immediately, without waiting. However, the caller will then
+		// wait when it calls the commit-wait function.
+		if deferred {
+			<-deferredWaitC
+		}
+
+		if !commit {
+			// If the transaction rolled back, it should immediately return,
+			// without waiting.
+			require.NoError(t, <-errC)
+			require.Equal(t, int64(0), metrics.CommitWaits.Count())
+			return
+		}
+
+		// If the transaction committed, it will need to wait at least until its
+		// commit timestamp is below the HLC clock. If linearizable mode is
+		// enabled and this transaction wrote then it will need to wait an
+		// additional max_offset.
+		expWait := time.Duration(0)
+		if linearizable && !readOnly {
+			expWait += maxClockOffset
+		}
+		if futureTime {
+			expWait += futureOffset
+		}
+		expMetric := int64(0)
+		if expWait > 0 {
+			expMetric = 1
+		}
+
+		// Advance the manual clock slowly. If the commit-wait sleep completes
+		// too early, we'll catch it with the require.Empty. If it completes too
+		// late, we'll stall when pulling from the channel.
+		for expWait > 0 {
+			require.Empty(t, errC)
+
+			adv := futureOffset / 5
+			expWait -= adv
+			s.Manual.Increment(adv.Nanoseconds())
+		}
+		require.NoError(t, <-errC)
+		require.Equal(t, expMetric, metrics.CommitWaits.Count())
+
+		// Validate the transaction's commit timestamp in relation to the local
+		// HLC clock.
+		minClockTS := txn.TestingCloneTxn().WriteTimestamp
+		if linearizable && !readOnly {
+			minClockTS = minClockTS.Add(maxClockOffset.Nanoseconds(), 0)
+		}
+		require.True(t, minClockTS.Less(s.Clock.Now()))
+	}
+	testutils.RunTrueAndFalse(t, "linearizable", func(t *testing.T, linearizable bool) {
+		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+			testutils.RunTrueAndFalse(t, "readOnly", func(t *testing.T, readOnly bool) {
+				testutils.RunTrueAndFalse(t, "futureTime", func(t *testing.T, futureTime bool) {
+					testutils.RunTrueAndFalse(t, "deferred", func(t *testing.T, deferred bool) {
+						testFn(t, linearizable, commit, readOnly, futureTime, deferred)
+					})
+				})
+			})
+		})
+	})
+}
+
 // TestAbortTransactionOnCommitErrors verifies that transactions are
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
@@ -1270,9 +1411,10 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				const nodeID = 0
 				// ReadWithinUncertaintyIntervalErrors need a clock to have been
 				// recorded on the origin.
-				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0))
+				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil),
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					&txn)
 			},
 			asyncAbort: false},
@@ -1298,16 +1440,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 
-				if _, hasPut := ba.GetArg(roachpb.Put); hasPut {
-					if _, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest); !ok {
-						t.Fatalf("expected Put")
-					}
-					union := &br.Responses[0] // avoid operating on copy
-					union.MustSetInner(&roachpb.PutResponse{})
-					if ba.Txn != nil && br.Txn == nil {
-						br.Txn.Status = roachpb.PENDING
-					}
-				} else if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+				if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 					if et.(*roachpb.EndTxnRequest).Commit {
 						commit.Store(true)
 						if test.errFn != nil {
@@ -1316,8 +1449,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
 					}
 					abort.Store(true)
-				} else {
-					t.Fatalf("unexpected batch: %s", ba)
 				}
 				return br, nil
 			}
@@ -1672,7 +1803,10 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			pointWrite: true,
 		},
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.DelRange(ctx, "a", "b") },
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				return err
+			},
 			expMethod:  roachpb.DeleteRange,
 			pointWrite: false,
 		},
@@ -2105,11 +2239,12 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	t.Run("standalone commit", func(t *testing.T) {
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
-		txn.UpdateDeadlineMaybe(ctx, clock.Now())
+		err := txn.UpdateDeadline(ctx, clock.Now())
+		require.NoError(t, err, "Deadline update to now failed")
 		if _, err := txn.Get(ctx, "k"); err != nil {
 			t.Fatal(err)
 		}
-		err := txn.Commit(ctx)
+		err = txn.Commit(ctx)
 		assertTransactionRetryError(t, err)
 		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %s", err)
@@ -2119,10 +2254,11 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	t.Run("commit in batch", func(t *testing.T) {
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
-		txn.UpdateDeadlineMaybe(ctx, clock.Now())
+		err := txn.UpdateDeadline(ctx, clock.Now())
+		require.NoError(t, err, "Deadline update to now failed")
 		b := txn.NewBatch()
 		b.Get("k")
-		err := txn.CommitInBatch(ctx, b)
+		err = txn.CommitInBatch(ctx, b)
 		assertTransactionRetryError(t, err)
 		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %s", err)
@@ -2161,6 +2297,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		Settings:   s.Cfg.Settings,
 		Clock:      s.Clock,
 		Stopper:    s.Stopper(),
+		// Disable transaction heartbeats so that they don't disrupt our attempt to
+		// track the requests issued by the transactions.
+		HeartbeatInterval: -1,
 	}, senderFn)
 	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
 
@@ -2331,5 +2470,377 @@ func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	leafInputState2 := txn.GetLeafTxnInputState(ctx)
 	if leafInputState2.Txn.Status != roachpb.PENDING {
 		t.Fatalf("expected PENDING txn, got: %s", leafInputState2.Txn.Status)
+	}
+}
+
+// Test that evaluating a request within a txn with the STAGING status works
+// fine. It's unusual for the server to receive a request in the STAGING status
+// (other than a single EndTxn which transitions from STAGING->COMMITTED),
+// because the committer interceptor reverts the status from STAGING->PENDING if
+// the batch moving to STAGING has been split and some part of it failed.
+// However, it can still happen that the server receives a request with the
+// STAGING record when the DistSender splits a batch and doesn't send all the
+// sub-batches in parallel; in that case it's possible that a sub-batch with the
+// EndTxn succeeds, and then the DistSender will send the remaining sub-batches
+// with a STAGING status.
+func TestPutsInStagingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	var putInStagingSeen bool
+	var storeKnobs kvserver.StoreTestingKnobs
+	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		put, ok := ba.GetArg(roachpb.Put)
+		if !ok || !put.(*roachpb.PutRequest).Key.Equal(keyB) {
+			return nil
+		}
+		txn := ba.Txn
+		if txn == nil {
+			return nil
+		}
+		if txn.Status == roachpb.STAGING {
+			putInStagingSeen = true
+		}
+		return nil
+	}
+
+	// Disable the DistSender concurrency so that sub-batches split by the
+	// DistSender are send serially and the transaction is updated from one to
+	// another. See below.
+	settings := cluster.MakeTestingClusterSettings()
+	senderConcurrencyLimit.Override(ctx, &settings.SV, 0)
+
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Settings: settings,
+			Knobs:    base.TestingKnobs{Store: &storeKnobs},
+		})
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(t, db.AdminSplit(ctx, keyB /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */))
+
+	txn := db.NewTxn(ctx, "test")
+
+	// Cause a write too old condition for the upcoming txn writes, to spicy up
+	// the test.
+	require.NoError(t, db.Put(ctx, keyB, "b"))
+
+	// Send a batch that will be split into two sub-batches: [Put(a)+EndTxn,
+	// Put(b)] (the EndTxn is grouped with the first write). These sub-batches are
+	// sent serially since we've inhibited the DistSender's concurrency. The first
+	// one will transition the txn to STAGING, and the DistSender will use that
+	// updated txn when sending the 2nd sub-batch.
+	b := txn.NewBatch()
+	b.Put(keyA, "a")
+	b.Put(keyB, "b")
+	require.NoError(t, txn.CommitInBatch(ctx, b))
+	// Verify that the test isn't fooling itself by checking that we've indeed
+	// seen a batch with the STAGING status.
+	require.True(t, putInStagingSeen)
+}
+
+// TestTxnManualRefresh verifies that TxnCoordSender's ManualRefresh method
+// works as expected.
+func TestTxnManualRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create some machinery to mock out the kvserver and allow the test to
+	// launch some requests from the client and then pass control flow of handling
+	// those requests back to the test.
+	type resp struct {
+		br   *roachpb.BatchResponse
+		pErr *roachpb.Error
+	}
+	type req struct {
+		ba     roachpb.BatchRequest
+		respCh chan resp
+	}
+	type testCase struct {
+		name string
+		run  func(
+			ctx context.Context,
+			t *testing.T,
+			db *kv.DB,
+			clock *hlc.ManualClock,
+			reqCh <-chan req,
+		)
+	}
+	var cases = []testCase{
+		{
+			name: "no-op",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				// Now a refresh should be a no-op which is indicated by the fact that
+				// this call does not block to send requests.
+				require.NoError(t, txn.ManualRefresh(ctx))
+				require.NoError(t, txn.Commit(ctx))
+			},
+		},
+		{
+			name: "refresh occurs successfully due to read",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.Put(ctx, "bar", "baz")
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Put)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn.Clone()
+					// Push the WriteTimestamp simulating an interaction with the
+					// timestamp cache.
+					br.Txn.WriteTimestamp = db.Clock().Now()
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.ManualRefresh(ctx)
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Refresh)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn.Clone()
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				// Now a refresh should be a no-op which is indicated by the fact that
+				// this call does not block to send requests.
+				require.NoError(t, txn.ManualRefresh(ctx))
+			},
+		},
+		{
+			name: "refresh occurs unsuccessfully due to read",
+			run: func(
+				ctx context.Context, t *testing.T, db *kv.DB,
+				clock *hlc.ManualClock, reqCh <-chan req,
+			) {
+				txn := db.NewTxn(ctx, "test")
+				errCh := make(chan error)
+				go func() {
+					_, err := txn.Get(ctx, "foo")
+					errCh <- err
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Get)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.Put(ctx, "bar", "baz")
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Put)
+					require.True(t, ok)
+					br := r.ba.CreateReply()
+					br.Txn = r.ba.Txn.Clone()
+					// Push the WriteTimestamp simulating an interaction with the
+					// timestamp cache.
+					br.Txn.WriteTimestamp = db.Clock().Now()
+					r.respCh <- resp{br: br}
+				}
+				require.NoError(t, <-errCh)
+
+				go func() {
+					errCh <- txn.ManualRefresh(ctx)
+				}()
+				{
+					r := <-reqCh
+					_, ok := r.ba.GetArg(roachpb.Refresh)
+					require.True(t, ok)
+					// Rejects the refresh due to a conflicting write.
+					pErr := roachpb.NewErrorf("encountered recently written key")
+					r.respCh <- resp{pErr: pErr}
+				}
+				require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, <-errCh)
+			},
+		},
+	}
+	run := func(t *testing.T, tc testCase) {
+		stopper := stop.NewStopper()
+		manual := hlc.NewManualClock(123)
+		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		reqCh := make(chan req)
+		var senderFn kv.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
+			*roachpb.BatchResponse, *roachpb.Error) {
+			r := req{
+				ba:     ba,
+				respCh: make(chan resp),
+			}
+			select {
+			case reqCh <- r:
+			case <-ctx.Done():
+				return nil, roachpb.NewError(ctx.Err())
+			}
+			select {
+			case rr := <-r.respCh:
+				return rr.br, rr.pErr
+			case <-ctx.Done():
+				return nil, roachpb.NewError(ctx.Err())
+			}
+		}
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		tsf := NewTxnCoordSenderFactory(
+			TxnCoordSenderFactoryConfig{
+				AmbientCtx:        ambient,
+				Clock:             clock,
+				Stopper:           stopper,
+				HeartbeatInterval: time.Hour,
+			},
+			senderFn,
+		)
+		db := kv.NewDB(ambient, tsf, clock, stopper)
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		tc.run(cancelCtx, t, db, manual, reqCh)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
+
+// TestTxnCoordSenderSetFixedTimestamp tests that SetFixedTimestamp cannot be
+// called after a transaction has already been used in the current epoch to read
+// or write.
+func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	for _, test := range []struct {
+		name   string
+		before func(*testing.T, *kv.Txn)
+		expErr string
+	}{
+		{
+			name:   "nothing before",
+			before: func(t *testing.T, txn *kv.Txn) {},
+		},
+		{
+			name: "read before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+			},
+			expErr: "cannot set fixed timestamp, .* already performed reads",
+		},
+		{
+			name: "write before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+			},
+			expErr: "cannot set fixed timestamp, .* already performed writes",
+		},
+		{
+			name: "read and write before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+			},
+			expErr: "cannot set fixed timestamp, .* already performed reads",
+		},
+		{
+			name: "read before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+		},
+		{
+			name: "write before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+		},
+		{
+			name: "read and write before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := createTestDB(t)
+			defer s.Stop()
+
+			txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			test.before(t, txn)
+
+			ts := s.Clock.Now()
+			err := txn.SetFixedTimestamp(ctx, ts)
+			if test.expErr != "" {
+				require.Error(t, err)
+				require.Regexp(t, test.expErr, err)
+				require.False(t, txn.CommitTimestampFixed())
+			} else {
+				require.NoError(t, err)
+				require.True(t, txn.CommitTimestampFixed())
+				require.Equal(t, ts, txn.CommitTimestamp())
+			}
+		})
 	}
 }

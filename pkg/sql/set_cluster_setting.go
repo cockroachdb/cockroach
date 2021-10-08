@@ -11,26 +11,36 @@
 package sql
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
@@ -43,6 +53,26 @@ type setClusterSettingNode struct {
 	setting settings.WritableSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
+	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
+	// version` but before executing it. It can carry out arbitrary migrations
+	// that allow us to eventually remove legacy code.
+	versionUpgradeHook VersionUpgradeHook
+}
+
+func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
+	if settings.AdminOnly(name) {
+		return p.RequireAdminRole(ctx, fmt.Sprintf("%s cluster setting '%s'", action, name))
+	}
+	hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+	if err != nil {
+		return err
+	}
+	if !hasModify {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with the %s privilege are allowed to %s cluster setting '%s'",
+			roleoption.MODIFYCLUSTERSETTING, action, name)
+	}
+	return nil
 }
 
 // SetClusterSetting sets session variables.
@@ -50,16 +80,6 @@ type setClusterSettingNode struct {
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
-	if err := p.RequireAdminRole(ctx, "SET CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
-	if !p.execCfg.TenantTestingKnobs.CanSetClusterSettings() && !p.execCfg.Codec.ForSystemTenant() {
-		// Setting cluster settings is disabled for phase 2 tenants if a test does
-		// not explicitly allow for setting in-memory cluster settings.
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can SET CLUSTER SETTING")
-	}
-
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
@@ -67,15 +87,18 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
 
+	if err := checkPrivilegesForSetting(ctx, p, name, "set"); err != nil {
+		return nil, err
+	}
+
 	setting, ok := v.(settings.WritableSetting)
 	if !ok {
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if _, ok := setting.(*settings.StateMachineSetting); ok && p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
-		// A tenant that is allowed to set in-memory cluster settings is attempting
-		// to set a state machine setting, which is disallowed due to complexity.
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can set state machine settings")
+	if setting.SystemOnly() && !p.execCfg.Codec.ForSystemTenant() {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"setting %s is only settable in the system tenant", name)
 	}
 
 	var value tree.TypedExpr
@@ -83,13 +106,13 @@ func (p *planner) SetClusterSetting(
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
 		if _, ok := n.Value.(tree.DefaultVal); !ok {
 			expr := n.Value
-			expr = unresolvedNameToStrVal(expr)
+			expr = paramparse.UnresolvedNameToStrVal(expr)
 
 			var requiredType *types.T
 			var dummyHelper tree.IndexedVarHelper
 
 			switch setting.(type) {
-			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
+			case *settings.StringSetting, *settings.VersionSetting, *settings.ByteSizeSetting:
 				requiredType = types.String
 			case *settings.BoolSetting:
 				requiredType = types.Bool
@@ -131,43 +154,22 @@ func (p *planner) SetClusterSetting(
 			}
 
 			value = typed
-		} else if _, isStateMachineSetting := setting.(*settings.StateMachineSetting); isStateMachineSetting {
-			return nil, errors.New("cannot RESET this cluster setting")
+		} else if _, isVersionSetting := setting.(*settings.VersionSetting); isVersionSetting {
+			return nil, errors.New("cannot RESET cluster version setting")
 		}
 	}
 
-	return &setClusterSettingNode{name: name, st: st, setting: setting, value: value}, nil
+	csNode := setClusterSettingNode{
+		name: name, st: st, setting: setting, value: value,
+		versionUpgradeHook: p.execCfg.VersionUpgradeHook,
+	}
+	return &csNode, nil
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
 	if !params.p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
 	}
-
-	if !params.p.execCfg.Codec.ForSystemTenant() {
-		// Sanity check that this tenant is able to set in-memory settings.
-		if !params.p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
-			return errors.Errorf("tenants cannot set cluster settings, this permission should have been checked at plan time")
-		}
-		var encodedValue string
-		if n.value == nil {
-			encodedValue = n.setting.EncodedDefault()
-		} else {
-			value, err := n.value.Eval(params.p.EvalContext())
-			if err != nil {
-				return err
-			}
-			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
-				return errors.Errorf("tenants cannot change state machine settings, this should've been checked at plan time")
-			}
-			encodedValue, err = toSettingString(params.ctx, n.st, n.name, n.setting, value, nil /* prev */)
-			if err != nil {
-				return err
-			}
-		}
-		return params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(n.name, encodedValue, n.setting.Typ())
-	}
-
 	execCfg := params.extendedEvalCtx.ExecCfg
 	var expectedEncodedValue string
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -177,7 +179,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			expectedEncodedValue = n.setting.EncodedDefault()
 			if _, err := execCfg.InternalExecutor.ExecEx(
 				ctx, "reset-setting", txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"DELETE FROM system.settings WHERE name = $1", n.name,
 			); err != nil {
 				return err
@@ -189,10 +191,11 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 			var prev tree.Datum
-			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
+			_, isSetVersion := n.setting.(*settings.VersionSetting)
+			if isSetVersion {
 				datums, err := execCfg.InternalExecutor.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
-					sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					"SELECT value FROM system.settings WHERE name = $1", n.name,
 				)
 				if err != nil {
@@ -203,22 +206,103 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 					// hasn't run yet, we can't update the version as we don't
 					// have good enough information about the current cluster
 					// version.
-					return errors.New("no persisted cluster version found, please retry later")
+					if params.extendedEvalCtx.Codec.ForSystemTenant() {
+						return errors.New("no persisted cluster version found, please retry later")
+					}
+					// The tenant cluster in 20.2 did not ever initialize this value and
+					// utilized this hard-coded value instead. In 21.1, the builtin
+					// which creates tenants sets up the cluster version state. It also
+					// is set when the version is upgraded.
+					tenantDefaultVersion := clusterversion.ClusterVersion{
+						Version: roachpb.Version{Major: 20, Minor: 2},
+					}
+					// Pretend that the expected value was already there to allow us to
+					// run migrations.
+					prevEncoded, err := protoutil.Marshal(&tenantDefaultVersion)
+					if err != nil {
+						return errors.WithAssertionFailure(err)
+					}
+					prev = tree.NewDString(string(prevEncoded))
+				} else {
+					prev = datums[0]
 				}
-				prev = datums[0]
 			}
 			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value, prev)
 			expectedEncodedValue = encoded
 			if err != nil {
 				return err
 			}
-			if _, err = execCfg.InternalExecutor.ExecEx(
-				ctx, "update-setting", txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-				n.name, encoded, n.setting.Typ(),
-			); err != nil {
-				return err
+
+			if isSetVersion {
+				// Updates the version inside the system.settings table.
+				// If we are already at the target version, then this
+				// function is idempotent.
+				updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion) error {
+					rawValue, err := protoutil.Marshal(&version)
+					if err != nil {
+						return err
+					}
+					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						// Confirm if the version has actually changed on us.
+						datums, err := execCfg.InternalExecutor.QueryRowEx(
+							ctx, "retrieve-prev-setting", txn,
+							sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+							"SELECT value FROM system.settings WHERE name = $1", n.name,
+						)
+						versionIsDifferent := true
+						if len(datums) > 0 {
+							dStr, ok := datums[0].(*tree.DString)
+							if !ok {
+								return errors.Errorf("existing version value is not a string, got %T", datums[0])
+							}
+							oldRawValue := []byte(string(*dStr))
+							versionIsDifferent = !bytes.Equal(oldRawValue, rawValue)
+						}
+						// Only if the version has changed alter the setting.
+						if versionIsDifferent {
+							_, err = execCfg.InternalExecutor.ExecEx(
+								ctx, "update-setting", txn,
+								sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+								`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+								n.name, string(rawValue), n.setting.Typ(),
+							)
+						}
+						return err
+					})
+				}
+				if err := runVersionUpgradeHook(
+					ctx, params, prev, value, n.versionUpgradeHook, updateVersionSystemSetting,
+				); err != nil {
+					return err
+				}
+			} else {
+				if _, err = execCfg.InternalExecutor.ExecEx(
+					ctx, "update-setting", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+					n.name, encoded, n.setting.Typ(),
+				); err != nil {
+					return err
+				}
+			}
+
+			if params.p.execCfg.TenantTestingKnobs != nil {
+				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, n.name, encoded, n.setting.Typ()); err != nil {
+					return err
+				}
+			}
+		}
+
+		if n.name == sessioninit.CacheEnabledSettingName {
+			if expectedEncodedValue == "false" {
+				// Bump role-related table versions to force other nodes to clear out
+				// their AuthInfo cache.
+				if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+					return err
+				}
+				if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -257,28 +341,30 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			if err != nil {
 				break
 			}
-			validatedExecMode, isValid := sessiondata.VectorizeExecModeFromString(sessiondata.VectorizeExecMode(val).String())
+			validatedExecMode, isValid := sessiondatapb.VectorizeExecModeFromString(sessiondatapb.VectorizeExecMode(val).String())
 			if !isValid {
 				break
 			}
 			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
+		case colexec.HashAggregationDiskSpillingEnabledSettingName:
+			if expectedEncodedValue == "false" {
+				telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
+			}
 		}
 
-		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogSetClusterSetting,
+		return params.p.logEvent(ctx,
 			0, /* no target */
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
-		)
+			&eventpb.SetClusterSetting{
+				SettingName: n.name,
+				Value:       reportedValue,
+			})
 	}); err != nil {
 		return err
 	}
 
-	if _, ok := n.setting.(*settings.StateMachineSetting); ok && n.value == nil {
-		// The "version" setting doesn't have a well defined "default" since it is
-		// set in a startup migration.
+	if _, ok := n.setting.(*settings.VersionSetting); ok && n.value == nil {
+		// The "version" setting doesn't have a well defined "default" since it
+		// is set in a startup migration.
 		return nil
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
@@ -297,6 +383,33 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		)
 	}
 	return err
+}
+
+func runVersionUpgradeHook(
+	ctx context.Context,
+	params runParams,
+	prev tree.Datum,
+	value tree.Datum,
+	f VersionUpgradeHook,
+	updateVersionSystemSetting UpdateVersionSystemSettingHook,
+) error {
+	var from, to clusterversion.ClusterVersion
+
+	fromVersionVal := []byte(string(*prev.(*tree.DString)))
+	if err := protoutil.Unmarshal(fromVersionVal, &from); err != nil {
+		return err
+	}
+
+	targetVersionStr := string(*value.(*tree.DString))
+	to.Version = roachpb.MustParseVersion(targetVersionStr)
+
+	// toSettingString already validated the input, and checked to
+	// see that we are allowed to transition. Let's call into our
+	// upgrade hook to run migrations, if any.
+	if err := f(ctx, params.p.User(), from, to, updateVersionSystemSetting); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
@@ -322,14 +435,20 @@ func toSettingString(
 			return string(*s), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
-	case *settings.StateMachineSetting:
+	case *settings.VersionSetting:
 		if s, ok := d.(*tree.DString); ok {
 			dStr, ok := prev.(*tree.DString)
 			if !ok {
-				return "", errors.New("the existing value is not a string")
+				return "", errors.Errorf("the existing value is not a string, got %T", prev)
 			}
+
 			prevRawVal := []byte(string(*dStr))
-			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, string(*s))
+			newRawVal, err := clusterversion.EncodingFromVersionStr(string(*s))
+			if err != nil {
+				return "", err
+			}
+
+			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, newRawVal)
 			if err != nil {
 				return "", err
 			}

@@ -26,8 +26,8 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/confchange"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3/confchange"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 // TestAtomicReplicationChange is a simple smoke test for atomic membership
@@ -48,15 +48,12 @@ func TestAtomicReplicationChange(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 6, args)
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.atomic_replication_changes.enabled = true`)
-	require.NoError(t, err)
-
 	// Create a range and put it on n1, n2, n3. Intentionally do this one at a
 	// time so we're not using atomic replication changes yet.
 	k := tc.ScratchRange(t)
-	desc, err := tc.AddReplicas(k, tc.Target(1))
+	desc, err := tc.AddVoters(k, tc.Target(1))
 	require.NoError(t, err)
-	desc, err = tc.AddReplicas(k, tc.Target(2))
+	desc, err = tc.AddVoters(k, tc.Target(2))
 	require.NoError(t, err)
 
 	runChange := func(expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange) roachpb.RangeDescriptor {
@@ -71,7 +68,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			var sawStores []roachpb.StoreID
 			for _, s := range tc.Servers {
-				r, _, _ := s.Stores().GetReplicaForRangeID(desc.RangeID)
+				r, _, _ := s.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
 				if r == nil {
 					continue
 				}
@@ -105,10 +102,10 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Run a fairly general change.
 	desc = runChange(desc, []roachpb.ReplicationChange{
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(5)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(4)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(5)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(4)},
 	})
 
 	// Replicas should now live on all stores except s3.
@@ -119,10 +116,10 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Rebalance back down all the way.
 	desc = runChange(desc, []roachpb.ReplicationChange{
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(0)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(1)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(3)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(5)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(0)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(1)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(3)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(5)},
 	})
 
 	// Only a lone voter on s5 should be left over.

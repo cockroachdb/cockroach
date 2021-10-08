@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cliflags",
+    srcs = [
+        "flags.go",
+        "flags_mt.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/cliflags",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/docs",
+        "@com_github_kr_text//:text",
+    ],
+)

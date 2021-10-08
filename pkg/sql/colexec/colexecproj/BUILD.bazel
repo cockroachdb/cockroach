@@ -1,0 +1,89 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+
+go_library(
+    name = "colexecproj",
+    srcs = [
+        "like_ops.go",
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",  # keep
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/server/telemetry",  # keep
+        "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexeccmp",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecerror",  # keep
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/duration",  # keep
+        "//pkg/util/json",  # keep
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colexecproj_test",
+    srcs = [
+        "default_cmp_op_test.go",
+        "dep_test.go",
+        "inject_setup_test.go",
+        "main_test.go",
+        "projection_ops_test.go",
+    ],
+    embed = [":colexecproj"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colconv",
+        "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexec/execgen",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("default_cmp_proj_ops.eg.go", "default_cmp_proj_ops_tmpl.go"),
+    ("proj_const_left_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_const_right_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_like_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_non_const_ops.eg.go", "proj_non_const_ops_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)

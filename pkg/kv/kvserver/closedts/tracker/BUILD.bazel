@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracker",
+    srcs = [
+        "heap_tracker.go",
+        "lockfree_tracker.go",
+        "tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "tracker_test",
+    size = "small",
+    srcs = ["tracker_test.go"],
+    embed = [":tracker"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

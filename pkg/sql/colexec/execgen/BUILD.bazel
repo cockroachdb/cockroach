@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "execgen",
+    srcs = [
+        "execgen.go",
+        "inline.go",
+        "overloads_util.go",
+        "placeholders.go",
+        "supported_bin_cmp_ops.go",
+        "template.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dave_dst//:dst",
+        "@com_github_dave_dst//decorator",
+        "@com_github_dave_dst//dstutil",
+    ],
+)
+
+go_test(
+    name = "execgen_test",
+    size = "small",
+    srcs = [
+        "datadriven_test.go",
+        "inline_test.go",
+        "template_test.go",
+        "util_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":execgen"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_dave_dst//:dst",
+        "@com_github_dave_dst//decorator",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

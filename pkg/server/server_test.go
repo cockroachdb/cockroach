@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -29,17 +28,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,6 +61,8 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
@@ -405,8 +411,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
-	now := s.Clock().Now()
-	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now, 0)
+	now := s.Clock().NowAsClockTimestamp()
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now.ToTimestamp(), 0)
 	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
@@ -562,10 +568,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 
-	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
+	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *descpb.Descriptor {
-		return sqlbase.NewInitialDatabaseDescriptor(
-			descpb.ID(i), "foo", security.AdminRole,
+		return dbdesc.NewInitial(
+			descpb.ID(i), "foo", security.AdminRoleName(),
 		).DescriptorProto()
 	}
 
@@ -622,8 +628,8 @@ func TestSystemConfigGossip(t *testing.T) {
 			return err
 		}
 
-		expected := valAt(2).GetDatabase()
-		db := got.GetDatabase()
+		_, expected, _, _ := descpb.FromDescriptor(valAt(2))
+		_, db, _, _ := descpb.FromDescriptor(&got)
 		if db == nil {
 			panic(errors.Errorf("found nil database: %v", got))
 		}
@@ -695,7 +701,7 @@ func TestClusterIDMismatch(t *testing.T) {
 
 	engines := make([]storage.Engine, 2)
 	for i := range engines {
-		e := storage.NewDefaultInMem()
+		e := storage.NewDefaultInMemForTesting()
 		defer e.Close()
 
 		sIdent := roachpb.StoreIdent{
@@ -763,11 +769,12 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 			m := hlc.NewManualClock(test.clockStartTime)
 			c := hlc.NewClock(m.UnixNano, maxOffset)
 
-			sleepUntilFn := func(until int64, currentTime func() int64) {
-				delta := until - currentTime()
+			sleepUntilFn := func(ctx context.Context, t hlc.Timestamp) error {
+				delta := t.WallTime - c.Now().WallTime
 				if delta > 0 {
 					m.Increment(delta)
 				}
+				return nil
 			}
 
 			wallTime1 := c.Now().WallTime
@@ -811,9 +818,9 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r != 0 {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})
@@ -972,14 +979,10 @@ func TestServeIndexHTML(t *testing.T) {
 `
 
 	linkInFakeUI := func() {
-		ui.Asset = func(string) (_ []byte, _ error) { return }
-		ui.AssetDir = func(name string) (_ []string, _ error) { return }
-		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+		ui.HaveUI = true
 	}
 	unlinkFakeUI := func() {
-		ui.Asset = nil
-		ui.AssetDir = nil
-		ui.AssetInfo = nil
+		ui.HaveUI = false
 	}
 
 	t.Run("Insecure mode", func(t *testing.T) {
@@ -1040,9 +1043,9 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				htmlTemplate,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			)
@@ -1075,18 +1078,18 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					build.BinaryVersionPrefix(),
 					1,
 				),
 			},
@@ -1117,6 +1120,8 @@ func TestGWRuntimeMarshalProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	r, err := http.NewRequest(http.MethodGet, "nope://unused", strings.NewReader(""))
+	require.NoError(t, err)
 	// Regression test against:
 	// https://github.com/cockroachdb/cockroach/issues/49842
 	runtime.DefaultHTTPError(
@@ -1124,7 +1129,125 @@ func TestGWRuntimeMarshalProto(t *testing.T) {
 		runtime.NewServeMux(),
 		&protoutil.ProtoPb{}, // calls XXX_size
 		&httptest.ResponseRecorder{},
-		nil, /* request */
+		r,
 		errors.New("boom"),
 	)
+}
+
+func TestDecommissionNodeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+	decomNodeID := tc.Server(2).NodeID()
+
+	// Make sure node status entries have been created.
+	for i := 0; i < tc.NumServers(); i++ {
+		srv := tc.Server(i)
+		entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(srv.NodeID()))
+		require.NoError(t, err)
+		require.NotNil(t, entry.Value, "node status entry not found for node %d", srv.NodeID())
+	}
+
+	// Decommission the node.
+	srv := tc.Server(0)
+	require.NoError(t, srv.Decommission(
+		ctx, livenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decomNodeID}))
+	require.NoError(t, srv.Decommission(
+		ctx, livenesspb.MembershipStatus_DECOMMISSIONED, []roachpb.NodeID{decomNodeID}))
+
+	// The node status entry should now have been cleaned up.
+	entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(decomNodeID))
+	require.NoError(t, err)
+	require.Nil(t, entry.Value, "found stale node status entry for node %d", decomNodeID)
+}
+
+func TestSQLDecommissioned(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // to set up a simple SQL client
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Decommission server 1 and wait for it to lose cluster access.
+	srv := tc.Server(0)
+	decomSrv := tc.Server(1)
+	for _, status := range []livenesspb.MembershipStatus{
+		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
+	} {
+		require.NoError(t, srv.Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
+	}
+
+	require.Eventually(t, func() bool {
+		_, err := decomSrv.DB().Scan(ctx, keys.MinKey, keys.MaxKey, 0)
+		s, ok := status.FromError(errors.UnwrapAll(err))
+		return ok && s.Code() == codes.PermissionDenied
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for server to lose cluster access")
+
+	// Tests SQL access. We're mostly concerned with these operations returning
+	// fast rather than hanging indefinitely due to internal retries. We both
+	// try the internal executor, to check that the internal structured error is
+	// propagated correctly, and also from a client to make sure the error is
+	// propagated all the way.
+	require.Eventually(t, func() bool {
+		sqlExec := decomSrv.InternalExecutor().(*sql.InternalExecutor)
+
+		datums, err := sqlExec.QueryBuffered(ctx, "", nil, "SELECT 1")
+		require.NoError(t, err)
+		require.Equal(t, []tree.Datums{{tree.NewDInt(1)}}, datums)
+
+		_, err = sqlExec.QueryBuffered(ctx, "", nil, "SELECT * FROM crdb_internal.tables")
+		if err == nil {
+			return false
+		}
+		s, ok := status.FromError(errors.UnwrapAll(err))
+		require.True(t, ok, "expected gRPC status error, got %T: %s", err, err)
+		require.Equal(t, codes.PermissionDenied, s.Code())
+
+		sqlClient, err := serverutils.OpenDBConnE(decomSrv.ServingSQLAddr(), "", true, tc.Stopper())
+		require.NoError(t, err)
+
+		var result int
+		err = sqlClient.QueryRow("SELECT 1").Scan(&result)
+		require.NoError(t, err)
+		require.Equal(t, 1, result)
+
+		_, err = sqlClient.Query("SELECT * FROM crdb_internal.tables")
+		return err != nil
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for queries to error")
+}
+
+func TestAssertEnginesEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng, err := storage.Open(ctx, storage.InMemory())
+	require.NoError(t, err)
+	defer eng.Close()
+
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	require.NoError(t, storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(),
+		hlc.Timestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
+	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+
+	batch := eng.NewBatch()
+	key := storage.MVCCKey{
+		Key:       []byte{0xde, 0xad, 0xbe, 0xef},
+		Timestamp: hlc.Timestamp{WallTime: 100},
+	}
+	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
+	require.NoError(t, batch.Commit(false))
+	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }

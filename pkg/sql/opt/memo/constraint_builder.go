@@ -204,6 +204,15 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 				return cb.makeStringPrefixSpan(col, prefix), false
 			}
 		}
+
+	case opt.ContainsOp:
+		if arr, ok := datum.(*tree.DArray); ok {
+			if arr.HasNulls {
+				return contradiction, true
+			}
+		}
+		// NULL cannot contain anything, so a non-tight, not-null span is built.
+		return cb.notNullSpan(col), false
 	}
 	return unconstrained, false
 }
@@ -415,9 +424,28 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	return constraint.SingleSpanConstraint(&keyCtx, &span), true
 }
 
+func (cb *constraintsBuilder) buildFunctionConstraints(
+	f *FunctionExpr,
+) (_ *constraint.Set, tight bool) {
+	if f.Properties.NullableArgs {
+		return unconstrained, false
+	}
+
+	// For an arbitrary function, the best we can do is deduce a set of not-null
+	// constraints.
+	cs := unconstrained
+	for _, arg := range f.Args {
+		if variable, ok := arg.(*VariableExpr); ok {
+			cs = cs.Intersect(cb.evalCtx, cb.notNullSpan(variable.Col))
+		}
+	}
+
+	return cs, false
+}
+
 func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.Set, tight bool) {
 	switch t := e.(type) {
-	case *NullExpr:
+	case *FalseExpr, *NullExpr:
 		return contradiction, true
 
 	case *VariableExpr:
@@ -507,6 +535,9 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 
 	case *RangeExpr:
 		return cb.buildConstraints(t.And)
+
+	case *FunctionExpr:
+		return cb.buildFunctionConstraints(t)
 	}
 
 	if e.ChildCount() < 2 {

@@ -22,114 +22,128 @@ import (
 
 func TestPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRole)
+	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+
+	testUser := security.TestUserName()
+	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
 
 	testCases := []struct {
-		grantee       string // User to grant/revoke privileges on.
+		grantee       security.SQLUsername // User to grant/revoke privileges on.
 		grant, revoke privilege.List
 		show          []UserPrivilegeString
 		objectType    privilege.ObjectType
 	}{
-		{"", nil, nil,
+		{security.SQLUsername{}, nil, nil,
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
 			},
 			privilege.Table,
 		},
-		{security.RootUser, privilege.List{privilege.ALL}, nil,
+		{security.RootUserName(), privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
 			},
 			privilege.Table,
 		},
-		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
+		{security.RootUserName(), privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
 			},
 			privilege.Table,
 		},
-		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
+		{testUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{"foo", []string{"DROP", "INSERT"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
+				{testUser, []string{"DROP", "INSERT"}},
 			},
 			privilege.Table,
 		},
-		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
+		{barUser, nil, privilege.List{privilege.INSERT, privilege.ALL},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{"foo", []string{"DROP", "INSERT"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
+				{testUser, []string{"DROP", "INSERT"}},
 			},
 			privilege.Table,
 		},
-		{"foo", privilege.List{privilege.ALL}, nil,
+		{testUser, privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{"foo", []string{"ALL"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
+				{testUser, []string{"ALL"}},
 			},
 			privilege.Table,
 		},
-		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
+		{testUser, nil, privilege.List{privilege.SELECT, privilege.INSERT},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
+				{testUser, []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
 			},
 			privilege.Table,
 		},
-		{"foo", nil, privilege.List{privilege.ALL},
+		{testUser, nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{security.RootUser, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{security.RootUserName(), []string{"ALL"}},
 			},
 			privilege.Table,
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
-		{security.RootUser, nil, privilege.List{privilege.ALL},
+		{security.RootUserName(), nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
 			},
 			privilege.Table,
 		},
 		// Ensure revoking USAGE from a user with ALL privilege on a type
 		// leaves the user with only GRANT privilege.
-		{"foo", privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
+		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
-				{"foo", []string{"GRANT"}},
+				{security.AdminRoleName(), []string{"ALL"}},
+				{testUser, []string{"GRANT"}},
 			},
 			privilege.Type,
 		},
 		// Ensure revoking USAGE, GRANT from a user with ALL privilege on a type
 		// leaves the user with no privileges.
-		{"foo",
+		{testUser,
 			privilege.List{privilege.ALL}, privilege.List{privilege.USAGE, privilege.GRANT},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
 			},
 			privilege.Type,
 		},
 		// Ensure revoking CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
 		// from a user with ALL privilege on a table leaves the user with no privileges.
-		{"foo",
+		{testUser,
 			privilege.List{privilege.ALL}, privilege.List{privilege.CREATE, privilege.DROP,
 				privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE,
 				privilege.ZONECONFIG},
 			[]UserPrivilegeString{
-				{security.AdminRole, []string{"ALL"}},
+				{security.AdminRoleName(), []string{"ALL"}},
 			},
 			privilege.Table,
+		},
+		// Ensure revoking CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// from a user with ALL privilege on a database leaves the user with no privileges.
+		{testUser,
+			privilege.List{privilege.ALL}, privilege.List{privilege.CONNECT, privilege.CREATE,
+				privilege.DROP, privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE,
+				privilege.UPDATE, privilege.ZONECONFIG},
+			[]UserPrivilegeString{
+				{security.AdminRoleName(), []string{"ALL"}},
+			},
+			privilege.Database,
 		},
 	}
 
 	for tcNum, tc := range testCases {
-		if tc.grantee != "" {
+		if !tc.grantee.Undefined() {
 			if tc.grant != nil {
 				descriptor.Grant(tc.grantee, tc.grant)
 			}
@@ -154,39 +168,42 @@ func TestPrivilege(t *testing.T) {
 func TestCheckPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	testUser := security.TestUserName()
+	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+
 	testCases := []struct {
 		pd   *PrivilegeDescriptor
-		user string
+		user security.SQLUsername
 		priv privilege.Kind
 		exp  bool
 	}{
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"foo", privilege.CREATE, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"bar", privilege.CREATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"bar", privilege.DROP, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"foo", privilege.DROP, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
-			"foo", privilege.CREATE, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"foo", privilege.ALL, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
-			"foo", privilege.ALL, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
-			"foo", privilege.ALL, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
-			"foo", privilege.CREATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
-			security.AdminRole),
-			"foo", privilege.UPDATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
-			security.AdminRole),
-			"foo", privilege.DROP, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.ALL},
-			security.AdminRole),
-			"foo", privilege.DROP, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.CREATE, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			barUser, privilege.CREATE, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			barUser, privilege.DROP, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.DROP, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, security.AdminRoleName()),
+			testUser, privilege.CREATE, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, privilege.ALL, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, security.AdminRoleName()),
+			testUser, privilege.ALL, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{}, security.AdminRoleName()),
+			testUser, privilege.ALL, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{}, security.AdminRoleName()),
+			testUser, privilege.CREATE, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRoleName()),
+			testUser, privilege.UPDATE, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRoleName()),
+			testUser, privilege.DROP, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.ALL},
+			security.AdminRoleName()),
+			testUser, privilege.DROP, true},
 	}
 
 	for tcNum, tc := range testCases {
@@ -200,25 +217,28 @@ func TestCheckPrivilege(t *testing.T) {
 func TestAnyPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	testUser := security.TestUserName()
+	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+
 	testCases := []struct {
 		pd   *PrivilegeDescriptor
-		user string
+		user security.SQLUsername
 		exp  bool
 	}{
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
-			"bar", false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
-			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
-			"foo", false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
-			security.AdminRole),
-			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
-			security.AdminRole),
-			"bar", false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			testUser, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+			barUser, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, security.AdminRoleName()),
+			testUser, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{}, security.AdminRoleName()),
+			testUser, false},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRoleName()),
+			testUser, true},
+		{NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRoleName()),
+			barUser, false},
 	}
 
 	for tcNum, tc := range testCases {
@@ -232,33 +252,84 @@ func TestAnyPrivilege(t *testing.T) {
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := ID(keys.MinUserDescID)
-	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRole)
-	if err := descriptor.Validate(id); err != nil {
+
+	testUser := security.TestUserName()
+
+	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+	validate := func() error {
+		return descriptor.Validate(ID(keys.MinUserDescID), privilege.Table, "whatever", DefaultSuperuserPrivileges)
+	}
+
+	if err := validate(); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Grant("foo", privilege.List{privilege.ALL})
-	if err := descriptor.Validate(id); err != nil {
+	descriptor.Grant(testUser, privilege.List{privilege.ALL})
+	if err := validate(); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(id); err != nil {
+	descriptor.Grant(security.RootUserName(), privilege.List{privilege.SELECT})
+	if err := validate(); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Revoke(
-		security.RootUser, privilege.List{privilege.SELECT}, privilege.Table)
-	if err := descriptor.Validate(id); err == nil {
+	descriptor.Revoke(security.RootUserName(), privilege.List{privilege.SELECT}, privilege.Table)
+	if err := validate(); err == nil {
 		t.Fatal("unexpected success")
 	}
 	// TODO(marc): validate fails here because we do not aggregate
 	// privileges into ALL when all are set.
-	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(id); err == nil {
+	descriptor.Grant(security.RootUserName(), privilege.List{privilege.SELECT})
+	if err := validate(); err == nil {
 		t.Fatal("unexpected success")
 	}
-	descriptor.Revoke(security.RootUser, privilege.List{privilege.ALL}, privilege.Table)
-	if err := descriptor.Validate(id); err == nil {
+	descriptor.Revoke(security.RootUserName(), privilege.List{privilege.ALL}, privilege.Table)
+	if err := validate(); err == nil {
 		t.Fatal("unexpected success")
+	}
+}
+
+func TestValidPrivilegesForObjects(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	id := ID(keys.MinUserDescID)
+
+	testUser := security.TestUserName()
+
+	testCases := []struct {
+		objectType      privilege.ObjectType
+		validPrivileges privilege.List
+	}{
+		{privilege.Table, privilege.TablePrivileges},
+		{privilege.Database, privilege.DBPrivileges},
+		{privilege.Schema, privilege.SchemaPrivileges},
+		{privilege.Type, privilege.TypePrivileges},
+	}
+
+	for _, tc := range testCases {
+		for _, priv := range tc.validPrivileges {
+			privDesc := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			privDesc.Grant(testUser, privilege.List{priv})
+			err := privDesc.Validate(id, tc.objectType, "whatever", DefaultSuperuserPrivileges)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Derive invalidPrivileges from the validPrivileges.
+		invalidPrivileges := privilege.List{}
+		for _, priv := range privilege.AllPrivileges {
+			if priv.Mask() & ^tc.validPrivileges.ToBitField() != 0 {
+				invalidPrivileges = append(invalidPrivileges, priv)
+			}
+		}
+
+		for _, priv := range invalidPrivileges {
+			privDesc := NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			privDesc.Grant(testUser, privilege.List{priv})
+			err := privDesc.Validate(id, tc.objectType, "whatever", DefaultSuperuserPrivileges)
+			if err == nil {
+				t.Fatalf("unexpected success, %s should not be a valid privilege for a %s",
+					priv, tc.objectType)
+			}
+		}
 	}
 }
 
@@ -268,40 +339,36 @@ func TestPrivilegeValidate(t *testing.T) {
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	id := ID(keys.MaxReservedDescID)
-	if _, exists := SystemAllowedPrivileges[id]; exists {
-		t.Fatalf("system object with maximum id %d already exists--is the reserved id space full?", id)
-	}
-	SystemAllowedPrivileges[id] = privilege.List{
-		privilege.SELECT,
-		privilege.GRANT,
-	}
-	defer delete(SystemAllowedPrivileges, id)
+	testUser := security.TestUserName()
 
-	rootWrongPrivilegesErr := "user root must have exactly SELECT, GRANT " +
-		"privileges on system object with ID=.*"
-	adminWrongPrivilegesErr := "user admin must have exactly SELECT, GRANT " +
-		"privileges on system object with ID=.*"
+	validate := func(descriptor *PrivilegeDescriptor) error {
+		return descriptor.Validate(keys.SystemDatabaseID, privilege.Table, "whatever", privilege.ReadData)
+	}
+
+	rootWrongPrivilegesErr := "user root must have exactly GRANT, SELECT " +
+		`privileges on (system )?table "whatever"`
+	adminWrongPrivilegesErr := "user admin must have exactly GRANT, SELECT " +
+		`privileges on (system )?table "whatever"`
 
 	{
 		// Valid: root user has one of the allowable privilege sets.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(
 			privilege.List{privilege.SELECT, privilege.GRANT},
-			security.AdminRole,
+			security.AdminRoleName(),
 		)
-		if err := descriptor.Validate(id); err != nil {
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has a subset of the allowed privileges.
-		descriptor.Grant("foo", privilege.List{privilege.SELECT})
-		if err := descriptor.Validate(id); err != nil {
+		descriptor.Grant(testUser, privilege.List{privilege.SELECT})
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has exactly the allowed privileges.
-		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		descriptor.Grant(testUser, privilege.List{privilege.GRANT})
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -310,25 +377,25 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		// Valid: root has exactly the allowed privileges.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(
 			privilege.List{privilege.SELECT, privilege.GRANT},
-			security.AdminRole,
+			security.AdminRoleName(),
 		)
 
 		// Valid: foo has a subset of the allowed privileges.
-		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		descriptor.Grant(testUser, privilege.List{privilege.GRANT})
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo can have privileges revoked, including privileges it doesn't currently have.
 		descriptor.Revoke(
-			"foo", privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL}, privilege.Table)
-		if err := descriptor.Validate(id); err != nil {
+			testUser, privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL}, privilege.Table)
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 
 		// Invalid: root user has too many privileges.
-		descriptor.Grant(security.RootUser, privilege.List{privilege.UPDATE})
-		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
+		descriptor.Grant(security.RootUserName(), privilege.List{privilege.UPDATE})
+		if err := validate(descriptor); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
 	}
@@ -336,177 +403,30 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	{
 		// Invalid: root has a non-allowable privilege set.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE},
-			security.AdminRole)
-		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
+			security.AdminRoleName())
+		if err := validate(descriptor); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
 
 		// Invalid: root's invalid privileges are revoked and replaced with allowable privileges,
 		// but admin is still wrong.
-		descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE}, privilege.Table)
-		descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT, privilege.GRANT})
-		if err := descriptor.Validate(id); !testutils.IsError(err, adminWrongPrivilegesErr) {
+		descriptor.Revoke(security.RootUserName(), privilege.List{privilege.UPDATE}, privilege.Table)
+		descriptor.Grant(security.RootUserName(), privilege.List{privilege.SELECT, privilege.GRANT})
+		if err := validate(descriptor); !testutils.IsError(err, adminWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", adminWrongPrivilegesErr, err)
 		}
 
 		// Valid: admin's invalid privileges are revoked and replaced with allowable privileges.
-		descriptor.Revoke(security.AdminRole, privilege.List{privilege.UPDATE}, privilege.Table)
-		descriptor.Grant(security.AdminRole, privilege.List{privilege.SELECT, privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		descriptor.Revoke(security.AdminRoleName(), privilege.List{privilege.UPDATE}, privilege.Table)
+		descriptor.Grant(security.AdminRoleName(), privilege.List{privilege.SELECT, privilege.GRANT})
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has less privileges than root.
-		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		descriptor.Grant(testUser, privilege.List{privilege.GRANT})
+		if err := validate(descriptor); err != nil {
 			t.Fatal(err)
-		}
-	}
-}
-
-func TestFixPrivileges(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Use a non-system ID.
-	userID := ID(keys.MinUserDescID)
-	userPrivs := privilege.List{privilege.ALL}
-
-	// And create an entry for a fake system table.
-	systemID := ID(keys.MaxReservedDescID)
-	if _, exists := SystemAllowedPrivileges[systemID]; exists {
-		t.Fatalf("system object with maximum id %d already exists--is the reserved id space full?", systemID)
-	}
-	systemPrivs := privilege.List{
-		privilege.SELECT,
-		privilege.GRANT,
-	}
-	SystemAllowedPrivileges[systemID] = systemPrivs
-	defer delete(SystemAllowedPrivileges, systemID)
-
-	type userPrivileges map[string]privilege.List
-
-	testCases := []struct {
-		id       ID
-		input    userPrivileges
-		modified bool
-		output   userPrivileges
-	}{
-		{
-			// Empty privileges for system ID.
-			systemID,
-			userPrivileges{},
-			true,
-			userPrivileges{
-				security.RootUser:  systemPrivs,
-				security.AdminRole: systemPrivs,
-			},
-		},
-		{
-			// Valid requirements for system ID.
-			systemID,
-			userPrivileges{
-				security.RootUser:  systemPrivs,
-				security.AdminRole: systemPrivs,
-				"foo":              privilege.List{privilege.SELECT},
-				"bar":              privilege.List{privilege.GRANT},
-				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
-			},
-			false,
-			userPrivileges{
-				security.RootUser:  systemPrivs,
-				security.AdminRole: systemPrivs,
-				"foo":              privilege.List{privilege.SELECT},
-				"bar":              privilege.List{privilege.GRANT},
-				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
-			},
-		},
-		{
-			// Too many privileges for system ID.
-			systemID,
-			userPrivileges{
-				security.RootUser:  privilege.List{privilege.ALL},
-				security.AdminRole: privilege.List{privilege.ALL},
-				"foo":              privilege.List{privilege.ALL},
-				"bar":              privilege.List{privilege.SELECT, privilege.UPDATE},
-			},
-			true,
-			userPrivileges{
-				security.RootUser:  systemPrivs,
-				security.AdminRole: systemPrivs,
-				"foo":              privilege.List{},
-				"bar":              privilege.List{privilege.SELECT},
-			},
-		},
-		{
-			// Empty privileges for non-system ID.
-			userID,
-			userPrivileges{},
-			true,
-			userPrivileges{
-				security.RootUser:  userPrivs,
-				security.AdminRole: userPrivs,
-			},
-		},
-		{
-			// Valid requirements for non-system ID.
-			userID,
-			userPrivileges{
-				security.RootUser:  userPrivs,
-				security.AdminRole: userPrivs,
-				"foo":              privilege.List{privilege.SELECT},
-				"bar":              privilege.List{privilege.GRANT},
-				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
-			},
-			false,
-			userPrivileges{
-				security.RootUser:  userPrivs,
-				security.AdminRole: userPrivs,
-				"foo":              privilege.List{privilege.SELECT},
-				"bar":              privilege.List{privilege.GRANT},
-				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
-			},
-		},
-		{
-			// All privileges are allowed for non-system ID, but we need super users.
-			userID,
-			userPrivileges{
-				"foo": privilege.List{privilege.ALL},
-				"bar": privilege.List{privilege.UPDATE},
-			},
-			true,
-			userPrivileges{
-				security.RootUser:  privilege.List{privilege.ALL},
-				security.AdminRole: privilege.List{privilege.ALL},
-				"foo":              privilege.List{privilege.ALL},
-				"bar":              privilege.List{privilege.UPDATE},
-			},
-		},
-	}
-
-	for num, testCase := range testCases {
-		desc := &PrivilegeDescriptor{}
-		for u, p := range testCase.input {
-			desc.Grant(u, p)
-		}
-
-		if a, e := MaybeFixPrivileges(testCase.id, desc), testCase.modified; a != e {
-			t.Errorf("#%d: expected modified=%t, got modified=%t", num, e, a)
-			continue
-		}
-
-		if a, e := len(desc.Users), len(testCase.output); a != e {
-			t.Errorf("#%d: expected %d users (%v), got %d (%v)", num, e, testCase.output, a, desc.Users)
-			continue
-		}
-
-		for u, p := range testCase.output {
-			outputUser, ok := desc.findUser(u)
-			if !ok {
-				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
-			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
-				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
-			}
 		}
 	}
 }
@@ -516,21 +436,24 @@ func TestValidateOwnership(t *testing.T) {
 
 	// Use a non-system id.
 	id := ID(keys.MinUserDescID)
+	validate := func(privs PrivilegeDescriptor) error {
+		return privs.Validate(id, privilege.Table, "whatever", DefaultSuperuserPrivileges)
+	}
 
 	// A privilege descriptor with a version before OwnerVersion can have
 	// no owner.
 	privs := PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
-				User:       security.AdminRole,
+				UserProto:  security.AdminRoleName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 			{
-				User:       security.RootUser,
+				UserProto:  security.RootUserName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 		}}
-	err := privs.Validate(id)
+	err := validate(privs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,38 +463,38 @@ func TestValidateOwnership(t *testing.T) {
 	privs = PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
-				User:       security.AdminRole,
+				UserProto:  security.AdminRoleName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 			{
-				User:       security.RootUser,
+				UserProto:  security.RootUserName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 		},
 		Version: OwnerVersion,
 	}
 
-	err = privs.Validate(id)
+	err = validate(privs)
 	if err == nil {
 		t.Fatal("unexpected success")
 	}
 
 	privs = PrivilegeDescriptor{
-		Owner: security.RootUser,
+		OwnerProto: security.RootUserName().EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				User:       security.AdminRole,
+				UserProto:  security.AdminRoleName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 			{
-				User:       security.RootUser,
+				UserProto:  security.RootUserName().EncodeProto(),
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 		},
 		Version: OwnerVersion,
 	}
 
-	err = privs.Validate(id)
+	err = validate(privs)
 	if err != nil {
 		t.Fatal(err)
 	}

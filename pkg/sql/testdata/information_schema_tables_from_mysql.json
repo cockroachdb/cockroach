@@ -1,0 +1,2965 @@
+{
+  "pgVersion": "8.0.25",
+  "diffSummary": {
+    "TotalTables": 0,
+    "TotalColumns": 0,
+    "MissingTables": 0,
+    "MissingColumns": 0,
+    "DatatypeMismatches": 0
+  },
+  "pgMetadata": {
+    "administrable_role_authorizations": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_default": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_mandatory": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "user": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "applicable_roles": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_default": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_mandatory": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "user": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "character_sets": {
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "default_collate_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "description": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "maxlen": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "check_constraints": {
+      "check_clause": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "collation_character_set_applicability": {
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "collations": {
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "id": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_compiled": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_default": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "pad_attribute": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sortlen": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "column_privileges": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "column_statistics": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "histogram": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "schema_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "columns": {
+      "character_maximum_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_octet_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_comment": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_default": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_key": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_type": {
+        "oid": 0,
+        "dataType": "mediumtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_type": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datetime_precision": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "extra": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "generation_expression": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_nullable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_precision": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_scale": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "ordinal_position": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privileges": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "srs_id": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "columns_extensions": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "secondary_engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "enabled_roles": {
+      "is_default": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_mandatory": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "role_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "engines": {
+      "comment": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "savepoints": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "support": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "transactions": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "xa": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "events": {
+      "character_set_client": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_connection": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "created": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "database_collation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "definer": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "ends": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_body": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_comment": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_definition": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "execute_at": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "interval_field": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "interval_value": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "last_altered": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "last_executed": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "on_completion": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "originator": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_mode": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "starts": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "status": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "time_zone": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "files": {
+      "autoextend_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "avg_row_length": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "check_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "checksum": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "create_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "creation_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_free": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_length": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "deleted_rows": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "extent_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "extra": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "file_id": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "file_name": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "file_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "free_extents": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "fulltext_keys": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_length": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "initial_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "last_access_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "last_update_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "logfile_group_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "logfile_group_number": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "max_data_length": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "maximum_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "recover_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "row_format": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "status": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_rows": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "total_extents": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "transaction_counter": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "update_count": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "update_time": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "version": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "key_column_usage": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "ordinal_position": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "position_in_unique_constraint": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "referenced_column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "referenced_table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "referenced_table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "keywords": {
+      "reserved": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "word": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "optimizer_trace": {
+      "insufficient_privileges": {
+        "oid": 0,
+        "dataType": "tinyint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "missing_bytes_beyond_max_mem_size": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "query": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "trace": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "parameters": {
+      "character_maximum_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_octet_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_type": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datetime_precision": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "dtd_identifier": {
+        "oid": 0,
+        "dataType": "mediumtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_precision": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_scale": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "ordinal_position": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "parameter_mode": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "parameter_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_type": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "partitions": {
+      "avg_row_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "check_time": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "checksum": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "create_time": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_free": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "max_data_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "nodegroup": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_comment": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_description": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_expression": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_method": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "partition_ordinal_position": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "subpartition_expression": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "subpartition_method": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "subpartition_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "subpartition_ordinal_position": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_rows": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "update_time": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "plugins": {
+      "load_option": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_author": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_description": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_library": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_library_version": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_license": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_status": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_type_version": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "plugin_version": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "processlist": {
+      "command": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "db": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "id": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "info": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "state": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "time": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "user": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "profiling": {
+      "block_ops_in": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "block_ops_out": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "context_involuntary": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "context_voluntary": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "cpu_system": {
+        "oid": 0,
+        "dataType": "decimal",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "cpu_user": {
+        "oid": 0,
+        "dataType": "decimal",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "duration": {
+        "oid": 0,
+        "dataType": "decimal",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "messages_received": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "messages_sent": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "page_faults_major": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "page_faults_minor": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "query_id": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "seq": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "source_file": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "source_function": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "source_line": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "state": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "swaps": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "referential_constraints": {
+      "constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "delete_rule": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "match_option": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "referenced_table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "unique_constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "unique_constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "unique_constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "update_rule": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "resource_groups": {
+      "resource_group_enabled": {
+        "oid": 0,
+        "dataType": "tinyint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "resource_group_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "resource_group_type": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "thread_priority": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "vcpu_ids": {
+        "oid": 0,
+        "dataType": "blob",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "role_column_grants": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee_host": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "role_routine_grants": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee_host": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_name": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_schema": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_name": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_schema": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "role_table_grants": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantee_host": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "grantor_host": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "routines": {
+      "character_maximum_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_octet_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_set_client": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_connection": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "created": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_type": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "database_collation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datetime_precision": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "definer": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "dtd_identifier": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "external_language": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "external_name": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_deterministic": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "last_altered": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_precision": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numeric_scale": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "parameter_style": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_body": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_comment": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_definition": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "routine_type": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "security_type": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_data_access": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_mode": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_path": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "schema_privileges": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "schemata": {
+      "catalog_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "default_character_set_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "default_collation_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "default_encryption": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "schema_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_path": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "schemata_extensions": {
+      "catalog_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "options": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "schema_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "st_geometry_columns": {
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "geometry_type_name": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "srs_id": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "srs_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "st_spatial_reference_systems": {
+      "definition": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "description": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "organization": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "organization_coordsys_id": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "srs_id": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "srs_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "st_units_of_measure": {
+      "conversion_factor": {
+        "oid": 0,
+        "dataType": "double",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "description": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "unit_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "unit_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "statistics": {
+      "cardinality": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "column_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "comment": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "expression": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_comment": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_visible": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "non_unique": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "nullable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "packed": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "seq_in_index": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sub_part": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "table_constraints": {
+      "constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "enforced": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "table_constraints_extensions": {
+      "constraint_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "constraint_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "secondary_engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "table_privileges": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "tables": {
+      "auto_increment": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "avg_row_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "check_time": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "checksum": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "create_options": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "create_time": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_free": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "data_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "index_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "max_data_length": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "row_format": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_collation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_comment": {
+        "oid": 0,
+        "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_rows": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_type": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "update_time": {
+        "oid": 0,
+        "dataType": "datetime",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "version": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "tables_extensions": {
+      "engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "secondary_engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "tablespaces": {
+      "autoextend_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "engine": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "extent_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "logfile_group_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "maximum_size": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "nodegroup_id": {
+        "oid": 0,
+        "dataType": "bigint",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_comment": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "tablespaces_extensions": {
+      "engine_attribute": {
+        "oid": 0,
+        "dataType": "json",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tablespace_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "triggers": {
+      "action_condition": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_order": {
+        "oid": 0,
+        "dataType": "int",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_orientation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_reference_new_row": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_reference_new_table": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_reference_old_row": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_reference_old_table": {
+        "oid": 0,
+        "dataType": "binary",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_statement": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "action_timing": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "character_set_client": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_connection": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "created": {
+        "oid": 0,
+        "dataType": "timestamp",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "database_collation": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "definer": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_manipulation": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_object_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_object_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "event_object_table": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "sql_mode": {
+        "oid": 0,
+        "dataType": "set",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "trigger_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "trigger_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "trigger_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "user_attributes": {
+      "attribute": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "host": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "user": {
+        "oid": 0,
+        "dataType": "char",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "user_privileges": {
+      "grantee": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_grantable": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "privilege_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "view_routine_usage": {
+      "specific_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "specific_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "view_table_usage": {
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "view_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "view_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "view_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "views": {
+      "character_set_client": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "check_option": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "collation_connection": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "definer": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "is_updatable": {
+        "oid": 0,
+        "dataType": "enum",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "security_type": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_catalog": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_name": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "table_schema": {
+        "oid": 0,
+        "dataType": "varchar",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "view_definition": {
+        "oid": 0,
+        "dataType": "longtext",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    }
+  },
+  "unimplementedTypes": null
+}

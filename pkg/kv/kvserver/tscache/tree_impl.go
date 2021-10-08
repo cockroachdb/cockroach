@@ -446,11 +446,6 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 	}
 }
 
-// SetLowWater implements the Cache interface.
-func (tc *treeImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.Add(start, end, ts, noTxnID)
-}
-
 // getLowWater implements the Cache interface.
 func (tc *treeImpl) getLowWater() hlc.Timestamp {
 	tc.RLock()
@@ -496,8 +491,7 @@ func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 		return true
 	}
 	// Compute the edge of the cache window.
-	edge := tc.latest
-	edge.WallTime -= MinRetentionWindow.Nanoseconds()
+	edge := tc.latest.Add(-MinRetentionWindow.Nanoseconds(), 0)
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
 	if ce.ts.LessEq(edge) {

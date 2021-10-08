@@ -1,0 +1,373 @@
+# LogicTest: local !metamorphic
+
+# Check SHOW KV TRACE FOR SESSION.
+
+statement ok
+SET tracing = on,kv,results; CREATE DATABASE t; SET tracing = off
+
+# Check the KV trace; we need to remove the eventlog entry and
+# internal queries since the timestamp is non-deterministic.
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 53
+batch flow coordinator  CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > state:PUBLIC offline_reason:"" default_privileges:<> >
+batch flow coordinator  CPut /NamespaceTable/30/1/53/0/"public"/4/1 -> 29
+exec stmt               rows affected: 0
+
+
+# More KV operations.
+statement ok
+SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v)); SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  CPut /NamespaceTable/30/1/53/29/"kv"/4/1 -> 54
+batch flow coordinator  CPut /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+# We avoid using the full trace output, because that would make the
+# ensuing trace especially chatty, as it traces the index backfill at
+# the end of the implicit transaction. A chatty trace could be OK in
+# tests, however the backfill also incur job table traffic which has a
+# timestamp index, and we can't use (non-deterministic) timestamp
+# values in expected values.
+statement ok
+SET tracing = on,kv,results; CREATE UNIQUE INDEX woo ON t.kv(v); SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'mutationJobs:<[^>]*>', 'mutationJobs:<...>') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  /* since the transactions involved are multi-range, intent resolving is async and
+  sometimes there's still intents around */
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:2 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+statement ok
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+batch flow coordinator  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+
+statement error duplicate key value
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+batch flow coordinator  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "primary"
+
+statement error duplicate key value
+SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+batch flow coordinator  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
+exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+
+statement ok
+SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), '\d\d\d\d\d+', '...PK...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  CPut /NamespaceTable/30/1/53/29/"kv2"/4/1 -> 55
+batch flow coordinator  CPut /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+statement ok
+SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
+
+query TT
+SELECT operation, message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%'
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+colbatchscan            Scan /Table/55/{1-2}
+colbatchscan            fetched: /kv2/primary/-9222809086901354496/k/v -> /1/2
+batch flow coordinator  Put /Table/55/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+batch flow coordinator  DelRange /Table/55/1 - /Table/55/2
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; DROP TABLE t.kv2; SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'drop_job_id:[1-9]\d*', 'drop_job_id:...'), 'drop_time:\d+', 'drop_time:...') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  Put /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:3 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv2" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+statement ok
+SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/54/{1-2}
+colbatchscan            fetched: /kv/primary/1/v -> /2
+batch flow coordinator  Del /Table/54/2/2/0
+batch flow coordinator  Del /Table/54/1/1/0
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE; SET tracing = off
+
+query TT
+SELECT operation,
+       regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'mutationJobs:<[^>]*>', 'mutationJobs:<...>') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  /* since the transactions involved are multi-range, intent resolving is async and
+  sometimes there's still intents around */
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:5 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+statement ok
+SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'job_id:[1-9]\d*', 'job_id:...', 'g'), 'drop_time:\d+', 'drop_time:...', 'g') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
+  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+  AND tag NOT LIKE '%intExec=%'
+  AND tag NOT LIKE '%scExec%'
+  AND tag NOT LIKE '%IndexBackfiller%'
+  AND operation != 'dist sender send'
+----
+batch flow coordinator  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:8 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > next_mutation_id:3 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 gc_mutations:<index_id:2 drop_time:... job_id:0 > create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt               rows affected: 0
+
+# Check that session tracing does not inhibit the fast path for inserts &
+# friends (the path resulting in 1PC transactions).
+
+subtest autocommit
+
+statement ok
+CREATE TABLE t.kv3(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
+
+statement ok
+SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
+
+# We look for rows containing an EndTxn as proof that the
+# insertNode is committing the txn.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
+----
+r44: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+node received request: 1 CPut, 1 EndTxn
+
+# Check that we can run set tracing regardless of the current tracing state.
+# This is convenient; sometimes it's unclear, for example, if you previously
+# stopped tracing or not, so issuing a set tracing=off should just work.
+subtest idempotent
+
+statement ok
+SET tracing = on; SET tracing = on;
+
+statement ok
+SET tracing = off; SET tracing = off;
+
+# Check that we can run set tracing in the aborted state (this is implemented by
+# making set tracing an ObserverStmt). This is very convenient for clients that
+# start tracing, then might get an error, then want to stop tracing.
+subtest aborted_txn
+
+query error pq: foo
+BEGIN; SELECT crdb_internal.force_error('', 'foo')
+
+statement ok
+SET tracing = off
+
+statement ok
+ROLLBACK
+
+subtest system_table_lookup
+
+# We use AOST to bypass the table cache.
+statement ok
+SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off
+
+query TT
+SELECT operation, message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
+  AND message NOT LIKE '%SystemConfigSpan%'
+  AND message NOT LIKE '%PushTxn%'
+----
+dist sender send  querying next range at /Table/12/1
+dist sender send  r8: sending batch 1 Scan to (n1,s1):1
+
+# Regression tests for incorrect interaction between consecutive session traces
+# (#59203, #60672).
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE a ]
+
+# Populate table descriptor cache.
+query I
+SELECT * FROM a
+----
+
+statement ok
+BEGIN;
+SET TRACING=ON;
+  INSERT INTO a VALUES (1);
+ROLLBACK
+
+# The tracing is still enabled. Insert a couple of rows with auto-commit, and
+# stop the tracing.
+statement ok
+  INSERT INTO a VALUES (2), (3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r44: sending batch 1 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+# Make another session trace.
+statement ok
+BEGIN;
+SET TRACING=ON;
+  INSERT INTO a VALUES (4), (5), (6);
+SET TRACING=OFF;
+COMMIT
+
+# Start the tracing again and insert a few rows with auto-commit.
+statement ok
+SET TRACING=ON;
+  INSERT INTO a VALUES (7), (8), (9), (10);
+
+# The tracing is still enabled. Insert a few rows, rollback the txn, and stop
+# the tracing.
+statement ok
+BEGIN;
+  INSERT INTO a VALUES (11), (12), (13), (14), (15);
+ROLLBACK;
+SET TRACING=OFF;
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r44: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 5 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+
+# make a table with some big strings in it.
+statement ok
+CREATE TABLE blobs (i INT PRIMARY KEY, j STRING, FAMILY (i, j))
+
+# make a table with some big (1mb) strings in it.
+statement ok
+SET TRACING=ON;
+  INSERT INTO blobs SELECT generate_series(1, 24), repeat('0123456789ab', 65536);
+SET TRACING=OFF;
+
+# verify insert of 24 rows paginated into 4 batches since they are .75mb each.
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r44: sending batch 6 CPut to (n1,s1):1
+dist sender send  r44: sending batch 6 CPut to (n1,s1):1
+dist sender send  r44: sending batch 6 CPut to (n1,s1):1
+dist sender send  r44: sending batch 6 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1

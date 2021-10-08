@@ -10,7 +10,10 @@
 
 package enginepb
 
-import "fmt"
+import "github.com/cockroachdb/errors"
+
+// SafeValue implements the redact.SafeValue interface.
+func (MVCCStatsDelta) SafeValue() {}
 
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
@@ -27,6 +30,14 @@ func (ms *MVCCPersistentStats) ToStats() MVCCStats {
 	return MVCCStats(*ms)
 }
 
+// ToStatsPtr converts the receiver to a *MVCCStats.
+func (ms *MVCCPersistentStats) ToStatsPtr() *MVCCStats {
+	return (*MVCCStats)(ms)
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ms *MVCCStats) SafeValue() {}
+
 // ToPersistentStats converts the receiver to an MVCCPersistentStats.
 func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
 	return MVCCPersistentStats(*ms)
@@ -37,6 +48,6 @@ func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
 func (op *MVCCLogicalOp) MustSetValue(value interface{}) {
 	op.Reset()
 	if !op.SetValue(value) {
-		panic(fmt.Sprintf("%T excludes %T", op, value))
+		panic(errors.AssertionFailedf("%T excludes %T", op, value))
 	}
 }

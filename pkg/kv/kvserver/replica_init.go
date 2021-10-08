@@ -11,12 +11,14 @@
 package kvserver
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -28,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -87,14 +89,19 @@ func newUnloadedReplica(
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
-	r.mu.zone = store.cfg.DefaultZoneConfig
+	r.mu.conf = store.cfg.DefaultSpanConfig
 	r.mu.replicaID = replicaID
 	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
+	}, func() time.Duration {
+		return kvserverbase.SplitByLoadMergeDelay.Get(&store.cfg.Settings.SV)
 	})
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
-	r.mu.proposalBuf.Init((*replicaProposer)(r))
+	r.mu.proposalBuf.Init((*replicaProposer)(r), tracker.NewLockfreeTracker(), r.Clock(), r.ClusterSettings())
+	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
+	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
+	r.mu.proposalBuf.testing.submitProposalFilter = store.cfg.TestingKnobs.TestingProposalSubmitFilter
 
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
@@ -120,6 +127,20 @@ func newUnloadedReplica(
 	return r
 }
 
+// setStartKeyLocked sets r.startKey. Note that this field has special semantics
+// described on its comment. Callers to this method are initializing an
+// uninitialized Replica and hold Replica.mu.
+func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
+	r.mu.AssertHeld()
+	if r.startKey != nil {
+		log.Fatalf(
+			r.AnnotateCtx(context.Background()),
+			"start key written twice: was %s, now %s", r.startKey, startKey,
+		)
+	}
+	r.startKey = startKey
+}
+
 // loadRaftMuLockedReplicaMuLocked will load the state of the replica from disk.
 // If desc is initialized, the Replica will be initialized when this method
 // returns. An initialized Replica may not be reloaded. If this method is called
@@ -139,6 +160,9 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	} else if r.mu.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
+	}
+	if desc.IsInitialized() {
+		r.setStartKeyLocked(desc.StartKey)
 	}
 
 	// Clear the internal raft group in case we're being reset. Since we're
@@ -171,22 +195,16 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 
 	r.setDescLockedRaftMuLocked(ctx, desc)
 
-	// Init the minLeaseProposedTS such that we won't use an existing lease (if
-	// any). This is so that, after a restart, we don't propose under old leases.
-	// If the replica is being created through a split, this value will be
-	// overridden.
-	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
-		// Only do this if there was a previous lease. This shouldn't be important
-		// to do but consider that the first lease which is obtained is back-dated
-		// to a zero start timestamp (and this de-flakes some tests). If we set the
-		// min proposed TS here, this lease could not be renewed (by the semantics
-		// of minLeaseProposedTS); and since minLeaseProposedTS is copied on splits,
-		// this problem would multiply to a number of replicas at cluster bootstrap.
-		// Instead, we make the first lease special (which is OK) and the problem
-		// disappears.
-		if r.mu.state.Lease.Sequence > 0 {
-			r.mu.minLeaseProposedTS = r.Clock().Now()
-		}
+	// Only do this if there was a previous lease. This shouldn't be important
+	// to do but consider that the first lease which is obtained is back-dated
+	// to a zero start timestamp (and this de-flakes some tests). If we set the
+	// min proposed TS here, this lease could not be renewed (by the semantics
+	// of minLeaseProposedTS); and since minLeaseProposedTS is copied on splits,
+	// this problem would multiply to a number of replicas at cluster bootstrap.
+	// Instead, we make the first lease special (which is OK) and the problem
+	// disappears.
+	if r.mu.state.Lease.Sequence > 0 {
+		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
 	ssBase := r.Engine().GetAuxiliaryDir()
@@ -200,14 +218,17 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
-	r.assertStateLocked(ctx, r.store.Engine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+
+	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
+
 	return nil
 }
 
-// IsInitialized is true if we know the metadata of this range, either
-// because we created it or we have received an initial snapshot from
-// another node. It is false when a range has been created in response
-// to an incoming message but we are waiting for our initial snapshot.
+// IsInitialized is true if we know the metadata of this replica's range, either
+// because we created it or we have received an initial snapshot from another
+// node. It is false when a replica has been created in response to an incoming
+// message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -320,7 +341,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		r.mu.tenantID = tenantID
 		r.store.metrics.acquireTenant(tenantID)
 		if tenantID != roachpb.SystemTenantID {
-			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(tenantID, r.store.stopper.ShouldQuiesce())
+			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(ctx, tenantID, r.store.stopper.ShouldQuiesce())
 		}
 	}
 
@@ -341,4 +362,10 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
+
+	// Prioritize the NodeLiveness Range in the Raft scheduler above all other
+	// Ranges to ensure that liveness never sees high Raft scheduler latency.
+	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {
+		r.store.scheduler.SetPriorityID(desc.RangeID)
+	}
 }

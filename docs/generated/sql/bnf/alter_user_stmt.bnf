@@ -1,5 +1,0 @@
-alter_user_stmt ::=
-	'ALTER' 'USER' name opt_with role_options
-	| 'ALTER' 'USER' name 
-	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_with role_options
-	| 'ALTER' 'USER' 'IF' 'EXISTS' name 

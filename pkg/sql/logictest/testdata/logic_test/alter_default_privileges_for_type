@@ -1,0 +1,134 @@
+statement ok
+CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser;
+
+# By default, testuser should have ALL privileges on a types it creates and
+# Public should have usage.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TYPE testuser_t AS ENUM();
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE testuser_t;
+----
+database_name  schema_name  type_name   grantee   privilege_type
+d              public       testuser_t  admin     ALL
+d              public       testuser_t  public    USAGE
+d              public       testuser_t  root      ALL
+d              public       testuser_t  testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser;
+ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
+
+statement ok
+CREATE TYPE testuser_t2 AS ENUM();
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE testuser_t2
+----
+database_name  schema_name  type_name    grantee  privilege_type
+d              public       testuser_t2  admin    ALL
+d              public       testuser_t2  root     ALL
+
+user root
+
+statement ok
+USE test;
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO testuser, testuser2
+
+statement ok
+CREATE TYPE t AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE t
+----
+database_name  schema_name  type_name  grantee    privilege_type
+test           public       t          admin      ALL
+test           public       t          public     USAGE
+test           public       t          root       ALL
+test           public       t          testuser   ALL
+test           public       t          testuser2  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM testuser, testuser2
+
+statement ok
+CREATE TYPE t2 AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE t2
+----
+database_name  schema_name  type_name  grantee    privilege_type
+test           public       t2         admin      ALL
+test           public       t2         public     USAGE
+test           public       t2         root       ALL
+test           public       t2         testuser   GRANT
+test           public       t2         testuser2  GRANT
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser, testuser2
+
+statement ok
+CREATE TYPE t3 AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE t3
+----
+database_name  schema_name  type_name  grantee  privilege_type
+test           public       t3         admin    ALL
+test           public       t3         public   USAGE
+test           public       t3         root     ALL
+
+statement ok
+GRANT CREATE ON DATABASE d TO testuser
+
+user testuser
+statement ok
+USE d
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TYPES FROM testuser, testuser2
+
+statement ok
+CREATE TYPE t4 AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE t4
+----
+database_name  schema_name  type_name  grantee  privilege_type
+d              public       t4         admin    ALL
+d              public       t4         root     ALL
+
+user root
+statement ok
+USE d
+
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TYPES FROM testuser, testuser2
+
+user testuser
+statement ok
+USE d
+
+statement ok
+CREATE TYPE t5 AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE t5
+----
+database_name  schema_name  type_name  grantee  privilege_type
+d              public       t5         admin    ALL
+d              public       t5         root     ALL

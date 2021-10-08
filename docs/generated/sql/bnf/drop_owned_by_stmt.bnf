@@ -1,0 +1,2 @@
+drop_owned_by_stmt ::=
+	'DROP' 'OWNED' 'BY' name_list opt_drop_behavior

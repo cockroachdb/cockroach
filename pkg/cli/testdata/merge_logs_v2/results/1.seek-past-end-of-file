@@ -1,0 +1,1 @@
+test-0002> I181130 22:15:07.653821 499 server/status/runtime.go:465  [n2] runtime stats: 756 MiB RSS, 1127 goroutines, 338 MiB/113 MiB/584 MiB GO alloc/idle/total, 94 MiB/149 MiB CGO alloc/total, 108469.2 CGO/sec, 1964.7/227.0 %(u/s)time, 0.4 %gc (54x), 185 MiB/184 MiB (r/w)net

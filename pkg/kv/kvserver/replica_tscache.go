@@ -12,45 +12,73 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// setTimestampCacheLowWaterMark updates the low water mark of the timestamp
-// cache to the provided timestamp for all key ranges owned by the provided
-// Range descriptor. This ensures that no future writes in either the local or
-// global keyspace are allowed at times equal to or earlier than this timestamp,
-// which could invalidate prior reads.
-func setTimestampCacheLowWaterMark(
-	tc tscache.Cache, desc *roachpb.RangeDescriptor, ts hlc.Timestamp,
+// addToTSCacheChecked adds the specified timestamp to the timestamp cache
+// covering the range of keys from start to end. Before doing so, the function
+// performs a few assertions to check for proper use of the timestamp cache.
+func (r *Replica) addToTSCacheChecked(
+	ctx context.Context,
+	st *kvserverpb.LeaseStatus,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+	start, end roachpb.Key,
+	ts hlc.Timestamp,
+	txnID uuid.UUID,
 ) {
-	for _, keyRange := range rditer.MakeReplicatedKeyRanges(desc) {
-		tc.SetLowWater(keyRange.Start.Key, keyRange.End.Key, ts)
+	// All updates to the timestamp cache must be performed below the expiration
+	// time of the leaseholder. This ensures correctness if the lease expires
+	// and is acquired by a new replica that begins serving writes immediately
+	// to the same keys at the next lease's start time.
+	if exp := st.Expiration(); exp.LessEq(ts) {
+		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
+			"cache update could be lost of a non-cooperative lease change.", ts, ba, br, pErr, exp)
 	}
+	// All updates the to timestamp cache with non-synthetic timestamps must be
+	// performed at or below the current time. This is no longer strictly
+	// required for correctness as lease transfers now read the timestamp cache
+	// directly instead of using the local HLC clock as a proxy for its high
+	// water-mark, but it serves as a good proxy for proper handling of HLC
+	// clock updates and, by extension, observed timestamps.
+	//
+	// TODO(nvanbenschoten): this is currently disabled because we seem to
+	// regularly hit it on master. Now that we ship a snapshot of the timestamp
+	// cache on lease transfers instead of just the current clock time, the
+	// property this is asserting is no longer quite as important, so we can
+	// disable the check. However, it would still be nice to track down how we
+	// can hit this.
+	if !ts.Synthetic && st.Now.ToTimestamp().Less(ts) && false {
+		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
+			"Non-synthetic timestamps should always lag the local hlc clock.", ts, ba, br, pErr, st.Now)
+	}
+	r.store.tsCache.Add(start, end, ts, txnID)
 }
 
 // updateTimestampCache updates the timestamp cache in order to set a low water
 // mark for the timestamp at which mutations to keys overlapping the provided
 // request can write, such that they don't re-write history.
 func (r *Replica) updateTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context,
+	st *kvserverpb.LeaseStatus,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
 ) {
-	if ba.ReadConsistency != roachpb.CONSISTENT {
-		// Inconsistent reads are excluded from the timestamp cache.
-		return
-	}
-	addToTSCache := r.store.tsCache.Add
-	if util.RaceEnabled {
-		addToTSCache = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)
+	addToTSCache := func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
+		r.addToTSCacheChecked(ctx, st, ba, br, pErr, start, end, ts, txnID)
 	}
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
@@ -80,18 +108,21 @@ func (r *Replica) updateTimestampCache(
 		start, end := header.Key, header.EndKey
 		switch t := args.(type) {
 		case *roachpb.EndTxnRequest:
-			// EndTxn requests that finalize their transaction record a
-			// tombstone in the timestamp cache to ensure replays and concurrent
-			// requests aren't able to recreate the transaction record.
+			// EndTxn requests record a tombstone in the timestamp cache to ensure
+			// replays and concurrent requests aren't able to recreate the transaction
+			// record.
 			//
-			// It inserts the timestamp of the final batch in the transaction.
-			// This timestamp must necessarily be equal to or greater than the
-			// transaction's MinTimestamp, which is consulted in
-			// CanCreateTxnRecord.
-			if br.Txn.Status.IsFinalized() {
-				key := transactionTombstoneMarker(start, txnID)
-				addToTSCache(key, nil, ts, txnID)
-			}
+			// It inserts the timestamp of the final batch in the transaction. This
+			// timestamp must necessarily be equal to or greater than the
+			// transaction's MinTimestamp, which is consulted in CanCreateTxnRecord.
+			key := transactionTombstoneMarker(start, txnID)
+			addToTSCache(key, nil, ts, txnID)
+		case *roachpb.HeartbeatTxnRequest:
+			// HeartbeatTxn requests record a tombstone entry when the record is
+			// initially written. This is used when considering potential 1PC
+			// evaluation, avoiding checking for a transaction record on disk.
+			key := transactionTombstoneMarker(start, txnID)
+			addToTSCache(key, nil, ts, txnID)
 		case *roachpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
 			// transaction that it was trying to recover. If so, then we record
@@ -108,16 +139,21 @@ func (r *Replica) updateTimestampCache(
 				addToTSCache(key, nil, ts, recovered.ID)
 			}
 		case *roachpb.PushTxnRequest:
-			// A successful PushTxn request bumps the timestamp cache for
-			// the pushee's transaction key. The pushee will consult the
-			// timestamp cache when creating its record. If the push left
-			// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
-			// update the timestamp cache. This will cause the creator
-			// of the transaction record to forward its provisional commit
-			// timestamp to honor the result of this push. If the push left
-			// the transaction in an ABORTED state (PUSH_ABORT) then we
-			// update the a special record in the timestamp cache. This will prevent
-			// the creation of the transaction record entirely.
+			// A successful PushTxn request bumps the timestamp cache for the
+			// pushee's transaction key. The pushee will consult the timestamp
+			// cache when creating its record - see CanCreateTxnRecord.
+			//
+			// If the push left the transaction in a PENDING state
+			// (PUSH_TIMESTAMP) then we add a "push" marker to the timestamp
+			// cache with the push time. This will cause the creator of the
+			// transaction record to forward its provisional commit timestamp to
+			// honor the result of this push, preventing it from committing at
+			// any prior time.
+			//
+			// If the push left the transaction in an ABORTED state (PUSH_ABORT)
+			// then we add a "tombstone" marker to the timestamp cache wth the
+			// pushee's minimum timestamp. This will prevent the creation of the
+			// transaction record entirely.
 			pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
 			var tombstone bool
@@ -137,12 +173,25 @@ func (r *Replica) updateTimestampCache(
 			}
 
 			var key roachpb.Key
+			var pushTS hlc.Timestamp
 			if tombstone {
+				// NOTE: we only push to the pushee's MinTimestamp and not to
+				// its WriteTimestamp here because we don't want to add an entry
+				// to the timestamp cache at a higher time than the request's
+				// timestamp. The request's PushTo field is validated to be less
+				// than or equal to its timestamp during evaluation. However, a
+				// PUSH_ABORT may not contain a PushTo timestamp or may contain
+				// a PushTo timestamp that lags the pushee's WriteTimestamp. So
+				// if we were to bump the timestamp cache to the WriteTimestamp,
+				// we could risk adding an entry at a time in advance of the
+				// local clock.
 				key = transactionTombstoneMarker(start, pushee.ID)
+				pushTS = pushee.MinTimestamp
 			} else {
 				key = transactionPushMarker(start, pushee.ID)
+				pushTS = pushee.WriteTimestamp
 			}
-			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID)
+			addToTSCache(key, nil, pushTS, t.PusherTxn.ID)
 		case *roachpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
@@ -213,25 +262,6 @@ func (r *Replica) updateTimestampCache(
 	}
 }
 
-// checkedTSCacheUpdate wraps tscache.Cache and asserts that any update to the
-// cache is at or below the specified time.
-func checkedTSCacheUpdate(
-	now hlc.Timestamp,
-	tc tscache.Cache,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
-) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID) {
-	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
-		if now.Less(ts) {
-			panic(fmt.Sprintf("Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
-				"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
-				"The timestamp cache update could be lost on a lease transfer.", ts, ba, br, pErr, now))
-		}
-		tc.Add(start, end, ts, txnID)
-	}
-}
-
 // txnsPushedDueToClosedTimestamp is a telemetry counter for the number of
 // batch requests which have been pushed due to the closed timestamp.
 var batchesPushedDueToClosedTimestamp telemetry.Counter
@@ -270,7 +300,7 @@ func (r *Replica) applyTimestampCache(
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		if roachpb.ConsultsTimestampCache(args) {
+		if roachpb.IsIntentWrite(args) {
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
@@ -348,6 +378,9 @@ func (r *Replica) applyTimestampCache(
 //     never needs to explicitly create the transaction record for contending
 //     transactions.
 //
+// In addition, it is used when considering 1PC evaluation, to avoid checking
+// for a transaction record on disk.
+//
 // This is detailed in the transaction record state machine below:
 //
 //  +----------------------------------------------------+
@@ -361,12 +394,13 @@ func (r *Replica) applyTimestampCache(
 //  | v -> t = forward v by timestamp t                  |
 //  +----------------------------------------------------+
 //
-//                   PushTxn(TIMESTAMP)                                HeartbeatTxn
-//                   then: v1 -> push.ts                             then: update record
-//                       +------+                                        +------+
-//     PushTxn(ABORT)    |      |        HeartbeatTxn                    |      |   PushTxn(TIMESTAMP)
-//    then: v2 -> txn.ts |      v        if: v2 < txn.orig               |      v  then: update record
-//                  +-----------------+  then: txn.ts -> v1      +--------------------+
+//                                                                     HeartbeatTxn
+//                   PushTxn(TIMESTAMP)                              then: update record
+//                   then: v1 -> push.ts                                   v2 -> txn.ts
+//                       +------+        HeartbeatTxn                    +------+
+//     PushTxn(ABORT)    |      |        if: v2 < txn.orig               |      |   PushTxn(TIMESTAMP)
+//    then: v2 -> txn.ts |      v        then: txn.ts -> v1              |      v  then: update record
+//                  +-----------------+        v2 -> txn.ts      +--------------------+
 //             +----|                 |  else: fail              |                    |----+
 //             |    |                 |------------------------->|                    |    |
 //             |    |  no txn record  |                          | txn record written |    |
@@ -451,7 +485,7 @@ func (r *Replica) applyTimestampCache(
 // system.
 //
 func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
+	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
@@ -473,22 +507,20 @@ func (r *Replica) CanCreateTxnRecord(
 	minCommitTS, _ = r.store.tsCache.GetMax(pushKey, nil /* end */)
 
 	// Also look in the timestamp cache to see if there is a tombstone entry for
-	// this transaction, which would indicate this transaction has already been
-	// finalized or was already aborted by a concurrent transaction. If there is
-	// an entry, then we return a retriable error: if this is a re-evaluation,
-	// then the error will be transformed into an ambiguous one higher up.
-	// Otherwise, if the client is still waiting for a result, then this cannot
-	// be a "replay" of any sort.
-	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	// this transaction, which indicates that this transaction has already written
+	// a transaction record. If there is an entry, then we return a retriable
+	// error: if this is a re-evaluation, then the error will be transformed into
+	// an ambiguous one higher up. Otherwise, if the client is still waiting for
+	// a result, then this cannot be a "replay" of any sort.
+	tombstoneTimestamp, tombstoneTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
-		switch tombstomeTxnID {
+		switch tombstoneTxnID {
 		case txnID:
-			// If we find our own transaction ID then an EndTxn request sent by
-			// our coordinator has already been processed. We might be a replay (e.g.
-			// a DistSender retry), or we raced with an asynchronous abort. Either
-			// way, return an error.
+			// If we find our own transaction ID then a transaction record has already
+			// been written. We might be a replay (e.g. a DistSender retry), or we
+			// raced with an asynchronous abort. Either way, return an error.
 			//
 			// TODO(andrei): We could keep a bit more info in the tscache to return a
 			// different error for COMMITTED transactions. If the EndTxn(commit) was
@@ -498,12 +530,12 @@ func (r *Replica) CanCreateTxnRecord(
 			// still have trouble reconstructing the result, but at least it could
 			// provide a non-ambiguous error to the application.
 			return false, hlc.Timestamp{},
-				roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
+				roachpb.ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY
 		case uuid.Nil:
 			lease, _ /* nextLease */ := r.GetLease()
 			// Recognize the case where a lease started recently. Lease transfers bump
 			// the ts cache low water mark.
-			if tombstoneTimestamp == lease.Start {
+			if tombstoneTimestamp == lease.Start.ToTimestamp() {
 				return false, hlc.Timestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
 			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
@@ -520,19 +552,73 @@ func (r *Replica) CanCreateTxnRecord(
 }
 
 // transactionTombstoneMarker returns the key used as a marker indicating that a
-// particular txn was finalized (i.e. by an EndTransaction, RecoverTxn or
-// PushTxn(Abort)). It is used as a marker in the timestamp cache serving as a
-// guard against creating a transaction record after the transaction record has
-// been cleaned up (i.e. by a BeginTxn being evaluated out of order or arriving
-// after another txn Push(Abort)'ed the txn).
+// particular txn has written a transaction record (which may or may not still
+// exist). It serves as a guard against recreating a transaction record after it
+// has been cleaned up (i.e. by a BeginTxn being evaluated out of order or
+// arriving after another txn Push(Abort)'ed the txn). It is also used to check
+// for existing txn records when considering 1PC evaluation without hitting
+// disk.
 func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-tmbs")...)
 }
 
-// transactionPushMarker returns the key used by the marker indicating that a
+// transactionPushMarker returns the key used as a marker indicating that a
 // particular txn was pushed before writing its transaction record. It is used
 // as a marker in the timestamp cache indicating that the transaction was pushed
 // in case the push happens before there's a transaction record.
 func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-push")...)
+}
+
+// GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
+// by the range to this point.
+func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
+	sum := collectReadSummaryFromTimestampCache(r.store.tsCache, r.Desc())
+	// Forward the read summary by the range's closed timestamp, because any
+	// replica could have served reads below this time. We also return the
+	// closed timestamp separately, in case callers want it split out.
+	closedTS := r.GetClosedTimestamp(ctx)
+	sum.Merge(rspb.FromTimestamp(closedTS))
+	return sum
+}
+
+// collectReadSummaryFromTimestampCache constucts a read summary for the range
+// with the specified descriptor using the timestamp cache.
+func collectReadSummaryFromTimestampCache(
+	tc tscache.Cache, desc *roachpb.RangeDescriptor,
+) rspb.ReadSummary {
+	var s rspb.ReadSummary
+	s.Local.LowWater, _ = tc.GetMax(
+		keys.MakeRangeKeyPrefix(desc.StartKey),
+		keys.MakeRangeKeyPrefix(desc.EndKey),
+	)
+	userKeys := desc.KeySpan()
+	s.Global.LowWater, _ = tc.GetMax(
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
+	)
+
+	return s
+}
+
+// applyReadSummaryToTimestampCache updates the timestamp cache to reflect the
+// reads present in the provided read summary. This ensures that no future
+// writes in either the local or global keyspace are allowed to invalidate
+// ("write underneath") prior reads.
+func applyReadSummaryToTimestampCache(
+	tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
+) {
+	tc.Add(
+		keys.MakeRangeKeyPrefix(desc.StartKey),
+		keys.MakeRangeKeyPrefix(desc.EndKey),
+		s.Local.LowWater,
+		uuid.Nil, /* txnID */
+	)
+	userKeys := desc.KeySpan()
+	tc.Add(
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
+		s.Global.LowWater,
+		uuid.Nil, /* txnID */
+	)
 }

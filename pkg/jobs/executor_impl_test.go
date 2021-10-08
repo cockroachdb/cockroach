@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,7 +26,12 @@ import (
 func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := newTestHelper(t)
+
+	argsFn := func(args *base.TestServerArgs) {
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithShortIntervals()
+	}
+
+	h, cleanup := newTestHelperWithServerArgs(t, argsFn)
 	defer cleanup()
 
 	var tests = []struct {
@@ -59,7 +65,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 
 			// Pretend we failed running; we expect job to be rescheduled.
 			require.NoError(t, NotifyJobTermination(
-				ctx, h.env, 123, StatusFailed, j.ScheduleID(), h.cfg.InternalExecutor, nil))
+				ctx, h.env, 123, StatusFailed, nil, j.ScheduleID(), h.cfg.InternalExecutor, nil))
 
 			// Verify nextRun updated
 			loaded := h.loadSchedule(t, j.ScheduleID())

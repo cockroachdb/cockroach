@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "span",
+    srcs = ["span_builder.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/span",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/inverted",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "span_test",
+    size = "small",
+    srcs = ["span_builder_test.go"],
+    embed = [":span"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/tree",
+    ],
+)

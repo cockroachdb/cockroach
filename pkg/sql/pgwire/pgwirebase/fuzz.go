@@ -13,34 +13,37 @@
 package pgwirebase
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/lib/pq/oid"
 )
 
 var (
-	timeCtx = tree.NewParseTimeContext(timeutil.Now())
-	// Compile a slice of all oids.
-	oids = func() []oid.Oid {
-		var ret []oid.Oid
-		for oid := range types.OidToType {
-			ret = append(ret, oid)
+	// Compile a slice of all typs.
+	typs = func() []*types.T {
+		var ret []*types.T
+		for _, typ := range types.OidToType {
+			ret = append(ret, typ)
 		}
 		return ret
 	}()
 )
 
-func FuzzDecodeOidDatum(data []byte) int {
+func FuzzDecodeDatum(data []byte) int {
 	if len(data) < 2 {
 		return 0
 	}
 
-	id := oids[int(data[1])%len(oids)]
+	typ := typs[int(data[1])%len(typs)]
 	code := FormatCode(data[0]) % (FormatBinary + 1)
 	b := data[2:]
 
-	_, err := DecodeOidDatum(timeCtx, id, code, b)
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	_, err := DecodeDatum(evalCtx, typ, code, b)
 	if err != nil {
 		return 0
 	}

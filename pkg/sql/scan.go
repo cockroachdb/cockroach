@@ -12,16 +12,18 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -43,11 +45,11 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	desc  *sqlbase.ImmutableTableDescriptor
-	index *descpb.IndexDescriptor
+	desc  catalog.TableDescriptor
+	index catalog.Index
 
 	// Set if an index was explicitly specified.
-	specifiedIndex *descpb.IndexDescriptor
+	specifiedIndex catalog.Index
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
@@ -58,12 +60,9 @@ type scanNode struct {
 	// be gained (e.g. for tables with wide rows) by reading only certain
 	// columns from KV using point lookups instead of a single range lookup for
 	// the entire row.
-	cols []*descpb.ColumnDescriptor
+	cols []catalog.Column
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns sqlbase.ResultColumns
-
-	// Map used to get the index for columns in cols.
-	colIdxMap map[descpb.ColumnID]int
+	resultColumns colinfo.ResultColumns
 
 	spans   []roachpb.Span
 	reverse bool
@@ -100,11 +99,16 @@ type scanNode struct {
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 
-	// systemColumns and systemColumnOrdinals contain information about what
-	// system columns the scan needs to produce, and what row ordinals to
-	// write those columns out into.
-	systemColumns        []descpb.SystemColumnKind
-	systemColumnOrdinals []int
+	// containsSystemColumns holds whether or not this scan is expected to
+	// produce any system columns.
+	containsSystemColumns bool
+
+	// localityOptimized is true if this scan is part of a locality optimized
+	// search strategy, which uses a limited UNION ALL operator to try to find a
+	// row on nodes in the gateway's region before fanning out to remote nodes. In
+	// order for this optimization to work, the DistSQL planner must create a
+	// local plan.
+	localityOptimized bool
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -114,6 +118,20 @@ type scanColumnsConfig struct {
 	// can add more columns). Non public columns can only be added if allowed
 	// by the visibility flag below.
 	wantedColumns []tree.ColumnID
+	// wantedColumnsOrdinals contains the ordinals of all columns in
+	// wantedColumns. Note that if addUnwantedAsHidden flag is set, the hidden
+	// columns are not included here.
+	wantedColumnsOrdinals []uint32
+
+	// invertedColumn maps the column ID of the inverted column (if it exists)
+	// to the column type actually stored in the index. For example, the
+	// inverted column of an inverted index has type bytes, even though the
+	// column descriptor matches the source column (Geometry, Geography, JSON or
+	// Array).
+	invertedColumn *struct {
+		colID tree.ColumnID
+		typ   *types.T
+	}
 
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
@@ -178,22 +196,11 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) limitHint() int64 {
-	var limitHint int64
-	if n.hardLimit != 0 {
-		limitHint = n.hardLimit
-	} else {
-		// Read a multiple of the limit when the limit is "soft" to avoid needing a second batch.
-		limitHint = n.softLimit * 2
-	}
-	return limitHint
-}
-
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) error {
@@ -212,7 +219,7 @@ func (n *scanNode) initTable(
 	}
 
 	// Check if any system columns are requested, as they need special handling.
-	n.systemColumns, n.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg)
+	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
 
 	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(colCfg)
@@ -221,79 +228,59 @@ func (n *scanNode) initTable(
 func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	if indexFlags.Index != "" {
 		// Search index by name.
-		indexName := string(indexFlags.Index)
-		if indexName == n.desc.PrimaryIndex.Name {
-			n.specifiedIndex = &n.desc.PrimaryIndex
-		} else {
-			for i := range n.desc.Indexes {
-				if indexName == n.desc.Indexes[i].Name {
-					n.specifiedIndex = &n.desc.Indexes[i]
-					break
-				}
-			}
-		}
-		if n.specifiedIndex == nil {
+		foundIndex, _ := n.desc.FindIndexWithName(string(indexFlags.Index))
+		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
+		n.specifiedIndex = foundIndex
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == descpb.IndexID(indexFlags.IndexID) {
-			n.specifiedIndex = &n.desc.PrimaryIndex
-		} else {
-			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == descpb.IndexID(indexFlags.IndexID) {
-					n.specifiedIndex = &n.desc.Indexes[i]
-					break
-				}
-			}
-		}
-		if n.specifiedIndex == nil {
+		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
+		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
+		n.specifiedIndex = foundIndex
 	}
 	return nil
 }
 
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
-	desc *sqlbase.ImmutableTableDescriptor, colCfg scanColumnsConfig,
-) (cols []*descpb.ColumnDescriptor, err error) {
+	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
+) (cols []catalog.Column, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns))
+	cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
 	for _, wc := range colCfg.wantedColumns {
-		var c *descpb.ColumnDescriptor
-		var err error
-		if sqlbase.IsColIDSystemColumn(descpb.ColumnID(wc)) {
-			// If the requested column is a system column, then retrieve the
-			// corresponding descriptor.
-			c, err = sqlbase.GetSystemColumnDescriptorFromID(descpb.ColumnID(wc))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// Otherwise, collect the descriptors from the table's columns.
-			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-				c, err = desc.FindActiveColumnByID(id)
-			} else {
-				c, _, err = desc.FindReadableColumnByID(id)
-			}
-			if err != nil {
-				return cols, err
+		id := descpb.ColumnID(wc)
+		col, err := desc.FindColumnWithID(id)
+		if err != nil {
+			return cols, err
+		}
+		if !col.IsSystemColumn() {
+			if colCfg.visibility != execinfra.ScanVisibilityPublic {
+				col = desc.ReadableColumns()[col.Ordinal()]
+			} else if !col.Public() {
+				return cols, fmt.Errorf("column-id \"%d\" does not exist", id)
 			}
 		}
 
-		cols = append(cols, c)
+		// If this is an inverted column, create a new descriptor with the
+		// correct type.
+		if vc := colCfg.invertedColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
+			col = col.DeepCopy()
+			col.ColumnDesc().Type = vc.typ
+		}
+		cols = append(cols, col)
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for i := range desc.Columns {
-			c := &desc.Columns[i]
+		for _, c := range desc.PublicColumns() {
 			found := false
 			for _, wc := range colCfg.wantedColumns {
-				if descpb.ColumnID(wc) == c.ID {
+				if descpb.ColumnID(wc) == c.GetID() {
 					found = true
 					break
 				}
@@ -302,9 +289,9 @@ func initColsForScan(
 				// NB: we could amortize this allocation using a second slice,
 				// but addUnwantedAsHidden is only used by scrub, so doing so
 				// doesn't seem worth it.
-				col := *c
-				col.Hidden = true
-				cols = append(cols, &col)
+				col := c.DeepCopy()
+				col.ColumnDesc().Hidden = true
+				cols = append(cols, col)
 			}
 		}
 	}
@@ -315,7 +302,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = &n.desc.PrimaryIndex
+	n.index = n.desc.GetPrimaryIndex()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)
@@ -324,10 +311,6 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = sqlbase.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
-	n.colIdxMap = make(map[descpb.ColumnID]int, len(n.cols))
-	for i, c := range n.cols {
-		n.colIdxMap[c.ID] = i
-	}
+	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
 	return nil
 }

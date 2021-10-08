@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "reduce_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/reduce",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/testutils/reduce",
+        "//pkg/testutils/reduce/reducesql",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "reduce",
+    embed = [":reduce_lib"],
+    visibility = ["//visibility:public"],
+)

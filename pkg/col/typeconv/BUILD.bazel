@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "typeconv",
+    srcs = ["typeconv.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/typeconv",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/json",
+        "@com_github_cockroachdb_apd_v2//:apd",
+    ],
+)

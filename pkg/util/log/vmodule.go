@@ -65,6 +65,11 @@ func SetVModule(value string) error {
 	return logging.vmoduleConfig.mu.vmodule.Set(value)
 }
 
+// GetVModule returns the current vmodule configuration.
+func GetVModule() string {
+	return logging.vmoduleConfig.mu.vmodule.String()
+}
+
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(l Level, depth int) bool {
@@ -80,10 +85,6 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 		return true
 	}
 
-	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		return true
-	}
-
 	// It's off globally but vmodule may still be set.
 	// Here is another cheap but safe test to see if vmodule is enabled.
 	if atomic.LoadInt32(&c.mu.filterLength) > 0 {
@@ -96,7 +97,7 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 		// paths, because a defer anywhere in the body of a function causes a call
 		// to runtime.deferreturn at the end of that function, which has a
 		// measurable performance penalty when in a very hot path.
-		// defer mainLog.pcsPool.Put(pcs)
+		// defer c.pcsPool.Put(pcs)
 		if runtime.Callers(2+depth, pcs[:]) == 0 {
 			c.pcsPool.Put(poolObj)
 			return false
@@ -238,18 +239,18 @@ func isLiteral(pattern string) bool {
 	return !strings.ContainsAny(pattern, `\*?[]`)
 }
 
-// Level is exported because it appears in the arguments to V and is
-// the type of the v flag, which can be set programmatically.
-// It's a distinct type because we want to discriminate it from logType.
-// Variables of type level are only changed under mainLog.mu.
-// The --verbosity flag is read only with atomic ops, so the state of the logging
-// module is consistent.
-
-// Level is treated as a sync/atomic int32.
-
 // Level specifies a level of verbosity for V logs. *Level implements
 // flag.Value; the --verbosity flag is of type Level and should be modified
 // only through the flag.Value interface.
+//
+// Level is exported because it appears in the arguments to V and is
+// the type of the v flag, which can be set programmatically.
+// It's a distinct type because we want to discriminate it from logType.
+// Variables of type level are only changed under loggerT.mu.
+// The --verbosity flag is read only with atomic ops, so the state of the logging
+// module is consistent.
+//
+// Level is treated as a sync/atomic int32.
 type Level int32
 
 // get returns the value of the Level.

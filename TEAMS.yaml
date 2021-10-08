@@ -1,0 +1,79 @@
+# This is a YAML file mapping team aliases from GitHub to
+# metadata about the team.
+# Expected structure is available in pkg/internal/team/team.go.
+
+# Finding triage_column_id:
+#   TriageColumnID is the column id of the project column the team uses to
+#   triage issues. To get it, open the project, click the "..." on top of
+#   the project column, and click "Copy column link". That link contains
+#   the ID as the `#column-<ID>` fragment.
+#
+# You can also use:
+#   https://github.com/cockroachlabs/github-find-triage-column-id using
+#   `go install github.com/cockroachlabs/github-find-triage-column-id@latest`.
+#
+#   Then to retrieve triage_column_id from a repo-based project, run:
+#     github-get-column-id --repo "cockroach" --project "Bazel" --column "To do"
+#   Or retrieve the triage_column_id from a organization-based project, run:
+#     github-get-column-id --project "Spatial" --column "Backlog"
+
+cockroachdb/docs:
+  triage_column_id: 3971225
+cockroachdb/sql-experience:
+  aliases:
+    cockroachdb/sql-syntax-prs: other
+    cockroachdb/sqlproxy-prs: other
+    cockroachdb/sql-api-prs: other
+  triage_column_id: 7259065
+cockroachdb/sql-schema:
+  triage_column_id: 8946818
+cockroachdb/sql-queries:
+  aliases:
+    cockroachdb/sql-optimizer: other
+    cockroachdb/sql-opt-prs: other
+  triage_column_id: 13549252
+cockroachdb/sql-observability:
+  triage_column_id: 12618343
+cockroachdb/kv:
+  aliases:
+    cockroachdb/kv-triage: roachtest
+    cockroachdb/kv-prs: other
+  triage_column_id: 14242655
+cockroachdb/geospatial:
+  triage_column_id: 9487269
+cockroachdb/dev-inf:
+  triage_column_id: 10210759
+cockroachdb/multiregion:
+  triage_column_id: 11926170
+cockroachdb/storage:
+  triage_column_id: 6668367
+cockroachdb/test-eng:
+  triage_column_id: 14041337
+cockroachdb/security:
+  triage_column_id: 0 # TODO
+cockroachdb/bulk-io:
+  aliases:
+    cockroachdb/bulk-prs: other
+  triage_column_id: 3097123
+cockroachdb/cdc:
+  aliases:
+    cockroachdb/cdc-prs: other
+  triage_column_id: 3570120
+cockroachdb/server:
+  aliases:
+    cockroachdb/cli-prs: other
+    cockroachdb/server-prs: other
+    cockroachdb/http-api-prs: other
+  triage_column_id: 2521812
+cockroachdb/cluster-ui:
+  aliases:
+    cockroachdb/cluster-ui-prs: other
+  triage_column_id: 6598672
+cockroachdb/obs-inf:
+  aliases:
+    cockroachdb/obs-inf-prs: other
+  triage_column_id: 14196277
+cockroachdb/unowned:
+  aliases:
+    cockroachdb/rfc-prs: other
+  triage_column_id: 0 # TODO

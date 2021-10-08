@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dumpstore",
+    srcs = ["dumpstore.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/dumpstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "dumpstore_test",
+    size = "small",
+    srcs = ["dumpstore_test.go"],
+    embed = [":dumpstore"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

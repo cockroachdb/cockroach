@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tpcc",
+    srcs = [
+        "audit.go",
+        "checks.go",
+        "ddls.go",
+        "delivery.go",
+        "generate.go",
+        "new_order.go",
+        "order_status.go",
+        "partition.go",
+        "payment.go",
+        "random.go",
+        "result.go",
+        "stock_level.go",
+        "tpcc.go",
+        "worker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/tpcc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/workloadimpl",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgx",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_jackc_pgtype//:pgtype",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_lib_pq//:pq",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "tpcc_test",
+    size = "small",
+    srcs = [
+        "partition_test.go",
+        "result_test.go",
+        "stats_test.go",
+    ],
+    embed = [":tpcc"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/workload",
+        "@com_github_stretchr_testify//require",
+    ],
+)

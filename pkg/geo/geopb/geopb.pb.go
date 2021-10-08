@@ -3,13 +3,15 @@
 
 package geopb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import encoding_binary "encoding/binary"
-
-import io "io"
+import (
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // ShapeType is the type of a spatial shape. Each of these corresponds to a
 // different representation and serialization format. For example, a Point is a
@@ -39,37 +41,111 @@ const (
 	// Geometry can contain any type.
 	ShapeType_Geometry ShapeType = 7
 	// GeometryCollection can contain a list of any above type except for Geometry.
-	ShapeType_GeometryCollection ShapeType = 8
+	ShapeType_GeometryCollection   ShapeType = 8
+	ShapeType_PointM               ShapeType = 536870913
+	ShapeType_LineStringM          ShapeType = 536870914
+	ShapeType_PolygonM             ShapeType = 536870915
+	ShapeType_MultiPointM          ShapeType = 536870916
+	ShapeType_MultiLineStringM     ShapeType = 536870917
+	ShapeType_MultiPolygonM        ShapeType = 536870918
+	ShapeType_GeometryM            ShapeType = 536870919
+	ShapeType_GeometryCollectionM  ShapeType = 536870920
+	ShapeType_PointZ               ShapeType = 1073741825
+	ShapeType_LineStringZ          ShapeType = 1073741826
+	ShapeType_PolygonZ             ShapeType = 1073741827
+	ShapeType_MultiPointZ          ShapeType = 1073741828
+	ShapeType_MultiLineStringZ     ShapeType = 1073741829
+	ShapeType_MultiPolygonZ        ShapeType = 1073741830
+	ShapeType_GeometryZ            ShapeType = 1073741831
+	ShapeType_GeometryCollectionZ  ShapeType = 1073741832
+	ShapeType_PointZM              ShapeType = 1610612737
+	ShapeType_LineStringZM         ShapeType = 1610612738
+	ShapeType_PolygonZM            ShapeType = 1610612739
+	ShapeType_MultiPointZM         ShapeType = 1610612740
+	ShapeType_MultiLineStringZM    ShapeType = 1610612741
+	ShapeType_MultiPolygonZM       ShapeType = 1610612742
+	ShapeType_GeometryZM           ShapeType = 1610612743
+	ShapeType_GeometryCollectionZM ShapeType = 1610612744
 )
 
 var ShapeType_name = map[int32]string{
-	0: "Unset",
-	1: "Point",
-	2: "LineString",
-	3: "Polygon",
-	4: "MultiPoint",
-	5: "MultiLineString",
-	6: "MultiPolygon",
-	7: "Geometry",
-	8: "GeometryCollection",
+	0:          "Unset",
+	1:          "Point",
+	2:          "LineString",
+	3:          "Polygon",
+	4:          "MultiPoint",
+	5:          "MultiLineString",
+	6:          "MultiPolygon",
+	7:          "Geometry",
+	8:          "GeometryCollection",
+	536870913:  "PointM",
+	536870914:  "LineStringM",
+	536870915:  "PolygonM",
+	536870916:  "MultiPointM",
+	536870917:  "MultiLineStringM",
+	536870918:  "MultiPolygonM",
+	536870919:  "GeometryM",
+	536870920:  "GeometryCollectionM",
+	1073741825: "PointZ",
+	1073741826: "LineStringZ",
+	1073741827: "PolygonZ",
+	1073741828: "MultiPointZ",
+	1073741829: "MultiLineStringZ",
+	1073741830: "MultiPolygonZ",
+	1073741831: "GeometryZ",
+	1073741832: "GeometryCollectionZ",
+	1610612737: "PointZM",
+	1610612738: "LineStringZM",
+	1610612739: "PolygonZM",
+	1610612740: "MultiPointZM",
+	1610612741: "MultiLineStringZM",
+	1610612742: "MultiPolygonZM",
+	1610612743: "GeometryZM",
+	1610612744: "GeometryCollectionZM",
 }
+
 var ShapeType_value = map[string]int32{
-	"Unset":              0,
-	"Point":              1,
-	"LineString":         2,
-	"Polygon":            3,
-	"MultiPoint":         4,
-	"MultiLineString":    5,
-	"MultiPolygon":       6,
-	"Geometry":           7,
-	"GeometryCollection": 8,
+	"Unset":                0,
+	"Point":                1,
+	"LineString":           2,
+	"Polygon":              3,
+	"MultiPoint":           4,
+	"MultiLineString":      5,
+	"MultiPolygon":         6,
+	"Geometry":             7,
+	"GeometryCollection":   8,
+	"PointM":               536870913,
+	"LineStringM":          536870914,
+	"PolygonM":             536870915,
+	"MultiPointM":          536870916,
+	"MultiLineStringM":     536870917,
+	"MultiPolygonM":        536870918,
+	"GeometryM":            536870919,
+	"GeometryCollectionM":  536870920,
+	"PointZ":               1073741825,
+	"LineStringZ":          1073741826,
+	"PolygonZ":             1073741827,
+	"MultiPointZ":          1073741828,
+	"MultiLineStringZ":     1073741829,
+	"MultiPolygonZ":        1073741830,
+	"GeometryZ":            1073741831,
+	"GeometryCollectionZ":  1073741832,
+	"PointZM":              1610612737,
+	"LineStringZM":         1610612738,
+	"PolygonZM":            1610612739,
+	"MultiPointZM":         1610612740,
+	"MultiLineStringZM":    1610612741,
+	"MultiPolygonZM":       1610612742,
+	"GeometryZM":           1610612743,
+	"GeometryCollectionZM": 1610612744,
 }
 
 func (x ShapeType) String() string {
 	return proto.EnumName(ShapeType_name, int32(x))
 }
+
 func (ShapeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{0}
+	return fileDescriptor_e98b4c2fa47407b4, []int{0}
 }
 
 // SpatialObjectType represents the type of the SpatialObject.
@@ -86,6 +162,7 @@ var SpatialObjectType_name = map[int32]string{
 	1: "GeographyType",
 	2: "GeometryType",
 }
+
 var SpatialObjectType_value = map[string]int32{
 	"Unknown":       0,
 	"GeographyType": 1,
@@ -95,8 +172,9 @@ var SpatialObjectType_value = map[string]int32{
 func (x SpatialObjectType) String() string {
 	return proto.EnumName(SpatialObjectType_name, int32(x))
 }
+
 func (SpatialObjectType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{1}
+	return fileDescriptor_e98b4c2fa47407b4, []int{1}
 }
 
 // SpatialObject represents a serialization of a Geospatial type.
@@ -117,21 +195,21 @@ func (m *SpatialObject) Reset()         { *m = SpatialObject{} }
 func (m *SpatialObject) String() string { return proto.CompactTextString(m) }
 func (*SpatialObject) ProtoMessage()    {}
 func (*SpatialObject) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{0}
+	return fileDescriptor_e98b4c2fa47407b4, []int{0}
 }
 func (m *SpatialObject) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SpatialObject) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SpatialObject) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SpatialObject.Merge(dst, src)
+func (m *SpatialObject) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpatialObject.Merge(m, src)
 }
 func (m *SpatialObject) XXX_Size() int {
 	return m.Size()
@@ -158,21 +236,21 @@ func (m *BoundingBox) Reset()         { *m = BoundingBox{} }
 func (m *BoundingBox) String() string { return proto.CompactTextString(m) }
 func (*BoundingBox) ProtoMessage()    {}
 func (*BoundingBox) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{1}
+	return fileDescriptor_e98b4c2fa47407b4, []int{1}
 }
 func (m *BoundingBox) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *BoundingBox) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *BoundingBox) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BoundingBox.Merge(dst, src)
+func (m *BoundingBox) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BoundingBox.Merge(m, src)
 }
 func (m *BoundingBox) XXX_Size() int {
 	return m.Size()
@@ -184,15 +262,64 @@ func (m *BoundingBox) XXX_DiscardUnknown() {
 var xxx_messageInfo_BoundingBox proto.InternalMessageInfo
 
 func init() {
-	proto.RegisterType((*SpatialObject)(nil), "cockroach.geopb.SpatialObject")
-	proto.RegisterType((*BoundingBox)(nil), "cockroach.geopb.BoundingBox")
 	proto.RegisterEnum("cockroach.geopb.ShapeType", ShapeType_name, ShapeType_value)
 	proto.RegisterEnum("cockroach.geopb.SpatialObjectType", SpatialObjectType_name, SpatialObjectType_value)
+	proto.RegisterType((*SpatialObject)(nil), "cockroach.geopb.SpatialObject")
+	proto.RegisterType((*BoundingBox)(nil), "cockroach.geopb.BoundingBox")
 }
+
+func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_e98b4c2fa47407b4) }
+
+var fileDescriptor_e98b4c2fa47407b4 = []byte{
+	// 657 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x94, 0x4f, 0x6f, 0xda, 0x40,
+	0x10, 0xc5, 0x31, 0x2c, 0x0e, 0x0c, 0x84, 0x2c, 0x9b, 0x3f, 0xa2, 0x69, 0xe4, 0x22, 0x54, 0xa9,
+	0x28, 0x07, 0x22, 0xa5, 0x52, 0xa5, 0x9e, 0x2a, 0xd1, 0x46, 0x51, 0xd5, 0x5a, 0x8d, 0x9c, 0x46,
+	0x4d, 0x7c, 0x41, 0x98, 0x58, 0xc6, 0x8d, 0xeb, 0xb5, 0xc0, 0x51, 0xf0, 0x8d, 0xfe, 0xef, 0xad,
+	0xfd, 0x54, 0x55, 0x8e, 0x39, 0xe6, 0x54, 0xb5, 0xe4, 0x5b, 0xe4, 0x54, 0xed, 0xac, 0x9d, 0x18,
+	0xc8, 0xc5, 0xde, 0x99, 0xf7, 0x76, 0xf6, 0xe7, 0x87, 0x31, 0xac, 0x3a, 0x36, 0xdf, 0x72, 0x6c,
+	0x1e, 0x58, 0xf2, 0xda, 0x0a, 0x06, 0x3c, 0xe4, 0x6c, 0xa9, 0xc7, 0x7b, 0x27, 0x03, 0xde, 0xed,
+	0xf5, 0x5b, 0xd8, 0x5e, 0x5f, 0x71, 0xb8, 0xc3, 0x51, 0xdb, 0x12, 0x2b, 0x69, 0x6b, 0xfc, 0xcc,
+	0xc2, 0xe2, 0x7e, 0xd0, 0x0d, 0xdd, 0xae, 0xf7, 0xc6, 0x7a, 0x6f, 0xf7, 0x42, 0xf6, 0x04, 0x48,
+	0x18, 0x05, 0x76, 0x4d, 0xa9, 0x2b, 0xcd, 0xca, 0x76, 0xa3, 0x35, 0x33, 0xa7, 0x35, 0xe5, 0x7e,
+	0x1b, 0x05, 0xb6, 0x81, 0x7e, 0xf6, 0x10, 0x88, 0x7d, 0x76, 0x62, 0xd5, 0xb2, 0x75, 0xa5, 0x59,
+	0x6e, 0xd3, 0xc9, 0x9f, 0x07, 0x64, 0xe7, 0xdd, 0xab, 0xf6, 0x75, 0x7c, 0x37, 0x50, 0x15, 0xae,
+	0xe1, 0xc0, 0x3d, 0xae, 0xe5, 0xea, 0x4a, 0x33, 0x2f, 0x5d, 0xfb, 0xc6, 0xcb, 0x17, 0xd7, 0xf1,
+	0xdd, 0x40, 0x95, 0x3d, 0x05, 0x18, 0xf6, 0xbb, 0x81, 0xdd, 0x41, 0x12, 0x82, 0x24, 0xeb, 0xf3,
+	0x24, 0xc2, 0x82, 0x04, 0xc5, 0x61, 0xb2, 0x64, 0xcf, 0xa0, 0x6c, 0xf1, 0x53, 0xff, 0xd8, 0xf5,
+	0x9d, 0x8e, 0xc5, 0x47, 0xb5, 0x7c, 0x5d, 0x69, 0x96, 0xb6, 0x37, 0xe6, 0x36, 0xb7, 0x63, 0x53,
+	0x9b, 0x8f, 0x8c, 0x92, 0x75, 0x5b, 0x34, 0x8e, 0xa0, 0x94, 0xd2, 0x58, 0x15, 0x88, 0xc7, 0x3b,
+	0x23, 0x8c, 0x43, 0x31, 0x72, 0x1e, 0x3f, 0x14, 0xad, 0xbe, 0xdb, 0x19, 0xe1, 0x93, 0x2a, 0x46,
+	0xae, 0xef, 0x1e, 0xc6, 0xae, 0x08, 0x1f, 0x0b, 0x5d, 0x47, 0xb1, 0x2b, 0x42, 0x7a, 0x74, 0x1d,
+	0x6d, 0xfe, 0xce, 0x43, 0xf1, 0x06, 0x9a, 0x15, 0x21, 0x7f, 0xe0, 0x0f, 0xed, 0x90, 0x66, 0xc4,
+	0x72, 0x8f, 0xbb, 0x7e, 0x48, 0x15, 0x56, 0x01, 0x78, 0xed, 0xfa, 0xf6, 0x7e, 0x38, 0x70, 0x7d,
+	0x87, 0x66, 0x59, 0x09, 0x16, 0xf6, 0xb8, 0x17, 0x39, 0xdc, 0xa7, 0x39, 0x21, 0xea, 0xa7, 0x5e,
+	0xe8, 0x4a, 0x33, 0x61, 0xcb, 0xb0, 0x84, 0x75, 0x6a, 0x47, 0x9e, 0x51, 0x28, 0xc7, 0x26, 0xb9,
+	0x4d, 0x65, 0x65, 0x28, 0xec, 0xda, 0xfc, 0x83, 0x1d, 0x0e, 0x22, 0xba, 0xc0, 0xd6, 0x80, 0x25,
+	0xd5, 0x73, 0xee, 0x79, 0x76, 0x2f, 0x74, 0xb9, 0x4f, 0x0b, 0xac, 0x02, 0x2a, 0xce, 0xd5, 0xe9,
+	0xc7, 0xf1, 0x78, 0x9c, 0x65, 0xcb, 0x50, 0xba, 0x9d, 0xab, 0xd3, 0x4f, 0xd8, 0xa4, 0x50, 0x88,
+	0xe7, 0xea, 0xf4, 0x73, 0x62, 0xbb, 0x65, 0xd2, 0xe9, 0x17, 0x6c, 0xd6, 0x80, 0xce, 0x80, 0xe9,
+	0xf4, 0x2b, 0x2a, 0xab, 0xb0, 0x98, 0xa6, 0xd3, 0xe9, 0x37, 0x6c, 0x57, 0xa1, 0x98, 0x40, 0xe9,
+	0xf4, 0x3b, 0xb6, 0xee, 0xc3, 0xf2, 0x3c, 0xa7, 0x4e, 0x7f, 0xa0, 0x98, 0xc0, 0x9a, 0x08, 0x4b,
+	0xa6, 0x61, 0x4d, 0x84, 0x25, 0x29, 0x58, 0x13, 0x61, 0xc9, 0x34, 0xac, 0x89, 0xb0, 0xe4, 0x0e,
+	0x58, 0x13, 0x61, 0xc9, 0x2c, 0xac, 0x89, 0xb0, 0x24, 0x0d, 0x6b, 0x22, 0x2c, 0xb9, 0x1b, 0xd6,
+	0x44, 0x58, 0xc2, 0x96, 0xc4, 0x6f, 0x28, 0x0e, 0x94, 0xd1, 0xaa, 0x6c, 0x05, 0xca, 0xa9, 0xc3,
+	0x64, 0xb6, 0xaa, 0x18, 0x9b, 0x1c, 0x24, 0xc3, 0x45, 0x63, 0x8a, 0x57, 0xa6, 0xab, 0xb2, 0x7b,
+	0x50, 0x9d, 0x05, 0x96, 0xf1, 0xaa, 0x6c, 0x0d, 0x2a, 0x53, 0xc4, 0x32, 0x5f, 0x95, 0x31, 0x80,
+	0x1b, 0x64, 0x19, 0xb0, 0xca, 0x36, 0x60, 0xe5, 0x0e, 0x66, 0x99, 0xb0, 0xda, 0x28, 0x17, 0xc6,
+	0x22, 0x69, 0x8a, 0xd7, 0xb8, 0x22, 0x58, 0x91, 0xcd, 0x1d, 0xa8, 0xce, 0x7d, 0x06, 0xc4, 0x9b,
+	0x7a, 0xe0, 0x9f, 0xf8, 0xfc, 0xcc, 0xa7, 0x19, 0x56, 0x85, 0xc5, 0x5d, 0x9b, 0x3b, 0x83, 0x6e,
+	0xd0, 0x8f, 0x84, 0x4a, 0x15, 0xf1, 0x5e, 0x26, 0xc7, 0x61, 0x27, 0xdb, 0x7e, 0x74, 0xfe, 0x4f,
+	0xcb, 0x9c, 0x4f, 0x34, 0xe5, 0x62, 0xa2, 0x29, 0x97, 0x13, 0x4d, 0xf9, 0x3b, 0xd1, 0x94, 0x5f,
+	0x57, 0x5a, 0xe6, 0xe2, 0x4a, 0xcb, 0x5c, 0x5e, 0x69, 0x19, 0x33, 0x8f, 0x7f, 0x56, 0x4b, 0xc5,
+	0x8f, 0xd5, 0xe3, 0xff, 0x01, 0x00, 0x00, 0xff, 0xff, 0x32, 0x59, 0x0c, 0xc5, 0xec, 0x04, 0x00,
+	0x00,
+}
+
 func (m *SpatialObject) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -200,48 +327,56 @@ func (m *SpatialObject) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SpatialObject) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SpatialObject) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(m.Type))
-	}
-	if len(m.EWKB) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(len(m.EWKB)))
-		i += copy(dAtA[i:], m.EWKB)
-	}
-	if m.SRID != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(m.SRID))
+	if m.BoundingBox != nil {
+		{
+			size, err := m.BoundingBox.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintGeopb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
 	}
 	if m.ShapeType != 0 {
-		dAtA[i] = 0x20
-		i++
 		i = encodeVarintGeopb(dAtA, i, uint64(m.ShapeType))
+		i--
+		dAtA[i] = 0x20
 	}
-	if m.BoundingBox != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(m.BoundingBox.Size()))
-		n1, err := m.BoundingBox.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+	if m.SRID != 0 {
+		i = encodeVarintGeopb(dAtA, i, uint64(m.SRID))
+		i--
+		dAtA[i] = 0x18
 	}
-	return i, nil
+	if len(m.EWKB) > 0 {
+		i -= len(m.EWKB)
+		copy(dAtA[i:], m.EWKB)
+		i = encodeVarintGeopb(dAtA, i, uint64(len(m.EWKB)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Type != 0 {
+		i = encodeVarintGeopb(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *BoundingBox) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -249,45 +384,52 @@ func (m *BoundingBox) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *BoundingBox) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BoundingBox) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.LoX != 0 {
-		dAtA[i] = 0x9
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.LoX))))
-		i += 8
-	}
-	if m.HiX != 0 {
-		dAtA[i] = 0x11
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.HiX))))
-		i += 8
+	if m.HiY != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.HiY))))
+		i--
+		dAtA[i] = 0x21
 	}
 	if m.LoY != 0 {
-		dAtA[i] = 0x19
-		i++
+		i -= 8
 		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.LoY))))
-		i += 8
+		i--
+		dAtA[i] = 0x19
 	}
-	if m.HiY != 0 {
-		dAtA[i] = 0x21
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.HiY))))
-		i += 8
+	if m.HiX != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.HiX))))
+		i--
+		dAtA[i] = 0x11
 	}
-	return i, nil
+	if m.LoX != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.LoX))))
+		i--
+		dAtA[i] = 0x9
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintGeopb(dAtA []byte, offset int, v uint64) int {
+	offset -= sovGeopb(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *SpatialObject) Size() (n int) {
 	if m == nil {
@@ -337,14 +479,7 @@ func (m *BoundingBox) Size() (n int) {
 }
 
 func sovGeopb(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozGeopb(x uint64) (n int) {
 	return sovGeopb(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -364,7 +499,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -392,7 +527,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (SpatialObjectType(b) & 0x7F) << shift
+				m.Type |= SpatialObjectType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -411,7 +546,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -420,6 +555,9 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthGeopb
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthGeopb
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -442,7 +580,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SRID |= (SRID(b) & 0x7F) << shift
+				m.SRID |= SRID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -461,7 +599,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ShapeType |= (ShapeType(b) & 0x7F) << shift
+				m.ShapeType |= ShapeType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -480,7 +618,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -489,6 +627,9 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthGeopb
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGeopb
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -505,7 +646,7 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGeopb
 			}
 			if (iNdEx + skippy) > l {
@@ -535,7 +676,7 @@ func (m *BoundingBox) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -599,7 +740,7 @@ func (m *BoundingBox) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGeopb
 			}
 			if (iNdEx + skippy) > l {
@@ -617,6 +758,7 @@ func (m *BoundingBox) Unmarshal(dAtA []byte) error {
 func skipGeopb(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -648,10 +790,8 @@ func skipGeopb(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -668,89 +808,34 @@ func skipGeopb(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthGeopb
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowGeopb
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipGeopb(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupGeopb
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthGeopb
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthGeopb = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowGeopb   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthGeopb        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowGeopb          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupGeopb = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_bd402adf6a465ece) }
-
-var fileDescriptor_geopb_bd402adf6a465ece = []byte{
-	// 468 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x92, 0xc1, 0x6e, 0xd3, 0x4c,
-	0x10, 0xc7, 0xbd, 0x89, 0xdd, 0x36, 0x93, 0xb4, 0xdd, 0xec, 0xf7, 0x81, 0xa2, 0x0a, 0x99, 0x28,
-	0x42, 0x22, 0xea, 0x21, 0x95, 0x8a, 0x84, 0xc4, 0x09, 0xc9, 0x50, 0x55, 0x08, 0x10, 0x95, 0x43,
-	0x45, 0xc3, 0x25, 0xb2, 0xdd, 0x95, 0xbd, 0xc4, 0xec, 0x58, 0xce, 0x56, 0x8d, 0x9f, 0x02, 0xee,
-	0xbc, 0x50, 0x8f, 0x3d, 0xf6, 0x84, 0xc0, 0x79, 0x8b, 0x9e, 0xd0, 0xae, 0x1d, 0x28, 0xe4, 0xe2,
-	0x9d, 0x99, 0xff, 0x6f, 0x76, 0xff, 0xeb, 0x59, 0xb8, 0x17, 0x73, 0x3c, 0x88, 0x39, 0x66, 0x61,
-	0xf5, 0x1d, 0x65, 0x39, 0x2a, 0x64, 0xbb, 0x11, 0x46, 0xb3, 0x1c, 0x83, 0x28, 0x19, 0x99, 0xf2,
-	0xde, 0xff, 0x31, 0xc6, 0x68, 0xb4, 0x03, 0x1d, 0x55, 0xd8, 0xe0, 0x4b, 0x03, 0xb6, 0xc7, 0x59,
-	0xa0, 0x44, 0x90, 0xbe, 0x0b, 0x3f, 0xf1, 0x48, 0xb1, 0xa7, 0x60, 0xab, 0x22, 0xe3, 0x3d, 0xd2,
-	0x27, 0xc3, 0x9d, 0xc3, 0xc1, 0xe8, 0x9f, 0x7d, 0x46, 0x7f, 0xd1, 0xef, 0x8b, 0x8c, 0xfb, 0x86,
-	0x67, 0x8f, 0xc0, 0xe6, 0x97, 0xb3, 0xb0, 0xd7, 0xe8, 0x93, 0x61, 0xc7, 0xa3, 0xe5, 0xf7, 0x87,
-	0xf6, 0xd1, 0x87, 0xd7, 0xde, 0x6d, 0xbd, 0xfa, 0x46, 0xd5, 0xd4, 0x3c, 0x17, 0xe7, 0xbd, 0x66,
-	0x9f, 0x0c, 0x9d, 0x8a, 0x1a, 0xfb, 0xaf, 0x5e, 0xde, 0xd6, 0xab, 0x6f, 0x54, 0xf6, 0x0c, 0x60,
-	0x9e, 0x04, 0x19, 0x9f, 0x1a, 0x27, 0xb6, 0x71, 0xb2, 0xb7, 0xee, 0x44, 0x23, 0xc6, 0x41, 0x6b,
-	0xbe, 0x0a, 0xd9, 0x73, 0xe8, 0x84, 0x78, 0x21, 0xcf, 0x85, 0x8c, 0xa7, 0x21, 0x2e, 0x7a, 0x4e,
-	0x9f, 0x0c, 0xdb, 0x87, 0x0f, 0xd6, 0x9a, 0xbd, 0x1a, 0xf2, 0x70, 0xe1, 0xb7, 0xc3, 0x3f, 0xc9,
-	0x60, 0x02, 0xed, 0x3b, 0x1a, 0xeb, 0x82, 0x9d, 0xe2, 0x74, 0x61, 0x7e, 0x07, 0xf1, 0x9b, 0x29,
-	0x9e, 0xe9, 0x52, 0x22, 0xa6, 0x0b, 0x73, 0x53, 0xe2, 0x37, 0x13, 0x71, 0x56, 0x53, 0x85, 0xb9,
-	0x96, 0xa1, 0x26, 0x35, 0x55, 0x18, 0xf7, 0x86, 0x9a, 0xec, 0x7f, 0x23, 0xd0, 0xfa, 0x6d, 0x9a,
-	0xb5, 0xc0, 0x39, 0x95, 0x73, 0xae, 0xa8, 0xa5, 0xc3, 0x13, 0x14, 0x52, 0x51, 0xc2, 0x76, 0x00,
-	0xde, 0x08, 0xc9, 0xc7, 0x2a, 0x17, 0x32, 0xa6, 0x0d, 0xd6, 0x86, 0xcd, 0x13, 0x4c, 0x8b, 0x18,
-	0x25, 0x6d, 0x6a, 0xf1, 0xed, 0x45, 0xaa, 0x44, 0x05, 0xdb, 0xec, 0x3f, 0xd8, 0x35, 0xf9, 0x9d,
-	0x0e, 0x87, 0x51, 0xe8, 0xd4, 0x50, 0xd5, 0xb6, 0xc1, 0x3a, 0xb0, 0x75, 0xcc, 0xf1, 0x33, 0x57,
-	0x79, 0x41, 0x37, 0xd9, 0x7d, 0x60, 0xab, 0xec, 0x05, 0xa6, 0x29, 0x8f, 0x94, 0x40, 0x49, 0xb7,
-	0xf6, 0x8f, 0xa0, 0xbb, 0x36, 0x5b, 0x7d, 0xfc, 0xa9, 0x9c, 0x49, 0xbc, 0x94, 0xd4, 0x62, 0x5d,
-	0xd8, 0x3e, 0xe6, 0x18, 0xe7, 0x41, 0x96, 0x14, 0x5a, 0xa5, 0x44, 0x1f, 0xb6, 0xda, 0xcc, 0x54,
-	0x1a, 0xde, 0xe3, 0xab, 0x9f, 0xae, 0x75, 0x55, 0xba, 0xe4, 0xba, 0x74, 0xc9, 0x4d, 0xe9, 0x92,
-	0x1f, 0xa5, 0x4b, 0xbe, 0x2e, 0x5d, 0xeb, 0x7a, 0xe9, 0x5a, 0x37, 0x4b, 0xd7, 0xfa, 0xe8, 0x98,
-	0x09, 0x84, 0x1b, 0xe6, 0x05, 0x3e, 0xf9, 0x15, 0x00, 0x00, 0xff, 0xff, 0x3b, 0x0b, 0xe8, 0x04,
-	0xc1, 0x02, 0x00, 0x00,
-}

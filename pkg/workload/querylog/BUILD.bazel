@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "querylog",
+    srcs = ["querylog.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/querylog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/rand",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_lib_pq//oid",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

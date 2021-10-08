@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/golang/geo/s2"
+	"github.com/twpayne/go-geom"
 )
 
 // RelationshipMap contains all the geospatial functions that can be index-
@@ -32,18 +34,20 @@ import (
 // index scan may produce false positives. Therefore, the original function must
 // be called on the output of the index operation to filter the results.
 var RelationshipMap = map[string]RelationshipType{
-	"st_covers":           Covers,
-	"st_coveredby":        CoveredBy,
-	"st_contains":         Covers,
-	"st_containsproperly": Covers,
-	"st_crosses":          Intersects,
-	"st_dwithin":          DWithin,
-	"st_dfullywithin":     DFullyWithin,
-	"st_equals":           Intersects,
-	"st_intersects":       Intersects,
-	"st_overlaps":         Intersects,
-	"st_touches":          Intersects,
-	"st_within":           CoveredBy,
+	"st_covers":                Covers,
+	"st_coveredby":             CoveredBy,
+	"st_contains":              Covers,
+	"st_containsproperly":      Covers,
+	"st_crosses":               Intersects,
+	"st_dwithin":               DWithin,
+	"st_dfullywithin":          DFullyWithin,
+	"st_equals":                Intersects,
+	"st_intersects":            Intersects,
+	"st_overlaps":              Intersects,
+	"st_touches":               Intersects,
+	"st_within":                CoveredBy,
+	"st_dwithinexclusive":      DWithin,
+	"st_dfullywithinexclusive": DFullyWithin,
 }
 
 // RelationshipReverseMap contains a default function for each of the
@@ -112,8 +116,9 @@ var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
 // GeographyIndex is an index over the unit sphere.
 type GeographyIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
-	// it to the index.
-	InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error)
+	// it to the index. Additionally returns a bounding box, which is non-empty
+	// iff the key slice is non-empty.
+	InvertedIndexKeys(c context.Context, g geo.Geography) ([]Key, geopb.BoundingBox, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -125,34 +130,38 @@ type GeographyIndex interface {
 
 	// Covers returns the index spans to read and union for the relationship
 	// ST_Covers(g, x), where x are the indexed geometries.
-	Covers(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+	Covers(c context.Context, g geo.Geography) (UnionKeySpans, error)
 
 	// CoveredBy returns the index entries to read and the expression to compute
 	// for ST_CoveredBy(g, x), where x are the indexed geometries.
-	CoveredBy(c context.Context, g *geo.Geography) (RPKeyExpr, error)
+	CoveredBy(c context.Context, g geo.Geography) (RPKeyExpr, error)
 
 	// Intersects returns the index spans to read and union for the relationship
 	// ST_Intersects(g, x), where x are the indexed geometries.
-	Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+	Intersects(c context.Context, g geo.Geography) (UnionKeySpans, error)
 
 	// DWithin returns the index spans to read and union for the relationship
 	// ST_DWithin(g, x, distanceMeters). That is, there exists a part of
 	// geometry g that is within distanceMeters of x, where x is an indexed
 	// geometry. This function assumes a sphere.
 	DWithin(
-		c context.Context, g *geo.Geography, distanceMeters float64,
+		c context.Context, g geo.Geography, distanceMeters float64,
 		useSphereOrSpheroid geogfn.UseSphereOrSpheroid,
 	) (UnionKeySpans, error)
 
 	// TestingInnerCovering returns an inner covering of g.
-	TestingInnerCovering(g *geo.Geography) s2.CellUnion
+	TestingInnerCovering(g geo.Geography) s2.CellUnion
+	// CoveringGeography returns a Geography which represents the covering of g
+	// using the index configuration.
+	CoveringGeography(c context.Context, g geo.Geography) (geo.Geography, error)
 }
 
 // GeometryIndex is an index over 2D cartesian coordinates.
 type GeometryIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
-	// it to the index.
-	InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error)
+	// it to the index. Additionally returns a bounding box, which is non-empty
+	// iff the key slice is non-empty.
+	InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, geopb.BoundingBox, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -164,29 +173,32 @@ type GeometryIndex interface {
 
 	// Covers returns the index spans to read and union for the relationship
 	// ST_Covers(g, x), where x are the indexed geometries.
-	Covers(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+	Covers(c context.Context, g geo.Geometry) (UnionKeySpans, error)
 
 	// CoveredBy returns the index entries to read and the expression to compute
 	// for ST_CoveredBy(g, x), where x are the indexed geometries.
-	CoveredBy(c context.Context, g *geo.Geometry) (RPKeyExpr, error)
+	CoveredBy(c context.Context, g geo.Geometry) (RPKeyExpr, error)
 
 	// Intersects returns the index spans to read and union for the relationship
 	// ST_Intersects(g, x), where x are the indexed geometries.
-	Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+	Intersects(c context.Context, g geo.Geometry) (UnionKeySpans, error)
 
 	// DWithin returns the index spans to read and union for the relationship
 	// ST_DWithin(g, x, distance). That is, there exists a part of geometry g
 	// that is within distance units of x, where x is an indexed geometry.
-	DWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
+	DWithin(c context.Context, g geo.Geometry, distance float64) (UnionKeySpans, error)
 
 	// DFullyWithin returns the index spans to read and union for the
 	// relationship ST_DFullyWithin(g, x, distance). That is, the maximum distance
 	// across every pair of points comprising geometries g and x is within distance
 	// units, where x is an indexed geometry.
-	DFullyWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
+	DFullyWithin(c context.Context, g geo.Geometry, distance float64) (UnionKeySpans, error)
 
 	// TestingInnerCovering returns an inner covering of g.
-	TestingInnerCovering(g *geo.Geometry) s2.CellUnion
+	TestingInnerCovering(g geo.Geometry) s2.CellUnion
+	// CoveringGeometry returns a Geometry which represents the covering of g
+	// using the index configuration.
+	CoveringGeometry(c context.Context, g geo.Geometry) (geo.Geometry, error)
 }
 
 // RelationshipType stores a type of geospatial relationship query that can
@@ -216,9 +228,11 @@ const (
 )
 
 var geoRelationshipTypeStr = map[RelationshipType]string{
-	Covers:     "covers",
-	CoveredBy:  "covered by",
-	Intersects: "intersects",
+	Covers:       "covers",
+	CoveredBy:    "covered by",
+	Intersects:   "intersects",
+	DWithin:      "dwithin",
+	DFullyWithin: "dfullywithin",
 }
 
 func (gr RelationshipType) String() string {
@@ -272,6 +286,11 @@ func (k Key) String() string {
 		b.WriteByte("0123"[c.ChildPosition(level)])
 	}
 	return b.String()
+}
+
+// S2CellID transforms the given key into the S2 CellID.
+func (k Key) S2CellID() s2.CellID {
+	return s2.CellID(k)
 }
 
 // KeySpan represents a range of Keys.
@@ -579,7 +598,7 @@ func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr
 		if _, ok := presentCells[rootID]; !ok {
 			continue
 		}
-		expr = append(expr, generateRPExprForTree(rootID, presentCells)...)
+		expr = generateRPExprForTree(rootID, presentCells, expr)
 		numFaces++
 		if numFaces > 1 {
 			expr = append(expr, RPSetIntersection)
@@ -637,8 +656,10 @@ func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr
 // - append the intersection operator
 // - append c13
 // - append the union operator
-func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}) []RPExprElement {
-	expr := []RPExprElement{Key(rootID)}
+func generateRPExprForTree(
+	rootID s2.CellID, presentCells map[s2.CellID]struct{}, expr []RPExprElement,
+) []RPExprElement {
+	expr = append(expr, Key(rootID))
 	if rootID.IsLeaf() {
 		return expr
 	}
@@ -647,7 +668,7 @@ func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}
 		if _, ok := presentCells[childCellID]; !ok {
 			continue
 		}
-		expr = append(expr, generateRPExprForTree(childCellID, presentCells)...)
+		expr = generateRPExprForTree(childCellID, presentCells, expr)
 		numChildren++
 		if numChildren > 1 {
 			expr = append(expr, RPSetIntersection)
@@ -695,4 +716,25 @@ func DefaultS2Config() *S2Config {
 		LevelMod: 1,
 		MaxCells: 4,
 	}
+}
+
+func makeGeomTFromKeys(
+	keys []Key, srid geopb.SRID, xyFromS2Point func(s2.Point) (float64, float64),
+) (geom.T, error) {
+	t := geom.NewMultiPolygon(geom.XY).SetSRID(int(srid))
+	for _, key := range keys {
+		cell := s2.CellFromCellID(key.S2CellID())
+		flatCoords := make([]float64, 0, 10)
+		for i := 0; i < 4; i++ {
+			x, y := xyFromS2Point(cell.Vertex(i))
+			flatCoords = append(flatCoords, x, y)
+		}
+		// The last point is the same as the first point.
+		flatCoords = append(flatCoords, flatCoords[0:2]...)
+		err := t.Push(geom.NewPolygonFlat(geom.XY, flatCoords, []int{10}))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
 }

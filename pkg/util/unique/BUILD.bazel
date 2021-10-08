@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "unique",
+    srcs = ["unique.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/unique",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "unique_test",
+    size = "small",
+    srcs = ["unique_test.go"],
+    embed = [":unique"],
+)

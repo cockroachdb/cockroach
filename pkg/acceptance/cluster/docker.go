@@ -27,7 +27,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -37,6 +39,7 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
 	isatty "github.com/mattn/go-isatty"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Retrieve the IP address of docker itself.
@@ -198,6 +201,7 @@ func createContainer(
 	l *DockerCluster,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
+	platformSpec specs.Platform,
 	containerName string,
 ) (*Container, error) {
 	hostConfig.NetworkMode = container.NetworkMode(l.networkID)
@@ -218,14 +222,14 @@ func createContainer(
 	// container.
 	for _, bind := range hostConfig.Binds {
 		hostPath, _ := splitBindSpec(bind)
-		if _, err := os.Stat(hostPath); os.IsNotExist(err) {
+		if _, err := os.Stat(hostPath); oserror.IsNotExist(err) {
 			maybePanic(os.MkdirAll(hostPath, 0755))
 		} else {
 			maybePanic(err)
 		}
 	}
 
-	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, containerName)
+	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, &platformSpec, containerName)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +309,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
 			err = errors.Errorf("non-zero exit code: %d", exitCode)
 			fmt.Fprintln(out, err.Error())
-			log.Shoutf(ctx, log.Severity_INFO, "command left-over files in %s", c.cluster.volumesDir)
+			log.Shoutf(ctx, severity.INFO, "command left-over files in %s", c.cluster.volumesDir)
 		}
 
 		return err
@@ -401,9 +405,12 @@ func (cli resilientDockerClient) ContainerCreate(
 	config *container.Config,
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
+	platformSpec *specs.Platform,
 	containerName string,
 ) (container.ContainerCreateCreatedBody, error) {
-	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+	response, err := cli.APIClient.ContainerCreate(
+		ctx, config, hostConfig, networkingConfig, platformSpec, containerName,
+	)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
 		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
@@ -430,7 +437,7 @@ func (cli resilientDockerClient) ContainerCreate(
 					log.Infof(ctx, "unable to remove container: %v", rerr)
 					return container.ContainerCreateCreatedBody{}, err
 				}
-				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, platformSpec, containerName)
 			}
 		}
 		log.Warningf(ctx, "error indicated existing container %s, "+

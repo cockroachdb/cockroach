@@ -11,399 +11,329 @@
 package log
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"regexp"
-	"strconv"
+	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/ttycolor"
+	"github.com/cockroachdb/redact/interfaces"
 	"github.com/petermattis/goid"
 )
 
-// formatLogEntry formats an Entry into a newly allocated *buffer.
-// The caller is responsible for calling putBuffer() afterwards.
-func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
-	buf := l.formatLogEntryInternal(entry, cp)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		_ = buf.WriteByte('\n')
-	}
-	if len(stacks) > 0 {
-		buf.Write(stacks)
-	}
-	return buf
-}
-
-// formatEntryInternal renders a log entry.
-// Log lines are colorized depending on severity.
-// It uses a newly allocated *buffer. The caller is responsible
-// for calling putBuffer() afterwards.
+// logEntry represents a logging event flowing through this package.
 //
-// Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line <redactable> [tags] counter msg...
-// where the fields are defined as follows:
-// 	L                A single character, representing the log level (eg 'I' for INFO)
-// 	yy               The year (zero padded; ie 2016 is '16')
-// 	mm               The month (zero padded; ie May is '05')
-// 	dd               The day (zero padded)
-// 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
-// 	goid             The goroutine id (omitted if zero for use by tests)
-// 	file             The file name
-// 	line             The line number
-// 	tags             The context tags
-// 	counter          The log entry counter, if non-zero
-// 	msg              The user-supplied message
-func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buffer {
-	if l.noColor {
-		cp = nil
-	}
+// It is different from logpb.Entry in that it is able to preserve
+// more information about the structure of the source event, so that
+// more details about this structure can be preserved by output
+// formatters. logpb.Entry, in comparison, was tailored specifically
+// to the legacy crdb-v1 formatter, and is a lossy representation.
+type logEntry struct {
+	idPayload
 
-	buf := getBuffer()
-	if entry.Line < 0 {
-		entry.Line = 0 // not a real line number, but acceptable to someDigits
-	}
-	if entry.Severity > Severity_FATAL || entry.Severity <= Severity_UNKNOWN {
-		entry.Severity = Severity_INFO // for safety.
-	}
+	// The entry timestamp.
+	ts int64
 
-	tmp := buf.tmp[:len(buf.tmp)]
-	var n int
-	var prefix []byte
-	switch entry.Severity {
-	case Severity_INFO:
-		prefix = cp[ttycolor.Cyan]
-	case Severity_WARNING:
-		prefix = cp[ttycolor.Yellow]
-	case Severity_ERROR, Severity_FATAL:
-		prefix = cp[ttycolor.Red]
-	}
-	n += copy(tmp, prefix)
-	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
-	// It's worth about 3X. Fprintf is hard.
-	now := timeutil.Unix(0, entry.Time)
-	year, month, day := now.Date()
-	hour, minute, second := now.Clock()
-	// Lyymmdd hh:mm:ss.uuuuuu file:line
-	tmp[n] = severityChar[entry.Severity-1]
-	n++
-	if year < 2000 {
-		year = 2000
-	}
-	n += buf.twoDigits(n, year-2000)
-	n += buf.twoDigits(n, int(month))
-	n += buf.twoDigits(n, day)
-	n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
-	tmp[n] = ' '
-	n++
-	n += buf.twoDigits(n, hour)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, minute)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, second)
-	tmp[n] = '.'
-	n++
-	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
-	tmp[n] = ' '
-	n++
-	if entry.Goroutine > 0 {
-		n += buf.someDigits(n, int(entry.Goroutine))
-		tmp[n] = ' '
-		n++
-	}
-	buf.Write(tmp[:n])
-	buf.WriteString(entry.File)
-	tmp[0] = ':'
-	n = buf.someDigits(1, int(entry.Line))
-	n++
-	// Reset the color to default.
-	n += copy(tmp[n:], cp[ttycolor.Reset])
-	tmp[n] = ' '
-	n++
-	// If redaction is enabled, indicate that the current entry has
-	// markers. This indicator is used in the log parser to determine
-	// which redaction strategy to adopt.
-	if entry.Redactable {
-		copy(tmp[n:], redactableIndicatorBytes)
-		n += len(redactableIndicatorBytes)
-	}
-	// Note: when the redactable indicator is not introduced
-	// there are two spaces next to each other. This is intended
-	// and should be preserved for backward-compatibility with
-	// 3rd party log parsers.
-	tmp[n] = ' '
-	n++
-	buf.Write(tmp[:n])
+	// If header is true, the entry is for a sink header and is emitted
+	// no matter the filter.
+	//
+	// Header entries currently bypass the filter because they are emitted
+	// deep in the file handling logic of file sinks, and not in the outer
+	// coordination logic that ventilates entries across multiple sinks.
+	// See the functions makeStartLine() / getStartLines() and how they
+	// are used.
+	//
+	// This behavior is desirable because we want sinks to get an
+	// identifying header that explains the cluster, node ID, etc,
+	// regardless of the filtering parameters.
+	header bool
 
-	// The remainder is variable-length and could exceed
-	// the static size of tmp. But we do have an upper bound.
-	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
+	// The severity of the event. This is not reported by formatters
+	// when the header boolean is set.
+	sev Severity
+	// The channel on which the entry was sent. This is not reported by
+	// formatters when the header boolean is set.
+	ch Channel
+	// The binary version with which the event was generated.
+	version string
 
-	// Display the tags if set.
-	if len(entry.Tags) != 0 {
-		buf.Write(cp[ttycolor.Blue])
-		buf.WriteByte('[')
-		buf.WriteString(entry.Tags)
-		buf.WriteString("] ")
-		buf.Write(cp[ttycolor.Reset])
-	}
+	// The goroutine where the event was generated.
+	gid int64
+	// The file/line where the event was generated.
+	file string
+	line int
 
-	// Display the counter if set.
-	if entry.Counter > 0 {
-		n = buf.someDigits(0, int(entry.Counter))
-		tmp[n] = ' '
-		n++
-		buf.Write(tmp[:n])
-	}
+	// The entry counter. Populated by outputLogEntry().
+	counter uint64
 
-	// Display the message.
-	buf.WriteString(entry.Message)
-	return buf
+	// The logging tags.
+	tags *logtags.Buffer
+
+	// The stack trace(s), when processing e.g. a fatal event.
+	stacks []byte
+
+	// Whether the entry is structured or not.
+	structured bool
+
+	// The entry payload.
+	payload entryPayload
 }
 
-// processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return l.formatLogEntry(entry, stacks, ttycolor.StderrProfile)
+var _ redact.SafeFormatter = (*logEntry)(nil)
+var _ fmt.Stringer = (*logEntry)(nil)
+
+func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
+	if len(e.file) != 0 {
+		// TODO(knz): The "canonical" way to represent a file/line prefix
+		// is: <file>:<line>: msg
+		// with a colon between the line number and the message.
+		// However, some location filter deep inside SQL doesn't
+		// understand a colon after the line number.
+		w.Printf("%s:%d ", redact.Safe(e.file), redact.Safe(e.line))
+	}
+	if e.tags != nil {
+		w.SafeString("[")
+		for i, tag := range e.tags.Get() {
+			if i > 0 {
+				w.SafeString(",")
+			}
+			// TODO(obs-inf/server): this assumes that log tag keys are safe, but this
+			// is not enforced. We could lint that it is true similar to how we lint
+			// that the format strings for `log.Infof` etc are const strings.
+			k := redact.SafeString(tag.Key())
+			v := tag.Value()
+			if v != nil {
+				w.Printf("%s=%v", k, tag.Value())
+			} else {
+				w.Printf("%s", k)
+			}
+		}
+		w.SafeString("] ")
+	}
+
+	if !e.payload.redactable {
+		w.Print(e.payload.message)
+	} else {
+		w.Print(redact.RedactableString(e.payload.message))
+	}
 }
 
-// processForFile formats a log entry for output to a file.
-func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
-	return l.formatLogEntry(entry, stacks, nil)
+func (e *logEntry) String() string {
+	return redact.StringWithoutMarkers(e)
 }
 
-// MakeEntry creates an Entry.
-func MakeEntry(
+type entryPayload struct {
+	// Whether the payload is redactable or not.
+	redactable bool
+
+	// The actual payload string.
+	// For structured entries, this is the JSON
+	// representation of the payload fields, without the
+	// outer '{}'.
+	// For unstructured entries, this is the (flat) message.
+	//
+	// If redactable is true, message is a RedactableString
+	// in disguise. If it is false, message is a flat string with
+	// no guarantees about content.
+	message string
+}
+
+func makeRedactablePayload(m redact.RedactableString) entryPayload {
+	return entryPayload{redactable: true, message: string(m)}
+}
+
+func makeUnsafePayload(m string) entryPayload {
+	return entryPayload{redactable: false, message: m}
+}
+
+// makeEntry creates a logEntry.
+func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
+	logging.idMu.RLock()
+	ids := logging.idMu.idPayload
+	logging.idMu.RUnlock()
+
+	res = logEntry{
+		idPayload: ids,
+		ts:        timeutil.Now().UnixNano(),
+		sev:       s,
+		ch:        c,
+		version:   build.BinaryVersion(),
+		gid:       goid.Get(),
+		tags:      logtags.FromContext(ctx),
+	}
+
+	// Populate file/lineno.
+	res.file, res.line, _ = caller.Lookup(depth + 1)
+
+	return res
+}
+
+// makeStructuredEntry creates a logEntry using a structured payload.
+func makeStructuredEntry(
+	ctx context.Context, s Severity, c Channel, depth int, payload eventpb.EventPayload,
+) (res logEntry) {
+	res = makeEntry(ctx, s, c, depth+1)
+
+	res.structured = true
+	_, b := payload.AppendJSONFields(false, nil)
+	res.payload = makeRedactablePayload(b.ToString())
+	return res
+}
+
+// makeUnstructuredEntry creates a logEntry using an unstructured message.
+func makeUnstructuredEntry(
 	ctx context.Context,
 	s Severity,
-	lc *EntryCounter,
+	c Channel,
 	depth int,
 	redactable bool,
 	format string,
 	args ...interface{},
-) (res Entry) {
-	res = Entry{
-		Severity:   s,
-		Time:       timeutil.Now().UnixNano(),
-		Goroutine:  goid.Get(),
-		Redactable: redactable,
-	}
+) (res logEntry) {
+	res = makeEntry(ctx, s, c, depth+1)
 
-	// Populate file/lineno.
-	file, line, _ := caller.Lookup(depth + 1)
-	res.File = file
-	res.Line = int64(line)
+	res.structured = false
 
-	// Optionally populate the counter.
-	if lc != nil && lc.EnableMsgCount {
-		// Add a counter. This is important for e.g. the SQL audit logs.
-		res.Counter = atomic.AddUint64(&lc.msgCount, 1)
-	}
-
-	// Populate the tags.
-	var buf strings.Builder
 	if redactable {
-		redactTags(ctx, &buf)
+		var buf redact.StringBuilder
+		if len(args) == 0 {
+			// TODO(knz): Remove this legacy case.
+			buf.Print(redact.Safe(format))
+		} else if len(format) == 0 {
+			buf.Print(args...)
+		} else {
+			buf.Printf(format, args...)
+		}
+		res.payload = makeRedactablePayload(buf.RedactableString())
 	} else {
-		formatTags(ctx, false /* brackets */, &buf)
+		var buf strings.Builder
+		formatArgs(&buf, format, args...)
+		res.payload = makeUnsafePayload(buf.String())
 	}
-	res.Tags = buf.String()
 
-	// Populate the message.
-	buf.Reset()
-	renderArgs(redactable, &buf, format, args...)
-	res.Message = buf.String()
-
-	return
+	return res
 }
 
-func renderArgs(redactable bool, buf *strings.Builder, format string, args ...interface{}) {
-	if len(args) == 0 {
-		buf.WriteString(format)
-	} else if len(format) == 0 {
-		if redactable {
-			redact.Fprint(buf, args...)
-		} else {
-			fmt.Fprint(buf, args...)
-		}
-	} else {
-		if redactable {
-			redact.Fprintf(buf, format, args...)
-		} else {
-			fmt.Fprintf(buf, format, args...)
-		}
-	}
+var configTagsBuffer = logtags.SingleTagBuffer("config", nil)
+
+// makeStartLine creates a formatted log entry suitable for the start
+// of a logging output using the canonical logging format.
+func makeStartLine(formatter logFormatter, format string, args ...interface{}) *buffer {
+	entry := makeUnstructuredEntry(
+		context.Background(),
+		severity.UNKNOWN, /* header - ignored */
+		0,                /* header - ignored */
+		2,                /* depth */
+		true,             /* redactable */
+		format,
+		args...)
+	entry.header = true
+	entry.tags = configTagsBuffer
+	return formatter.formatEntry(entry)
 }
 
-// Format writes the log entry to the specified writer.
-func (e Entry) Format(w io.Writer) error {
-	buf := logging.formatLogEntry(e, nil, nil)
-	defer putBuffer(buf)
-	_, err := w.Write(buf.Bytes())
-	return err
+// getStartLines retrieves the log entries for the start
+// of a new log file output.
+func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
+	f := l.formatter
+	messages := make([]*buffer, 0, 6)
+	messages = append(messages,
+		makeStartLine(f, "file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		makeStartLine(f, "running on machine: %s", fullHostName),
+		makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
+		makeStartLine(f, "arguments: %s", os.Args),
+	)
+
+	logging.idMu.RLock()
+	if logging.idMu.clusterID != "" {
+		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.idMu.clusterID))
+	}
+	if logging.idMu.nodeID != 0 {
+		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.idMu.nodeID))
+	}
+	if logging.idMu.tenantID != "" {
+		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.idMu.tenantID))
+	}
+	if logging.idMu.sqlInstanceID != 0 {
+		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.idMu.sqlInstanceID))
+	}
+	logging.idMu.RUnlock()
+
+	// Including a non-ascii character in the first 1024 bytes of the log helps
+	// viewers that attempt to guess the character encoding.
+	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", Safe(f.formatterName())))
+
+	if strings.HasPrefix(f.formatterName(), "crdb-") {
+		// For the crdb file formats, suggest the structure of each log line.
+		messages = append(messages,
+			makeStartLine(f, `line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg`))
+	}
+	return messages
 }
 
-// We don't include a capture group for the log message here, just for the
-// preamble, because a capture group that handles multiline messages is very
-// slow when running on the large buffers passed to EntryDecoder.split.
-var entryRE = regexp.MustCompile(
-	`(?m)^` +
-		/* Severity         */ `([IWEF])` +
-		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
-		/* Goroutine ID     */ `(?:(\d+) )?` +
-		/* File/Line        */ `([^:]+):(\d+) ` +
-		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
-		/* Context tags     */ `(?:\[([^]]+)\] )?`,
-)
+// convertToLegacy turns the entry into a logpb.Entry.
+func (e logEntry) convertToLegacy() (res logpb.Entry) {
+	res = logpb.Entry{
+		Severity:   e.sev,
+		Channel:    e.ch,
+		Time:       e.ts,
+		File:       e.file,
+		Line:       int64(e.line),
+		Goroutine:  e.gid,
+		Counter:    e.counter,
+		Redactable: e.payload.redactable,
+		Message:    e.payload.message,
+	}
 
-// EntryDecoder reads successive encoded log entries from the input
-// buffer. Each entry is preceded by a single big-ending uint32
-// describing the next entry's length.
-type EntryDecoder struct {
-	re                 *regexp.Regexp
-	scanner            *bufio.Scanner
-	sensitiveEditor    redactEditor
-	truncatedLastEntry bool
+	if e.tags != nil {
+		res.Tags = renderTagsAsString(e.tags, e.payload.redactable)
+	}
+
+	if e.structured {
+		// At this point, the message only contains the JSON fields of the
+		// payload. Add the decoration suitable for our legacy file
+		// format.
+		res.Message = structuredEntryPrefix + "{" + res.Message + "}"
+		res.StructuredStart = uint32(len(structuredEntryPrefix))
+		res.StructuredEnd = uint32(len(res.Message))
+	}
+
+	if e.stacks != nil {
+		res.StackTraceStart = uint32(len(res.Message)) + 1
+		res.Message += "\n" + string(e.stacks)
+	}
+
+	return res
 }
 
-// NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
-	d := &EntryDecoder{
-		re:              entryRE,
-		scanner:         bufio.NewScanner(in),
-		sensitiveEditor: getEditor(editMode),
+const structuredEntryPrefix = "Structured entry: "
+
+func renderTagsAsString(tags *logtags.Buffer, redactable bool) string {
+	if redactable {
+		return string(renderTagsAsRedactable(tags))
 	}
-	d.scanner.Split(d.split)
-	return d
+	var buf strings.Builder
+	tags.FormatToString(&buf)
+	return buf.String()
 }
 
-// MessageTimeFormat is the format of the timestamp in log message headers as
-// used in time.Parse and time.Format.
-const MessageTimeFormat = "060102 15:04:05.999999"
-
-// Decode decodes the next log entry into the provided protobuf message.
-func (d *EntryDecoder) Decode(entry *Entry) error {
-	for {
-		if !d.scanner.Scan() {
-			if err := d.scanner.Err(); err != nil {
-				return err
-			}
-			return io.EOF
-		}
-		b := d.scanner.Bytes()
-		m := d.re.FindSubmatch(b)
-		if m == nil {
-			continue
-		}
-
-		// Process the severity.
-		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
-
-		// Process the timestamp.
-		t, err := time.Parse(MessageTimeFormat, string(m[2]))
-		if err != nil {
-			return err
-		}
-		entry.Time = t.UnixNano()
-
-		// Process the goroutine ID.
-		if len(m[3]) > 0 {
-			goroutine, err := strconv.Atoi(string(m[3]))
-			if err != nil {
-				return err
-			}
-			entry.Goroutine = int64(goroutine)
-		}
-
-		// Process the file/line details.
-		entry.File = string(m[4])
-		line, err := strconv.Atoi(string(m[5]))
-		if err != nil {
-			return err
-		}
-		entry.Line = int64(line)
-
-		// Process the context tags.
-		redactable := len(m[6]) != 0
-		if len(m[7]) != 0 {
-			r := redactablePackage{
-				msg:        m[7],
-				redactable: redactable,
-			}
-			r = d.sensitiveEditor(r)
-			entry.Tags = string(r.msg)
-		}
-
-		// Process the log message itself
-		r := redactablePackage{
-			msg:        trimFinalNewLines(b[len(m[0]):]),
-			redactable: redactable,
-		}
-		r = d.sensitiveEditor(r)
-		entry.Message = string(r.msg)
-		entry.Redactable = r.redactable
-		return nil
-	}
-}
-
-func trimFinalNewLines(s []byte) []byte {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '\n' {
-			s = s[:i]
-		} else {
-			break
-		}
-	}
-	return s
-}
-
-func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if atEOF && len(data) == 0 {
-		return 0, nil, nil
-	}
-	if d.truncatedLastEntry {
-		i := d.re.FindIndex(data)
-		if i == nil {
-			// If there's no entry that starts in this chunk, advance past it, since
-			// we've truncated the entry it was originally part of.
-			return len(data), nil, nil
-		}
-		d.truncatedLastEntry = false
-		if i[0] > 0 {
-			// If an entry starts anywhere other than the first index, advance to it
-			// to maintain the invariant that entries start at the beginning of data.
-			// This isn't necessary, but simplifies the code below.
-			return i[0], nil, nil
-		}
-		// If i[0] == 0, then a new entry starts at the beginning of data, so fall
-		// through to the normal logic.
-	}
-	// From this point on, we assume we're currently positioned at a log entry.
-	// We want to find the next one so we start our search at data[1].
-	i := d.re.FindIndex(data[1:])
-	if i == nil {
-		if atEOF {
-			return len(data), data, nil
-		}
-		if len(data) >= bufio.MaxScanTokenSize {
-			// If there's no room left in the buffer, return the current truncated
-			// entry.
-			d.truncatedLastEntry = true
-			return len(data), data, nil
-		}
-		// If there is still room to read more, ask for more before deciding whether
-		// to truncate the entry.
-		return 0, nil, nil
-	}
-	// i[0] is the start of the next log entry, but we need to adjust the value
-	// to account for using data[1:] above.
-	i[0]++
-	return i[0], data[:i[0]], nil
+// MakeLegacyEntry creates an logpb.Entry.
+func MakeLegacyEntry(
+	ctx context.Context,
+	s Severity,
+	c Channel,
+	depth int,
+	redactable bool,
+	format string,
+	args ...interface{},
+) (res logpb.Entry) {
+	return makeUnstructuredEntry(ctx, s, c, depth+1, redactable, format, args...).convertToLegacy()
 }

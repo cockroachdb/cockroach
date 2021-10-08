@@ -13,8 +13,38 @@ CREATE TABLE o (o_id INT PRIMARY KEY, c_id INT, ship TEXT);
 
 # We can't decorrelate cases which don't use a scalar type in the
 # ARRAY(...) operator.
-statement error can't execute a correlated ARRAY\(...\) over tuple\{int, string\}
-SELECT
+query T
+EXPLAIN SELECT
   c_id,
   ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
 FROM c ORDER BY c_id
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +c_id
+│
+└── • render
+    │
+    └── • group
+        │ group by: c_id
+        │
+        └── • sort
+            │ order: +o_id
+            │
+            └── • hash join (left outer)
+                │ equality: (c_id) = (c_id)
+                │ left cols are key
+                │
+                ├── • scan
+                │     missing stats
+                │     table: c@primary
+                │     spans: FULL SCAN
+                │
+                └── • render
+                    │
+                    └── • scan
+                          missing stats
+                          table: o@primary
+                          spans: FULL SCAN

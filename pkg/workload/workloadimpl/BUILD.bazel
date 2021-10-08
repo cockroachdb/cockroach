@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workloadimpl",
+    srcs = [
+        "doc.go",
+        "precomputedrand.go",
+        "random.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadimpl",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_exp//rand"],
+)
+
+go_test(
+    name = "workloadimpl_test",
+    size = "small",
+    srcs = [
+        "precomputedrand_test.go",
+        "random_test.go",
+    ],
+    deps = [
+        ":workloadimpl",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//rand",
+    ],
+)

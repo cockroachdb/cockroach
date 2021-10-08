@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/testutils/lint/passes:__subpackages__"],
+)
+
+go_library(
+    name = "forbiddenmethod",
+    srcs = [
+        "analyzers.go",
+        "forbiddenmethod.go",
+        "naked_go.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/passesutil",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/inspect",
+        "@org_golang_x_tools//go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "forbiddenmethod_test",
+    size = "small",
+    srcs = [
+        "descriptormarshal_test.go",
+        "main_test.go",
+        "naked_go_test.go",
+    ],
+    data = [
+        ":testdata",
+        "@go_sdk//:files",
+    ],
+    deps = [
+        ":forbiddenmethod",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)

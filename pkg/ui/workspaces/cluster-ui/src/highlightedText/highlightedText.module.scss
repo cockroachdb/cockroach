@@ -1,0 +1,10 @@
+@import '../core/index.module';
+
+._text-bold {
+  color: $colors--primary-blue-3;
+  font-family: $font-family--monospace;
+
+  &-light {
+    color: $colors--primary-blue-7;
+  }
+}

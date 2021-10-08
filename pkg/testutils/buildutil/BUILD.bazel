@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "buildutil",
+    srcs = ["build.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/buildutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/skip",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

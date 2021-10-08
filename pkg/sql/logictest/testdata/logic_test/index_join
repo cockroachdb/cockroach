@@ -1,0 +1,41 @@
+# Regression test for incorrect post-processing setup in the join reader when
+# performing an index join (#54226). Note that this only happened under high
+# verbosity, so this failure would only reproduce when this file is run with
+# --vmodule=processorsbase=4, which is the case for the nightly verbose logic
+# tests.
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+CREATE TABLE lineitem
+(
+    l_orderkey int PRIMARY KEY,
+    l_extendedprice float NOT NULL,
+    l_shipdate date NOT NULL,
+    INDEX l_sd (l_shipdate ASC)
+);
+INSERT INTO lineitem VALUES (1, 200, '1994-01-01');
+ALTER TABLE lineitem INJECT STATISTICS '[
+  {
+    "columns": ["l_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["l_extendedprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["l_shipdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  }
+]';
+
+query R
+SELECT sum(l_extendedprice) FROM lineitem WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR AND l_extendedprice < 100
+----
+NULL

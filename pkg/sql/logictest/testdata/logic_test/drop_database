@@ -1,16 +1,20 @@
-# LogicTest: !3node-tenant(52567)
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
 
 statement ok
 CREATE DATABASE "foo-bar"
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-foo-bar
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+foo-bar    root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 statement ok
 CREATE TABLE "foo-bar".t(x INT)
@@ -26,42 +30,44 @@ SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
 t  [53]  DROP
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query TT
-SELECT job_type, status FROM [SHOW JOBS]
+SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root'
 ----
-SCHEMA CHANGE       succeeded
-SCHEMA CHANGE GC    running
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE GC  running
 
 statement ok
 CREATE DATABASE "foo bar"
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-foo bar
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+foo bar    root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 statement ok
 DROP DATABASE "foo bar" CASCADE
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 statement ok
 CREATE DATABASE d1
@@ -139,27 +145,27 @@ SELECT * FROM d2.v4
 ----
 0
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-d1
-d2
-defaultdb
-postgres
-system
-test
+d1         root  NULL  {}  NULL
+d2         root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 statement ok
 DROP DATABASE d1 CASCADE
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-d2
-defaultdb
-postgres
-system
-test
+d2         root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query error pgcode 42P01 relation "d1.v2" does not exist
 SELECT * FROM d1.v2
@@ -180,13 +186,13 @@ SELECT * FROM d2.v1
 statement ok
 DROP DATABASE d2 CASCADE
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query error pgcode 42P01 relation "d2.v1" does not exist
 SELECT * FROM d2.v1
@@ -213,13 +219,13 @@ CREATE TABLE constraint_db.t2 (
 statement ok
 DROP DATABASE constraint_db CASCADE
 
-query T
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query error pgcode 42P01 relation "constraint_db.t1" does not exist
 SELECT * FROM constraint_db.t1

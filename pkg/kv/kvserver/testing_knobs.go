@@ -13,11 +13,15 @@ package kvserver
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StoreTestingKnobs is a part of the context used to control parts of
@@ -32,6 +36,8 @@ type StoreTestingKnobs struct {
 	TxnWaitKnobs            txnwait.TestingKnobs
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 	TenantRateKnobs         tenantrate.TestingKnobs
+	StorageKnobs            storage.TestingKnobs
+	AllocatorKnobs          *AllocatorTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -39,18 +45,17 @@ type StoreTestingKnobs struct {
 	// returns an error, the command will not be evaluated.
 	TestingRequestFilter kvserverbase.ReplicaRequestFilter
 
-	// TestingLatchFilter is called before evaluating each command on a replica
-	// but after acquiring latches for the command. Blocking in the filter will
-	// block interfering requests. If it returns an error, the command will not
-	// be evaluated.
-	TestingLatchFilter kvserverbase.ReplicaRequestFilter
-
 	// TestingConcurrencyRetryFilter is called before a concurrency retry error is
 	// handled and the batch is retried.
 	TestingConcurrencyRetryFilter kvserverbase.ReplicaConcurrencyRetryFilter
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
+	// TestingProposalSubmitFilter can be used by tests to observe and optionally
+	// drop Raft proposals before they are handed to etcd/raft to begin the
+	// process of replication. Dropped proposals are still eligible to be
+	// reproposed due to ticks.
+	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
@@ -73,10 +78,6 @@ type StoreTestingKnobs struct {
 	// or data.
 	TestingRangefeedFilter kvserverbase.ReplicaRangefeedFilter
 
-	// A hack to manipulate the clock before sending a batch request to a replica.
-	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
-	// we make TestServer take a ManualClock.
-	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.
@@ -88,11 +89,6 @@ type StoreTestingKnobs struct {
 	// should get rid of such practices once we make TestServer take a
 	// ManualClock.
 	DisableMaxOffsetCheck bool
-	// DontPreventUseOfOldLeaseOnStart disables the initialization of
-	// replica.mu.minLeaseProposedTS on replica.Init(). This has the effect of
-	// allowing the replica to use the lease that it had in a previous life (in
-	// case the tests persisted the engine used in said previous life).
-	DontPreventUseOfOldLeaseOnStart bool
 	// DisableAutomaticLeaseRenewal enables turning off the background worker
 	// that attempts to automatically renew expiration-based leases.
 	DisableAutomaticLeaseRenewal bool
@@ -100,6 +96,8 @@ type StoreTestingKnobs struct {
 	// called to acquire a new lease. This can be used to assert that a request
 	// triggers a lease acquisition.
 	LeaseRequestEvent func(ts hlc.Timestamp, storeID roachpb.StoreID, rangeID roachpb.RangeID) *roachpb.Error
+	// PinnedLeases can be used to prevent all but one store from acquiring leases on a given range.
+	PinnedLeases *PinnedLeasesKnob
 	// LeaseTransferBlockedOnExtensionEvent, if set, is called when
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
@@ -124,14 +122,61 @@ type StoreTestingKnobs struct {
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
-	// DisableRaftSnapshotQueue disables the raft snapshot queue.
+	// DisableRaftSnapshotQueue disables the raft snapshot queue. Use this
+	// sparingly, as it tends to produce flaky tests during up-replication where
+	// the explicit learner snapshot gets lost. Since uninitialized replicas
+	// reject the raft leader's MsgApp with a rejection that hints at index zero,
+	// Raft will always want to send another snapshot if it gets to talk to the
+	// follower before it applied the snapshot. In the common case, the mechanism
+	// we have to suppress raft snapshots while an explicit snapshot is in flight
+	// avoids the duplication of work. However, in the uncommon case, the raft
+	// leader is on a different store and so no suppression takes place. This
+	// duplication is avoided by turning the raft snapshot queue off, but
+	// unfortunately there are certain conditions under which the explicit
+	// snapshot may fail to produce the desired result of an initialized follower
+	// which the leader will append to.
+	//
+	// For example, if there is a term change between when the snapshot is
+	// constructed and received, the follower will silently drop the snapshot
+	// without signaling an error to the sender, i.e. the leader. (To work around
+	// that, once could adjust the term for the message in that case in
+	// `(*Replica).stepRaftGroup` to prevent the message from getting dropped).
+	//
+	// Another problem is that the snapshot may apply but fail to inform the
+	// leader of this fact. Once a Raft leader has determined that a follower
+	// needs a snapshot, it will keep asking for a snapshot to be sent until a) a
+	// call to .ReportSnapshotStatus acks that a snapshot got applied, or b) an
+	// MsgAppResp is received from from the follower acknowledging an index
+	// *greater than or equal to the PendingSnapshotIndex* it tracks for that
+	// follower (such an MsgAppResp is emitted in response to applying the
+	// snapshot), whichever occurs first.
+	//
+	//
+	// However, neither may happen despite the snapshot applying successfully. The
+	// call to `ReportSnapshotStatus` may not occur on the correct Replica, since
+	// Raft leader can change during replication operations, and MsgAppResp can
+	// get dropped. Even if the MsgAppResp does get to the leader, the contained
+	// index (which is the index of the snapshot that got applied) may be less
+	// than the index at which the leader asked for a snapshot (since the applied
+	// snapshot is an external snapshot, and may have been initiated before the
+	// raft leader even wanted a snapshot) - again leaving the leader to continue
+	// asking for a snapshot. Lastly, even if we improved the raft code to accept
+	// all snapshots that allow it to continue replicating the log, there may have
+	// been a log truncation separating the snapshot from the log.
+	//
+	// Either way, the result in all of the rare cases above this is that an
+	// additional snapshot must be sent from the Raft snapshot queue until the
+	// leader will include the follower in log replication. It is thus ill-advised
+	// to turn the snap queue off except when this is known to be a good idea.
+	//
+	// An example of a test that becomes flaky with this set to false is
+	// TestReportUnreachableRemoveRace, though it needs a 20-node roachprod-stress
+	// cluster to reliably reproduce this within a few minutes.
 	DisableRaftSnapshotQueue bool
 	// DisableConsistencyQueue disables the consistency checker.
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
-	// DisablePeriodicGossips disables periodic gossiping.
-	DisablePeriodicGossips bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder.
 	DisableLeaderFollowsLeaseholder bool
@@ -185,6 +230,8 @@ type StoreTestingKnobs struct {
 	// DontPushOnWriteIntentError will propagate a write intent error immediately
 	// instead of utilizing the intent resolver to try to push the corresponding
 	// transaction.
+	// TODO(nvanbenschoten): can we replace this knob with usage of the Error
+	// WaitPolicy on BatchRequests?
 	DontPushOnWriteIntentError bool
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the txn wait queue to wait for the transaction to
@@ -205,27 +252,36 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*SnapshotRequest_Header) error
-	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
-	// that happens when promotion to a voter fails.
+	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
+	// rollback that happens when either the initial snapshot or the promotion of
+	// a learner to a voter fails.
 	ReplicaAddSkipLearnerRollback func() bool
-	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
+	// VoterAddStopAfterLearnerSnapshot causes voter addition to return early
 	// if the func returns true. Specifically, after the learner txn is successful
 	// and after the LEARNER type snapshot, but before promoting it to a voter.
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
-	ReplicaAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
-	// ReplicaSkipLearnerSnapshot causes snapshots to never be sent to learners
-	// if the func returns true. Adding replicas proceeds as usual, though if
-	// the added replica has no prior state which can be caught up from the raft
-	// log, the result will be an voter that is unable to participate in quorum.
-	ReplicaSkipLearnerSnapshot func() bool
-	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
+	VoterAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
+	// NonVoterAfterInitialization is called after a newly added non-voting
+	// replica receives its initial snapshot. Note that this knob _can_ be used in
+	// conjunction with ReplicaSkipInitialSnapshot.
+	NonVoterAfterInitialization func()
+	// ReplicaSkipInitialSnapshot causes snapshots to never be sent to learners or
+	// non-voters if the func returns true. Adding replicas proceeds as usual,
+	// though if an added voter has no prior state which can be caught up from the
+	// raft log, the result will be an voter that is unable to participate in
+	// quorum.
+	ReplicaSkipInitialSnapshot func() bool
+	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
+	// a snapshot to a follower replica.
+	RaftSnapshotQueueSkipReplica func() bool
+	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
 	// of a first ChangeReplicas transaction. If the replication change does
 	// not use joint consensus, this early return is identical to the regular
 	// return path.
-	ReplicaAddStopAfterJointConfig func() bool
+	VoterAddStopAfterJointConfig func() bool
 	// ReplicationAlwaysUseJointConfig causes replica addition to always go
 	// through a joint configuration, even when this isn't necessary (because
 	// the replication change affects only one replica).
@@ -233,9 +289,13 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
-	// BeforeRelocateOne intercepts the return values of s.relocateOne before
-	// they're being put into effect.
-	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)
+	// OnRelocatedOne intercepts the return values of s.relocateOne after they
+	// have successfully been put into effect.
+	OnRelocatedOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)
+	// DontIgnoreFailureToTransferLease makes `AdminRelocateRange` return an error
+	// to its client if it failed to transfer the lease to the first voting
+	// replica in the set of relocation targets.
+	DontIgnoreFailureToTransferLease bool
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
@@ -246,7 +306,144 @@ type StoreTestingKnobs struct {
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.
 	RangeFeedPushTxnsAge time.Duration
+	// AllowLeaseProposalWhenNotLeader, if set, makes the proposal buffer allow
+	// lease request proposals even when the replica inserting that proposal is
+	// not the Raft leader. This can be used in tests to allow a replica to
+	// acquire a lease without first moving the Raft leadership to it (e.g. it
+	// allows tests to expire leases by stopping the old leaseholder's liveness
+	// heartbeats and then expect other replicas to take the lease without
+	// worrying about Raft).
+	AllowLeaseRequestProposalsWhenNotLeader bool
+	// DontCloseTimestamps inhibits the propBuf's closing of timestamps. All Raft
+	// commands will carry an empty closed timestamp.
+	DontCloseTimestamps bool
+	// AllowDangerousReplicationChanges disables safeguards
+	// in execChangeReplicasTxn that prevent moving
+	// to a configuration that cannot make progress.
+	AllowDangerousReplicationChanges bool
+	// AllowUnsynchronizedReplicationChanges allows calls to ChangeReplicas
+	// even when the replicate queue is enabled. This often results in flaky
+	// tests, so by default, it is prevented.
+	AllowUnsynchronizedReplicationChanges bool
+	// PurgeOutdatedReplicasInterceptor intercepts attempts to purge outdated
+	// replicas in the store.
+	PurgeOutdatedReplicasInterceptor func()
+	// If set, use the given truncated state type when bootstrapping ranges.
+	// This is used for testing the truncated state migration.
+	TruncatedStateTypeOverride *stateloader.TruncatedStateType
+	// If set, use the given version as the initial replica version when
+	// bootstrapping ranges. This is used for testing the migration
+	// infrastructure.
+	InitialReplicaVersionOverride *roachpb.Version
+	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
+	// gossiped store capacity values which need be exceeded before the store will
+	// gossip immediately without waiting for the periodic gossip interval.
+	GossipWhenCapacityDeltaExceedsFraction float64
+	// TimeSeriesDataStore is an interface used by the store's time series
+	// maintenance queue to dispatch individual maintenance tasks.
+	TimeSeriesDataStore TimeSeriesDataStore
+
+	// Called whenever a range campaigns as a result of a tick. This
+	// is called under the replica lock and raftMu, so basically don't
+	// acquire any locks in this method.
+	OnRaftTimeoutCampaign func(roachpb.RangeID)
+
+	// LeaseRenewalSignalChan populates `Store.renewableLeasesSignal`.
+	LeaseRenewalSignalChan chan struct{}
+	// LeaseRenewalOnPostCycle is invoked after each lease renewal cycle.
+	LeaseRenewalOnPostCycle func()
+	// LeaseRenewalDurationOverride replaces the timer duration for proactively
+	// renewing expiration based leases.
+	LeaseRenewalDurationOverride time.Duration
+
+	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
+	// unavailable to queues that ask for it.
+	MakeSystemConfigSpanUnavailableToQueues bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*StoreTestingKnobs) ModuleTestingKnobs() {}
+
+// NodeLivenessTestingKnobs allows tests to override some node liveness
+// controls. When set, fields ultimately affect the NodeLivenessOptions used by
+// the cluster.
+type NodeLivenessTestingKnobs struct {
+	// LivenessDuration overrides a liveness record's life time.
+	LivenessDuration time.Duration
+	// RenewalDuration specifies how long before the expiration a record is
+	// heartbeated. If LivenessDuration is set, this should probably be set too.
+	RenewalDuration time.Duration
+	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
+	// whether a node is live or not.
+	StorePoolNodeLivenessFn NodeLivenessFunc
+}
+
+var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (NodeLivenessTestingKnobs) ModuleTestingKnobs() {}
+
+// AllocatorTestingKnobs allows tests to override the behavior of `Allocator`.
+type AllocatorTestingKnobs struct {
+	// AllowLeaseTransfersToReplicasNeedingSnapshots permits lease transfer
+	// targets produced by the Allocator to include replicas that may be waiting
+	// for snapshots.
+	AllowLeaseTransfersToReplicasNeedingSnapshots bool
+}
+
+// PinnedLeasesKnob is a testing know for controlling what store can acquire a
+// lease for specific ranges.
+type PinnedLeasesKnob struct {
+	mu struct {
+		syncutil.Mutex
+		pinned map[roachpb.RangeID]roachpb.StoreID
+	}
+}
+
+// NewPinnedLeases creates a PinnedLeasesKnob.
+func NewPinnedLeases() *PinnedLeasesKnob {
+	p := &PinnedLeasesKnob{}
+	p.mu.pinned = make(map[roachpb.RangeID]roachpb.StoreID)
+	return p
+}
+
+// PinLease makes it so that only the specified store can take a lease for the
+// specified range. Replicas on other stores attempting to acquire a lease will
+// get NotLeaseHolderErrors. Lease transfers away from the pinned store are
+// permitted.
+func (p *PinnedLeasesKnob) PinLease(rangeID roachpb.RangeID, storeID roachpb.StoreID) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.pinned[rangeID] = storeID
+}
+
+// rejectLeaseIfPinnedElsewhere is called when r is trying to acquire a lease.
+// It returns a NotLeaseholderError if the lease is pinned on another store.
+// r.mu needs to be rlocked.
+func (p *PinnedLeasesKnob) rejectLeaseIfPinnedElsewhere(r *Replica) *roachpb.Error {
+	if p == nil {
+		return nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pinnedStore, ok := p.mu.pinned[r.RangeID]
+	if !ok || pinnedStore == r.StoreID() {
+		return nil
+	}
+
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	var pinned *roachpb.ReplicaDescriptor
+	if pinnedRep, ok := r.descRLocked().GetReplicaDescriptor(pinnedStore); ok {
+		pinned = &pinnedRep
+	}
+	return roachpb.NewError(&roachpb.NotLeaseHolderError{
+		Replica:     repDesc,
+		LeaseHolder: pinned,
+		RangeID:     r.RangeID,
+		CustomMsg:   "injected: lease pinned to another store",
+	})
+}

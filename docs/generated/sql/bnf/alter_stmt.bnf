@@ -1,0 +1,3 @@
+alter_stmt ::=
+	alter_ddl_stmt
+	| alter_role_stmt

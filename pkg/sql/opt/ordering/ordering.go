@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -22,11 +21,11 @@ import (
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required ordering.
-func CanProvide(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	if required.Any() {
 		return true
 	}
-	if util.RaceEnabled {
+	if util.CrdbTestBuild {
 		checkRequired(expr, required)
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
@@ -36,10 +35,10 @@ func CanProvide(expr memo.RelExpr, required *physical.OrderingChoice) bool {
 // given child in order to satisfy a required ordering. Can only be called if
 // CanProvide is true for the required ordering.
 func BuildChildRequired(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
-	if util.RaceEnabled && !result.Any() {
+	if util.CrdbTestBuild && !result.Any() {
 		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
 	}
 	return result
@@ -60,13 +59,13 @@ func BuildChildRequired(
 //
 // This function assumes that the provided orderings have already been set in
 // the children of the expression.
-func BuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	if required.Any() {
 		return nil
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
 
-	if util.RaceEnabled {
+	if util.CrdbTestBuild {
 		checkProvided(expr, required, provided)
 	}
 
@@ -74,14 +73,14 @@ func BuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ord
 }
 
 type funcs struct {
-	canProvideOrdering func(expr memo.RelExpr, required *physical.OrderingChoice) bool
+	canProvideOrdering func(expr memo.RelExpr, required *props.OrderingChoice) bool
 
 	buildChildReqOrdering func(
-		parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-	) physical.OrderingChoice
+		parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+	) props.OrderingChoice
 
 	buildProvidedOrdering func(
-		expr memo.RelExpr, required *physical.OrderingChoice,
+		expr memo.RelExpr, required *props.OrderingChoice,
 	) opt.Ordering
 }
 
@@ -110,6 +109,36 @@ func init() {
 		buildChildReqOrdering: projectBuildChildReqOrdering,
 		buildProvidedOrdering: projectBuildProvided,
 	}
+	funcMap[opt.UnionOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.UnionAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.IntersectOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.IntersectAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.ExceptOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.ExceptAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
 	funcMap[opt.IndexJoinOp] = funcs{
 		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
@@ -119,6 +148,11 @@ func init() {
 		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
 		buildProvidedOrdering: lookupJoinBuildProvided,
+	}
+	funcMap[opt.InvertedJoinOp] = funcs{
+		canProvideOrdering:    invertedJoinCanProvideOrdering,
+		buildChildReqOrdering: invertedJoinBuildChildReqOrdering,
+		buildProvidedOrdering: invertedJoinBuildProvided,
 	}
 	funcMap[opt.OrdinalityOp] = funcs{
 		canProvideOrdering:    ordinalityCanProvideOrdering,
@@ -139,6 +173,11 @@ func init() {
 		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
 		buildProvidedOrdering: limitOrOffsetBuildProvided,
+	}
+	funcMap[opt.TopKOp] = funcs{
+		canProvideOrdering:    topKCanProvideOrdering,
+		buildChildReqOrdering: noChildReqOrdering,
+		buildProvidedOrdering: topKBuildProvided,
 	}
 	funcMap[opt.ScalarGroupByOp] = funcs{
 		// ScalarGroupBy always has exactly one result; any required ordering should
@@ -237,19 +276,24 @@ func init() {
 		buildChildReqOrdering: exportBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.WithOp] = funcs{
+		canProvideOrdering:    withCanProvideOrdering,
+		buildChildReqOrdering: withBuildChildReqOrdering,
+		buildProvidedOrdering: withBuildProvided,
+	}
 }
 
-func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	return false
 }
 
 func noChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
-	return physical.OrderingChoice{}
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
+	return props.OrderingChoice{}
 }
 
-func noProvidedOrdering(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func noProvidedOrdering(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	return nil
 }
 
@@ -315,7 +359,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 // maintain the provided ordering when merging results from multiple nodes, and
 // we don't want to make needless comparisons.
 func trimProvided(
-	provided opt.Ordering, required *physical.OrderingChoice, fds *props.FuncDepSet,
+	provided opt.Ordering, required *props.OrderingChoice, fds *props.FuncDepSet,
 ) opt.Ordering {
 	if len(provided) == 0 {
 		return nil
@@ -341,7 +385,7 @@ func trimProvided(
 }
 
 // checkRequired runs sanity checks on the ordering required of an operator.
-func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
+func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 	rel := expr.Relational()
 
 	// Verify that the ordering only refers to output columns.
@@ -362,7 +406,7 @@ func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 }
 
 // checkProvided runs sanity checks on a provided ordering.
-func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provided opt.Ordering) {
+func checkProvided(expr memo.RelExpr, required *props.OrderingChoice, provided opt.Ordering) {
 	// The provided ordering must refer only to output columns.
 	if outCols := expr.Relational().OutputCols; !provided.ColSet().SubsetOf(outCols) {
 		panic(errors.AssertionFailedf(
@@ -380,7 +424,7 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 		fds := &expr.Relational().FuncDeps
 		r := required.Copy()
 		r.Simplify(fds)
-		var p physical.OrderingChoice
+		var p props.OrderingChoice
 		p.FromOrdering(provided)
 		p.Simplify(fds)
 		if !r.Any() && (p.Any() || !p.Intersects(&r)) {

@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "channel",
+    srcs = [
+        ":gen-channel",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/channel",  # keep
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/log/logpb"],  # keep
+)
+
+genrule(
+    name = "gen-channel",
+    srcs = [
+        "//pkg/util/log/logpb:log.proto",
+    ],
+    outs = ["channel_generated.go"],
+    cmd = """
+      $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
+        channel.go $(location channel_generated.go)
+       """,
+    exec_tools = [
+        "//pkg/util/log/gen",
+    ],
+)

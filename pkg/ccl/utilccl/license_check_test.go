@@ -9,33 +9,37 @@
 package utilccl
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSettingAndCheckingLicense(t *testing.T) {
 	idA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
 	idB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
 
+	ctx := context.Background()
 	t0 := timeutil.Unix(0, 0)
 
-	licA, _ := licenseccl.License{
+	licA, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{idA},
 		Type:              licenseccl.License_Enterprise,
 		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-	}.Encode()
+	}).Encode()
 
-	licB, _ := licenseccl.License{
+	licB, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{idB},
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
-	}.Encode()
+	}).Encode()
 
 	st := cluster.MakeTestingClusterSettings()
 
@@ -58,18 +62,19 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		{"", idA, t0, "requires an enterprise license"},
 	} {
 		updater := st.MakeUpdater()
-		if err := updater.Set("enterprise.license", tc.lic, "s"); err != nil {
+		if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
 			t.Fatal(err)
 		}
-		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "")
+		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "", true)
 		if !testutils.IsError(err, tc.err) {
-			l, _ := licenseccl.Decode(tc.lic)
+			l, _ := decode(tc.lic)
 			t.Fatalf("%d: lic %v, update by %T, checked by %s at %s, got %q", i, l, updater, tc.checkCluster, tc.checkTime, err)
 		}
 	}
 }
 
 func TestGetLicenseTypePresent(t *testing.T) {
+	ctx := context.Background()
 	for _, tc := range []struct {
 		licenseType licenseccl.License_Type
 		expected    string
@@ -80,12 +85,12 @@ func TestGetLicenseTypePresent(t *testing.T) {
 	} {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
-		lic, _ := licenseccl.License{
+		lic, _ := (&licenseccl.License{
 			ClusterID:         []uuid.UUID{},
 			Type:              tc.licenseType,
 			ValidUntilUnixSec: 0,
-		}.Encode()
-		if err := updater.Set("enterprise.license", lic, "s"); err != nil {
+		}).Encode()
+		if err := updater.Set(ctx, "enterprise.license", lic, "s"); err != nil {
 			t.Fatal(err)
 		}
 		actual, err := getLicenseType(st)
@@ -110,6 +115,7 @@ func TestGetLicenseTypeAbsent(t *testing.T) {
 }
 
 func TestSettingBadLicenseStrings(t *testing.T) {
+	ctx := context.Background()
 	for _, tc := range []struct{ lic, err string }{
 		{"blah", "invalid license string"},
 		{"cl-0-blah", "invalid license string"},
@@ -117,10 +123,106 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		u := st.MakeUpdater()
 
-		if err := u.Set("enterprise.license", tc.lic, "s"); !testutils.IsError(
+		if err := u.Set(ctx, "enterprise.license", tc.lic, "s"); !testutils.IsError(
 			err, tc.err,
 		) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
 		}
 	}
+}
+
+func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
+	ctx := context.Background()
+	id, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
+
+	t0 := timeutil.Unix(1603926294, 0)
+
+	lic1M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Enterprise,
+		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
+	}).Encode()
+
+	lic2M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
+	}).Encode()
+
+	lic0M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, 0, 0).Unix(),
+	}).Encode()
+
+	licExpired, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, -1, 0).Unix(),
+	}).Encode()
+
+	st := cluster.MakeTestingClusterSettings()
+	updater := st.MakeUpdater()
+
+	for _, tc := range []struct {
+		desc     string
+		lic      string
+		ttlHours float64
+	}{
+		{"One Month", lic1M, 24 * 31},
+		{"Two Month", lic2M, 24*31 + 24*30},
+		{"Zero Month", lic0M, 0},
+		{"Expired", licExpired, -24 * 30},
+		{"No License", "", 0},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
+				t.Fatal(err)
+			}
+
+			actual, err := TimeToEnterpriseLicenseExpiry(context.Background(), st, t0)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			require.Equal(t, tc.ttlHours, actual.Hours())
+		})
+	}
+}
+
+func TestApplyTenantLicenseWithLicense(t *testing.T) {
+	license, _ := (&licenseccl.License{
+		Type: licenseccl.License_Enterprise,
+	}).Encode()
+
+	defer TestingDisableEnterprise()()
+	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
+
+	settings := cluster.MakeClusterSettings()
+
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.NoError(t, ApplyTenantLicense())
+	require.NoError(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.True(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+}
+
+func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
+	defer TestingDisableEnterprise()()
+
+	settings := cluster.MakeClusterSettings()
+	_, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
+	envutil.ClearEnvCache()
+	require.False(t, ok)
+
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.NoError(t, ApplyTenantLicense())
+	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), "", ""))
+}
+
+func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {
+	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", "THIS IS NOT A VALID LICENSE")()
+	require.Error(t, ApplyTenantLicense())
 }

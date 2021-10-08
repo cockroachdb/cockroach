@@ -1098,6 +1098,76 @@ func (e *BindExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
+type LetExpr struct {
+	Labels StringsExpr
+	Target Expr
+	Result *RefExpr
+	Src    *SourceLoc
+	Typ    DataType
+}
+
+func (e *LetExpr) Op() Operator {
+	return LetOp
+}
+
+func (e *LetExpr) ChildCount() int {
+	return 3
+}
+
+func (e *LetExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return &e.Labels
+	case 1:
+		return e.Target
+	case 2:
+		return e.Result
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *LetExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "Labels"
+	case 1:
+		return "Target"
+	case 2:
+		return "Result"
+	}
+	return ""
+}
+
+func (e *LetExpr) Value() interface{} {
+	return nil
+}
+
+func (e *LetExpr) Visit(visit VisitFunc) Expr {
+	children := visitChildren(e, visit)
+	if children != nil {
+		return &LetExpr{Labels: *children[0].(*StringsExpr), Target: children[1], Result: children[2].(*RefExpr), Src: e.Source()}
+	}
+	return e
+}
+
+func (e *LetExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *LetExpr) InferredType() DataType {
+	return e.Typ
+}
+
+func (e *LetExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *LetExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
 type RefExpr struct {
 	Label StringExpr
 	Src   *SourceLoc
@@ -1295,6 +1365,58 @@ func (e *StringExpr) String() string {
 }
 
 func (e *StringExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type StringsExpr []StringExpr
+
+func (e *StringsExpr) Op() Operator {
+	return StringsOp
+}
+
+func (e *StringsExpr) ChildCount() int {
+	return len(*e)
+}
+
+func (e *StringsExpr) Child(nth int) Expr {
+	return &(*e)[nth]
+}
+
+func (e *StringsExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *StringsExpr) Value() interface{} {
+	return nil
+}
+
+func (e *StringsExpr) Visit(visit VisitFunc) Expr {
+	children := visitChildren(e, visit)
+	if children != nil {
+		typedChildren := make(StringsExpr, len(children))
+		for i := 0; i < len(children); i++ {
+			typedChildren[i] = *children[i].(*StringExpr)
+		}
+		return &typedChildren
+	}
+	return e
+}
+
+func (e *StringsExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *StringsExpr) InferredType() DataType {
+	return AnyDataType
+}
+
+func (e *StringsExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *StringsExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 

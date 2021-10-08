@@ -1,0 +1,48 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.inverted;
+option go_package = "inverted";
+
+import "gogoproto/gogo.proto";
+
+// SetOperator is an operator on sets.
+enum SetOperator {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // None is used in an expression node with no children.
+  None = 0;
+
+  // SetUnion unions the children.
+  SetUnion = 1;
+
+  // SetIntersection intersects the children.
+  SetIntersection = 2;
+}
+
+// SpanExpressionProto is a proto representation of an inverted.Expression
+// tree consisting only of SpanExpressions. It is intended for use in
+// expression execution.
+message SpanExpressionProto {
+  // Span is a span of the inverted index. Represents [start, end).
+  message Span {
+    bytes start = 1;
+    bytes end = 2;
+  }
+  message Node {
+    repeated Span factored_union_spans = 1 [(gogoproto.nullable) = false];
+    SetOperator operator = 2;
+    Node left = 3;
+    Node right = 4;
+  }
+  repeated Span spans_to_read = 1 [(gogoproto.nullable) = false];
+  Node node = 2 [(gogoproto.nullable) = false];
+}

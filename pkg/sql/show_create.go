@@ -14,11 +14,13 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type shouldOmitFKClausesFromCreate int
@@ -66,24 +68,22 @@ func ShowCreateTable(
 	p PlanHookState,
 	tn *tree.TableName,
 	dbPrefix string,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
-	a := &sqlbase.DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
-	if desc.Temporary {
+	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
 	}
 	f.WriteString("TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	primaryKeyIsOnVisibleColumn := false
-	visibleCols := desc.VisibleColumns()
-	for i := range visibleCols {
-		col := &visibleCols[i]
+	// Inaccessible columns are not displayed in SHOW CREATE TABLE.
+	for i, col := range desc.AccessibleColumns() {
 		if i != 0 {
 			f.WriteString(",")
 		}
@@ -93,25 +93,20 @@ func ShowCreateTable(
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
-			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
-			// is on a visible column (not rowid).
-			primaryKeyIsOnVisibleColumn = true
-		}
 	}
-	if primaryKeyIsOnVisibleColumn ||
-		(desc.IsPhysicalTable() && desc.PrimaryIndex.IsSharded()) {
+
+	if desc.IsPhysicalTable() {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
+		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().GetName())
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
+
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
 	// exclude check mutations below, for consistency.
 	if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
-		for i := range desc.OutboundFKs {
+		if err := desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 			fkCtx := tree.NewFmtCtx(tree.FmtSimple)
-			fk := &desc.OutboundFKs[i]
 			fkCtx.WriteString(",\n\tCONSTRAINT ")
 			fkCtx.FormatNameP(&fk.Name)
 			fkCtx.WriteString(" ")
@@ -127,23 +122,27 @@ func ShowCreateTable(
 				sessiondata.EmptySearchPath,
 			); err != nil {
 				if displayOptions.FKDisplayMode == OmitMissingFKClausesFromCreate {
-					continue
-				} else { // When FKDisplayMode == IncludeFkClausesInCreate.
-					return "", err
+					return nil
 				}
+				// When FKDisplayMode == IncludeFkClausesInCreate.
+				return err
 			}
 			f.WriteString(fkCtx.String())
+			return nil
+		}); err != nil {
+			return "", err
 		}
 	}
-	allIdx := append(desc.Indexes, desc.PrimaryIndex)
-	for i := range allIdx {
-		idx := &allIdx[i]
+	allIdx := append(
+		append([]catalog.Index{}, desc.PublicNonPrimaryIndexes()...),
+		desc.GetPrimaryIndex())
+	for _, idx := range allIdx {
 		// Only add indexes to the create_statement column, and not to the
 		// create_nofks column if they are not associated with an INTERLEAVE
 		// statement.
 		// Initialize to false if Interleave has no ancestors, indicating that the
 		// index is not interleaved at all.
-		includeInterleaveClause := len(idx.Interleave.Ancestors) == 0
+		includeInterleaveClause := idx.NumInterleaveAncestors() == 0
 		if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
 			// The caller is instructing us to not omit FK clauses from inside the CREATE.
 			// (i.e. the caller does not want them as separate DDL.)
@@ -151,29 +150,43 @@ func ShowCreateTable(
 			// clauses as well.
 			includeInterleaveClause = true
 		}
-		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
+		if !idx.Primary() && includeInterleaveClause {
 			// Showing the primary index is handled above.
+
+			// Build the PARTITION BY clause.
+			var partitionBuf bytes.Buffer
+			if err := ShowCreatePartitioning(
+				a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
+			); err != nil {
+				return "", err
+			}
+
+			// Add interleave or Foreign Key indexes only to the create_table columns,
+			// and not the create_nofks column.
+			var interleaveBuf bytes.Buffer
+			if includeInterleaveClause {
+				// TODO(mgartner): The logic in showCreateInterleave can be
+				// moved to catformat.IndexForDisplay.
+				if err := showCreateInterleave(idx, &interleaveBuf, dbPrefix, lCtx); err != nil {
+					return "", err
+				}
+			}
+
 			f.WriteString(",\n\t")
-			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
+			idxStr, err := catformat.IndexForDisplay(
+				ctx,
+				desc,
+				&descpb.AnonymousTable,
+				idx,
+				partitionBuf.String(),
+				interleaveBuf.String(),
+				p.RunParams(ctx).p.SemaCtx(),
+			)
 			if err != nil {
 				return "", err
 			}
 			f.WriteString(idxStr)
-			// Showing the INTERLEAVE and PARTITION BY for the primary index are
-			// handled last.
 
-			// Add interleave or Foreign Key indexes only to the create_table columns,
-			// and not the create_nofks column.
-			if includeInterleaveClause {
-				if err := showCreateInterleave(idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-					return "", err
-				}
-			}
-			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
-			); err != nil {
-				return "", err
-			}
 		}
 	}
 
@@ -183,17 +196,21 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(&desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}
 
+	if err := showCreateLocality(desc, f); err != nil {
+		return "", err
+	}
+
 	if !displayOptions.IgnoreComments {
-		if err := showComments(tn, desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+		if err := showComments(tn, desc, selectComment(ctx, p, desc.GetID()), &f.Buffer); err != nil {
 			return "", err
 		}
 	}
@@ -214,7 +231,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 }
 
 // ShowCreate returns a valid SQL representation of the CREATE
-// statement used to create the descriptor passed in. The
+// statement used to create the descriptor passed in.
 //
 // The names of the tables references by foreign keys, and the
 // interleaved parent if any, are prefixed by their own database name
@@ -225,18 +242,26 @@ func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
 	allDescs []descpb.Descriptor,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string
 	var err error
-	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
-		stmt, err = ShowCreateView(ctx, &tn, desc)
+		stmt, err = ShowCreateView(ctx, &p.RunParams(ctx).p.semaCtx, &tn, desc)
 	} else if desc.IsSequence() {
 		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
-		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
+		lCtx, lErr := newInternalLookupCtxFromDescriptors(ctx, allDescs, nil /* want all tables */)
+		if lErr != nil {
+			return "", lErr
+		}
+		// Overwrite desc with hydrated descriptor.
+		desc, err = lCtx.getTableByID(desc.GetID())
+		if err != nil {
+			return "", err
+		}
 		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 

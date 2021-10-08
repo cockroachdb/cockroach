@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -35,7 +35,7 @@ import (
 )
 
 // WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
+func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
 	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
@@ -78,7 +78,7 @@ func RunJob(
 	ops []string,
 	query string,
 	args ...interface{},
-) (int64, error) {
+) (jobspb.JobID, error) {
 	*allowProgressIota = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
@@ -90,7 +90,7 @@ func RunJob(
 	case err := <-errCh:
 		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
 	}
-	var jobID int64
+	var jobID jobspb.JobID
 	db.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 	for _, op := range ops {
 		db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
@@ -107,7 +107,7 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.Replica
 	return func(_ context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 		for _, ru := range br.Responses {
 			switch ru.GetInner().(type) {
-			case *roachpb.ExportResponse, *roachpb.ImportResponse, *roachpb.AddSSTableResponse:
+			case *roachpb.ExportResponse, *roachpb.AddSSTableResponse:
 				<-*allowProgressIota
 			}
 		}
@@ -129,6 +129,7 @@ func verifySystemJob(
 	var statusString string
 	var runningStatus gosql.NullString
 	var runningStatusString string
+	var usernameString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
@@ -138,9 +139,10 @@ func verifySystemJob(
 		filterType.String(),
 		offset,
 	).Scan(
-		&actual.Description, &actual.Username, &rawDescriptorIDs,
+		&actual.Description, &usernameString, &rawDescriptorIDs,
 		&statusString, &runningStatus,
 	)
+	actual.Username = security.MakeSQLUsernameFromPreNormalizedString(usernameString)
 	if runningStatus.Valid {
 		runningStatusString = runningStatus.String
 	}
@@ -192,37 +194,9 @@ func VerifySystemJob(
 	return verifySystemJob(t, db, offset, filterType, string(expectedStatus), "", expected)
 }
 
-// GetJobFormatVersion returns the format version of a schema change job.
-// Will fail the test if the jobID does not reference a schema change job.
-func GetJobFormatVersion(
-	t testing.TB, db *sqlutils.SQLRunner,
-) jobspb.SchemaChangeDetailsFormatVersion {
-	rows := db.QueryStr(t, "SELECT * FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND description <> 'updating privileges' ORDER BY created DESC LIMIT 1")
-	if len(rows) != 1 {
-		t.Fatal("expected exactly one row when checking the format version")
-	}
-	jobID, err := strconv.Atoi(rows[0][0])
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var payloadBytes []byte
-	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&payloadBytes)
-
-	payload := &jobspb.Payload{}
-	if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-		t.Fatal(err)
-	}
-	// Lease is always nil in 19.2.
-	payload.Lease = nil
-
-	details := payload.GetSchemaChange()
-	return details.FormatVersion
-}
-
 // GetJobID gets a particular job's ID.
-func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
-	var jobID int64
+func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) jobspb.JobID {
+	var jobID jobspb.JobID
 	db.QueryRow(t, `
 	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
 	).Scan(&jobID)
@@ -230,8 +204,8 @@ func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
 }
 
 // GetLastJobID gets the most recent job's ID.
-func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) int64 {
-	var jobID int64
+func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
+	var jobID jobspb.JobID
 	db.QueryRow(
 		t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&jobID)
@@ -239,7 +213,7 @@ func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) int64 {
 }
 
 // GetJobProgress loads the Progress message associated with the job.
-func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
+func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}
 	var buf []byte
 	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)

@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gc",
+    srcs = [
+        "gc.go",
+        "gc_iterator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv/kvserver/abortspan",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/rditer",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/bufalloc",
+        "//pkg/util/contextutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "gc_test",
+    size = "medium",
+    srcs = [
+        "data_distribution_test.go",
+        "gc_iterator_test.go",
+        "gc_old_test.go",
+        "gc_random_test.go",
+        "gc_test.go",
+    ],
+    embed = [":gc"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/rditer",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

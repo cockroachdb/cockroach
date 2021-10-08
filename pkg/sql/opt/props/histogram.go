@@ -12,16 +12,20 @@ package props
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -47,9 +51,13 @@ func (h *Histogram) String() string {
 func (h *Histogram) Init(
 	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
 ) {
-	h.evalCtx = evalCtx
-	h.col = col
-	h.buckets = buckets
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*h = Histogram{
+		evalCtx: evalCtx,
+		col:     col,
+		buckets: buckets,
+	}
 }
 
 // copy returns a deep copy of the histogram.
@@ -178,15 +186,14 @@ func (h *Histogram) CanFilter(c *constraint.Constraint) (colOffset, exactPrefix 
 	return 0, exactPrefix, false
 }
 
-// Filter filters the histogram according to the given constraint, and returns
-// a new histogram with the results. CanFilter should be called first to
-// validate that c can filter the histogram.
-func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
-	colOffset, exactPrefix, ok := h.CanFilter(c)
-	if !ok {
-		panic(errors.AssertionFailedf("column mismatch"))
-	}
-
+func (h *Histogram) filter(
+	spanCount int,
+	getSpan func(int) *constraint.Span,
+	desc bool,
+	colOffset, exactPrefix int,
+	prefix []tree.Datum,
+	columns constraint.Columns,
+) *Histogram {
 	bucketCount := h.BucketCount()
 	filtered := &Histogram{
 		evalCtx: h.evalCtx,
@@ -203,21 +210,15 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
 
-	prefix := make([]tree.Datum, colOffset)
-	for i := range prefix {
-		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
-	}
-	desc := c.Columns.Get(colOffset).Descending()
 	var iter histogramIter
 	iter.init(h, desc)
 	spanIndex := 0
-	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: c.Columns}
+	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: columns}
 
 	// Find the first span that may overlap with the histogram.
 	firstBucket := makeSpanFromBucket(&iter, prefix)
-	spanCount := c.Spans.Count()
 	for spanIndex < spanCount {
-		span := c.Spans.Get(spanIndex)
+		span := getSpan(spanIndex)
 		if firstBucket.StartsAfter(&keyCtx, span) {
 			spanIndex++
 			continue
@@ -229,7 +230,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	}
 
 	// Use binary search to find the first bucket that overlaps with the span.
-	span := c.Spans.Get(spanIndex)
+	span := getSpan(spanIndex)
 	bucIndex := sort.Search(bucketCount, func(i int) bool {
 		iter.setIdx(i)
 		bucket := makeSpanFromBucket(&iter, prefix)
@@ -263,7 +264,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
 		left := makeSpanFromBucket(&iter, prefix)
-		right := c.Spans.Get(spanIndex)
+		right := getSpan(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
 			spanIndex++
@@ -335,6 +336,52 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	return filtered
 }
 
+// Filter filters the histogram according to the given constraint, and returns
+// a new histogram with the results. CanFilter should be called first to
+// validate that c can filter the histogram.
+func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
+	colOffset, exactPrefix, ok := h.CanFilter(c)
+	if !ok {
+		panic(errors.AssertionFailedf("column mismatch"))
+	}
+	prefix := make([]tree.Datum, colOffset)
+	for i := range prefix {
+		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
+	}
+	desc := c.Columns.Get(colOffset).Descending()
+
+	return h.filter(c.Spans.Count(), c.Spans.Get, desc, colOffset, exactPrefix, prefix, c.Columns)
+}
+
+// InvertedFilter filters the histogram according to the given inverted
+// constraint, and returns a new histogram with the results.
+func (h *Histogram) InvertedFilter(spans inverted.Spans) *Histogram {
+	var columns constraint.Columns
+	columns.InitSingle(opt.MakeOrderingColumn(h.col, false /* desc */))
+	return h.filter(
+		len(spans),
+		func(idx int) *constraint.Span {
+			return makeSpanFromInvertedSpan(spans[idx])
+		},
+		false, /* desc */
+		0,     /* exactPrefix */
+		0,     /* colOffset */
+		nil,   /* prefix */
+		columns,
+	)
+}
+
+func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
+	var span constraint.Span
+	span.Init(
+		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),
+		constraint.IncludeBoundary,
+		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.End))),
+		constraint.ExcludeBoundary,
+	)
+	return &span
+}
+
 func (h *Histogram) getNextLowerBound(currentUpperBound tree.Datum) tree.Datum {
 	nextLowerBound, ok := currentUpperBound.Next(h.evalCtx)
 	if !ok {
@@ -383,7 +430,7 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
-func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
+func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {
 	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
@@ -392,8 +439,8 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		n := b.NumRange
 		d := b.DistinctRange
 
-		b.NumEq *= selectivity
-		b.NumRange *= selectivity
+		b.NumEq *= selectivity.AsFloat()
+		b.NumRange *= selectivity.AsFloat()
 
 		if d == 0 {
 			continue
@@ -405,7 +452,7 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		//
 		// This formula returns d * selectivity when d=n but is closer to d
 		// when d << n.
-		b.DistinctRange = d - d*math.Pow(1-selectivity, n/d)
+		b.DistinctRange = d - d*math.Pow(1-selectivity.AsFloat(), n/d)
 	}
 	return res
 }
@@ -426,12 +473,16 @@ type histogramIter struct {
 // histogram. If desc is true, the iterator starts from the end of the
 // histogram and moves backwards.
 func (hi *histogramIter) init(h *Histogram, desc bool) {
-	hi.idx = -1
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*hi = histogramIter{
+		idx:  -1,
+		h:    h,
+		desc: desc,
+	}
 	if desc {
 		hi.idx = h.BucketCount()
 	}
-	hi.h = h
-	hi.desc = desc
 	hi.next()
 }
 
@@ -566,11 +617,11 @@ func getFilteredBucket(
 			// This span represents an equality condition with a value in the range
 			// of this bucket. Use the distinct count of the bucket to estimate the
 			// selectivity of the equality condition.
-			selectivity := 1.0
+			selectivity := OneSelectivity
 			if b.DistinctRange > 1 {
-				selectivity = 1 / b.DistinctRange
+				selectivity = MakeSelectivity(1 / b.DistinctRange)
 			}
-			numEq = selectivity * b.NumRange
+			numEq = selectivity.AsFloat() * b.NumRange
 		} else if ok && rangeBefore > 0 && isDiscrete(bucketLowerBound.ResolvedType()) {
 			// If we were successful in finding the ranges before and after filtering
 			// and the data type is discrete (e.g., integer, date, or timestamp), we
@@ -612,86 +663,191 @@ func getFilteredBucket(
 	}
 }
 
-// getRangesBeforeAndAfter returns the size of the ranges before and after the
-// given bucket is filtered by the given span. If swap is true, the upper and
-// lower bounds should be swapped for the bucket and the span. Returns ok=true
-// if these range sizes are calculated successfully, and false otherwise.
+// getRangesBeforeAndAfter returns the size of the before and after ranges based
+// on the lower and upper bounds provided. If swap is true, the upper and lower
+// bounds of both ranges are swapped. Returns ok=true if these range sizes are
+// calculated successfully, and false otherwise. The calculations for
+// rangeBefore and rangeAfter are datatype dependent.
+//
+// For numeric types, we can simply find the difference between the lower and
+// upper bounds for rangeBefore/rangeAfter.
+//
+// For non-numeric types, we can convert each bound into sorted key bytes (CRDB
+// key representation) to find their range. As we do need a lot of precision in
+// our range estimate, we can remove the common prefix between the lower and
+// upper bounds, and limit the byte array to 8 bytes. This also simplifies our
+// implementation since we won't need to handle an arbitrary length of bounds.
+// Following the conversion, we must zero extend the byte arrays to ensure the
+// length is uniform between lower and upper bounds. This process is highlighted
+// below, where [\bear - \bobcat] represents the before range and
+// [\bluejay - \boar] represents the after range.
+//
+//   bear    := [18  98  101 97  114 0   1          ]
+//           => [101 97  114 0   0   0   0   0      ]
+//
+//   bluejay := [18  98  108 117 101 106 97  121 0 1]
+//           => [108 117 101 106 97  121 0   0      ]
+//
+//   boar    := [18  98  111 97  114 0   1          ]
+//           => [111 97  114 0   0   0   0   0      ]
+//
+//   bobcat  := [18  98  111 98  99  97  116 0   1  ]
+//           => [111 98  99  97  116 0   0   0      ]
+//
+// We can now find the range before/after by finding the difference between
+// the lower and upper bounds:
+//
+//	 rangeBefore := [111 98  99  97  116 0   1   0] -
+//                  [101 97  114 0   1   0   0   0]
+//
+//   rangeAfter  := [111 97  114 0   1   0   0   0] -
+//                  [108 117 101 106 97  121 0   1]
+//
+// Subtracting the uint64 representations of the byte arrays, the resulting
+// rangeBefore and rangeAfter are:
+//
+//	 rangeBefore := 8,026,086,756,136,779,776 - 7,305,245,414,897,221,632
+//               := 720,841,341,239,558,100
+//
+//	 rangeAfter := 8,025,821,355,276,500,992 - 7,815,264,235,947,622,400
+//              := 210,557,119,328,878,600
+//
 func getRangesBeforeAndAfter(
-	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum, swap bool,
+	beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound tree.Datum, swap bool,
 ) (rangeBefore, rangeAfter float64, ok bool) {
 	// If the data types don't match, don't bother trying to calculate the range
 	// sizes. This should almost never happen, but we want to avoid type
 	// assertion errors below.
 	typesMatch :=
-		bucketLowerBound.ResolvedType().Equivalent(bucketUpperBound.ResolvedType()) &&
-			bucketUpperBound.ResolvedType().Equivalent(spanLowerBound.ResolvedType()) &&
-			spanLowerBound.ResolvedType().Equivalent(spanUpperBound.ResolvedType())
+		beforeLowerBound.ResolvedType().Equivalent(beforeUpperBound.ResolvedType()) &&
+			beforeUpperBound.ResolvedType().Equivalent(afterLowerBound.ResolvedType()) &&
+			afterLowerBound.ResolvedType().Equivalent(afterUpperBound.ResolvedType())
 	if !typesMatch {
 		return 0, 0, false
 	}
 
 	if swap {
-		bucketLowerBound, bucketUpperBound = bucketUpperBound, bucketLowerBound
-		spanLowerBound, spanUpperBound = spanUpperBound, spanLowerBound
+		beforeLowerBound, beforeUpperBound = beforeUpperBound, beforeLowerBound
+		afterLowerBound, afterUpperBound = afterUpperBound, afterLowerBound
 	}
 
+	// The calculations below assume that all bounds are inclusive.
 	// TODO(rytaft): handle more types here.
-	// Note: the calculations below assume that bucketLowerBound is inclusive and
-	// Span.PreferInclusive() has been called on the span.
+	switch beforeLowerBound.ResolvedType().Family() {
+	case types.IntFamily:
+		rangeBefore = float64(*beforeUpperBound.(*tree.DInt)) - float64(*beforeLowerBound.(*tree.DInt))
+		rangeAfter = float64(*afterUpperBound.(*tree.DInt)) - float64(*afterLowerBound.(*tree.DInt))
+		return rangeBefore, rangeAfter, true
 
-	getRange := func(lowerBound, upperBound tree.Datum) (rng float64, ok bool) {
-		switch lowerBound.ResolvedType().Family() {
-		case types.IntFamily:
-			rng = float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
-			return rng, true
-
-		case types.DateFamily:
-			lower := lowerBound.(*tree.DDate)
-			upper := upperBound.(*tree.DDate)
-			if lower.IsFinite() && upper.IsFinite() {
-				rng = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
-				return rng, true
-			}
-			return 0, false
-
-		case types.DecimalFamily:
-			lower, err := lowerBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			upper, err := upperBound.(*tree.DDecimal).Float64()
-			if err != nil {
-				return 0, false
-			}
-			rng = upper - lower
-			return rng, true
-
-		case types.FloatFamily:
-			rng = float64(*upperBound.(*tree.DFloat)) - float64(*lowerBound.(*tree.DFloat))
-			return rng, true
-
-		case types.TimestampFamily:
-			lower := lowerBound.(*tree.DTimestamp).Time
-			upper := upperBound.(*tree.DTimestamp).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		case types.TimestampTZFamily:
-			lower := lowerBound.(*tree.DTimestampTZ).Time
-			upper := upperBound.(*tree.DTimestampTZ).Time
-			rng = float64(upper.Sub(lower))
-			return rng, true
-
-		default:
-			return 0, false
+	case types.DateFamily:
+		lowerBefore := beforeLowerBound.(*tree.DDate)
+		upperBefore := beforeUpperBound.(*tree.DDate)
+		lowerAfter := afterLowerBound.(*tree.DDate)
+		upperAfter := afterUpperBound.(*tree.DDate)
+		if lowerBefore.IsFinite() && upperBefore.IsFinite() && lowerAfter.IsFinite() && upperAfter.IsFinite() {
+			rangeBefore = float64(upperBefore.PGEpochDays()) - float64(lowerBefore.PGEpochDays())
+			rangeAfter = float64(upperAfter.PGEpochDays()) - float64(lowerAfter.PGEpochDays())
+			return rangeBefore, rangeAfter, true
 		}
+		return 0, 0, false
+
+	case types.DecimalFamily:
+		lowerBefore, err := beforeLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperBefore, err := beforeUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		lowerAfter, err := afterLowerBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		upperAfter, err := afterUpperBound.(*tree.DDecimal).Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		rangeBefore = upperBefore - lowerBefore
+		rangeAfter = upperAfter - lowerAfter
+		return rangeBefore, rangeAfter, true
+
+	case types.FloatFamily:
+		rangeBefore = float64(*beforeUpperBound.(*tree.DFloat)) - float64(*beforeLowerBound.(*tree.DFloat))
+		rangeAfter = float64(*afterUpperBound.(*tree.DFloat)) - float64(*afterLowerBound.(*tree.DFloat))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimestamp).Time
+		upperBefore := beforeUpperBound.(*tree.DTimestamp).Time
+		lowerAfter := afterLowerBound.(*tree.DTimestamp).Time
+		upperAfter := afterUpperBound.(*tree.DTimestamp).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimestampTZFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimestampTZ).Time
+		upperBefore := beforeUpperBound.(*tree.DTimestampTZ).Time
+		lowerAfter := afterLowerBound.(*tree.DTimestampTZ).Time
+		upperAfter := afterUpperBound.(*tree.DTimestampTZ).Time
+		rangeBefore = float64(upperBefore.Sub(lowerBefore))
+		rangeAfter = float64(upperAfter.Sub(lowerAfter))
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTime)
+		upperBefore := beforeUpperBound.(*tree.DTime)
+		lowerAfter := afterLowerBound.(*tree.DTime)
+		upperAfter := afterUpperBound.(*tree.DTime)
+		rangeBefore = float64(*upperBefore) - float64(*lowerBefore)
+		rangeAfter = float64(*upperAfter) - float64(*lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.TimeTZFamily:
+		lowerBefore := beforeLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperBefore := beforeUpperBound.(*tree.DTimeTZ).TimeOfDay
+		lowerAfter := afterLowerBound.(*tree.DTimeTZ).TimeOfDay
+		upperAfter := afterUpperBound.(*tree.DTimeTZ).TimeOfDay
+		rangeBefore = float64(upperBefore) - float64(lowerBefore)
+		rangeAfter = float64(upperAfter) - float64(lowerAfter)
+		return rangeBefore, rangeAfter, true
+
+	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
+		// For non-numeric types, convert the datums to encoded keys to
+		// approximate the range. We utilize an array to reduce repetitive code.
+		boundArr := [4]tree.Datum{
+			beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound,
+		}
+		var boundArrByte [4][]byte
+
+		for i := range boundArr {
+			var err error
+			// Encode each bound value into a sortable byte format.
+			boundArrByte[i], err = rowenc.EncodeTableKey(nil, boundArr[i], encoding.Ascending)
+			if err != nil {
+				return 0, 0, false
+			}
+		}
+
+		// Remove common prefix.
+		ind := getCommonPrefix(boundArrByte)
+		for i := range boundArrByte {
+			// Fix length of byte arrays to 8 bytes.
+			boundArrByte[i] = getFixedLenArr(boundArrByte[i], ind, 8 /* fixLen */)
+		}
+
+		rangeBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
+			binary.BigEndian.Uint64(boundArrByte[0]))
+		rangeAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
+			binary.BigEndian.Uint64(boundArrByte[2]))
+
+		return rangeBefore, rangeAfter, true
+
+	default:
+		// Range calculations are not supported for the given type family.
+		return 0, 0, false
 	}
-
-	rangeBefore, okBefore := getRange(bucketLowerBound, bucketUpperBound)
-	rangeAfter, okAfter := getRange(spanLowerBound, spanUpperBound)
-	ok = okBefore && okAfter
-
-	return rangeBefore, rangeAfter, ok
 }
 
 // isDiscrete returns true if the given data type is discrete.
@@ -701,6 +857,55 @@ func isDiscrete(typ *types.T) bool {
 		return true
 	}
 	return false
+}
+
+// getCommonPrefix returns the first index where the value at said index differs
+// across all byte arrays in byteArr. byteArr must contain at least one element
+// to compute a common prefix.
+func getCommonPrefix(byteArr [4][]byte) int {
+	// Checks if the current value at index is the same between all byte arrays.
+	currIndMatching := func(ind int) bool {
+		for i := 0; i < len(byteArr); i++ {
+			if ind >= len(byteArr[i]) || byteArr[0][ind] != byteArr[i][ind] {
+				return false
+			}
+		}
+		return true
+	}
+
+	ind := 0
+	for currIndMatching(ind) {
+		ind++
+	}
+
+	return ind
+}
+
+// getFixedLenArr returns a byte array of size fixLen starting from specified
+// index within the original byte array.
+func getFixedLenArr(byteArr []byte, ind, fixLen int) []byte {
+
+	if len(byteArr) <= 0 {
+		panic(errors.AssertionFailedf("byteArr must have at least one element"))
+	}
+
+	if fixLen <= 0 {
+		panic(errors.AssertionFailedf("desired fixLen must be greater than 0"))
+	}
+
+	if ind < 0 || ind > len(byteArr) {
+		panic(errors.AssertionFailedf("ind must be contained within byteArr"))
+	}
+
+	// If byteArr is insufficient to hold desired size of byte array (fixLen),
+	// allocate new array, else return subarray of size fixLen starting at ind
+	if len(byteArr) < ind+fixLen {
+		byteArrFix := make([]byte, fixLen)
+		copy(byteArrFix, byteArr[ind:])
+		return byteArrFix
+	}
+
+	return byteArr[ind : ind+fixLen]
 }
 
 // histogramWriter prints histograms with the following formatting:
@@ -727,11 +932,15 @@ const (
 )
 
 func (w *histogramWriter) init(buckets []cat.HistogramBucket) {
-	w.cells = [][]string{
-		make([]string, len(buckets)*2),
-		make([]string, len(buckets)*2),
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*w = histogramWriter{
+		cells: [][]string{
+			make([]string, len(buckets)*2),
+			make([]string, len(buckets)*2),
+		},
+		colWidths: make([]int, len(buckets)*2),
 	}
-	w.colWidths = make([]int, len(buckets)*2)
 
 	for i, b := range buckets {
 		w.cells[counts][i*2] = fmt.Sprintf(" %.5g ", b.NumRange)

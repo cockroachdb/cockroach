@@ -31,7 +31,7 @@ type View interface {
 	// number of columns in the view.
 	ColumnNameCount() int
 
-	// ColumnNames returns the name of the column at the ith ordinal position
+	// ColumnName returns the name of the column at the ith ordinal position
 	// within the view, where i < ColumnNameCount.
 	ColumnName(i int) tree.Name
 

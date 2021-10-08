@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs are base.ModuleTestingKnobs for testing jobs related infra.
@@ -46,7 +47,72 @@ type TestingKnobs struct {
 	// OverrideAsOfClause is a function which has a chance of modifying
 	// tree.AsOfClause.
 	OverrideAsOfClause func(clause *tree.AsOfClause)
+
+	// BeforeUpdate is called in the update transaction after the update function
+	// has run. If an error is returned, it will be propagated and the update will
+	// not be committed.
+	BeforeUpdate func(orig, updated JobMetadata) error
+
+	// IntervalOverrides consists of override knobs for job intervals.
+	IntervalOverrides TestingIntervalOverrides
+
+	// AfterJobStateMachine is called once the running instance of the job has
+	// returned from the state machine that transitions it from one state to
+	// another.
+	AfterJobStateMachine func()
+
+	// TimeSource replaces registry's clock.
+	TimeSource *hlc.Clock
+
+	// DisableAdoptions disables job adoptions.
+	DisableAdoptions bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// TestingIntervalOverrides contains variables to override the intervals and
+// settings of periodic tasks.
+type TestingIntervalOverrides struct {
+	// Adopt overrides the adoptIntervalSetting cluster setting.
+	Adopt *time.Duration
+
+	// Cancel overrides the cancelIntervalSetting cluster setting.
+	Cancel *time.Duration
+
+	// Gc overrides the gcIntervalSetting cluster setting.
+	Gc *time.Duration
+
+	// RetentionTime overrides the retentionTimeSetting cluster setting.
+	RetentionTime *time.Duration
+
+	// RetryInitialDelay overrides retryInitialDelaySetting cluster setting.
+	RetryInitialDelay *time.Duration
+
+	// RetryMaxDelay overrides retryMaxDelaySetting cluster setting.
+	RetryMaxDelay *time.Duration
+}
+
+// NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
+// overrides for short adopt and cancel intervals.
+func NewTestingKnobsWithShortIntervals() *TestingKnobs {
+	const defaultShortInterval = 10 * time.Millisecond
+	return NewTestingKnobsWithIntervals(
+		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
+	)
+}
+
+// NewTestingKnobsWithIntervals return a TestingKnobs structure with overrides
+// for adopt and cancel intervals.
+func NewTestingKnobsWithIntervals(
+	adopt, cancel, initialDelay, maxDelay time.Duration,
+) *TestingKnobs {
+	return &TestingKnobs{
+		IntervalOverrides: TestingIntervalOverrides{
+			Adopt:             &adopt,
+			Cancel:            &cancel,
+			RetryInitialDelay: &initialDelay,
+			RetryMaxDelay:     &maxDelay,
+		},
+	}
+}

@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workloadccl",
+    srcs = ["fixture.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+    ],
+)
+
+go_test(
+    name = "workloadccl_test",
+    size = "small",
+    srcs = [
+        "bench_test.go",
+        "fixture_test.go",
+        "main_test.go",
+    ],
+    embed = [":workloadccl"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/stats",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/tpcc",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
+        "@org_golang_x_oauth2//google",
+    ],
+)

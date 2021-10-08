@@ -110,7 +110,7 @@ func measureQuery(planText string) (int64, error) {
 
 	// Use a 1 minute timeout.
 	// These benchmarks shouldn't go that long generally anyway.
-	if _, err := c.ExecContext(ctx, "SET statement_timeout = 60*1000"); err != nil {
+	if _, err := c.ExecContext(ctx, "SET statement_timeout = 60000"); err != nil {
 		return 0, err
 	}
 
@@ -308,6 +308,10 @@ var Benches = []*opbench.Spec{
 	SortLineitemSpec,
 	ScanOrdersSpec,
 	ScanLineitemSpec,
+	StreamingGroupByLineitemSpec,
+	HashGroupByLineitemSpec,
+	StreamingSetOpSpec,
+	HashSetOpSpec,
 }
 
 // HashJoinSpec does a hash join between supplier and lineitem.
@@ -342,8 +346,8 @@ var HashJoinSpec = &opbench.Spec{
 )`,
 
 	Inputs: []opbench.Options{
-		{Field: "lineitem_rows", Values: []float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000}},
-		{Field: "supplier_rows", Values: []float64{1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000}},
+		{Field: "lineitem_rows", Values: []float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000}},
+		{Field: "supplier_rows", Values: []float64{10, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000, 20000}},
 	},
 
 	GetParam: func(paramName string, config opbench.Configuration) string {
@@ -392,8 +396,8 @@ var MergeJoinSpec = &opbench.Spec{
 )`,
 
 	Inputs: []opbench.Options{
-		{Field: "lineitem_rows", Values: []float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000}},
-		{Field: "supplier_rows", Values: []float64{1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000}},
+		{Field: "lineitem_rows", Values: []float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000}},
+		{Field: "supplier_rows", Values: []float64{10, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000, 20000}},
 	},
 
 	GetParam: func(paramName string, config opbench.Configuration) string {
@@ -437,7 +441,7 @@ var LookupJoinSpec = &opbench.Spec{
 )`,
 
 	Inputs: []opbench.Options{
-		{Field: "supplier_rows", Values: []float64{1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000}},
+		{Field: "supplier_rows", Values: []float64{10, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000, 20000}},
 	},
 
 	GetParam: func(paramName string, config opbench.Configuration) string {
@@ -500,7 +504,7 @@ func makeScanSpec(
 var ScanLineitemSpec = makeScanSpec(
 	"scan-lineitem",
 	"lineitem",
-	[]float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000},
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
 	[]float64{1, 2, 3, 4, 16},
 	[]string{
 		"l_orderkey", "l_partkey", "l_suppkey",
@@ -516,7 +520,7 @@ var ScanLineitemSpec = makeScanSpec(
 var ScanOrdersSpec = makeScanSpec(
 	"scan-orders",
 	"orders",
-	[]float64{250000, 500000, 750000, 1000000, 1250000, 1500000},
+	[]float64{10, 250000, 500000, 750000, 1000000, 1250000, 1500000, 1750000, 2000000, 2250000, 2500000, 2750000, 3000000},
 	[]float64{1, 3, 6, 9},
 	[]string{
 		"o_orderkey", "o_custkey", "o_orderstatus",
@@ -571,7 +575,7 @@ func makeSortSpec(
 var SortLineitemSpec = makeSortSpec(
 	"sort-lineitem",
 	"lineitem",
-	[]float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000},
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
 	[]float64{1, 2, 3},
 	[]string{
 		"l_orderkey", "l_partkey", "l_suppkey",
@@ -582,4 +586,190 @@ var SortLineitemSpec = makeSortSpec(
 		"l_comment",
 	},
 	"+l_orderkey",
+)
+
+func makeGroupBySpec(
+	name string,
+	tableName string,
+	rowCounts []float64,
+	colCounts []float64,
+	colNames []string,
+	ordering string,
+) *opbench.Spec {
+	return &opbench.Spec{
+		Name: name,
+		Plan: fmt.Sprintf(`
+(Root
+	(GroupBy
+		(Scan
+			[
+				(Table "%s")
+				(Cols "$cols")
+				(HardLimit $rows)
+			]
+		)
+		[]
+		[
+      (GroupingCols "$cols")
+      (Ordering "%s")
+    ]
+	)
+	(Presentation "$cols")
+  (NoOrdering)
+)`, tableName, ordering),
+
+		Inputs: []opbench.Options{
+			{Field: "rows", Values: rowCounts},
+			{Field: "num_cols", Values: colCounts},
+		},
+
+		GetParam: func(paramName string, config opbench.Configuration) string {
+			switch paramName {
+			case "rows":
+				return fmt.Sprintf("%d", int(config["rows"]))
+			case "cols":
+				return colPrefix(colNames, int(config["num_cols"]))
+			}
+			panic(errors.AssertionFailedf("can't handle %q", paramName))
+		},
+	}
+}
+
+// StreamingGroupByLineitemSpec scans and aggregates the lineitem table using a
+// streaming group by.
+var StreamingGroupByLineitemSpec = makeGroupBySpec(
+	"streaming-group-by-lineitem",
+	"lineitem",
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
+	[]float64{1},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+	"+l_orderkey",
+)
+
+// HashGroupByLineitemSpec scans and aggregates the lineitem table using a
+// hash group by.
+var HashGroupByLineitemSpec = makeGroupBySpec(
+	"hash-group-by-lineitem",
+	"lineitem",
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
+	[]float64{2, 3, 4},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+	"",
+)
+
+func makeSetOpSpec(
+	name string,
+	leftTable, rightTable string,
+	rowCounts []float64,
+	colCounts []float64,
+	leftColNames, rightColNames []string,
+	ordering string,
+) *opbench.Spec {
+	return &opbench.Spec{
+		Name: name,
+		Plan: fmt.Sprintf(`
+(Root
+  (Intersect
+    (Scan
+			[
+				(Table "%s")
+				(Cols "$left_cols")
+				(HardLimit $rows)
+			]
+    )
+    (Scan
+			[
+				(Table "%s")
+				(Cols "$right_cols")
+				(HardLimit $rows)
+			]
+    )
+  [
+    (LeftCols "$left_cols")
+    (RightCols "$right_cols")
+    (OutCols "$left_cols")
+    (Ordering "%s")
+  ]
+)
+	(Presentation "$left_cols")
+  (NoOrdering)
+)`, leftTable, rightTable, ordering),
+
+		Inputs: []opbench.Options{
+			{Field: "rows", Values: rowCounts},
+			{Field: "num_cols", Values: colCounts},
+		},
+
+		GetParam: func(paramName string, config opbench.Configuration) string {
+			switch paramName {
+			case "rows":
+				return fmt.Sprintf("%d", int(config["rows"]))
+			case "left_cols":
+				return colPrefix(leftColNames, int(config["num_cols"]))
+			case "right_cols":
+				return colPrefix(rightColNames, int(config["num_cols"]))
+			}
+			panic(errors.AssertionFailedf("can't handle %q", paramName))
+		},
+	}
+}
+
+// StreamingSetOpSpec performs a streaming set operation between
+// the lineitem and order tables.
+var StreamingSetOpSpec = makeSetOpSpec(
+	"streaming-set-op",
+	"lineitem", "orders",
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
+	[]float64{1},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+	[]string{
+		"o_orderkey", "o_custkey", "o_orderstatus",
+		"o_totalprice", "o_orderdate", "o_orderpriority",
+		"o_clerk", "o_shippriority", "o_comment",
+	},
+	"+l_orderkey",
+)
+
+// HashSetOpSpec performs a streaming set operation between
+// the lineitem and order tables.
+var HashSetOpSpec = makeSetOpSpec(
+	"hash-set-op",
+	"lineitem", "orders",
+	[]float64{10, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000},
+	[]float64{1, 2},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+	[]string{
+		"o_orderkey", "o_custkey", "o_orderstatus",
+		"o_totalprice", "o_orderdate", "o_orderpriority",
+		"o_clerk", "o_shippriority", "o_comment",
+	},
+	"",
 )

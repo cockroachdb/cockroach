@@ -10,70 +10,40 @@
 
 package execgen
 
-import "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/errors"
+)
 
 const nonTemplatePanic = "do not call from non-template code"
 
 // Remove unused warnings.
 var (
 	_ = COPYVAL
-	_ = SET
-	_ = SLICE
-	_ = COPYSLICE
 	_ = APPENDSLICE
 	_ = APPENDVAL
-	_ = LEN
-	_ = ZERO
-	_ = WINDOW
+	_ = SETVARIABLESIZE
 )
 
 // COPYVAL is a template function that can be used to set a scalar to the value
 // of another scalar in such a way that the destination won't be modified if the
-// source is. You must use this on the result of UNSAFEGET if you wish to store
-// that result past the lifetime of the batch you UNSAFEGET'd from.
+// source is.
 func COPYVAL(dest, src interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
-}
-
-// SET is a template function.
-func SET(target, i, new interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
-}
-
-// SLICE is a template function.
-func SLICE(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
-	return nil
-}
-
-// COPYSLICE is a template function.
-func COPYSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // APPENDSLICE is a template function.
 func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // APPENDVAL is a template function.
 func APPENDVAL(target, v interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
-// LEN is a template function.
-func LEN(target interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
-	return nil
-}
-
-// ZERO is a template function.
-func ZERO(target interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
-}
-
-// WINDOW is a template function.
-func WINDOW(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
+// SETVARIABLESIZE is a template function.
+func SETVARIABLESIZE(target, value interface{}) interface{} {
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }

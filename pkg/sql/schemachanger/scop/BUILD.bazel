@@ -1,0 +1,75 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "scop",
+    srcs = [
+        "backfill.go",
+        "mutation.go",
+        "ops.go",
+        "validation.go",
+        ":gen-backfill",  # keep
+        ":gen-mutation",  # keep
+        ":gen-type-stringer",  # keep
+        ":gen-validation",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "gen-visitors",
+    srcs = ["generate_visitor.go"],
+    gotags = ["generator"],
+    deps = [
+        "//pkg/cli/exit",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_gostdlib//go/format",
+    ],
+)
+
+genrule(
+    name = "gen-mutation",
+    srcs = ["mutation.go"],
+    outs = ["mutation_visitor_generated.go"],
+    cmd = """
+        $(location :gen-visitors) scop Mutation $(location mutation.go) $(location mutation_visitor_generated.go)
+       """,
+    exec_tools = [
+        ":gen-visitors",
+    ],
+)
+
+genrule(
+    name = "gen-backfill",
+    srcs = ["backfill.go"],
+    outs = ["backfill_visitor_generated.go"],
+    cmd = """
+        $(location :gen-visitors) scop Backfill $(location backfill.go) $(location backfill_visitor_generated.go)
+       """,
+    exec_tools = [
+        ":gen-visitors",
+    ],
+)
+
+genrule(
+    name = "gen-validation",
+    srcs = ["validation.go"],
+    outs = ["validation_visitor_generated.go"],
+    cmd = """
+        $(location :gen-visitors) scop Validation $(location validation.go) $(location validation_visitor_generated.go)
+       """,
+    exec_tools = [
+        ":gen-visitors",
+    ],
+)
+
+stringer(
+    name = "gen-type-stringer",
+    src = "ops.go",
+    typ = "Type",
+)

@@ -25,23 +25,26 @@ import (
 // minimum number of new segments with equal length is created,
 // between given two-points such that each segment has length less
 // than or equal to given maximum segment length.
-func Segmentize(g *geo.Geometry, segmentMaxLength float64) (*geo.Geometry, error) {
+func Segmentize(g geo.Geometry, segmentMaxLength float64) (geo.Geometry, error) {
+	if math.IsNaN(segmentMaxLength) || math.IsInf(segmentMaxLength, 1 /* sign */) {
+		return g, nil
+	}
 	geometry, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	switch geometry := geometry.(type) {
 	case *geom.Point, *geom.MultiPoint:
 		return g, nil
 	default:
 		if segmentMaxLength <= 0 {
-			return nil, errors.Newf("maximum segment length must be positive")
+			return geo.Geometry{}, errors.Newf("maximum segment length must be positive")
 		}
-		segGeometry, err := geosegmentize.SegmentizeGeom(geometry, segmentMaxLength, segmentizeCoords)
+		segGeometry, err := geosegmentize.Segmentize(geometry, segmentMaxLength, segmentizeCoords)
 		if err != nil {
-			return nil, err
+			return geo.Geometry{}, err
 		}
-		return geo.NewGeometryFromGeomT(segGeometry)
+		return geo.MakeGeometryFromGeomT(segGeometry)
 	}
 }
 
@@ -51,30 +54,42 @@ func Segmentize(g *geo.Geometry, segmentMaxLength float64) (*geo.Geometry, error
 // segment has a length less than or equal to given maximum segment length.
 // Note: List of points does not consist of end point.
 func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]float64, error) {
+	if len(a) != len(b) {
+		return nil, errors.Newf("cannot segmentize two coordinates of different dimensions")
+	}
+	if maxSegmentLength <= 0 {
+		return nil, errors.Newf("maximum segment length must be positive")
+	}
+
+	// Only 2D distance is considered for determining number of segments.
 	distanceBetweenPoints := math.Sqrt(math.Pow(a.X()-b.X(), 2) + math.Pow(b.Y()-a.Y(), 2))
+
+	doubleNumberOfSegmentsToCreate := math.Ceil(distanceBetweenPoints / maxSegmentLength)
+	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
+	if err := geosegmentize.CheckSegmentizeValidNumPoints(doubleNumPoints, a, b); err != nil {
+		return nil, err
+	}
 
 	// numberOfSegmentsToCreate represent the total number of segments
 	// in which given two coordinates will be divided.
-	numberOfSegmentsToCreate := int(math.Ceil(distanceBetweenPoints / maxSegmentLength))
-	numPoints := 2 * (1 + numberOfSegmentsToCreate)
-	if numPoints > geosegmentize.MaxPoints {
-		return nil, errors.Newf(
-			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
-			numPoints,
-			a,
-			b,
-			geosegmentize.MaxPoints,
-		)
-	} // segmentFraction represent the fraction of length each segment
+	numberOfSegmentsToCreate := int(doubleNumberOfSegmentsToCreate)
+	numPoints := int(doubleNumPoints)
+	// segmentFraction represent the fraction of length each segment
 	// has with respect to total length between two coordinates.
-	allSegmentizedCoordinates := make([]float64, 0, 2*(1+numberOfSegmentsToCreate))
+	allSegmentizedCoordinates := make([]float64, 0, numPoints)
 	allSegmentizedCoordinates = append(allSegmentizedCoordinates, a.Clone()...)
 	segmentFraction := 1.0 / float64(numberOfSegmentsToCreate)
 	for pointInserted := 1; pointInserted < numberOfSegmentsToCreate; pointInserted++ {
+		segmentPoint := make([]float64, 0, len(a))
+		for i := 0; i < len(a); i++ {
+			segmentPoint = append(
+				segmentPoint,
+				a[i]*(1-float64(pointInserted)*segmentFraction)+b[i]*(float64(pointInserted)*segmentFraction),
+			)
+		}
 		allSegmentizedCoordinates = append(
 			allSegmentizedCoordinates,
-			b.X()*float64(pointInserted)*segmentFraction+a.X()*(1-float64(pointInserted)*segmentFraction),
-			b.Y()*float64(pointInserted)*segmentFraction+a.Y()*(1-float64(pointInserted)*segmentFraction),
+			segmentPoint...,
 		)
 	}
 

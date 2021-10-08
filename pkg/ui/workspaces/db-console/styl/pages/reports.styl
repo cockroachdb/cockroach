@@ -1,0 +1,387 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '../utils/alternating.styl'
+
+$reports-table
+  margin 0 0 40px
+  display table
+  border-collapse collapse
+  border-spacing 0
+
+  &__row
+    display table-row
+    background-color $table-border-color
+
+    &--header
+      font-weight 900
+      color white
+      border 0
+      border-style none
+
+  &__cell
+    padding 6px 12px
+    display table-cell
+    height 20px
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+    max-width 200px
+    border-width 1px 1px 0 0
+    border-color rgba(0, 0, 0, .1)
+    border-style solid
+
+    &--header
+      font-weight 900
+      color white
+      border 0
+      border-style none
+
+    &--short
+      max-width 1px
+
+.problems-list
+  width 100%
+  background-color white
+  white-space normal
+  padding 6px 12px
+  border-width 1px 1px 0 0
+  border-color rgba(0, 0, 0, .1)
+  border-style solid
+
+.problems-link
+  color $link-color
+  text-decoration none
+  padding-right .5rem
+  display inline-block
+
+.node-filter-list
+  list-style-position inside
+  margin 5px
+
+.network-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    text-align center
+    width 6em
+
+    &&--header
+      background-color $link-color
+
+    &&--header:nth-child(1)
+      width 3em
+
+    &&--header-warning
+      color $alert-color
+
+    &&--spacer
+      border 0
+      background-color $background-color
+      width 3em
+
+    &&--self
+      background-color $table-border-color
+
+    &&--stddev-plus-2
+      background-color lighten($alert-color, 10%)
+
+    &&--stddev-plus-1
+      background-color lighten($alert-color, 50%)
+
+    &&--stddev-even
+      background-color white
+
+    &&--stddev-minus-1
+      background-color lighten($healthy-color, 50%)
+
+    &&--stddev-minus-2
+      background-color lighten($healthy-color, 10%)
+
+    &&--no-connection
+        color $alert-color
+
+.nodes-table
+  @extend $reports-table
+  font-size 12px
+
+  &__cell
+    background-color white
+    padding 6px 12px
+
+    &--header
+      background-color $link-color
+      text-align right
+
+    &--header-warning
+      color yellow
+
+.nodes-entries-list
+  list-style-type none
+  margin 0
+  padding 0
+
+.certs-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+    max-width none
+    width 100%
+
+    &--header
+      background-color $link-color
+      text-align right
+      width unset
+
+    &--header-warning
+      color $alert-color
+
+.certs-entries-list
+  list-style-type none
+  margin 0
+  padding 0
+
+.stores-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+    max-width none
+    width 100%
+
+    &--header
+      background-color $link-color
+      text-align right
+      width 150px
+      min-width 150px
+
+      &--row
+        background-color $link-color
+        text-align center
+        color white
+        font-weight 900
+
+.connections-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color green
+
+    &&--warning
+      color $alert-color
+
+  &__cell
+    white-space normal
+    max-width none
+
+.log-entries-list
+  list-style-type none
+  margin 0
+  padding 0
+
+.log-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color orange
+
+  &__cell
+    white-space normal
+    max-width none
+
+    &--date
+      min-width 10rem
+
+.allocator-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color $link-color
+
+  &__cell
+    white-space normal
+    max-width none
+
+    &--date
+      min-width 14rem
+
+.lease-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color green
+
+  &__cell
+    white-space normal
+    max-width none
+
+.range-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+
+    &--header
+      background-color $link-color
+      text-align right
+      max-width none
+
+    &--header-warning
+      color yellow
+
+    &--raftstate-leader
+      color green
+
+    &--raftstate-follower
+      color blue
+
+    &--raftstate-candidate
+      color orange
+
+    &--raftstate-precandidate
+      color darkorange
+
+    &--raftstate-dormant
+      color lightgray
+
+    &--raftstate-unknown
+      color red
+
+    &--lease-holder
+      color green
+
+    &--lease-follower
+      color blue
+
+    &--different-from-leader-warning
+      color red
+
+    &--local-replica
+      color green
+
+    &--dormant
+      color lightgray
+
+    &--warning
+      color orange
+
+    &--quiescent
+      color violet
+
+    &--global-range
+      color blue
+
+.range-entries-list
+  list-style-type none
+  margin 0
+  padding 0
+
+.debug-table
+  margin 0 0 40px
+  display table
+  border 0
+  color $body-color
+
+  &__row
+    display table-row
+
+  &__cell
+    padding 6px 12px
+    display table-cell
+    text-align left
+    vertical-align top
+    width fit-content
+
+    &--header
+      font-weight 900
+      color $headings-color
+      text-align right
+      width 18rem
+      padding-top 7px
+
+.debug-inner-table
+  margin 0
+  display table
+  border 0
+  color $body-color
+
+  &__row
+    display table-row
+
+  &__cell
+    display table-cell
+    text-align left
+    vertical-align top
+    width 25rem
+
+    &--notes
+      width fit-content
+
+.debug-link
+  color $link-color
+  text-decoration none
+
+.failure-table
+  @extend $reports-table
+
+  &__row
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color $alert-color
+
+  &__cell
+    white-space normal
+    max-width none
+
+.settings-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color $link-color
+
+  &__cell
+    white-space normal
+    max-width none

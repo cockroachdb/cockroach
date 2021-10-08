@@ -1,0 +1,590 @@
+new-span-leaf name=b tight=true unique=true span=b
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+new-unknown-leaf name=u-tight tight=true
+----
+unknown expression: tight=true
+
+new-unknown-leaf name=u-not-tight tight=false
+----
+unknown expression: tight=false
+
+# -----------------------------------------------------
+# Tests involving UnknownExpression.
+# -----------------------------------------------------
+
+# Or of tight [b, b] with tight UnknownExpression. They
+# become the left and right child and the result is tight.
+or result=bt left=b right=u-tight
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── UNION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: empty
+      └── unknown expression: tight=true
+
+# Same as previous with left and right reversed in the
+# call to Or.
+or result=bt left=u-tight right=b
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── UNION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: empty
+      └── unknown expression: tight=true
+
+# Or of tight [b, b] with non-tight UnknownExpression.
+# Unlike bt, the result here is not tight.
+or result=bnt left=b right=u-not-tight
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── UNION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: empty
+      └── unknown expression: tight=false
+
+# And of tight [b, b] with tight UnknownExpression.
+# No factoring is possible.
+and result=b-and-unknown left=b right=u-tight
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: empty
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: ["b", "b"]
+      └── unknown expression: tight=true
+
+# Similar and as previous but with non-tight UnknownExpression.
+# Only output difference is that the result is not tight.
+and result=b-and-unknown left=b right=u-not-tight
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: empty
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: ["b", "b"]
+      └── unknown expression: tight=false
+
+# And of bt and bnt. Factoring is possible. The result is
+# not tight.
+and result=bt-and-bnt left=bt right=bnt
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: false
+      │    ├── to read: ["b", "b"]
+      │    ├── union spans: empty
+      │    └── UNION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── to read: ["b", "b"]
+      │         │    └── union spans: empty
+      │         └── unknown expression: tight=true
+      └── span expression
+           ├── tight: false, unique: false
+           ├── to read: ["b", "b"]
+           ├── union spans: empty
+           └── UNION
+                ├── span expression
+                │    ├── tight: true, unique: true
+                │    ├── to read: ["b", "b"]
+                │    └── union spans: empty
+                └── unknown expression: tight=false
+
+# Or of bt and bnt. Similar to And in toRead and unionSpans.
+or result=bt-or-bnt left=bnt right=bt
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── UNION
+      ├── span expression
+      │    ├── tight: false, unique: false
+      │    ├── to read: ["b", "b"]
+      │    ├── union spans: empty
+      │    └── UNION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── to read: ["b", "b"]
+      │         │    └── union spans: empty
+      │         └── unknown expression: tight=false
+      └── span expression
+           ├── tight: true, unique: false
+           ├── to read: ["b", "b"]
+           ├── union spans: empty
+           └── UNION
+                ├── span expression
+                │    ├── tight: true, unique: true
+                │    ├── to read: ["b", "b"]
+                │    └── union spans: empty
+                └── unknown expression: tight=true
+
+# -----------------------------------------------------
+# Tests involving NonInvertedColExpression.
+# -----------------------------------------------------
+
+new-non-inverted-leaf name=niexpr
+----
+
+# And with a NonInvertedColExpression makes the result
+# not tight.
+and result=bt-and-niexpr left=bt right=niexpr
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ ├── union spans: ["b", "b"]
+ └── UNION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "b"]
+      │    └── union spans: empty
+      └── unknown expression: tight=true
+
+# Or with a NonInvertedColExpression results in a
+# NonInvertedColExpression.
+or result=bt-or-niexpr left=niexpr right=bt
+----
+{}
+
+# -----------------------------------------------------
+# Tests involving only SpanExpressions.
+# -----------------------------------------------------
+
+# Trivial union with self.
+or result=b-or-b left=b right=b
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+# Trivial intersection with self.
+and result=b-and-b left=b right=b
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+new-span-leaf name=b-not-tight tight=false unique=false span=b
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+# Trivial union with tight and non-tight.
+or result=_ left=b right=b-not-tight
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+# Trivial intersection with tight and non-tight.
+and result=_ left=b-not-tight right=b
+----
+span expression
+ ├── tight: false, unique: false
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+new-span-leaf name=ac tight=true unique=true span=a,c
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["a", "c")
+ └── union spans: ["a", "c")
+
+# [b, b] or [a, c) = [a, c)
+or result=_ left=b right=ac
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "c")
+ └── union spans: ["a", "c")
+
+# [b, b] and [a, c) = [b, b]
+and result=_ left=b right=ac
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+new-span-leaf name=bj tight=true unique=true span=b,j
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "j")
+ └── union spans: ["b", "j")
+
+# [b, b] or [b, j) = [b, j)
+or result=_ left=bj right=b
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["b", "j")
+ └── union spans: ["b", "j")
+
+# [b, b] and [b, j) = [b, b]
+and result=_ left=b right=bj
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["b", "b"]
+ └── union spans: ["b", "b"]
+
+# [b, j) or [a, c) = [a, j)
+or result=aj left=bj right=ac
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ └── union spans: ["a", "j")
+
+# [b, j) and [a, c)
+and result=bj-and-ac left=bj right=ac
+----
+span expression
+ ├── tight: true, unique: true
+ ├── to read: ["a", "j")
+ ├── union spans: ["b", "b"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "j")
+      │    └── union spans: ["c", "j")
+      └── span expression
+           ├── tight: true, unique: true
+           ├── to read: ["a", "c")
+           └── union spans: ["a", "a"]
+
+# And of these expressions promotes the factored span [b, c)
+and result=foo left=aj right=bj-and-ac
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ ├── union spans: ["b", "b"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: false
+      │    ├── to read: ["a", "j")
+      │    └── union spans
+      │         ├── ["a", "a"]
+      │         └── ["c", "j")
+      └── span expression
+           ├── tight: true, unique: true
+           ├── to read: ["a", "j")
+           ├── union spans: empty
+           └── INTERSECTION
+                ├── span expression
+                │    ├── tight: true, unique: true
+                │    ├── to read: ["b", "j")
+                │    └── union spans: ["c", "j")
+                └── span expression
+                     ├── tight: true, unique: true
+                     ├── to read: ["a", "c")
+                     └── union spans: ["a", "a"]
+
+# Same parameters reversed
+and result=foo left=bj-and-ac right=aj
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ ├── union spans: ["b", "b"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["a", "j")
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── to read: ["b", "j")
+      │         │    └── union spans: ["c", "j")
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              ├── to read: ["a", "c")
+      │              └── union spans: ["a", "a"]
+      └── span expression
+           ├── tight: true, unique: false
+           ├── to read: ["a", "j")
+           └── union spans
+                ├── ["a", "a"]
+                └── ["c", "j")
+
+# Or of these expressions causes the children of bj-and-ac to be
+# promoted. Note that the unionSpans of the root subsume the
+# ones of the children, which were originally the grandchildren.
+# Further simplification is possible by transitively traversing
+# the subtrees.
+or result=bar left=aj right=bj-and-ac
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ ├── union spans: ["a", "j")
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: true
+      │    ├── to read: ["b", "j")
+      │    └── union spans: ["c", "j")
+      └── span expression
+           ├── tight: true, unique: true
+           ├── to read: ["a", "c")
+           └── union spans: ["a", "a"]
+
+and result=foo-and-bar left=foo right=bar
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ ├── union spans: ["b", "b"]
+ └── INTERSECTION
+      ├── span expression
+      │    ├── tight: true, unique: false
+      │    ├── to read: ["a", "j")
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── to read: ["a", "j")
+      │         │    ├── union spans: empty
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: true, unique: true
+      │         │         │    ├── to read: ["b", "j")
+      │         │         │    └── union spans: ["c", "j")
+      │         │         └── span expression
+      │         │              ├── tight: true, unique: true
+      │         │              ├── to read: ["a", "c")
+      │         │              └── union spans: ["a", "a"]
+      │         └── span expression
+      │              ├── tight: true, unique: false
+      │              ├── to read: ["a", "j")
+      │              └── union spans
+      │                   ├── ["a", "a"]
+      │                   └── ["c", "j")
+      └── span expression
+           ├── tight: true, unique: false
+           ├── to read: ["a", "j")
+           ├── union spans
+           │    ├── ["a", "a"]
+           │    └── ["c", "j")
+           └── INTERSECTION
+                ├── span expression
+                │    ├── tight: true, unique: true
+                │    ├── to read: ["b", "j")
+                │    └── union spans: ["c", "j")
+                └── span expression
+                     ├── tight: true, unique: true
+                     ├── to read: ["a", "c")
+                     └── union spans: ["a", "a"]
+
+or result=foo-or-bar left=foo right=bar
+----
+span expression
+ ├── tight: true, unique: false
+ ├── to read: ["a", "j")
+ ├── union spans: ["a", "j")
+ └── UNION
+      ├── span expression
+      │    ├── tight: true, unique: false
+      │    ├── to read: ["a", "j")
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── to read: ["a", "j")
+      │         │    ├── union spans: empty
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: true, unique: true
+      │         │         │    ├── to read: ["b", "j")
+      │         │         │    └── union spans: ["c", "j")
+      │         │         └── span expression
+      │         │              ├── tight: true, unique: true
+      │         │              ├── to read: ["a", "c")
+      │         │              └── union spans: ["a", "a"]
+      │         └── span expression
+      │              ├── tight: true, unique: false
+      │              ├── to read: ["a", "j")
+      │              └── union spans
+      │                   ├── ["a", "a"]
+      │                   └── ["c", "j")
+      └── span expression
+           ├── tight: true, unique: false
+           ├── to read: ["a", "j")
+           ├── union spans: empty
+           └── INTERSECTION
+                ├── span expression
+                │    ├── tight: true, unique: true
+                │    ├── to read: ["b", "j")
+                │    └── union spans: ["c", "j")
+                └── span expression
+                     ├── tight: true, unique: true
+                     ├── to read: ["a", "c")
+                     └── union spans: ["a", "a"]
+
+to-proto name=foo-and-bar
+----
+spans_to_read: <
+  start: "a"
+  end: "j"
+>
+node: <
+  factored_union_spans: <
+    start: "b"
+    end: "c"
+  >
+  operator: SetIntersection
+  left: <
+    operator: SetIntersection
+    left: <
+      operator: SetIntersection
+      left: <
+        factored_union_spans: <
+          start: "c"
+          end: "j"
+        >
+      >
+      right: <
+        factored_union_spans: <
+          start: "a"
+          end: "b"
+        >
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+  >
+  right: <
+    factored_union_spans: <
+      start: "a"
+      end: "b"
+    >
+    factored_union_spans: <
+      start: "c"
+      end: "j"
+    >
+    operator: SetIntersection
+    left: <
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+    >
+  >
+>
+
+to-proto name=foo-or-bar
+----
+spans_to_read: <
+  start: "a"
+  end: "j"
+>
+node: <
+  factored_union_spans: <
+    start: "a"
+    end: "j"
+  >
+  operator: SetUnion
+  left: <
+    operator: SetIntersection
+    left: <
+      operator: SetIntersection
+      left: <
+        factored_union_spans: <
+          start: "c"
+          end: "j"
+        >
+      >
+      right: <
+        factored_union_spans: <
+          start: "a"
+          end: "b"
+        >
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+  >
+  right: <
+    operator: SetIntersection
+    left: <
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+    >
+  >
+>
+
+# A nil *SpanExpression
+to-proto name=none
+----
+<nil>

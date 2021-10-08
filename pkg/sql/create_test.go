@@ -22,18 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -55,7 +55,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := sqlbase.NewDatabaseKey("test").Key(codec)
+	nameKey := catalogkeys.MakeDatabaseNameKey(codec, "test")
 	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -63,7 +63,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
+	dbDescKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
 	dbDesc := &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
 			Database: &descpb.DatabaseDescriptor{
@@ -96,18 +96,15 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
 		t.Fatal(err)
 	} else {
-		descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(
+		systemDescriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 			ctx, kvDB, codec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// TODO(arul): Revert this back to to len(descriptorIDs) once the migration
-		//  to the new system.namespace is done.
-		// Every database is initialized with a public schema, which does not have
-		// a descriptor associated with it. There are 3 databases: defaultdb,
-		// system, and postgres.
-		e := len(descriptorIDs) + 3
+		// In addition to the system database and its tables, there are 3 other
+		// databases: defaultdb, system, and postgres.
+		e := len(systemDescriptorIDs) + 3
 		if a := len(kvs); a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
@@ -118,7 +115,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbDescKey = sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
+	dbDescKey = catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -236,24 +233,24 @@ func verifyTables(
 		tableName := fmt.Sprintf("table_%d", id)
 		kvDB := tc.Servers[count%tc.NumServers()].DB()
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-		if tableDesc.ID < descIDStart {
+		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
 				tableName,
-				tableDesc.ID,
+				tableDesc.GetID(),
 				descIDStart,
 			)
 
-			if _, ok := tableIDs[tableDesc.ID]; ok {
+			if _, ok := tableIDs[tableDesc.GetID()]; ok {
 				t.Fatalf("duplicate ID: %d", id)
 			}
-			tableIDs[tableDesc.ID] = struct{}{}
-			if tableDesc.ID > maxID {
-				maxID = tableDesc.ID
+			tableIDs[tableDesc.GetID()] = struct{}{}
+			if tableDesc.GetID() > maxID {
+				maxID = tableDesc.GetID()
 			}
 
 		}
-		usedTableIDs[tableDesc.ID] = tableName
+		usedTableIDs[tableDesc.GetID()] = tableName
 	}
 
 	if e, a := expectedNumOfTables, len(usedTableIDs); e != a {
@@ -267,7 +264,7 @@ func verifyTables(
 		if _, ok := tableIDs[id]; ok {
 			continue
 		}
-		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 		desc := &descpb.Descriptor{}
 		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
@@ -457,36 +454,36 @@ func TestCreateStatementType(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := pgx.Connect(pgxConfig)
+	conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmdTag, err := conn.Exec("CREATE DATABASE t")
+	cmdTag, err := conn.Exec(ctx, "CREATE DATABASE t")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE DATABASE" {
+	if cmdTag.String() != "CREATE DATABASE" {
 		t.Fatal("expected CREATE DATABASE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.foo(x INT)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.foo(x INT)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE" {
+	if cmdTag.String() != "CREATE TABLE" {
 		t.Fatal("expected CREATE TABLE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE AS" {
+	if cmdTag.String() != "CREATE TABLE AS" {
 		t.Fatal("expected CREATE TABLE AS, got", cmdTag)
 	}
 }

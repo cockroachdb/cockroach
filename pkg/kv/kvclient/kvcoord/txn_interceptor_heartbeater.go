@@ -15,20 +15,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// txnHeartbeatDuring1PC defines whether the txnHeartbeater should launch a
-// heartbeat loop for 1PC transactions. The value defaults to false even though
-// 1PC transactions leave intents around on retriable errors if the batch has
-// been split between ranges and may be pushed when in lock wait-queues because
-// we consider that unlikely enough so we prefer to not pay for a goroutine.
-var txnHeartbeatFor1PC = envutil.EnvOrDefaultBool("COCKROACH_TXN_HEARTBEAT_DURING_1PC", false)
+// abortTxnAsyncTimeout is the context timeout for abortTxnAsyncLocked()
+// rollbacks. If the intent resolver has spare async task capacity, this timeout
+// only needs to be long enough for the EndTxn request to make it through Raft,
+// but if the cleanup task is synchronous (to backpressure clients) then cleanup
+// will be abandoned when the timeout expires. We generally want to clean up if
+// possible, but not at any cost, so we set it high at 1 minute.
+const abortTxnAsyncTimeout = time.Minute
 
 // txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
 // loop. Transaction coordinators heartbeat their transaction record
@@ -112,7 +114,35 @@ type txnHeartbeater struct {
 		// future requests sent though it (which indicates that the heartbeat
 		// loop did not race with an EndTxn request).
 		finalObservedStatus roachpb.TransactionStatus
+
+		// ifReqs tracks the number of in-flight requests. This is expected to
+		// be either 0 or 1, but we let the txnLockGatekeeper enforce that.
+		//
+		// This is used to make sure we don't send EndTxn(commit=false) from
+		// abortTxnAsyncLocked() concurrently with another in-flight request.
+		// The TxnCoordSender assumes synchronous operation; in particular,
+		// the txnPipeliner must update its lock spans with pending responses
+		// before attaching the final lock spans to the EndTxn request.
+		ifReqs uint8
+
+		// abortTxnAsyncPending, if true, signals that an abortTxnAsyncLocked()
+		// call is waiting for in-flight requests to complete. Once the last
+		// request returns (setting ifReqs=0), it calls abortTxnAsyncLocked().
+		abortTxnAsyncPending bool
+
+		// abortTxnAsyncResultC is non-nil when an abortTxnAsyncLocked()
+		// rollback is in-flight. If a client rollback arrives concurrently, it
+		// will wait for the result on this channel, collapsing the requests to
+		// prevent concurrent rollbacks. Only EndTxn(commit=false) requests can
+		// arrive during rollback, the TxnCoordSender blocks any others due to
+		// finalObservedStatus.
+		abortTxnAsyncResultC chan abortTxnAsyncResult
 	}
+}
+
+type abortTxnAsyncResult struct {
+	br   *roachpb.BatchResponse
+	pErr *roachpb.Error
 }
 
 // init initializes the txnHeartbeater. This method exists instead of a
@@ -141,6 +171,7 @@ func (h *txnHeartbeater) init(
 func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	etArg, hasET := ba.GetArg(roachpb.EndTxn)
 	firstLockingIndex, pErr := firstLockingIndex(&ba)
 	if pErr != nil {
 		return nil, pErr
@@ -159,17 +190,67 @@ func (h *txnHeartbeater) SendLocked(
 
 		// Start the heartbeat loop if it has not already started.
 		if !h.mu.loopStarted {
-			_, haveEndTxn := ba.GetArg(roachpb.EndTxn)
-			if !haveEndTxn || txnHeartbeatFor1PC {
-				if err := h.startHeartbeatLoopLocked(ctx); err != nil {
-					return nil, roachpb.NewError(err)
+			h.startHeartbeatLoopLocked(ctx)
+		}
+	}
+
+	if hasET {
+		et := etArg.(*roachpb.EndTxnRequest)
+
+		// Set the EndTxn request's TxnHeartbeating flag. Set to true if
+		// a hearbeat loop was started which indicates that transaction has
+		// a transaction record.
+		//
+		// TODO(erikgrinaker): In v21.2 we always heartbeat the txn record, so
+		// this field is never used. However, we still need to set it when
+		// interacting with v21.1 nodes. We can remove this field in v22.1.
+		et.TxnHeartbeating = h.mu.loopStarted
+
+		// Preemptively stop the heartbeat loop in case of transaction abort.
+		// In case of transaction commit we don't want to do this because commit
+		// could fail with retryable error and transaction would be restarted
+		// with the next epoch.
+		if !et.Commit {
+			h.cancelHeartbeatLoopLocked()
+
+			// If an abortTxnAsyncLocked() rollback is in flight, we'll wait for
+			// its result here to avoid sending a concurrent rollback.
+			// Otherwise, txnLockGatekeeper would error since it does not allow
+			// concurrent requests (to enforce a synchronous client protocol).
+			if resultC := h.mu.abortTxnAsyncResultC; resultC != nil {
+				// We have to unlock the mutex while waiting, to allow the
+				// txnLockGatekeeper to acquire the mutex when receiving the
+				// async abort response. Once we receive our copy of the
+				// response, we re-acquire the lock to return it to the client.
+				h.mu.Unlock()
+				defer h.mu.Lock()
+				select {
+				case res := <-resultC:
+					return res.br, res.pErr
+				case <-ctx.Done():
+					return nil, roachpb.NewError(ctx.Err())
 				}
 			}
 		}
 	}
 
-	// Forward the batch through the wrapped lockedSender.
-	return h.wrapped.SendLocked(ctx, ba)
+	// Forward the batch through the wrapped lockedSender, recording the
+	// in-flight request to coordinate with abortTxnAsyncLocked(). Recall that
+	// the mutex is unlocked for the duration of the SendLocked() call.
+	h.mu.ifReqs++
+	br, pErr := h.wrapped.SendLocked(ctx, ba)
+	h.mu.ifReqs--
+
+	// If an abortTxnAsyncLocked() call is waiting for this in-flight
+	// request to complete, call it. At this point, finalObservedStatus has
+	// already been set, so we don't have to worry about additional incoming
+	// requests (except rollbacks) -- the TxnCoordSender will block them.
+	if h.mu.abortTxnAsyncPending && h.mu.ifReqs == 0 {
+		h.abortTxnAsyncLocked(ctx)
+		h.mu.abortTxnAsyncPending = false
+	}
+
+	return br, pErr
 }
 
 // setWrapped is part of the txnInterceptor interface.
@@ -189,10 +270,10 @@ func (*txnHeartbeater) importLeafFinalState(context.Context, *roachpb.LeafTxnFin
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) epochBumpedLocked() {}
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (*txnHeartbeater) createSavepointLocked(context.Context, *savepoint) {}
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnHeartbeater) rollbackToSavepointLocked(context.Context, savepoint) {}
 
 // closeLocked is part of the txnInterceptor interface.
@@ -201,26 +282,45 @@ func (h *txnHeartbeater) closeLocked() {
 }
 
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
-func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
+func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
+	if h.loopInterval < 0 {
+		log.Infof(ctx, "coordinator heartbeat loop disabled")
+		return
+	}
 	if h.mu.loopStarted {
 		log.Fatal(ctx, "attempting to start a second heartbeat loop")
 	}
-	log.VEventf(ctx, 2, "coordinator spawns heartbeat loop")
+	log.VEventf(ctx, 2, kvbase.SpawningHeartbeatLoopMsg)
 	h.mu.loopStarted = true
 	// NB: we can't do this in init() because the txn isn't populated yet then
 	// (it's zero).
 	h.AmbientContext.AddLogTag("txn-hb", h.mu.txn.Short())
 
+	const taskName = "[async] kv.TxnCoordSender: heartbeat loop"
+
 	// Create a new context so that the heartbeat loop doesn't inherit the
 	// caller's cancelation.
-	// We want the loop to run in a span linked to the current one, though, so we
-	// put our span in the new context and expect RunAsyncTask to fork it
-	// immediately.
-	hbCtx := h.AnnotateCtx(context.Background())
-	hbCtx = opentracing.ContextWithSpan(hbCtx, opentracing.SpanFromContext(ctx))
-	hbCtx, h.mu.loopCancel = context.WithCancel(hbCtx)
+	hbCtx, hbCancel := context.WithCancel(h.AnnotateCtx(context.Background()))
 
-	return h.stopper.RunAsyncTask(hbCtx, "kv.TxnCoordSender: heartbeat loop", h.heartbeatLoop)
+	// Delay spawning the loop goroutine until the first loopInterval passes, to
+	// avoid the associated cost for small write transactions. In benchmarks,
+	// this gave a 3% throughput increase for point writes at high concurrency.
+	timer := time.AfterFunc(h.loopInterval, func() {
+		// We want the loop to run in a span linked to the current one, so we put
+		// our span in the context and fork it.
+		var span *tracing.Span
+		hbCtx = tracing.ContextWithSpan(hbCtx, tracing.SpanFromContext(ctx))
+		hbCtx, span = tracing.ForkSpan(hbCtx, taskName)
+		defer span.Finish()
+
+		// Only errors on quiesce, which is safe to ignore.
+		_ = h.stopper.RunTask(hbCtx, taskName, h.heartbeatLoop)
+	})
+
+	h.mu.loopCancel = func() {
+		timer.Stop()
+		hbCancel()
+	}
 }
 
 func (h *txnHeartbeater) cancelHeartbeatLoopLocked() {
@@ -250,6 +350,11 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 		ticker := time.NewTicker(h.loopInterval)
 		tickChan = ticker.C
 		defer ticker.Stop()
+	}
+
+	// Loop is only spawned after loopInterval, so heartbeat immediately.
+	if !h.heartbeat(ctx) {
+		return
 	}
 
 	// Loop with ticker for periodic heartbeats.
@@ -322,7 +427,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 
 	var respTxn *roachpb.Transaction
 	if pErr != nil {
-		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
+		log.VEventf(ctx, 2, "heartbeat failed for %s: %s", h.mu.txn, pErr)
 
 		// We need to be prepared here to handle the case of a
 		// TransactionAbortedError with no transaction proto in it.
@@ -338,6 +443,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 			// its commit or an ambiguous one and we have nothing to offer that
 			// provides more clarity. We do however prevent it from running more
 			// requests in case it isn't aware that the transaction is over.
+			log.VEventf(ctx, 1, "Heartbeat detected aborted txn, cleaning up for %s", h.mu.txn)
 			h.abortTxnAsyncLocked(ctx)
 			h.mu.finalObservedStatus = roachpb.ABORTED
 			return false
@@ -357,6 +463,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 		case roachpb.ABORTED:
 			// Roll back the transaction record to clean up intents and
 			// then shut down the heartbeat loop.
+			log.VEventf(ctx, 1, "Heartbeat detected aborted txn, cleaning up for %s", h.mu.txn)
 			h.abortTxnAsyncLocked(ctx)
 		}
 		h.mu.finalObservedStatus = respTxn.Status
@@ -365,15 +472,19 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	return true
 }
 
-// abortTxnAsyncLocked send an EndTxn(commmit=false) asynchronously.
+// abortTxnAsyncLocked sends an EndTxn(commit=false) asynchronously.
 // The purpose of the async cleanup is to resolve transaction intents as soon
 // as possible when a transaction coordinator observes an ABORTED transaction.
 func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
-	log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
 
-	// NB: We use context.Background() here because we don't want a canceled
-	// context to interrupt the aborting.
-	ctx = h.AnnotateCtx(context.Background())
+	// If a request is in flight, we must wait for it to complete first such
+	// that txnPipeliner can record its lock spans and attach them to the EndTxn
+	// request we'll send.
+	if h.mu.ifReqs > 0 {
+		h.mu.abortTxnAsyncPending = true
+		log.VEventf(ctx, 2, "async abort waiting for in-flight request for txn %s", h.mu.txn)
+		return
+	}
 
 	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
@@ -383,24 +494,72 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
-		Poison: true,
+		Poison:          true,
+		TxnHeartbeating: true,
 	})
 
+	const taskName = "txnHeartbeater: aborting txn"
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
-	if err := h.stopper.RunAsyncTask(
-		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
-			// Send the abort request through the interceptor stack. This is
-			// important because we need the txnPipeliner to append lock spans
-			// to the EndTxn request.
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			_, pErr := h.wrapped.SendLocked(ctx, ba)
-			if pErr != nil {
-				log.VErrEventf(ctx, 1, "async abort failed for %s: %s ", txn, pErr)
+	if err := h.stopper.RunAsyncTask(h.AnnotateCtx(context.Background()), taskName,
+		func(ctx context.Context) {
+			if err := contextutil.RunWithTimeout(ctx, taskName, abortTxnAsyncTimeout,
+				func(ctx context.Context) error {
+					h.mu.Lock()
+					defer h.mu.Unlock()
+
+					// If we find an abortTxnAsyncResultC, that means an async
+					// rollback request is already in flight, so there's no
+					// point in us running another. This can happen because the
+					// TxnCoordSender also calls abortTxnAsyncLocked()
+					// independently of the heartbeat loop.
+					if h.mu.abortTxnAsyncResultC != nil {
+						log.VEventf(ctx, 2,
+							"skipping async abort due to concurrent async abort for %s", txn)
+						return nil
+					}
+
+					// TxnCoordSender allows EndTxn(commit=false) through even
+					// after we set finalObservedStatus, and that request can
+					// race with us for the mutex. Thus, if we find an in-flight
+					// request here, after checking ifReqs=0 before being spawned,
+					// we deduce that it must have been a rollback and there's no
+					// point in sending another rollback.
+					if h.mu.ifReqs > 0 {
+						log.VEventf(ctx, 2,
+							"skipping async abort due to client rollback for %s", txn)
+						return nil
+					}
+
+					// Set up a result channel to signal to an incoming client
+					// rollback that an async rollback is already in progress,
+					// and pass it the result. The buffer allows storing the
+					// result even when no client rollback arrives. Recall that
+					// the SendLocked() call below releases the mutex while
+					// running, allowing concurrent incoming requests.
+					h.mu.abortTxnAsyncResultC = make(chan abortTxnAsyncResult, 1)
+
+					// Send the abort request through the interceptor stack. This is
+					// important because we need the txnPipeliner to append lock spans
+					// to the EndTxn request.
+					br, pErr := h.wrapped.SendLocked(ctx, ba)
+					if pErr != nil {
+						log.VErrEventf(ctx, 1, "async abort failed for %s: %s ", txn, pErr)
+						h.metrics.AsyncRollbacksFailed.Inc(1)
+					}
+
+					// Pass the result to a waiting client rollback, if any, and
+					// remove the channel since we're no longer in flight.
+					h.mu.abortTxnAsyncResultC <- abortTxnAsyncResult{br: br, pErr: pErr}
+					h.mu.abortTxnAsyncResultC = nil
+					return nil
+				},
+			); err != nil {
+				log.VEventf(ctx, 1, "async abort failed for %s: %s", txn, err)
 			}
 		},
 	); err != nil {
 		log.Warningf(ctx, "%v", err)
+		h.metrics.AsyncRollbacksFailed.Inc(1)
 	}
 }
 

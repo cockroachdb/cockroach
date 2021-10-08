@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "compare",
+    srcs = ["empty.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/compose/compare/compare",
+    visibility = ["//visibility:public"],
+)

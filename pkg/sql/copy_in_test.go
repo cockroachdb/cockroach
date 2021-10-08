@@ -23,13 +23,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -216,7 +215,7 @@ func TestCopyRandom(t *testing.T) {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, t, false)
+				d := randgen.RandDatum(rng, t, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 				switch t {
 				case types.Float:
@@ -407,76 +406,6 @@ func TestCopyError(t *testing.T) {
 	}
 }
 
-// TestCopyOne verifies that only one COPY can run at once.
-func TestCopyOne(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 18352)
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-// TestCopyInProgress verifies that after a COPY has started another statement
-// cannot run.
-func TestCopyInProgress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 18352)
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Query("SELECT 1"); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 // TestCopyTransaction verifies that COPY data can be used after it is done
 // within a transaction.
 func TestCopyTransaction(t *testing.T) {
@@ -582,10 +511,11 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	tdb := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 	tdb.Exec(t, `CREATE TABLE t (k INT8 PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
 	tdb.Exec(t, `GRANT admin TO foo`)
@@ -597,10 +527,14 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	conn, err := pgxConn(t, userURL)
 	require.NoError(t, err)
 
-	tag, err := conn.CopyFromReader(strings.NewReader("1\n2\n"),
-		"copy t(k) from stdin")
+	rowsAffected, err := conn.CopyFrom(
+		ctx,
+		pgx.Identifier{"t"},
+		[]string{"k"},
+		pgx.CopyFromRows([][]interface{}{{1}, {2}}),
+	)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), tag.RowsAffected())
+	require.Equal(t, int64(2), rowsAffected)
 
 	// Prior to the bug fix which prompted this test, the below schema change
 	// would hang until the leases expire. Let's make sure it finishes "soon".
@@ -615,5 +549,5 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	case <-time.After(testutils.DefaultSucceedsSoonDuration):
 		t.Fatal("alter did not complete")
 	}
-	require.NoError(t, conn.Close())
+	require.NoError(t, conn.Close(ctx))
 }

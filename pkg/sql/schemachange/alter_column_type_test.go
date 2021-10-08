@@ -38,7 +38,7 @@ func TestColumnConversions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	columnType := func(typStr string) *types.T {
-		t, err := parser.ParseType(typStr)
+		t, err := parser.GetTypeFromValidSQLSyntax(typStr)
 		if err != nil {
 			panic(err)
 		}

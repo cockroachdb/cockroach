@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "exec",
+    srcs = [
+        "factory.go",
+        ":gen-factory",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies required in the auto-generated code.
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/inverted",
+        "//pkg/sql/opt",  # keep
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/optional",
+    ],
+)
+
+# Define a file group for all the factory definitions.
+rules = filegroup(
+    name = "defs",
+    srcs = ["factory.opt"],
+    visibility = ["//visibility:public"],
+)
+
+# Define the generator for the expression tree creation and normalization
+# functions.
+genrule(
+    name = "gen-factory",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        ":defs",
+    ],
+    outs = ["factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execfactory $(locations :defs)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

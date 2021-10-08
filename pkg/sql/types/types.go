@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -525,6 +526,46 @@ var (
 	DecimalArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Decimal, Oid: oid.T__numeric, Locale: &emptyLocale}}
 
+	// BoolArray is the type of an array value having Bool-typed elements.
+	BoolArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Bool, Oid: oid.T__bool, Locale: &emptyLocale}}
+
+	// UUIDArray is the type of an array value having UUID-typed elements.
+	UUIDArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Uuid, Oid: oid.T__uuid, Locale: &emptyLocale}}
+
+	// TimeArray is the type of an array value having Date-typed elements.
+	DateArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Date, Oid: oid.T__date, Locale: &emptyLocale}}
+
+	// TimeArray is the type of an array value having Time-typed elements.
+	TimeArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Time, Oid: oid.T__time, Locale: &emptyLocale}}
+
+	// TimeTZArray is the type of an array value having TimeTZ-typed elements.
+	TimeTZArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: TimeTZ, Oid: oid.T__timetz, Locale: &emptyLocale}}
+
+	// TimestampArray is the type of an array value having Timestamp-typed elements.
+	TimestampArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Timestamp, Oid: oid.T__timestamp, Locale: &emptyLocale}}
+
+	// TimestampTZArray is the type of an array value having TimestampTZ-typed elements.
+	TimestampTZArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: TimestampTZ, Oid: oid.T__timestamptz, Locale: &emptyLocale}}
+
+	// IntervalArray is the type of an array value having Interval-typed elements.
+	IntervalArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Interval, Oid: oid.T__interval, Locale: &emptyLocale}}
+
+	// INetArray is the type of an array value having INet-typed elements.
+	INetArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: INet, Oid: oid.T__inet, Locale: &emptyLocale}}
+
+	// VarBitArray is the type of an array value having VarBit-typed elements.
+	VarBitArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
+
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
@@ -1016,9 +1057,14 @@ func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
+	// Do not make an array of type unknown[]. Follow Postgres' behavior and
+	// convert this to type string[].
+	if typ.Family() == UnknownFamily {
+		typ = String
+	}
 	arr := &T{InternalType: InternalType{
 		Family:        ArrayFamily,
-		Oid:           calcArrayOid(typ),
+		Oid:           CalcArrayOid(typ),
 		ArrayContents: typ,
 		Locale:        &emptyLocale,
 	}}
@@ -1150,7 +1196,7 @@ func (t *T) TypeModifier() int32 {
 	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
-		case StringFamily:
+		case StringFamily, CollatedStringFamily:
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
 			typeModifier = width + 4
@@ -1219,8 +1265,14 @@ func RemapUserDefinedTypeOIDs(t *T, newOID, newArrayOID oid.Oid) {
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
+	return IsOIDUserDefinedType(t.Oid())
+}
+
+// IsOIDUserDefinedType returns whether or not o corresponds to a user
+// defined type.
+func IsOIDUserDefinedType(o oid.Oid) bool {
 	// Types with OIDs larger than the predefined max are user defined.
-	return t.Oid() > oidext.CockroachPredefinedOIDMax
+	return o > oidext.CockroachPredefinedOIDMax
 }
 
 var familyNames = map[Family]string{
@@ -1332,8 +1384,7 @@ func (t *T) Name() string {
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
 	case TupleFamily:
-		// Tuple types are currently anonymous, with no name.
-		return ""
+		return t.SQLStandardName()
 
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
@@ -1501,6 +1552,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "regproc"
 		case oid.T_regprocedure:
 			return "regprocedure"
+		case oid.T_regrole:
+			return "regrole"
 		case oid.T_regtype:
 			return "regtype"
 		default:
@@ -1585,6 +1638,10 @@ func (t *T) InformationSchemaName() string {
 	// This is the same as SQLStandardName, except for the case of arrays.
 	if t.Family() == ArrayFamily {
 		return "ARRAY"
+	}
+	// TypeMeta attributes are populated only when it is user defined type.
+	if t.TypeMeta.Name != nil {
+		return "USER-DEFINED"
 	}
 	return t.SQLStandardName()
 }
@@ -1712,8 +1769,12 @@ func (t *T) Equivalent(other *T) bool {
 
 	switch t.Family() {
 	case CollatedStringFamily:
-		if t.Locale() != "" && other.Locale() != "" && t.Locale() != other.Locale() {
-			return false
+		// CockroachDB differs from Postgres by comparing collation names
+		// case-insensitively and equating hyphens/underscores.
+		if t.Locale() != "" && other.Locale() != "" {
+			if !lex.LocaleNamesAreEqual(t.Locale(), other.Locale()) {
+				return false
+			}
 		}
 
 	case TupleFamily:
@@ -1752,9 +1813,9 @@ func (t *T) Equivalent(other *T) bool {
 }
 
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
-// * `t` is Unknown (i.e., NULL) and `other` is not a tuple,
+// * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
-func (t *T) EquivalentOrNull(other *T) bool {
+func (t *T) EquivalentOrNull(other *T, allowNullTupleEquivalence bool) bool {
 	// Check normal equivalency first, then check for Null
 	normalEquivalency := t.Equivalent(other)
 	if normalEquivalency {
@@ -1763,7 +1824,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 
 	switch t.Family() {
 	case UnknownFamily:
-		return other.Family() != TupleFamily
+		return allowNullTupleEquivalence || other.Family() != TupleFamily
 
 	case TupleFamily:
 		if other.Family() != TupleFamily {
@@ -1779,7 +1840,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 			return false
 		}
 		for i := range t.TupleContents() {
-			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i], allowNullTupleEquivalence) {
 				return false
 			}
 		}
@@ -2058,7 +2119,7 @@ func (t *T) upgradeType() error {
 				return err
 			}
 			t.InternalType.ArrayContents = &arrayContents
-			t.InternalType.Oid = calcArrayOid(t.ArrayContents())
+			t.InternalType.Oid = CalcArrayOid(t.ArrayContents())
 		}
 
 		// Marshaling/unmarshaling nested arrays is not yet supported.
@@ -2131,6 +2192,19 @@ func (t *T) Marshal() (data []byte, err error) {
 		return nil, err
 	}
 	return protoutil.Marshal(&temp.InternalType)
+}
+
+// MarshalToSizedBuffer is like Mashal, except that it deserializes to
+// an existing byte slice with exactly enough remaining space for
+// Size().
+//
+// Marshal is part of the protoutil.Message interface.
+func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalToSizedBuffer(data)
 }
 
 // MarshalTo behaves like Marshal, except that it deserializes to an existing
@@ -2310,6 +2384,16 @@ func (t *T) IsAmbiguous() bool {
 	return false
 }
 
+// IsNumeric returns true iff this type is an integer, float, or decimal.
+func (t *T) IsNumeric() bool {
+	switch t.Family() {
+	case IntFamily, FloatFamily, DecimalFamily:
+		return true
+	default:
+		return false
+	}
+}
+
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
 // enum physical representations that matches the input byte slice.
 func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
@@ -2323,9 +2407,11 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		}
 	}
 	err := errors.Newf(
-		"could not find %v in enum representation %s",
+		"could not find %v in enum %q representation %s %s",
 		phys,
+		t.TypeMeta.Name.FQName(),
 		t.TypeMeta.EnumData.debugString(),
+		debug.Stack(),
 	)
 	return 0, err
 }
@@ -2366,8 +2452,6 @@ func IsStringType(t *T) bool {
 // the issue number should be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	switch t.Family() {
-	case JsonFamily:
-		return false, 23468
 	default:
 		return true, 0
 	}
@@ -2472,6 +2556,12 @@ func (t *T) stringTypeSQL() string {
 	return typName
 }
 
+// IsHydrated returns true if this is a user-defined type and the TypeMeta
+// is hydrated.
+func (t *T) IsHydrated() bool {
+	return t.UserDefined() && t.TypeMeta != (UserDefinedTypeMetadata{})
+}
+
 var typNameLiterals map[string]*T
 
 func init() {
@@ -2550,9 +2640,10 @@ var unreservedTypeTokens = map[string]*T{
 	"oidvector":  OidVector,
 	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 	"regclass":     RegClass,
+	"regnamespace": RegNamespace,
 	"regproc":      RegProc,
 	"regprocedure": RegProcedure,
-	"regnamespace": RegNamespace,
+	"regrole":      RegRole,
 	"regtype":      RegType,
 
 	"serial2":     &Serial2Type,
@@ -2573,6 +2664,7 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"box":           21286,
 	"cidr":          18846,
 	"circle":        21286,
+	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
 	"macaddr":       -1,

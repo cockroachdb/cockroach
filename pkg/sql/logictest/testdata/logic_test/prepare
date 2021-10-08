@@ -1019,7 +1019,7 @@ ap35145
 statement ok
 DROP DATABASE d35145
 
-query error database "d35145" does not exist
+query error relation "pg_settings" does not exist
 EXECUTE display_appname
 
 statement ok
@@ -1035,7 +1035,7 @@ ap35145
 statement ok
 CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
 
-query error database "d35145_2" does not exist
+query error relation "pg_settings" does not exist
 EXECUTE display_appname
 
 # Check what happens when the stmt is executed over no db whatsoever.
@@ -1156,11 +1156,11 @@ PREPARE e AS OPT PLAN '
     )
     [
       (Options "opt,verbose")
-      (ColList [ (NewColumn "text" "string") ])
+      (ColList [ (NewColumn "info" "string") ])
       (Props (MinPhysProps))
     ]
   )
-  (Presentation "text")
+  (Presentation "info")
   (NoOrdering)
 )'
 
@@ -1171,17 +1171,18 @@ select
  ├── columns: k:1 str:2
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1050.04
+ ├── cost: 1074.45
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── scan t2
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1040.02
+ │    ├── cost: 1064.42
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
  └── filters
       └── (k:1 % 2) = 1 [outer=(1), immutable]
 
@@ -1348,13 +1349,16 @@ DROP TABLE t3
 
 # Ensure that changes to used types in tables invalidate prepared statements.
 statement ok
-SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'hi');
 CREATE TABLE greeting_table (x greeting NOT NULL, y INT, INDEX (x, y))
 
 # This query plan emits constrained lookups based on each enum value.
 statement ok
 PREPARE enum_query AS SELECT x, y FROM greeting_table WHERE y = 2
+
+# Create prepared statement to drop type.
+statement ok
+PREPARE enum_drop AS DROP TYPE greeting
 
 # Now alter the enum to have a new value.
 statement ok
@@ -1369,3 +1373,21 @@ query TI
 EXECUTE enum_query
 ----
 howdy 2
+
+# drop table
+statement ok
+DROP TABLE greeting_table
+
+# drop the type using prepared statement.
+statement ok
+EXECUTE enum_drop
+
+# Regression test for #64765.
+statement ok
+CREATE TABLE t64765 (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
+
+statement ok
+EXECUTE q64765(1, 1)

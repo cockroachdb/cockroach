@@ -12,7 +12,7 @@ SELECT crdb_internal.node_executable_version()
 
 user testuser
 
-statement error only users with the admin role are allowed to SET CLUSTER SETTING
+statement error only users with the admin role are allowed to set cluster setting 'version'
 SET CLUSTER SETTING version = '2.0'
 
 user root
@@ -43,7 +43,7 @@ SHOW CLUSTER SETTING version
 ----
 1.0
 
-# Can skip versions on unstable patch upgrades.
+# Can skip versions on unstable patch upgrades. The internal version here (500) must be even.
 statement ok
 SET CLUSTER SETTING version = '1.0-500'
 
@@ -72,5 +72,5 @@ SET CLUSTER SETTING version = '1.1'
 statement error cannot upgrade to 1.1-999: node running 1.1
 SET CLUSTER SETTING version = '1.1-999'
 
-statement error cannot RESET this cluster setting
+statement error cannot RESET cluster version setting
 RESET CLUSTER SETTING version

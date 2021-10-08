@@ -1,0 +1,81 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = [
+        "constants.go",
+        "crdb_test_off.go",
+        "crdb_test_on.go",  # keep
+        "every_n.go",
+        "fast_int_map.go",
+        "fast_int_set.go",  # keep
+        "fast_int_set_large.go",
+        "fast_int_set_small.go",
+        "fast_int_set_str.go",
+        "fast_int_set_testonly.go",
+        "hash.go",
+        "nocopy.go",
+        "pluralize.go",
+        "race_off.go",
+        "race_on.go",
+        "reflect.go",
+        "slices.go",
+        "smalltrace.go",
+        "strings.go",
+        "testaddr_default.go",
+        "testaddr_random.go",
+        "topk.go",
+        "unresolved_addr.go",
+    ],
+    embed = [":util_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/netutil/addr",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//container/intsets",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    size = "small",
+    srcs = [
+        "every_n_test.go",
+        "fast_int_map_test.go",
+        "fast_int_set_test.go",
+        "slices_test.go",
+        "smalltrace_test.go",
+        "strings_test.go",
+        "topk_test.go",
+        "unresolved_addr_test.go",
+    ],
+    embed = [":util"],
+    deps = [
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "util_proto",
+    srcs = ["unresolved_addr.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "util_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util",
+    proto = ":util_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)

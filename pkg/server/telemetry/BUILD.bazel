@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "telemetry",
+    srcs = [
+        "doc.go",
+        "features.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/telemetry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "telemetry_test",
+    size = "small",
+    srcs = ["features_test.go"],
+    deps = [
+        ":telemetry",
+        "@com_github_stretchr_testify//require",
+    ],
+)

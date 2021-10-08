@@ -32,7 +32,7 @@ func TestS2GeographyIndexBasic(t *testing.T) {
 
 	ctx := context.Background()
 	var index GeographyIndex
-	shapes := make(map[string]*geo.Geography)
+	shapes := make(map[string]geo.Geography)
 	datadriven.RunTest(t, "testdata/s2_geography", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":

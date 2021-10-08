@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -26,8 +27,11 @@ func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rocksDB := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-	defer rocksDB.Close()
+	pebble, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pebble.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new
 	// MultiIterator, which is fully iterated (using either NextKey or Next) and
@@ -78,9 +82,9 @@ func TestMultiIterator(t *testing.T) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
 		t.Run(name, func(t *testing.T) {
-			var iters []SimpleIterator
+			var iters []SimpleMVCCIterator
 			for _, input := range test.inputs {
-				batch := rocksDB.NewBatch()
+				batch := pebble.NewBatch()
 				defer batch.Close()
 				for i := 0; ; {
 					if i == len(input) {
@@ -99,11 +103,17 @@ func TestMultiIterator(t *testing.T) {
 						v = []byte{input[i+1]}
 					}
 					i += 2
-					if err := batch.Put(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
-						t.Fatalf("%+v", err)
+					if ts.IsEmpty() {
+						if err := batch.PutUnversioned(k, v); err != nil {
+							t.Fatalf("%+v", err)
+						}
+					} else {
+						if err := batch.PutMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+							t.Fatalf("%+v", err)
+						}
 					}
 				}
-				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
 				iters = append(iters, iter)
 			}
@@ -111,16 +121,16 @@ func TestMultiIterator(t *testing.T) {
 			subtests := []struct {
 				name     string
 				expected string
-				fn       func(SimpleIterator)
+				fn       func(SimpleMVCCIterator)
 			}{
-				{"NextKey", test.expectedNextKey, (SimpleIterator).NextKey},
-				{"Next", test.expectedNext, (SimpleIterator).Next},
+				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
+				{"Next", test.expectedNext, (SimpleMVCCIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
+					for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
 						ok, err := it.Valid()
 						if err != nil {
 							t.Fatalf("unexpected error: %+v", err)
@@ -129,7 +139,7 @@ func TestMultiIterator(t *testing.T) {
 							break
 						}
 						output.Write(it.UnsafeKey().Key)
-						if it.UnsafeKey().Timestamp == (hlc.Timestamp{}) {
+						if it.UnsafeKey().Timestamp.IsEmpty() {
 							output.WriteRune('M')
 						} else {
 							output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))

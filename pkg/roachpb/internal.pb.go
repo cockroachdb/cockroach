@@ -3,13 +3,15 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import encoding_binary "encoding/binary"
-
-import io "io"
+import (
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // InternalTimeSeriesData is a collection of data samples for some
 // measurable value, where each sample is taken over a uniform time
@@ -105,21 +107,21 @@ func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{}
 func (m *InternalTimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesData) ProtoMessage()    {}
 func (*InternalTimeSeriesData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_10ecd69bc61e348f, []int{0}
+	return fileDescriptor_e6bb08ea8edac125, []int{0}
 }
 func (m *InternalTimeSeriesData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *InternalTimeSeriesData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *InternalTimeSeriesData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InternalTimeSeriesData.Merge(dst, src)
+func (m *InternalTimeSeriesData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InternalTimeSeriesData.Merge(m, src)
 }
 func (m *InternalTimeSeriesData) XXX_Size() int {
 	return m.Size()
@@ -169,21 +171,21 @@ func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSamp
 func (m *InternalTimeSeriesSample) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesSample) ProtoMessage()    {}
 func (*InternalTimeSeriesSample) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_10ecd69bc61e348f, []int{1}
+	return fileDescriptor_e6bb08ea8edac125, []int{1}
 }
 func (m *InternalTimeSeriesSample) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *InternalTimeSeriesSample) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *InternalTimeSeriesSample) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InternalTimeSeriesSample.Merge(dst, src)
+func (m *InternalTimeSeriesSample) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InternalTimeSeriesSample.Merge(m, src)
 }
 func (m *InternalTimeSeriesSample) XXX_Size() int {
 	return m.Size()
@@ -198,10 +200,190 @@ func init() {
 	proto.RegisterType((*InternalTimeSeriesData)(nil), "cockroach.roachpb.InternalTimeSeriesData")
 	proto.RegisterType((*InternalTimeSeriesSample)(nil), "cockroach.roachpb.InternalTimeSeriesSample")
 }
+
+func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptor_e6bb08ea8edac125) }
+
+var fileDescriptor_e6bb08ea8edac125 = []byte{
+	// 413 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0x3f, 0x6f, 0x13, 0x31,
+	0x18, 0xc6, 0xef, 0xad, 0xf3, 0x0f, 0x57, 0x95, 0x82, 0x29, 0x91, 0x15, 0x21, 0xe7, 0xd4, 0xc9,
+	0x08, 0x29, 0x95, 0x98, 0x10, 0x63, 0xd4, 0x85, 0x01, 0x86, 0xb4, 0x13, 0x4b, 0x64, 0x0e, 0xa7,
+	0x58, 0xe4, 0xec, 0x93, 0xed, 0xa0, 0x7e, 0x0c, 0x66, 0xa6, 0x7e, 0x03, 0x56, 0x3e, 0x42, 0xc6,
+	0x8e, 0x9d, 0x10, 0x5c, 0x16, 0x3e, 0x06, 0x3a, 0x9f, 0xef, 0x0e, 0x14, 0x75, 0xb3, 0x7f, 0xcf,
+	0xf3, 0xbc, 0xf2, 0xe3, 0x17, 0x4f, 0xac, 0x11, 0xd9, 0xa7, 0xe2, 0xc3, 0xb9, 0xd2, 0x5e, 0x5a,
+	0x2d, 0x36, 0xf3, 0xc2, 0x1a, 0x6f, 0xc8, 0xe3, 0xcc, 0x64, 0x9f, 0x83, 0x36, 0x8f, 0x8e, 0xe9,
+	0xe9, 0xb5, 0xb9, 0x36, 0x41, 0x3d, 0xaf, 0x4e, 0xb5, 0xf1, 0xec, 0x3b, 0xc2, 0x93, 0x37, 0x31,
+	0x7b, 0xa5, 0x72, 0x79, 0x29, 0xad, 0x92, 0xee, 0x42, 0x78, 0x41, 0x5e, 0xe1, 0xa7, 0xce, 0x0b,
+	0xeb, 0x57, 0x5e, 0xe5, 0xd2, 0x79, 0x91, 0x17, 0x2b, 0x2d, 0xb4, 0x71, 0x14, 0x52, 0xe0, 0x68,
+	0xd1, 0xdb, 0xfd, 0x9c, 0x25, 0xcb, 0x27, 0xc1, 0x72, 0xd5, 0x38, 0xde, 0x55, 0x86, 0x90, 0x14,
+	0x79, 0xb1, 0x91, 0xab, 0x8f, 0x5b, 0x2b, 0xbc, 0x32, 0x3a, 0x26, 0x8f, 0xfe, 0x4b, 0x06, 0xcb,
+	0x45, 0x74, 0xd4, 0xc9, 0xb7, 0x78, 0x58, 0x63, 0x47, 0x51, 0x8a, 0xf8, 0xf1, 0xcb, 0x17, 0xf3,
+	0x83, 0x26, 0xf3, 0xc3, 0xf7, 0x5e, 0x86, 0xcc, 0x62, 0x50, 0x0d, 0xa6, 0xb0, 0x6c, 0x66, 0x90,
+	0x29, 0x1e, 0x98, 0xf5, 0xda, 0x49, 0x4f, 0x7b, 0x29, 0xe2, 0xfd, 0xc5, 0xd1, 0x18, 0x96, 0x91,
+	0x90, 0x09, 0xee, 0x6d, 0x84, 0xf3, 0xb4, 0x9f, 0x22, 0x0e, 0x41, 0x09, 0x77, 0x42, 0x71, 0x3f,
+	0x33, 0x5b, 0xed, 0xe9, 0x20, 0x45, 0xfc, 0x24, 0x08, 0x35, 0x20, 0xa7, 0x18, 0xb9, 0x6d, 0x4e,
+	0x87, 0x6d, 0xa0, 0xba, 0x56, 0x34, 0x17, 0x37, 0x74, 0xd4, 0xd1, 0x5c, 0xdc, 0x04, 0xaa, 0x34,
+	0x7d, 0xf4, 0x0f, 0x55, 0xba, 0x9a, 0xbd, 0x56, 0xd6, 0x79, 0x8a, 0x5b, 0x5e, 0x03, 0xc2, 0xf0,
+	0xe8, 0x8b, 0xb0, 0x4a, 0xe8, 0x4c, 0xd2, 0xe3, 0x56, 0x6c, 0xd9, 0xeb, 0xd1, 0x8f, 0xdb, 0x19,
+	0xfc, 0xb9, 0x9d, 0xc1, 0xd9, 0x37, 0xc0, 0xf4, 0xa1, 0x1f, 0x20, 0xcf, 0xda, 0xc2, 0xd5, 0x92,
+	0xfa, 0xf1, 0xab, 0xbb, 0xca, 0xb1, 0x00, 0x70, 0x88, 0x52, 0xa8, 0x30, 0xed, 0x2a, 0x03, 0x3f,
+	0x89, 0x4a, 0x2c, 0x3d, 0x6e, 0xea, 0x01, 0x8f, 0xd5, 0xc6, 0x4d, 0xb5, 0x9a, 0x28, 0xdd, 0x3d,
+	0x6e, 0xf1, 0x7c, 0xf7, 0x9b, 0x25, 0xbb, 0x92, 0xc1, 0x5d, 0xc9, 0xe0, 0xbe, 0x64, 0xf0, 0xab,
+	0x64, 0xf0, 0x75, 0xcf, 0x92, 0xbb, 0x3d, 0x4b, 0xee, 0xf7, 0x2c, 0x79, 0x3f, 0x8c, 0x5b, 0xfc,
+	0x1b, 0x00, 0x00, 0xff, 0xff, 0x44, 0xed, 0x1f, 0x34, 0xbb, 0x02, 0x00, 0x00,
+}
+
+func (this *InternalTimeSeriesData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*InternalTimeSeriesData)
+	if !ok {
+		that2, ok := that.(InternalTimeSeriesData)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.StartTimestampNanos != that1.StartTimestampNanos {
+		return false
+	}
+	if this.SampleDurationNanos != that1.SampleDurationNanos {
+		return false
+	}
+	if len(this.Samples) != len(that1.Samples) {
+		return false
+	}
+	for i := range this.Samples {
+		if !this.Samples[i].Equal(&that1.Samples[i]) {
+			return false
+		}
+	}
+	if len(this.Offset) != len(that1.Offset) {
+		return false
+	}
+	for i := range this.Offset {
+		if this.Offset[i] != that1.Offset[i] {
+			return false
+		}
+	}
+	if len(this.Last) != len(that1.Last) {
+		return false
+	}
+	for i := range this.Last {
+		if this.Last[i] != that1.Last[i] {
+			return false
+		}
+	}
+	if len(this.Count) != len(that1.Count) {
+		return false
+	}
+	for i := range this.Count {
+		if this.Count[i] != that1.Count[i] {
+			return false
+		}
+	}
+	if len(this.Sum) != len(that1.Sum) {
+		return false
+	}
+	for i := range this.Sum {
+		if this.Sum[i] != that1.Sum[i] {
+			return false
+		}
+	}
+	if len(this.Max) != len(that1.Max) {
+		return false
+	}
+	for i := range this.Max {
+		if this.Max[i] != that1.Max[i] {
+			return false
+		}
+	}
+	if len(this.Min) != len(that1.Min) {
+		return false
+	}
+	for i := range this.Min {
+		if this.Min[i] != that1.Min[i] {
+			return false
+		}
+	}
+	if len(this.First) != len(that1.First) {
+		return false
+	}
+	for i := range this.First {
+		if this.First[i] != that1.First[i] {
+			return false
+		}
+	}
+	if len(this.Variance) != len(that1.Variance) {
+		return false
+	}
+	for i := range this.Variance {
+		if this.Variance[i] != that1.Variance[i] {
+			return false
+		}
+	}
+	return true
+}
+func (this *InternalTimeSeriesSample) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*InternalTimeSeriesSample)
+	if !ok {
+		that2, ok := that.(InternalTimeSeriesSample)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Offset != that1.Offset {
+		return false
+	}
+	if this.Sum != that1.Sum {
+		return false
+	}
+	if this.Count != that1.Count {
+		return false
+	}
+	if this.Max != nil && that1.Max != nil {
+		if *this.Max != *that1.Max {
+			return false
+		}
+	} else if this.Max != nil {
+		return false
+	} else if that1.Max != nil {
+		return false
+	}
+	if this.Min != nil && that1.Min != nil {
+		if *this.Min != *that1.Min {
+			return false
+		}
+	} else if this.Min != nil {
+		return false
+	} else if that1.Min != nil {
+		return false
+	}
+	return true
+}
 func (m *InternalTimeSeriesData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -209,130 +391,139 @@ func (m *InternalTimeSeriesData) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *InternalTimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *InternalTimeSeriesData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintInternal(dAtA, i, uint64(m.StartTimestampNanos))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintInternal(dAtA, i, uint64(m.SampleDurationNanos))
-	if len(m.Samples) > 0 {
-		for _, msg := range m.Samples {
-			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintInternal(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
+	if len(m.Variance) > 0 {
+		for iNdEx := len(m.Variance) - 1; iNdEx >= 0; iNdEx-- {
+			f1 := math.Float64bits(float64(m.Variance[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f1))
 		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.Variance)*8))
+		i--
+		dAtA[i] = 0x5a
+	}
+	if len(m.First) > 0 {
+		for iNdEx := len(m.First) - 1; iNdEx >= 0; iNdEx-- {
+			f2 := math.Float64bits(float64(m.First[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f2))
+		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.First)*8))
+		i--
+		dAtA[i] = 0x52
+	}
+	if len(m.Min) > 0 {
+		for iNdEx := len(m.Min) - 1; iNdEx >= 0; iNdEx-- {
+			f3 := math.Float64bits(float64(m.Min[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f3))
+		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.Min)*8))
+		i--
+		dAtA[i] = 0x4a
+	}
+	if len(m.Max) > 0 {
+		for iNdEx := len(m.Max) - 1; iNdEx >= 0; iNdEx-- {
+			f4 := math.Float64bits(float64(m.Max[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f4))
+		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.Max)*8))
+		i--
+		dAtA[i] = 0x42
+	}
+	if len(m.Sum) > 0 {
+		for iNdEx := len(m.Sum) - 1; iNdEx >= 0; iNdEx-- {
+			f5 := math.Float64bits(float64(m.Sum[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f5))
+		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.Sum)*8))
+		i--
+		dAtA[i] = 0x3a
+	}
+	if len(m.Count) > 0 {
+		dAtA7 := make([]byte, len(m.Count)*10)
+		var j6 int
+		for _, num := range m.Count {
+			for num >= 1<<7 {
+				dAtA7[j6] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j6++
+			}
+			dAtA7[j6] = uint8(num)
+			j6++
+		}
+		i -= j6
+		copy(dAtA[i:], dAtA7[:j6])
+		i = encodeVarintInternal(dAtA, i, uint64(j6))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.Last) > 0 {
+		for iNdEx := len(m.Last) - 1; iNdEx >= 0; iNdEx-- {
+			f8 := math.Float64bits(float64(m.Last[iNdEx]))
+			i -= 8
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f8))
+		}
+		i = encodeVarintInternal(dAtA, i, uint64(len(m.Last)*8))
+		i--
+		dAtA[i] = 0x2a
 	}
 	if len(m.Offset) > 0 {
-		dAtA2 := make([]byte, len(m.Offset)*10)
-		var j1 int
+		dAtA10 := make([]byte, len(m.Offset)*10)
+		var j9 int
 		for _, num1 := range m.Offset {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA10[j9] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j1++
+				j9++
 			}
-			dAtA2[j1] = uint8(num)
-			j1++
+			dAtA10[j9] = uint8(num)
+			j9++
 		}
+		i -= j9
+		copy(dAtA[i:], dAtA10[:j9])
+		i = encodeVarintInternal(dAtA, i, uint64(j9))
+		i--
 		dAtA[i] = 0x22
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(j1))
-		i += copy(dAtA[i:], dAtA2[:j1])
 	}
-	if len(m.Last) > 0 {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.Last)*8))
-		for _, num := range m.Last {
-			f3 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f3))
-			i += 8
-		}
-	}
-	if len(m.Count) > 0 {
-		dAtA5 := make([]byte, len(m.Count)*10)
-		var j4 int
-		for _, num := range m.Count {
-			for num >= 1<<7 {
-				dAtA5[j4] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j4++
+	if len(m.Samples) > 0 {
+		for iNdEx := len(m.Samples) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Samples[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintInternal(dAtA, i, uint64(size))
 			}
-			dAtA5[j4] = uint8(num)
-			j4++
-		}
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(j4))
-		i += copy(dAtA[i:], dAtA5[:j4])
-	}
-	if len(m.Sum) > 0 {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.Sum)*8))
-		for _, num := range m.Sum {
-			f6 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f6))
-			i += 8
+			i--
+			dAtA[i] = 0x1a
 		}
 	}
-	if len(m.Max) > 0 {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.Max)*8))
-		for _, num := range m.Max {
-			f7 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f7))
-			i += 8
-		}
-	}
-	if len(m.Min) > 0 {
-		dAtA[i] = 0x4a
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.Min)*8))
-		for _, num := range m.Min {
-			f8 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f8))
-			i += 8
-		}
-	}
-	if len(m.First) > 0 {
-		dAtA[i] = 0x52
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.First)*8))
-		for _, num := range m.First {
-			f9 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f9))
-			i += 8
-		}
-	}
-	if len(m.Variance) > 0 {
-		dAtA[i] = 0x5a
-		i++
-		i = encodeVarintInternal(dAtA, i, uint64(len(m.Variance)*8))
-		for _, num := range m.Variance {
-			f10 := math.Float64bits(float64(num))
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f10))
-			i += 8
-		}
-	}
-	return i, nil
+	i = encodeVarintInternal(dAtA, i, uint64(m.SampleDurationNanos))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintInternal(dAtA, i, uint64(m.StartTimestampNanos))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *InternalTimeSeriesSample) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -340,43 +531,50 @@ func (m *InternalTimeSeriesSample) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *InternalTimeSeriesSample) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *InternalTimeSeriesSample) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintInternal(dAtA, i, uint64(m.Offset))
-	dAtA[i] = 0x30
-	i++
-	i = encodeVarintInternal(dAtA, i, uint64(m.Count))
-	dAtA[i] = 0x39
-	i++
-	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Sum))))
-	i += 8
-	if m.Max != nil {
-		dAtA[i] = 0x41
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Max))))
-		i += 8
-	}
 	if m.Min != nil {
-		dAtA[i] = 0x49
-		i++
+		i -= 8
 		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Min))))
-		i += 8
+		i--
+		dAtA[i] = 0x49
 	}
-	return i, nil
+	if m.Max != nil {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(*m.Max))))
+		i--
+		dAtA[i] = 0x41
+	}
+	i -= 8
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Sum))))
+	i--
+	dAtA[i] = 0x39
+	i = encodeVarintInternal(dAtA, i, uint64(m.Count))
+	i--
+	dAtA[i] = 0x30
+	i = encodeVarintInternal(dAtA, i, uint64(m.Offset))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintInternal(dAtA []byte, offset int, v uint64) int {
+	offset -= sovInternal(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTimeSeriesData {
 	this := &InternalTimeSeriesData{}
@@ -388,7 +586,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 	if r.Intn(2) == 0 {
 		this.SampleDurationNanos *= -1
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v1 := r.Intn(5)
 		this.Samples = make([]InternalTimeSeriesSample, v1)
 		for i := 0; i < v1; i++ {
@@ -396,7 +594,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			this.Samples[i] = *v2
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v3 := r.Intn(10)
 		this.Offset = make([]int32, v3)
 		for i := 0; i < v3; i++ {
@@ -406,7 +604,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v4 := r.Intn(10)
 		this.Last = make([]float64, v4)
 		for i := 0; i < v4; i++ {
@@ -416,14 +614,14 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v5 := r.Intn(10)
 		this.Count = make([]uint32, v5)
 		for i := 0; i < v5; i++ {
 			this.Count[i] = uint32(r.Uint32())
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v6 := r.Intn(10)
 		this.Sum = make([]float64, v6)
 		for i := 0; i < v6; i++ {
@@ -433,7 +631,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v7 := r.Intn(10)
 		this.Max = make([]float64, v7)
 		for i := 0; i < v7; i++ {
@@ -443,7 +641,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v8 := r.Intn(10)
 		this.Min = make([]float64, v8)
 		for i := 0; i < v8; i++ {
@@ -453,7 +651,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v9 := r.Intn(10)
 		this.First = make([]float64, v9)
 		for i := 0; i < v9; i++ {
@@ -463,7 +661,7 @@ func NewPopulatedInternalTimeSeriesData(r randyInternal, easy bool) *InternalTim
 			}
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v10 := r.Intn(10)
 		this.Variance = make([]float64, v10)
 		for i := 0; i < v10; i++ {
@@ -489,14 +687,14 @@ func NewPopulatedInternalTimeSeriesSample(r randyInternal, easy bool) *InternalT
 	if r.Intn(2) == 0 {
 		this.Sum *= -1
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v11 := float64(r.Float64())
 		if r.Intn(2) == 0 {
 			v11 *= -1
 		}
 		this.Max = &v11
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v12 := float64(r.Float64())
 		if r.Intn(2) == 0 {
 			v12 *= -1
@@ -648,14 +846,7 @@ func (m *InternalTimeSeriesSample) Size() (n int) {
 }
 
 func sovInternal(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozInternal(x uint64) (n int) {
 	return sovInternal(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -675,7 +866,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -703,7 +894,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartTimestampNanos |= (int64(b) & 0x7F) << shift
+				m.StartTimestampNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -722,7 +913,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SampleDurationNanos |= (int64(b) & 0x7F) << shift
+				m.SampleDurationNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -741,7 +932,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -750,6 +941,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthInternal
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -770,7 +964,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (int32(b) & 0x7F) << shift
+					v |= int32(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -787,7 +981,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -796,12 +990,15 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
 				var elementCount int
 				var count int
-				for _, integer := range dAtA {
+				for _, integer := range dAtA[iNdEx:postIndex] {
 					if integer < 128 {
 						count++
 					}
@@ -821,7 +1018,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (int32(b) & 0x7F) << shift
+						v |= int32(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -852,7 +1049,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -861,6 +1058,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -894,7 +1094,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (uint32(b) & 0x7F) << shift
+					v |= uint32(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -911,7 +1111,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -920,12 +1120,15 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
 				var elementCount int
 				var count int
-				for _, integer := range dAtA {
+				for _, integer := range dAtA[iNdEx:postIndex] {
 					if integer < 128 {
 						count++
 					}
@@ -945,7 +1148,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (uint32(b) & 0x7F) << shift
+						v |= uint32(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -976,7 +1179,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -985,6 +1188,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1027,7 +1233,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -1036,6 +1242,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1078,7 +1287,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -1087,6 +1296,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1129,7 +1341,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -1138,6 +1350,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1180,7 +1395,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -1189,6 +1404,9 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthInternal
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthInternal
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -1216,7 +1434,7 @@ func (m *InternalTimeSeriesData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
@@ -1246,7 +1464,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1274,7 +1492,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Offset |= (int32(b) & 0x7F) << shift
+				m.Offset |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1293,7 +1511,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Count |= (uint32(b) & 0x7F) << shift
+				m.Count |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1339,7 +1557,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
@@ -1357,6 +1575,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(dAtA []byte) error {
 func skipInternal(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1388,10 +1607,8 @@ func skipInternal(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1408,85 +1625,34 @@ func skipInternal(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthInternal
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowInternal
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipInternal(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupInternal
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthInternal
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthInternal = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowInternal   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthInternal        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowInternal          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupInternal = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptor_internal_10ecd69bc61e348f) }
-
-var fileDescriptor_internal_10ecd69bc61e348f = []byte{
-	// 408 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xb1, 0x8e, 0xd3, 0x30,
-	0x00, 0x86, 0xe3, 0x73, 0xd2, 0x1e, 0x3e, 0x9d, 0x54, 0xcc, 0x11, 0x59, 0x15, 0xf2, 0x45, 0x37,
-	0x19, 0x21, 0xe5, 0x24, 0x26, 0xc4, 0x18, 0xdd, 0xc2, 0x00, 0x43, 0xef, 0x26, 0x96, 0xca, 0x04,
-	0xf7, 0xb0, 0x68, 0xec, 0xc8, 0x76, 0x51, 0x1f, 0x83, 0x89, 0x99, 0x9d, 0x17, 0xe0, 0x11, 0x3a,
-	0x76, 0xec, 0x84, 0x20, 0x7d, 0x11, 0x14, 0xc7, 0x49, 0x41, 0xd5, 0x6d, 0xcd, 0xf7, 0xff, 0xbf,
-	0xe5, 0xaf, 0x46, 0xa9, 0xd1, 0xbc, 0xfc, 0x54, 0x7f, 0xb8, 0x96, 0xca, 0x09, 0xa3, 0xf8, 0x32,
-	0xaf, 0x8d, 0x76, 0x1a, 0x3f, 0x2e, 0x75, 0xf9, 0xd9, 0x67, 0x79, 0x68, 0x4c, 0x2f, 0xee, 0xf5,
-	0xbd, 0xf6, 0xe9, 0x75, 0xfb, 0xab, 0x2b, 0x5e, 0xfd, 0x80, 0x28, 0x7d, 0x13, 0xb6, 0x77, 0xb2,
-	0x12, 0xb7, 0xc2, 0x48, 0x61, 0x6f, 0xb8, 0xe3, 0xf8, 0x15, 0x7a, 0x6a, 0x1d, 0x37, 0x6e, 0xee,
-	0x64, 0x25, 0xac, 0xe3, 0x55, 0x3d, 0x57, 0x5c, 0x69, 0x4b, 0x40, 0x06, 0x18, 0x2c, 0xe2, 0xcd,
-	0xaf, 0xcb, 0x68, 0xf6, 0xc4, 0x57, 0xee, 0xfa, 0xc6, 0xbb, 0xb6, 0xe0, 0x97, 0xbc, 0xaa, 0x97,
-	0x62, 0xfe, 0x71, 0x65, 0xb8, 0x93, 0x5a, 0x85, 0xe5, 0xc9, 0x7f, 0x4b, 0x5f, 0xb9, 0x09, 0x8d,
-	0x6e, 0xf9, 0x16, 0x8d, 0x3b, 0x6c, 0x09, 0xcc, 0x20, 0x3b, 0x7b, 0xf9, 0x22, 0x3f, 0x32, 0xc9,
-	0x8f, 0xef, 0x7b, 0xeb, 0x37, 0xc5, 0xa8, 0x3d, 0x98, 0x80, 0x59, 0x7f, 0x06, 0x9e, 0xa2, 0x91,
-	0x5e, 0x2c, 0xac, 0x70, 0x24, 0xce, 0x20, 0x4b, 0x8a, 0x93, 0x09, 0x98, 0x05, 0x82, 0x53, 0x14,
-	0x2f, 0xb9, 0x75, 0x24, 0xc9, 0x20, 0x03, 0x3e, 0xf1, 0xdf, 0x98, 0xa0, 0xa4, 0xd4, 0x2b, 0xe5,
-	0xc8, 0x28, 0x83, 0xec, 0xdc, 0x07, 0x1d, 0xc0, 0x17, 0x08, 0xda, 0x55, 0x45, 0xc6, 0xc3, 0xa0,
-	0xfd, 0x6c, 0x69, 0xc5, 0xd7, 0xe4, 0xf4, 0x40, 0x2b, 0xbe, 0xf6, 0x54, 0x2a, 0xf2, 0xe8, 0x1f,
-	0x2a, 0x55, 0x7b, 0xf6, 0x42, 0x1a, 0xeb, 0x08, 0x1a, 0x78, 0x07, 0x30, 0x45, 0xa7, 0x5f, 0xb8,
-	0x91, 0x5c, 0x95, 0x82, 0x9c, 0x0d, 0xe1, 0xc0, 0x5e, 0xc7, 0x3f, 0xbf, 0x5f, 0x82, 0xab, 0x6f,
-	0x00, 0x91, 0x87, 0xec, 0xf1, 0xb3, 0x41, 0xb6, 0x7d, 0xa0, 0x24, 0xfc, 0xcd, 0xbd, 0xee, 0xf4,
-	0xa0, 0x05, 0xd8, 0x79, 0x08, 0x83, 0x58, 0xda, 0x8b, 0x01, 0x06, 0x42, 0xe2, 0xd5, 0x26, 0xbd,
-	0x1a, 0x60, 0x41, 0x6b, 0xd2, 0x6b, 0x75, 0x44, 0xaa, 0xee, 0x62, 0xc5, 0xf3, 0xcd, 0x1f, 0x1a,
-	0x6d, 0x1a, 0x0a, 0xb6, 0x0d, 0x05, 0xbb, 0x86, 0x82, 0xdf, 0x0d, 0x05, 0x5f, 0xf7, 0x34, 0xda,
-	0xee, 0x69, 0xb4, 0xdb, 0xd3, 0xe8, 0xfd, 0x38, 0xbc, 0xde, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff,
-	0x2b, 0x28, 0x34, 0x60, 0xb3, 0x02, 0x00, 0x00,
-}

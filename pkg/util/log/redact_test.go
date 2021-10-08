@@ -18,6 +18,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
@@ -31,10 +34,10 @@ const escapeMark = "?"
 // when redactable logs are enabled, and no mark indicator when they
 // are not.
 func TestRedactedLogOutput(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	defer capture()()
 
 	defer TestingSetRedactable(false)()
 
@@ -47,23 +50,38 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 	// Also verify that raw markers are preserved, when redactable
 	// markers are disabled.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	Errorf(context.Background(), "test2 %v end", startRedactable+"hello"+endRedactable)
-	if !contains("test2 "+startRedactable+"hello"+endRedactable+" end", t) {
-		t.Errorf("expected unquoted markers, got %q", contents())
+	if !contains("test2 ?hello? end", t) {
+		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
-	mainLog.newBuffers()
-	mainLog.redactableLogs.Set(true)
+	resetCaptured()
+	_ = TestingSetRedactable(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
-	if !contains(redactableIndicator+" test3", t) {
+	if !contains(redactableIndicator+" [-] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
 	if !contains("test3 "+startRedactable+"hello"+endRedactable+" end", t) {
 		t.Errorf("expected marked data, got %q", contents())
 	}
+
+	// Verify that safe parts of errors don't get enclosed in redaction markers
+	resetCaptured()
+	Errorf(context.Background(), "test3e %v end",
+		errors.AssertionFailedf("hello %v",
+			errors.Newf("error-in-error %s", "world")))
+	if !contains(redactableIndicator+" [-] 4  test3e", t) {
+		t.Errorf("expected marker indicator, got %q", contents())
+	}
+	if !contains("test3e hello error-in-error "+startRedactable+"world"+endRedactable+" end", t) {
+		t.Errorf("expected marked data, got %q", contents())
+	}
+
 	// When redactable logs are enabled, the markers are always quoted.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
 	Errorf(context.Background(), "test4 %v end", specialString)
 	if contains(specialString, t) {
@@ -101,36 +119,33 @@ func TestRedactTags(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		var buf strings.Builder
-		redactTags(tc.ctx, &buf)
-		assert.Equal(t, tc.expected, buf.String())
+		tags := logtags.FromContext(tc.ctx)
+		actual := renderTagsAsRedactable(tags)
+		assert.Equal(t, tc.expected, string(actual))
 	}
 }
 
 func TestRedactedDecodeFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testData := []struct {
-		redactableLogs bool
-		redactMode     EditSensitiveData
-		expRedactable  bool
-		expMessage     string
+		redactMode    EditSensitiveData
+		expRedactable bool
+		expMessage    string
 	}{
-		{false, WithMarkedSensitiveData, true, "‹marker: this is safe, stray marks ??, this is not safe›"},
-		{false, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ‹›, this is not safe"},
-		{false, WithoutSensitiveData, true, "‹×›"},
-		{true, WithMarkedSensitiveData, true, "marker: this is safe, stray marks ‹›, ‹this is not safe›"},
-		{true, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks , this is not safe"},
-		{true, WithoutSensitiveData, true, "marker: this is safe, stray marks ‹×›, ‹×›"},
+		{WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
+		{WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
+		{WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
+		{WithoutSensitiveDataNorMarkers, false, "marker: this is safe, stray marks ??, ×"},
 	}
 
 	for _, tc := range testData {
 		// Use a closure to force scope boundaries.
-		t.Run(fmt.Sprintf("%v/%v", tc.redactableLogs, tc.redactMode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", tc.redactMode), func(t *testing.T) {
 			// Initialize the logging system for this test.
 			// The log file go to a different directory in each sub-test.
 			s := ScopeWithoutShowLogs(t)
 			defer s.Close(t)
-			setFlags()
-			defer TestingSetRedactable(tc.redactableLogs)()
 
 			// Force file re-initialization.
 			s.Rotate(t)
@@ -139,7 +154,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := mainLog.mu.file.(*syncBuffer)
+			info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
 			if !ok {
 				t.Fatalf("buffer wasn't created")
 			}
@@ -150,16 +165,19 @@ func TestRedactedDecodeFile(t *testing.T) {
 
 			// Prepare reading the entries from the file.
 			infoName := filepath.Base(info.file.Name())
-			reader, err := GetLogReader(infoName, true /* restricted */)
+			reader, err := GetLogReader(infoName)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer reader.Close()
-			decoder := NewEntryDecoder(reader, tc.redactMode)
+			decoder, err := NewEntryDecoder(reader, tc.redactMode)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
-			var entry Entry
+			var entry logpb.Entry
 			for {
 				if err := decoder.Decode(&entry); err != nil {
 					if err == io.EOF {
@@ -169,7 +187,8 @@ func TestRedactedDecodeFile(t *testing.T) {
 				}
 				if strings.HasSuffix(entry.File, "redact_test.go") {
 					assert.Equal(t, tc.expRedactable, entry.Redactable)
-					assert.Equal(t, tc.expMessage, entry.Message)
+					msg := strings.TrimPrefix(strings.TrimSpace(entry.Message), "1  ")
+					assert.Equal(t, tc.expMessage, msg)
 					foundMessage = true
 				}
 			}
@@ -177,5 +196,20 @@ func TestRedactedDecodeFile(t *testing.T) {
 				t.Error("expected marked message in log, found none")
 			}
 		})
+	}
+}
+
+// TestDefaultRedactable checks that redaction markers are enabled by
+// default.
+func TestDefaultRedactable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	// Check redaction markers in the output.
+	defer capture()()
+	Infof(context.Background(), "safe %s", "unsafe")
+
+	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
+		t.Errorf("expected marked data, got %q", contents())
 	}
 }

@@ -1,0 +1,35 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "licenseccl",
+    srcs = ["license.go"],
+    embed = [":licenseccl_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+proto_library(
+    name = "licenseccl_proto",
+    srcs = ["license.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "licenseccl_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl",
+    proto = ":licenseccl_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/uuid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)

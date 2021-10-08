@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sampledataccl",
+    srcs = ["bankdata.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/testutils/serverutils",
+        "//pkg/workload",
+        "//pkg/workload/workloadsql",
+    ],
+)
+
+go_test(
+    name = "sampledataccl_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    embed = [":sampledataccl"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)

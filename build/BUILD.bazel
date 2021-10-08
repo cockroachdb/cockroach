@@ -1,0 +1,2 @@
+# Left empty intentionally, for bazel to treat this as a package and source
+# utility methods from it.

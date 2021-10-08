@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -25,18 +26,16 @@ func init() {
 }
 
 func declareKeysRequestLease(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As
 	// such, the request does not actually acquire latches over these spans
 	// (see concurrency.shouldAcquireLatches). However, we continue to
 	// declare the keys in order to appease SpanSet assertions under race.
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangePriorReadSummaryKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // RequestLease sets the range lease for this range. The command fails
@@ -53,24 +52,19 @@ func RequestLease(
 	// newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 
+	// NOTE: we use the range's current lease as prevLease instead of
+	// args.PrevLease so that we can detect lease requests that will
+	// inevitably fail early and reject them with a detailed
+	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  prevLease,
 		Requested: args.Lease,
 	}
 
-	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-	// no reason this wouldn't work in principle, but it seems inadvisable. In
-	// particular, learners can't become raft leaders, so we wouldn't be able to
-	// co-locate the leaseholder + raft leader, which is going to affect tail
-	// latencies. Additionally, as of the time of writing, learner replicas are
-	// only used for a short time in replica addition, so it's not worth working
-	// out the edge cases. If we decide to start using long-lived learners at some
-	// point, that math may change.
-	//
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := checkCanReceiveLease(&args.Lease, cArgs.EvalCtx); err != nil {
+	if err := roachpb.CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		rErr.Message = err.Error()
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
@@ -112,7 +106,7 @@ func RequestLease(
 		// same store.
 		//
 		// Note also that leasePostApply makes sure to update the timestamp cache in
-		// this case: even though the lease holder does not change, the the sequence
+		// this case: even though the lease holder does not change, the sequence
 		// number does and this triggers a low water mark bump.
 		//
 		// The bug prevented with this is unlikely to occur in practice
@@ -122,7 +116,7 @@ func RequestLease(
 		}
 
 	} else if prevLease.Type() == roachpb.LeaseExpiration {
-		effectiveStart.Backward(prevLease.Expiration.Next())
+		effectiveStart.BackwardWithTimestamp(prevLease.Expiration.Next())
 	}
 
 	if isExtension {
@@ -137,11 +131,27 @@ func RequestLease(
 			newLease.Expiration = &t
 			newLease.Expiration.Forward(prevLease.GetExpiration())
 		}
-	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
+	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.ToTimestamp().Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 	newLease.Start = effectiveStart
+
+	var priorReadSum *rspb.ReadSummary
+	if !prevLease.Equivalent(newLease) {
+		// If the new lease is not equivalent to the old lease (i.e. either the
+		// lease is changing hands or the leaseholder restarted), construct a
+		// read summary to instruct the new leaseholder on how to update its
+		// timestamp cache. Since we are not the leaseholder ourselves, we must
+		// pessimistically assume that prior leaseholders served reads all the
+		// way up to the start of the new lease.
+		//
+		// NB: this is equivalent to the leaseChangingHands condition in
+		// leasePostApplyLocked.
+		worstCaseSum := rspb.FromTimestamp(newLease.Start.ToTimestamp())
+		priorReadSum = &worstCaseSum
+	}
+
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, isExtension, false /* isTransfer */)
+		newLease, prevLease, priorReadSum, isExtension, false /* isTransfer */)
 }

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: kube-dns
+  name: cockroachdb-dns-external
+  namespace: kube-system
+  annotations: 
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  ports:
+  - name: dns
+    port: 53
+    protocol: TCP
+    targetPort: 53
+  selector:
+    k8s-app: kube-dns
+  type: LoadBalancer
+  loadBalancerSourceRanges: ["0.0.0.0/0"]

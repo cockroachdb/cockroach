@@ -1,0 +1,72 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+
+
+.crl-email-subscription
+  border-radius 5px
+  box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  display flex
+  flex-direction row
+  align-items center
+  justify-content flex-end
+  height 90px
+  background-image url("../../../assets/dashboard/email_signup_bg.png")
+  background-repeat round
+
+  &__text
+    font-size $font-size--large
+    font-family $font-family--base
+    line-height 1.6
+    letter-spacing -0.2px
+    color $colors--white
+    flex-grow 1
+    height inherit
+    border-radius inherit
+    padding-left $spacing-large
+    display flex
+    align-items center
+
+
+  &__controls
+    flex-grow 0
+    margin-left $spacing-medium
+    padding-top $spacing-small
+
+  &__close-button
+    flex-grow 0 
+    color $colors--white
+    align-self flex-start
+    margin $spacing-smaller $spacing-small $spacing-small $spacing-medium
+    cursor pointer
+    font-size $font-size--large
+    line-height $spacing-smaller
+    font-weight $font-weight--extra-bold
+
+
+  @media (max-width: 1055px) {
+    background-position center
+
+    .crl-email-subscription__text {
+      font-size $font-size--tall
+      font-family $font-family--base
+      line-height 1.6
+    }
+  }
+
+  @media (max-width: 940px) {
+    background-position left
+
+    .crl-email-subscription__text {
+      display none
+    }
+  }

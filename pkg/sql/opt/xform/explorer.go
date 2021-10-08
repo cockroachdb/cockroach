@@ -86,18 +86,22 @@ type explorer struct {
 	mem     *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
-	// used by the exploration rules. It wraps an unnamed xfunc.CustomFuncs,
-	// so it provides a clean interface for calling functions from both the xform
-	// and xfunc packages using the same prefix.
+	// used by the exploration rules. It wraps an unnamed norm.CustomFuncs, so
+	// it provides a clean interface for calling functions from both the xform
+	// and norm packages using the same prefix.
 	funcs CustomFuncs
 }
 
 // init initializes the explorer for use (or reuse).
 func (e *explorer) init(o *Optimizer) {
-	e.evalCtx = o.evalCtx
-	e.o = o
-	e.f = o.Factory()
-	e.mem = o.mem
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*e = explorer{
+		evalCtx: o.evalCtx,
+		o:       o,
+		f:       o.Factory(),
+		mem:     o.mem,
+	}
 	e.funcs.Init(e)
 }
 

@@ -11,11 +11,11 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -24,11 +24,11 @@ import (
 
 func NewAndProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -66,11 +66,11 @@ func NewAndProjOp(
 
 func NewOrProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftInputType, rightInputType *types.T,
 	leftIdx, rightIdx, outputIdx int,
-) (colexecbase.Operator, error) {
+) (colexecop.Operator, error) {
 	leftFamily := leftInputType.Family()
 	leftIsBool := leftFamily == types.BoolFamily
 	leftIsNull := leftFamily == types.UnknownFamily
@@ -107,13 +107,15 @@ func NewOrProjOp(
 }
 
 type andProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -130,10 +132,10 @@ type andProjOp struct {
 // outputIdx.
 func newAndProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -144,7 +146,6 @@ func newAndProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -161,17 +162,21 @@ func (o *andProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *andProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -181,23 +186,24 @@ func (o *andProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -271,20 +277,14 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
-		batch = o.rightProjOpChain.Next(ctx)
+		o.rightFeedOp.SetBatch(batch)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
@@ -545,13 +545,15 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type andRightNullProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -568,10 +570,10 @@ type andRightNullProjOp struct {
 // outputIdx.
 func newAndRightNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andRightNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -582,7 +584,6 @@ func newAndRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -599,17 +600,21 @@ func (o *andRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *andRightNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andRightNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -619,23 +624,24 @@ func (o *andRightNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andRightNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -705,13 +711,7 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
@@ -950,13 +950,15 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type andLeftNullProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -973,10 +975,10 @@ type andLeftNullProjOp struct {
 // outputIdx.
 func newAndLeftNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &andLeftNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -987,7 +989,6 @@ func newAndLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1004,17 +1005,21 @@ func (o *andLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *andLeftNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andLeftNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1024,23 +1029,24 @@ func (o *andLeftNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andLeftNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -1075,20 +1081,14 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
-		batch = o.rightProjOpChain.Next(ctx)
+		o.rightFeedOp.SetBatch(batch)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
@@ -1336,13 +1336,15 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1359,10 +1361,10 @@ type orProjOp struct {
 // outputIdx.
 func newOrProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -1373,7 +1375,6 @@ func newOrProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1390,17 +1391,21 @@ func (o *orProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *orProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1410,23 +1415,24 @@ func (o *orProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -1501,20 +1507,14 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
-		batch = o.rightProjOpChain.Next(ctx)
+		o.rightFeedOp.SetBatch(batch)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
@@ -1775,13 +1775,15 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orRightNullProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -1798,10 +1800,10 @@ type orRightNullProjOp struct {
 // outputIdx.
 func newOrRightNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orRightNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -1812,7 +1814,6 @@ func newOrRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1829,17 +1830,21 @@ func (o *orRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *orRightNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orRightNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1849,23 +1854,24 @@ func (o *orRightNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orRightNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -1936,13 +1942,7 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
@@ -2181,13 +2181,15 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orLeftNullProjOp struct {
-	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	colexecop.InitHelper
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *FeedOperator
-	rightFeedOp      *FeedOperator
+	allocator *colmem.Allocator
+	input     colexecop.Operator
+
+	leftProjOpChain  colexecop.Operator
+	rightProjOpChain colexecop.Operator
+	leftFeedOp       *colexecop.FeedOperator
+	rightFeedOp      *colexecop.FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -2204,10 +2206,10 @@ type orLeftNullProjOp struct {
 // outputIdx.
 func newOrLeftNullProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *FeedOperator,
+	input, leftProjOpChain, rightProjOpChain colexecop.Operator,
+	leftFeedOp, rightFeedOp *colexecop.FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) colexecop.Operator {
 	return &orLeftNullProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -2218,7 +2220,6 @@ func newOrLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -2235,17 +2236,21 @@ func (o *orLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
-func (o *orLeftNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orLeftNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -2255,23 +2260,24 @@ func (o *orLeftNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orLeftNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
 	// In order to support the short-circuiting logic, we need to be quite tricky
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
-	o.leftFeedOp.batch = batch
-	batch = o.leftProjOpChain.Next(ctx)
+	o.leftFeedOp.SetBatch(batch)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -2307,20 +2313,14 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
-		o.rightFeedOp.batch = batch
-		batch = o.rightProjOpChain.Next(ctx)
+		o.rightFeedOp.SetBatch(batch)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()

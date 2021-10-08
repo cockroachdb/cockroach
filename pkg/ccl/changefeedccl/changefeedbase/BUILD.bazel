@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "changefeedbase",
+    srcs = [
+        "avro.go",
+        "errors.go",
+        "options.go",
+        "settings.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/settings",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

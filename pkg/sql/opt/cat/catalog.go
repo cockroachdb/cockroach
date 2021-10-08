@@ -15,7 +15,9 @@ package cat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -119,6 +121,11 @@ type Catalog interface {
 	// ResolveTypeByOID is used to look up a user defined type by ID.
 	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 
+	// ResolveType is used to resolve an unresolved object name.
+	ResolveType(
+		ctx context.Context, name *tree.UnresolvedObjectName,
+	) (*types.T, error)
+
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
@@ -135,6 +142,15 @@ type Catalog interface {
 	// returns an error.
 	RequireAdminRole(ctx context.Context, action string) error
 
+	// HasRoleOption converts the roleoption to its SQL column name and checks if
+	// the user belongs to a role where the option has value true. Requires a
+	// valid transaction to be open.
+	//
+	// This check should be done on the version of the privilege that is stored in
+	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
 	// FullyQualifiedName retrieves the fully qualified name of a data source.
 	// Note that:
 	//  - this call may involve a database operation so it shouldn't be used in
@@ -142,4 +158,7 @@ type Catalog interface {
 	//  - the fully qualified name of a data source object can change without the
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
+
+	// RoleExists returns true if the role exists.
+	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
 }

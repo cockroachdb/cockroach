@@ -1,0 +1,3 @@
+set_transaction_stmt ::=
+	'SET' 'TRANSACTION' transaction_mode_list
+	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list

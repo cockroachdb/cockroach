@@ -10,7 +10,11 @@
 
 package settings
 
-import "github.com/cockroachdb/errors"
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
 
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -42,6 +46,14 @@ func (*StringSetting) Typ() string {
 	return "s"
 }
 
+// Default returns default value for setting.
+func (s *StringSetting) Default() string {
+	return s.defaultValue
+}
+
+// Defeat the linter.
+var _ = (*StringSetting).Default
+
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get(sv *Values) string {
 	loaded := sv.getGeneric(s.slotIdx)
@@ -61,32 +73,37 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 	return nil
 }
 
-func (s *StringSetting) set(sv *Values, v string) error {
+// Override sets the setting to the given value, assuming
+// it passes validation.
+func (s *StringSetting) Override(ctx context.Context, sv *Values, v string) {
+	_ = s.set(ctx, sv, v)
+}
+
+func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
 	if err := s.Validate(sv, v); err != nil {
 		return err
 	}
 	if s.Get(sv) != v {
-		sv.setGeneric(s.slotIdx, v)
+		sv.setGeneric(ctx, s.slotIdx, v)
 	}
 	return nil
 }
 
-func (s *StringSetting) setToDefault(sv *Values) {
-	if err := s.set(sv, s.defaultValue); err != nil {
+func (s *StringSetting) setToDefault(ctx context.Context, sv *Values) {
+	if err := s.set(ctx, sv, s.defaultValue); err != nil {
 		panic(err)
 	}
+}
+
+// WithPublic sets public visibility and can be chained.
+func (s *StringSetting) WithPublic() *StringSetting {
+	s.SetVisibility(Public)
+	return s
 }
 
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
 	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterPublicStringSetting defines a new setting with type string and makes it public.
-func RegisterPublicStringSetting(key, desc string, defaultValue string) *StringSetting {
-	s := RegisterValidatedStringSetting(key, desc, defaultValue, nil)
-	s.SetVisibility(Public)
-	return s
 }
 
 // RegisterValidatedStringSetting defines a new setting with type string with a

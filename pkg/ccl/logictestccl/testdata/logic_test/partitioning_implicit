@@ -1,0 +1,1017 @@
+# LogicTest: local
+
+statement error declared partition columns \(partition_by\) do not match first 1 columns in index being partitioned \(a\)
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  partition_by int,
+  a INT,
+  INDEX (a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+  )
+)
+
+statement error PARTITION ALL BY LIST/RANGE is currently experimental
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement error found multiple definitions in partition using column "a"
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT
+) PARTITION BY LIST (a, a) (
+  PARTITION a1 VALUES IN ((1, 1))
+)
+
+statement error implicit column partitioning on a subpartition is not yet supported
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX (c) PARTITION BY LIST (a) (
+    PARTITION a1 VALUES IN (1) PARTITION BY LIST (b) (
+      PARTITION a1b1 VALUES IN ((1))
+    )
+  )
+)
+
+statement ok
+CREATE TABLE t (a INT, b INT, INDEX(a))
+
+statement error cannot ALTER INDEX and change the partitioning to contain implicit columns
+ALTER INDEX t@t_a_idx PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement error cannot ALTER TABLE and change the partitioning to contain implicit columns
+ALTER TABLE t PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  j JSON,
+  INDEX (b) PARTITION BY LIST(a) (
+    PARTITION b_implicit VALUES IN (2)
+  ),
+  UNIQUE INDEX (c) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN (3)
+  ),
+  INDEX (a, b, c) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX (j) PARTITION BY LIST(a) (
+    PARTITION j_implicit VALUES IN (5)
+  ),
+  FAMILY (pk, a, b, c, d, j)
+) PARTITION BY LIST(a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
+    PARTITION j_implicit VALUES IN ((5))
+  ),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE INDEX new_idx ON t(d) PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
+    PARTITION j_implicit VALUES IN ((5))
+  ),
+  INDEX new_idx (d ASC) PARTITION BY LIST (a) (
+    PARTITION d_implicit VALUES IN ((1))
+  ),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── pk int not null
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key bytes not null [inverted]
+ ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+ ├── PRIMARY INDEX primary
+ │    ├── a int not null (implicit)
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── pk_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── INDEX t_b_idx
+ │    ├── a int not null (implicit)
+ │    ├── b int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── b_implicit
+ │              └── partition by list prefixes
+ │                   └── (2)
+ ├── UNIQUE INDEX t_c_key
+ │    ├── a int not null (implicit)
+ │    ├── c int
+ │    ├── pk int not null (storing)
+ │    └── partitions
+ │         └── c_implicit
+ │              └── partition by list prefixes
+ │                   └── (3)
+ ├── INDEX t_a_b_c_idx
+ │    ├── d int (implicit)
+ │    ├── a int not null
+ │    ├── b int
+ │    ├── c int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── a_b_c_implicit
+ │              └── partition by list prefixes
+ │                   └── (4)
+ ├── INVERTED INDEX t_j_idx
+ │    ├── a int not null (implicit)
+ │    ├── j_inverted_key bytes not null [inverted]
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── j_implicit
+ │              └── partition by list prefixes
+ │                   └── (5)
+ ├── INDEX new_idx
+ │    ├── a int not null (implicit)
+ │    ├── d int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── d_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (c)
+scan t
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4, 5)
+
+# Tests for FK references against the implicit columns.
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c)
+)
+
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t_one_family (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c),
+  FAMILY (pk, ref_t_pk, ref_t_c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE fk_using_implicit_columns_against_t_one_family]
+----
+CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
+   pk INT8 NOT NULL,
+   ref_t_pk INT8 NOT NULL,
+   ref_t_c INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+   CONSTRAINT fk_ref_t_pk_ref_t FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
+   CONSTRAINT fk_ref_t_c_ref_t FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
+   FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
+)
+
+
+query T
+EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: fk_using_implicit_columns_against_t(pk, ref_t_pk, ref_t_c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (pk) = (column2)
+│           │ left cols are key
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right anti)
+            │ equality: (c) = (column3)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t@t_c_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+
+statement error Key \(ref_t_pk\)=\(2\) is not present in table "t"
+INSERT INTO fk_using_implicit_columns_against_t VALUES (2, 2, 4)
+
+# Error if we reference the implicit partitioning in the foreign key.
+statement error there is no unique constraint matching given keys for referenced table t
+CREATE TABLE fk_including_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_a INT,
+  ref_t_pk INT,
+  ref_t_c INT,
+  CONSTRAINT a_pk FOREIGN KEY(ref_t_a, ref_t_pk) REFERENCES t(a, pk)
+)
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY NOTHING
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY NOTHING
+
+statement ok
+CREATE TABLE t_implicit_idx (
+  id INT PRIMARY KEY,
+  a INT,
+  INDEX t_a_idx (a) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t_implicit_idx@t_a_idx PARTITION BY LIST (a) (
+    PARTITION "one" VALUES IN (1)
+)
+
+query TTTTTT colnames
+SELECT
+  indexrelid, indrelid, indkey, indclass, indoption, indcollation
+FROM pg_index
+WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 't')
+ORDER BY 1,2,3
+----
+indexrelid  indrelid  indkey  indclass  indoption  indcollation
+710236225   58        5       0         2          0
+710236226   58        6       0         2          0
+710236227   58        2 3 4   0 0 0     2 2 2      0 0 0
+710236228   58        4       0         2          0
+710236229   58        3       0         2          0
+710236230   58        1       0         2          0
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name   column_name  implicit
+new_idx      a            true
+new_idx      d            false
+primary      a            true
+primary      pk           false
+t_a_b_c_idx  a            false
+t_a_b_c_idx  b            false
+t_a_b_c_idx  c            false
+t_a_b_c_idx  d            true
+t_b_idx      a            true
+t_b_idx      b            false
+t_c_key      a            true
+t_c_key      c            false
+t_j_idx      a            true
+t_j_idx      j            false
+
+query TTT colnames
+SELECT
+  tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 't'
+ORDER BY 1, 2, 3
+----
+tablename  indexname    indexdef
+t          new_idx      CREATE INDEX new_idx ON test.public.t USING btree (d ASC)
+t          primary      CREATE UNIQUE INDEX "primary" ON test.public.t USING btree (pk ASC)
+t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
+t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC)
+t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
+t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j ASC)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX new_idx PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION ALL BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement ok
+DROP TABLE t CASCADE
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  INDEX(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+statement error cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  UNIQUE(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+query T noticetrace
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  partition_by int,
+  a int NOT NULL,
+  b int NOT NULL,
+  c int NOT NULL,
+  d int NOT NULL,
+  j JSON,
+  u STRING UNIQUE,
+  INDEX (a),
+  UNIQUE (b),
+  INDEX (partition_by, c),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, partition_by, a, b, c, d, j, u)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+----
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
+  PARTITION one VALUES IN ((1))
+)
+
+statement error cannot change the partitioning of an index if the table has PARTITION ALL BY defined
+ALTER INDEX t@t_a_idx PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
+query T noticetrace
+CREATE INDEX created_idx ON t(c)
+----
+
+statement ok
+ALTER TABLE t ADD COLUMN e INT8 NOT NULL UNIQUE
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT unique_c_d UNIQUE(c, d)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  c INT8 NOT NULL,
+  d INT8 NOT NULL,
+  j JSONB NULL,
+  u STRING NULL,
+  e INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  UNIQUE INDEX t_u_key (u ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INVERTED INDEX t_j_idx (j),
+  INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
+  UNIQUE INDEX unique_c_d (c ASC, d ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+query TTB
+SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM t]
+ORDER BY index_name, seq_in_index
+----
+created_idx           partition_by  true
+created_idx           c             false
+created_idx           pk            true
+primary               partition_by  true
+primary               pk            false
+primary               pk2           false
+primary               a             false
+primary               b             false
+primary               c             false
+primary               d             false
+primary               j             false
+primary               u             false
+primary               e             false
+t_a_idx               partition_by  true
+t_a_idx               a             false
+t_a_idx               pk            true
+t_b_key               partition_by  true
+t_b_key               b             false
+t_b_key               pk            true
+t_e_key               partition_by  true
+t_e_key               e             false
+t_e_key               pk            true
+t_j_idx               partition_by  true
+t_j_idx               j             false
+t_j_idx               pk            true
+t_partition_by_c_idx  partition_by  false
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  pk            true
+t_u_key               partition_by  true
+t_u_key               u             false
+t_u_key               pk            true
+unique_c_d            partition_by  true
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            pk            true
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+primary               partition_by  true
+primary               pk            false
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
+t_j_idx               j             false
+t_j_idx               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+t_u_key               partition_by  true
+t_u_key               u             false
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            partition_by  true
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (pk2)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  c INT8 NOT NULL,
+  d INT8 NOT NULL,
+  j JSONB NULL,
+  u STRING NULL,
+  e INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
+  UNIQUE INDEX t_pk_key (pk ASC),
+  UNIQUE INDEX t_u_key (u ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INVERTED INDEX t_j_idx (j),
+  INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
+  UNIQUE INDEX unique_c_d (c ASC, d ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+primary               partition_by  true
+primary               pk2           false
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
+t_j_idx               j             false
+t_j_idx               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+t_pk_key              partition_by  true
+t_pk_key              pk            false
+t_u_key               partition_by  true
+t_u_key               u             false
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            partition_by  true
+
+statement ok
+DROP TABLE t
+
+# Tests for PARTITION ALL BY RANGE.
+statement ok
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  partition_by int,
+  a int,
+  b int,
+  c int,
+  d int,
+  INDEX (a),
+  UNIQUE (b),
+  UNIQUE (c) WHERE d > 100,
+  INDEX (partition_by, c),
+  FAMILY (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (minvalue) TO (2),
+  PARTITION two VALUES FROM (2) TO (maxvalue)
+)
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
+  PARTITION one VALUES IN ((1))
+)
+
+statement ok
+CREATE INDEX created_idx ON t(c)
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+primary               partition_by  true
+primary               pk            false
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_c_key               c             false
+t_c_key               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  UNIQUE INDEX t_c_key (c ASC) WHERE d > 100:::INT8,
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INDEX created_idx (c ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (MINVALUE) TO (2),
+  PARTITION two VALUES FROM (2) TO (MAXVALUE)
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement error changing partition of table with PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION BY NOTHING
+
+subtest unique-checks
+
+# We should plan uniqueness checks for all implicitly partitioned unique indexes.
+query T
+EXPLAIN INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (pk) = (column1)
+│           │ right cols are key
+│           │ pred: column3 != partition_by
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_a_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b) = (column5)
+│           │ right cols are key
+│           │ pred: (column1 != pk) OR (column3 != partition_by)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_key
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: t@primary
+                │ equality: (partition_by, pk) = (partition_by,pk)
+                │ equality cols are key
+                │
+                └── • hash join
+                    │ equality: (c) = (column6)
+                    │ right cols are key
+                    │ pred: (column1 != pk) OR (column3 != partition_by)
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: t@t_c_key (partial index)
+                    │     spans: FULL SCAN
+                    │
+                    └── • filter
+                        │ estimated row count: 1
+                        │ filter: column7 > 100
+                        │
+                        └── • scan buffer
+                              label: buffer 1
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPDATE t SET b = 1 WHERE pk = 2
+
+subtest upsert
+
+# The conflict columns in an upsert should only include the primary key,
+# not any implicit partitioning columns.
+query T
+EXPLAIN UPSERT INTO t VALUES (3, 3, 3, 3, 3, 3, 3)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (left outer)
+│               │
+│               ├── • values
+│               │     size: 7 columns, 1 row
+│               │
+│               └── • filter
+│                   │ filter: pk = 3
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@primary
+│                         spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b) = (column5)
+│           │ right cols are key
+│           │ pred: (upsert_pk != pk) OR (column3 != partition_by)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_key
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: t@primary
+                │ equality: (partition_by, pk) = (partition_by,pk)
+                │ equality cols are key
+                │
+                └── • hash join
+                    │ equality: (c) = (column6)
+                    │ right cols are key
+                    │ pred: (upsert_pk != pk) OR (column3 != partition_by)
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: t@t_c_key (partial index)
+                    │     spans: FULL SCAN
+                    │
+                    └── • filter
+                        │ filter: column7 > 100
+                        │
+                        └── • scan buffer
+                              label: buffer 1
+
+# One row already exists, one row is new.
+statement ok
+UPSERT INTO t VALUES (2, 4, 4, 4, 4, 4, 4), (3, 3, 3, 3, 3, 3, 3)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPSERT INTO t VALUES (3, 2, 2, 1, 1, 1, 1)
+
+query IIIIIII colnames,rowsort
+SELECT * from t
+----
+pk  pk2  partition_by  a  b  c  d
+1   1    1             1  1  1  1
+3   3    3             3  3  3  3
+2   4    4             4  4  4  4
+
+# Regression tests for #59583.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (
+  pk INT,
+  pk2 INT NOT NULL,
+  partition_by INT,
+  x INT,
+  y INT,
+  INDEX (y)
+) PARTITION BY LIST (partition_by) (
+    PARTITION p1 VALUES IN (1)
+);
+INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
+
+query IIIII rowsort
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+CREATE INDEX new_idx ON t(x)
+
+query IIIII rowsort
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS(pk2)
+
+query IIIII rowsort
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+query IIIII rowsort
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+# Tests adding a new UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, v INT);
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+statement ok
+DELETE FROM t WHERE partition_by = 2;
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+# Tests adding a UNIQUE index with PARTITION ALL BY implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, v INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+statement ok
+DELETE FROM t WHERE partition_by = 2;
+CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+# Tests adding a new partial UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, a INT, b INT);
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+statement ok
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+# Tests adding a partial UNIQUE index with PARTITION ALL BY implicit
+# partitioning.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (partition_by INT, a INT, b INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
+
+statement ok
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0

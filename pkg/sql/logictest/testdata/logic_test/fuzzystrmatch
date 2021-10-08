@@ -1,0 +1,56 @@
+statement ok
+CREATE TABLE fuzzystrmatch_table(
+  id int primary key,
+  a text,
+  b text
+)
+
+statement ok
+INSERT INTO fuzzystrmatch_table VALUES
+  (1, 'apple', 'banana'),
+  (2, '', 'pear'),
+  (3, '😄', '🐯'),
+  (4, null, 'a'),
+  (5, 'a', null),
+  (6, null, null)
+
+statement error levenshtein argument exceeds maximum length of 255 characters
+SELECT levenshtein(lpad('', 256, 'x'), '')
+
+statement error levenshtein argument exceeds maximum length of 255 characters
+SELECT levenshtein(lpad('', 256, 'x'), '', 2, 3, 4)
+
+query TTII
+SELECT a, b, levenshtein(a, b), levenshtein(a, b, 2, 3, 4) FROM fuzzystrmatch_table ORDER BY id
+----
+apple  banana  5     18
+·      pear    4     8
+😄      🐯       1     4
+NULL   a       NULL  NULL
+a      NULL    NULL  NULL
+NULL   NULL    NULL  NULL
+
+query T
+SELECT soundex('hello world!')
+----
+H464
+
+query TTT
+SELECT soundex('Anne'), soundex('Ann'), difference('Anne', 'Ann');
+----
+A500 A500 4
+
+query TTT
+SELECT soundex('Anne'), soundex('Andrew'), difference('Anne', 'Andrew');
+----
+A500 A536 2
+
+query TTT
+SELECT soundex('Anne'), soundex('Margaret'), difference('Anne', 'Margaret');
+----
+A500 M626 0
+
+query TTTT
+SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL), difference(NULL, 'Bob');
+----
+A500  NULL  NULL  NULL

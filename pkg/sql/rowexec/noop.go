@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,17 +54,22 @@ func newNoopProcessor(
 	); err != nil {
 		return nil, err
 	}
+	ctx := flowCtx.EvalCtx.Ctx()
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+		n.input = newInputStatCollector(n.input)
+		n.ExecStatsForTrace = n.execStatsForTrace
+	}
 	return n, nil
 }
 
 // Start is part of the RowSource interface.
-func (n *noopProcessor) Start(ctx context.Context) context.Context {
+func (n *noopProcessor) Start(ctx context.Context) {
+	ctx = n.StartInternal(ctx, noopProcName)
 	n.input.Start(ctx)
-	return n.StartInternal(ctx, noopProcName)
 }
 
 // Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (n *noopProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for n.State == execinfra.StateRunning {
 		row, meta := n.input.Next()
 
@@ -86,10 +91,16 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetada
 	return nil, n.DrainHelper()
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (n *noopProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	n.InternalClose()
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (n *noopProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(n.input)
+	if !ok {
+		return nil
+	}
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: n.OutputHelper.Stats(),
+	}
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

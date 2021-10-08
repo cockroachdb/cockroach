@@ -17,8 +17,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,8 +58,6 @@ type DiskBackedNumberedRowContainer struct {
 //    spills to disk.
 //  - memoryMonitor is used to monitor this container's memory usage.
 //  - diskMonitor is used to monitor this container's disk usage.
-//  - rowCapacity (if not 0) specifies the number of rows in-memory container
-//    should be preallocated for.
 func NewDiskBackedNumberedRowContainer(
 	deDup bool,
 	types []*types.T,
@@ -65,7 +65,6 @@ func NewDiskBackedNumberedRowContainer(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
-	rowCapacity int,
 ) *DiskBackedNumberedRowContainer {
 	d := &DiskBackedNumberedRowContainer{
 		deDup:         deDup,
@@ -73,15 +72,15 @@ func NewDiskBackedNumberedRowContainer(
 		rowIterMemAcc: memoryMonitor.MakeBoundAccount(),
 	}
 	d.rc = &DiskBackedRowContainer{}
-	d.rc.Init(nil /*ordering*/, types, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+	d.rc.Init(nil /*ordering*/, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	if deDup {
-		ordering := make(sqlbase.ColumnOrdering, len(types))
+		ordering := make(colinfo.ColumnOrdering, len(types))
 		for i := range types {
 			ordering[i].ColIdx = i
 			ordering[i].Direction = encoding.Ascending
 		}
 		deduper := &DiskBackedRowContainer{}
-		deduper.Init(ordering, types, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+		deduper.Init(ordering, types, evalCtx, engine, memoryMonitor, diskMonitor)
 		deduper.DoDeDuplicate()
 		d.deduper = deduper
 	}
@@ -118,7 +117,7 @@ func (d *DiskBackedNumberedRowContainer) testingSpillToDisk(ctx context.Context)
 // AddRow tries to add a row. It returns the position of the
 // row in the container.
 func (d *DiskBackedNumberedRowContainer) AddRow(
-	ctx context.Context, row sqlbase.EncDatumRow,
+	ctx context.Context, row rowenc.EncDatumRow,
 ) (int, error) {
 	if d.deDup {
 		assignedIdx, err := d.deduper.AddRowWithDeDup(ctx, row)
@@ -178,7 +177,7 @@ func (d *DiskBackedNumberedRowContainer) SetupForRead(ctx context.Context, acces
 // accesses for semi-joins and anti-joins.
 func (d *DiskBackedNumberedRowContainer) GetRow(
 	ctx context.Context, idx int, skip bool,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	if !d.rc.UsingDisk() {
 		if skip {
 			return nil, nil
@@ -294,8 +293,8 @@ type numberedDiskRowIterator struct {
 	// EncDatumRow. The top element has the highest nextAccess and is the
 	// best candidate to evict.
 	cacheHeap  cacheMaxNextAccessHeap
-	datumAlloc sqlbase.DatumAlloc
-	rowAlloc   sqlbase.EncDatumRowAlloc
+	datumAlloc rowenc.DatumAlloc
+	rowAlloc   rowenc.EncDatumRowAlloc
 
 	hitCount  int
 	missCount int
@@ -308,7 +307,7 @@ type cacheElement struct {
 	// when empty there are no more accesses left.
 	accesses []int
 	// row is non-nil for a cached row.
-	row sqlbase.EncDatumRow
+	row rowenc.EncDatumRow
 	// When row is non-nil, this is the element in the heap.
 	heapElement cacheRowHeapElement
 	// Used only when initializing accesses, so that we can allocate a single
@@ -425,7 +424,7 @@ func (n *numberedDiskRowIterator) close() {
 
 func (n *numberedDiskRowIterator) getRow(
 	ctx context.Context, idx int, skip bool,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	thisAccessIdx := n.accessIdx
 	n.accessIdx++
 	elem, ok := n.cache[idx]
@@ -516,7 +515,7 @@ func (n *numberedDiskRowIterator) getRow(
 	return n.tryAddCacheAndReturnRow(ctx, elem)
 }
 
-func (n *numberedDiskRowIterator) ensureDecoded(row sqlbase.EncDatumRow) error {
+func (n *numberedDiskRowIterator) ensureDecoded(row rowenc.EncDatumRow) error {
 	for i := range row {
 		if err := row[i].EnsureDecoded(n.rowIter.rowContainer.types[i], &n.datumAlloc); err != nil {
 			return err
@@ -527,7 +526,7 @@ func (n *numberedDiskRowIterator) ensureDecoded(row sqlbase.EncDatumRow) error {
 
 func (n *numberedDiskRowIterator) tryAddCacheAndReturnRow(
 	ctx context.Context, elem *cacheElement,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	r, err := n.rowIter.Row()
 	if err != nil {
 		return nil, err
@@ -559,13 +558,13 @@ func (n *numberedDiskRowIterator) tryAddCache(ctx context.Context, elem *cacheEl
 }
 
 func (n *numberedDiskRowIterator) tryAddCacheHelper(
-	ctx context.Context, elem *cacheElement, row sqlbase.EncDatumRow, alreadyDecoded bool,
+	ctx context.Context, elem *cacheElement, row rowenc.EncDatumRow, alreadyDecoded bool,
 ) error {
 	if elem.row != nil {
 		log.Fatalf(ctx, "adding row to cache when it is already in cache")
 	}
 	nextAccess := elem.accesses[0]
-	evict := func() (sqlbase.EncDatumRow, error) {
+	evict := func() (rowenc.EncDatumRow, error) {
 		heapElem := heap.Pop(&n.cacheHeap).(*cacheRowHeapElement)
 		evictElem, ok := n.cache[heapElem.rowIdx]
 		if !ok {
@@ -578,7 +577,7 @@ func (n *numberedDiskRowIterator) tryAddCacheHelper(
 		return evictedRow, nil
 	}
 	rowBytesUsage := -1
-	var rowToReuse sqlbase.EncDatumRow
+	var rowToReuse rowenc.EncDatumRow
 	for {
 		if n.maxCacheSize == 0 {
 			return nil
@@ -609,7 +608,7 @@ func (n *numberedDiskRowIterator) tryAddCacheHelper(
 			rowBytesUsage = int(row.Size())
 		}
 		if err := n.memAcc.Grow(ctx, int64(rowBytesUsage)); err != nil {
-			if sqlbase.IsOutOfMemoryError(err) {
+			if sqlerrors.IsOutOfMemoryError(err) {
 				// Could not grow the memory to handle this row, so reduce the
 				// maxCacheSize (max count of entries), to the current number of
 				// entries in the cache. The assumption here is that rows in the cache

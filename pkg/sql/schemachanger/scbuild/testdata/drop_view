@@ -1,0 +1,128 @@
+create-table
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256))
+----
+
+create-view
+CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
+----
+
+build
+DROP VIEW defaultdb.v1
+----
+- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+  state: PUBLIC
+  details:
+    dependedOn: 53
+    tableId: 52
+- DROP View:{DescID: 53}
+  state: PUBLIC
+  details:
+    dependedOnBy: []
+    dependsOn:
+    - 52
+    tableId: 53
+
+create-view
+CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
+----
+
+create-view
+CREATE VIEW defaultdb.v3 AS (SELECT name, n1 FROM v1, v2);
+----
+
+create-view
+CREATE VIEW defaultdb.v4 AS (SELECT n2, n1 FROM v2);
+----
+
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
+create-view
+CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb.v4)
+----
+
+build
+DROP VIEW defaultdb.v1 CASCADE
+----
+- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
+  state: PUBLIC
+  details:
+    dependedOn: 53
+    tableId: 52
+- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}
+  state: PUBLIC
+  details:
+    dependedOn: 54
+    tableId: 53
+- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    dependedOn: 55
+    tableId: 53
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    dependedOn: 55
+    tableId: 54
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
+  state: PUBLIC
+  details:
+    dependedOn: 56
+    tableId: 54
+- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
+  state: PUBLIC
+  details:
+    dependedOn: 59
+    tableId: 56
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    typeId: 57
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    typeId: 58
+- DROP View:{DescID: 53}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 54
+    - 55
+    dependsOn:
+    - 52
+    tableId: 53
+- DROP View:{DescID: 54}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 55
+    - 56
+    dependsOn:
+    - 53
+    tableId: 54
+- DROP View:{DescID: 55}
+  state: PUBLIC
+  details:
+    dependedOnBy: []
+    dependsOn:
+    - 53
+    - 54
+    tableId: 55
+- DROP View:{DescID: 56}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 59
+    dependsOn:
+    - 54
+    tableId: 56
+- DROP View:{DescID: 59}
+  state: PUBLIC
+  details:
+    dependedOnBy: []
+    dependsOn:
+    - 56
+    tableId: 59

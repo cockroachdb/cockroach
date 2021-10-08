@@ -14,26 +14,29 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // BinaryOpName is a mapping from all binary operators that are supported by
 // the vectorized engine to their names.
-var BinaryOpName = map[tree.BinaryOperator]string{
-	tree.Bitand:       "Bitand",
-	tree.Bitor:        "Bitor",
-	tree.Bitxor:       "Bitxor",
-	tree.Plus:         "Plus",
-	tree.Minus:        "Minus",
-	tree.Mult:         "Mult",
-	tree.Div:          "Div",
-	tree.FloorDiv:     "FloorDiv",
-	tree.Mod:          "Mod",
-	tree.Pow:          "Pow",
-	tree.Concat:       "Concat",
-	tree.LShift:       "LShift",
-	tree.RShift:       "RShift",
-	tree.JSONFetchVal: "JSONFetchVal",
+var BinaryOpName = map[tree.BinaryOperatorSymbol]string{
+	tree.Bitand:            "Bitand",
+	tree.Bitor:             "Bitor",
+	tree.Bitxor:            "Bitxor",
+	tree.Plus:              "Plus",
+	tree.Minus:             "Minus",
+	tree.Mult:              "Mult",
+	tree.Div:               "Div",
+	tree.FloorDiv:          "FloorDiv",
+	tree.Mod:               "Mod",
+	tree.Pow:               "Pow",
+	tree.Concat:            "Concat",
+	tree.LShift:            "LShift",
+	tree.RShift:            "RShift",
+	tree.JSONFetchVal:      "JSONFetchVal",
+	tree.JSONFetchText:     "JSONFetchText",
+	tree.JSONFetchValPath:  "JSONFetchValPath",
+	tree.JSONFetchTextPath: "JSONFetchTextPath",
 }
 
 // ComparisonOpName is a mapping from all comparison operators that are
 // supported by the vectorized engine to their names.
-var ComparisonOpName = map[tree.ComparisonOperator]string{
+var ComparisonOpName = map[tree.ComparisonOperatorSymbol]string{
 	tree.EQ: "EQ",
 	tree.NE: "NE",
 	tree.LT: "LT",

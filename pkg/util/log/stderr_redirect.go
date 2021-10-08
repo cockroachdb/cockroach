@@ -34,16 +34,6 @@ var OrigStderr = func() *os.File {
 	return os.NewFile(fd, os.Stderr.Name())
 }()
 
-// LoggingToStderr returns true if log messages of the given severity
-// sent to the main logger are also visible on stderr. This is used
-// e.g. by the startup code to announce server details both on the
-// external stderr and to the log file.
-//
-// This is also the logic used by Shout calls.
-func LoggingToStderr(s Severity) bool {
-	return s >= mainLog.stderrThreshold.get()
-}
-
 // hijackStderr replaces stderr with the given file descriptor.
 //
 // A client that wishes to use the original stderr (the process'
@@ -65,11 +55,11 @@ var osStderrMu syncutil.Mutex
 // taken over in this way. It also errors if the target logger has no
 // valid output directory and no output file has been created (or
 // could be created).
-func (l *loggerT) takeOverInternalStderr() error {
+func (l *fileSink) takeOverInternalStderr(logger *loggerT) error {
 	takeOverStderrMu.Lock()
 	defer takeOverStderrMu.Unlock()
 
-	if anyLoggerHasInternalStderrOwnership() {
+	if anySinkHasInternalStderrOwnership() {
 		return errors.AssertionFailedf(
 			"can't take over stderr; first takeover:\n%s",
 			takeOverStderrMu.previousStderrTakeover)
@@ -105,7 +95,7 @@ func (l *loggerT) takeOverInternalStderr() error {
 // relinquishInternalStderr relinquishes a takeover by
 // takeOverInternalStderr(). It returns an error if the
 // logger did not take over internal stderr writes already.
-func (l *loggerT) relinquishInternalStderr() error {
+func (l *fileSink) relinquishInternalStderr() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.mu.redirectInternalStderrWrites {
@@ -114,7 +104,7 @@ func (l *loggerT) relinquishInternalStderr() error {
 		takeOverStderrMu.Lock()
 		defer takeOverStderrMu.Unlock()
 		var extra string
-		if anyLoggerHasInternalStderrOwnership() {
+		if anySinkHasInternalStderrOwnership() {
 			extra = fmt.Sprintf("; previous take over:\n%s", takeOverStderrMu.previousStderrTakeover)
 		}
 		return errors.AssertionFailedf(basemsg, extra)
@@ -133,28 +123,19 @@ func (l *loggerT) relinquishInternalStderr() error {
 	return nil
 }
 
-// anyLoggerHasInternalStderrOwnership returns true iff any of the
-// loggers currently has redirectInternalStderrWrites set.
+// anySinkHasInternalStderrOwnership returns true iff any of the
+// sinks currently has redirectInternalStderrWrites set.
 //
 // Used by takeOverInternalStderr() to enforce its invariant.
-func anyLoggerHasInternalStderrOwnership() bool {
-	mainLog.mu.Lock()
-	mainLogHasOwnership := mainLog.mu.redirectInternalStderrWrites
-	mainLog.mu.Unlock()
-	if mainLogHasOwnership {
-		return true
-	}
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, secL := range secondaryLogRegistry.mu.loggers {
-		secL.logger.mu.Lock()
-		hasOwnership := secL.logger.mu.redirectInternalStderrWrites
-		secL.logger.mu.Unlock()
-		if hasOwnership {
-			return true
-		}
-	}
-	return false
+func anySinkHasInternalStderrOwnership() bool {
+	hasOwnership := false
+	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		hasOwnership = hasOwnership || l.mu.redirectInternalStderrWrites
+		return nil
+	})
+	return hasOwnership
 }
 
 var takeOverStderrMu struct {

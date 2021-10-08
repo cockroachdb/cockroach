@@ -1,0 +1,137 @@
+# Our main txn that will get into state waitSelf.
+new-txn name=txn ts=10,1 epoch=0
+----
+
+# Will hold a lock discovered by txn1.
+new-txn name=txnOld ts=10,1 epoch=0
+----
+
+# Will separate two requests made by the main txn.
+new-txn name=txnMiddle ts=10,1 epoch=0
+----
+
+new-request name=reqOld txn=txnOld ts=10,1
+  put key=k value=v
+----
+
+new-request name=reqTxn1 txn=txn ts=10,1
+  put key=k value=w
+----
+
+new-request name=reqTxnMiddle txn=txnMiddle ts=10,1
+  put key=k value=w
+----
+
+new-request name=reqTxn2 txn=txn ts=20,1
+  put key=k value=x
+----
+
+sequence req=reqOld
+----
+[1] sequence reqOld: sequencing request
+[1] sequence reqOld: acquiring latches
+[1] sequence reqOld: scanning lock table for conflicting locks
+[1] sequence reqOld: sequencing complete, returned guard
+
+on-lock-acquired req=reqOld key=k
+----
+[-] acquire lock: txn 00000002 @ k
+
+finish req=reqOld
+----
+[-] finish reqOld: finishing request
+
+sequence req=reqTxn1
+----
+[2] sequence reqTxn1: sequencing request
+[2] sequence reqTxn1: acquiring latches
+[2] sequence reqTxn1: scanning lock table for conflicting locks
+[2] sequence reqTxn1: waiting in lock wait-queues
+[2] sequence reqTxn1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence reqTxn1: pushing txn 00000002 to abort
+[2] sequence reqTxn1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=reqTxnMiddle
+----
+[3] sequence reqTxnMiddle: sequencing request
+[3] sequence reqTxnMiddle: acquiring latches
+[3] sequence reqTxnMiddle: scanning lock table for conflicting locks
+[3] sequence reqTxnMiddle: waiting in lock wait-queues
+[3] sequence reqTxnMiddle: lock wait-queue event: wait for txn 00000002 holding lock @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[3] sequence reqTxnMiddle: pushing txn 00000002 to abort
+[3] sequence reqTxnMiddle: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=reqTxn2
+----
+[4] sequence reqTxn2: sequencing request
+[4] sequence reqTxn2: acquiring latches
+[4] sequence reqTxn2: scanning lock table for conflicting locks
+[4] sequence reqTxn2: waiting in lock wait-queues
+[4] sequence reqTxn2: lock wait-queue event: wait for txn 00000002 holding lock @ key "k" (queuedWriters: 3, queuedReaders: 0)
+[4] sequence reqTxn2: pushing txn 00000002 to abort
+[4] sequence reqTxn2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txnOld status=committed
+----
+[-] update txn: committing txnOld
+[2] sequence reqTxn1: resolving intent "k" for txn 00000002 with COMMITTED status
+[2] sequence reqTxn1: lock wait-queue event: done waiting
+[2] sequence reqTxn1: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence reqTxn1: acquiring latches
+[2] sequence reqTxn1: scanning lock table for conflicting locks
+[2] sequence reqTxn1: sequencing complete, returned guard
+[3] sequence reqTxnMiddle: resolving intent "k" for txn 00000002 with COMMITTED status
+[3] sequence reqTxnMiddle: lock wait-queue event: wait for (distinguished) txn 00000001 running request @ key "k" (queuedWriters: 2, queuedReaders: 0)
+[3] sequence reqTxnMiddle: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[3] sequence reqTxnMiddle: pushing txn 00000001 to detect request deadlock
+[3] sequence reqTxnMiddle: blocked on select in concurrency_test.(*cluster).PushTransaction
+[4] sequence reqTxn2: resolving intent "k" for txn 00000002 with COMMITTED status
+[4] sequence reqTxn2: lock wait-queue event: wait self @ key "k"
+[4] sequence reqTxn2: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence reqTxn2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 4, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 3
+local: num=0
+
+
+# This is the interesting step - we see reqTxn2 announce that it conflicted with
+# itself (txn #1), which indicates transitioning out of the waitSelf state.
+#
+# TODO(nvanbenschoten): would be nice to make this more explicit, but I'm not sure
+# how to change `(*lockTableImpl).Format` to make it happen in debug-lock-table above.
+finish req=reqTxn1
+----
+[-] finish reqTxn1: finishing request
+[3] sequence reqTxnMiddle: lock wait-queue event: done waiting
+[3] sequence reqTxnMiddle: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[3] sequence reqTxnMiddle: acquiring latches
+[3] sequence reqTxnMiddle: scanning lock table for conflicting locks
+[3] sequence reqTxnMiddle: sequencing complete, returned guard
+[4] sequence reqTxn2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence reqTxn2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence reqTxn2: pushing txn 00000003 to detect request deadlock
+[4] sequence reqTxn2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+finish req=reqTxnMiddle
+----
+[-] finish reqTxnMiddle: finishing request
+[4] sequence reqTxn2: lock wait-queue event: done waiting
+[4] sequence reqTxn2: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence reqTxn2: acquiring latches
+[4] sequence reqTxn2: scanning lock table for conflicting locks
+[4] sequence reqTxn2: sequencing complete, returned guard
+
+finish req=reqTxn2
+----
+[-] finish reqTxn2: finishing request
+
+reset
+----

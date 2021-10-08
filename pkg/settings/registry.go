@@ -60,8 +60,9 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer":                               {},
 	"kv.bulk_io_write.addsstable_max_rate":                 {},
 	// removed as of 20.1.
-	"schemachanger.lease.duration":       {},
-	"schemachanger.lease.renew_fraction": {},
+	"schemachanger.lease.duration":           {},
+	"schemachanger.lease.renew_fraction":     {},
+	"diagnostics.forced_stat_reset.interval": {},
 	// removed as of 20.2.
 	"rocksdb.ingest_backpressure.pending_compaction_threshold":         {},
 	"sql.distsql.temp_storage.joins":                                   {},
@@ -71,6 +72,43 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer_foreign_keys.enabled":                      {},
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
 	"sql.parallel_scans.enabled":                                       {},
+	"backup.table_statistics.enabled":                                  {},
+	// removed as of 21.1.
+	"sql.distsql.interleaved_joins.enabled": {},
+	"sql.testing.vectorize.batch_size":      {},
+	"sql.testing.mutations.max_batch_size":  {},
+	"sql.testing.mock_contention.enabled":   {},
+	"kv.atomic_replication_changes.enabled": {},
+	// removed as of 21.1.2.
+	"kv.tenant_rate_limiter.read_requests.rate_limit":   {},
+	"kv.tenant_rate_limiter.read_requests.burst_limit":  {},
+	"kv.tenant_rate_limiter.write_requests.rate_limit":  {},
+	"kv.tenant_rate_limiter.write_requests.burst_limit": {},
+	"kv.tenant_rate_limiter.read_bytes.rate_limit":      {},
+	"kv.tenant_rate_limiter.read_bytes.burst_limit":     {},
+	"kv.tenant_rate_limiter.write_bytes.rate_limit":     {},
+	"kv.tenant_rate_limiter.write_bytes.burst_limit":    {},
+
+	// removed as of 21.2.
+	"sql.defaults.vectorize_row_count_threshold":                     {},
+	"cloudstorage.gs.default.key":                                    {},
+	"storage.sst_export.max_intents_per_error":                       {},
+	"jobs.registry.leniency":                                         {},
+	"sql.defaults.experimental_expression_based_indexes.enabled":     {},
+	"kv.transaction.write_pipelining_max_outstanding_size":           {},
+	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
+	"bulkio.backup.proxy_file_writes.enabled":                        {},
+	"sql.distsql.prefer_local_execution.enabled":                     {},
+	"kv.follower_read.target_multiple":                               {},
+	"kv.closed_timestamp.close_fraction":                             {},
+	"sql.telemetry.query_sampling.qps_threshold":                     {},
+	"sql.telemetry.query_sampling.sample_rate":                       {},
+
+	// removed as of 22.1.
+	"sql.defaults.drop_enum_value.enabled": {},
+	"trace.lightstep.token":                {},
+	"trace.datadog.agent":                  {},
+	"trace.datadog.project":                {},
 }
 
 // register adds a setting to the registry.
@@ -85,7 +123,19 @@ func register(key, desc string, s extendedSetting) {
 		panic(fmt.Sprintf("setting missing description: %s", key))
 	}
 	if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
-		panic(fmt.Sprintf("setting descriptions should start with a lowercase letter: %q", desc))
+		panic(fmt.Sprintf(
+			"setting descriptions should start with a lowercase letter: %q, %q", key, desc,
+		))
+	}
+	for _, c := range desc {
+		if c == unicode.ReplacementChar {
+			panic(fmt.Sprintf("setting descriptions must be valid UTF-8: %q, %q", key, desc))
+		}
+		if unicode.IsControl(c) {
+			panic(fmt.Sprintf(
+				"setting descriptions cannot contain control character %q: %q, %q", c, key, desc,
+			))
+		}
 	}
 	s.setDescription(desc)
 	registry[key] = s
@@ -142,7 +192,8 @@ var ReadableTypes = map[string]string{
 	"z": "byte size",
 	"d": "duration",
 	"e": "enumeration",
-	"m": "custom validation",
+	// This is named "m" (instead of "v") for backwards compatibility reasons.
+	"m": "version",
 }
 
 // RedactedValue returns a string representation of the value for settings

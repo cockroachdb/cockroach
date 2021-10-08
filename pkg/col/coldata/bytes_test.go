@@ -18,7 +18,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -86,8 +86,12 @@ func applyMethodsAndVerify(
 		debugString += m.String()
 		switch m {
 		case set:
-			// Can only Set starting from maxSetIndex.
-			i := b1.maxSetIndex + rng.Intn(b1.Len()-b1.maxSetIndex)
+			// Can only Set starting from maxSetLength - 1 (or zero if maxSetLength is
+			// zero).
+			i := b1.maxSetLength - 1 + rng.Intn(b1.Len()-(b1.maxSetLength-1))
+			if i < 0 {
+				i = 0
+			}
 			new := make([]byte, rng.Intn(16))
 			rng.Read(new)
 			debugString += fmt.Sprintf("(%d, %v)", i, new)
@@ -160,8 +164,8 @@ func applyMethodsAndVerify(
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
 			return errors.Wrapf(err,
-				"\ndebugString:\n%s\nflat (maxSetIdx=%d):\n%s\nreference:\n%s",
-				debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2))
+				"\ndebugString:\n%s\nflat (maxSetLength=%d):\n%s\nreference:\n%s",
+				debugString, b1.maxSetLength, b1.String(), prettyByteSlice(b2))
 		}
 	}
 	return nil
@@ -214,13 +218,12 @@ func TestBytesRefImpl(t *testing.T) {
 
 		// Make a pair of sources to copy/append from. Use the destination variables
 		// with a certain probability.
-		sourceN := n
 		flatSource := flat
 		referenceSource := reference
 		selfReferencingSources := true
 		if rng.Float64() < 0.5 {
 			selfReferencingSources = false
-			sourceN = 1 + rng.Intn(maxLength)
+			sourceN := 1 + rng.Intn(maxLength)
 			flatSource = NewBytes(sourceN)
 			referenceSource = make([][]byte, sourceN)
 			for i := 0; i < sourceN; i++ {
@@ -361,9 +364,10 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "source two", string(b1.Get(1)))
 		require.Equal(t, "source one", string(b1.Get(2)))
 
-		// Set the length to 1 and  follow it with testing a full overwrite of only
-		// one element.
-		b1.SetLength(1)
+		// Set the length to 1 and follow it with testing a full overwrite of
+		// only one element.
+		b1.offsets = b1.offsets[:2]
+		b1.maxSetLength = 1
 		require.Equal(t, 1, b1.Len())
 		b1.CopySlice(b2, 0, 0, b2.Len())
 		require.Equal(t, 1, b1.Len())
@@ -434,56 +438,151 @@ func TestBytes(t *testing.T) {
 		other = b2.Window(0, 4)
 		other.AssertOffsetsAreNonDecreasing(4)
 	})
-}
 
-// TestAppendBytesWithLastNull makes sure that Append handles correctly the
-// case when the last element of Bytes vector is NULL.
-func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(types.Bytes, 4, StandardColumnFactory)
-	sel := []int{0, 2, 3}
-	src.Bytes().Set(0, []byte("zero"))
-	src.Nulls().SetNull(1)
-	src.Bytes().Set(2, []byte("two"))
-	src.Nulls().SetNull(3)
-	sliceArgs := SliceArgs{
-		Src:         src,
-		DestIdx:     0,
-		SrcStartIdx: 0,
-		SrcEndIdx:   len(sel),
-	}
-	dest := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
-	expected := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
-	for _, withSel := range []bool{false, true} {
-		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
-			expected.Nulls().UnsetNulls()
-			expected.Bytes().Reset()
-			if withSel {
-				sliceArgs.Sel = sel
-				for expIdx, srcIdx := range sel {
-					if src.Nulls().NullAt(srcIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(srcIdx))
-					}
+	t.Run("Truncate", func(t *testing.T) {
+		b := NewBytes(8)
+		b.Set(4, []byte("foo"))
+		require.Equal(t, 5, b.maxSetLength)
+		require.Panics(t, func() { b.Set(1, []byte("bar")) })
+		b.Truncate(1)
+		require.Equal(t, 1, b.maxSetLength)
+		require.NotPanics(t, func() { b.Set(1, []byte("baz")) })
+		require.Equal(t, 2, b.maxSetLength)
+		b.Truncate(0)
+		require.Equal(t, 0, b.maxSetLength)
+		require.NotPanics(t, func() { b.Set(4, []byte("deadbeef")) })
+	})
+
+	t.Run("Abbreviated", func(t *testing.T) {
+		rng, _ := randutil.NewPseudoRand()
+
+		// Create a vector with random bytes values.
+		b := NewBytes(250)
+		for i := 0; i < b.Len(); i++ {
+			size := rng.Intn(32)
+			b.Set(i, randutil.RandBytes(rng, size))
+		}
+
+		// Ensure that for every i and j:
+		//
+		//  - abbr[i] < abbr[j] iff b.Get(i) < b.Get(j)
+		//  - abbr[i] > abbr[j] iff b.Get(i) > b.Get(j)
+		//
+		abbr := b.Abbreviated()
+		for i := 0; i < b.Len(); i++ {
+			for j := 0; j < b.Len(); j++ {
+				cmp := bytes.Compare(b.Get(i), b.Get(j))
+				if abbr[i] < abbr[j] && cmp >= 0 {
+					t.Errorf("abbr value of %v should not be less than %v", b.Get(i), b.Get(j))
 				}
-			} else {
-				sliceArgs.Sel = nil
-				for expIdx := 0; expIdx < 3; expIdx++ {
-					if src.Nulls().NullAt(expIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(expIdx))
-					}
+				if abbr[i] > abbr[j] && cmp <= 0 {
+					t.Errorf("abbr value of %v should not be greater than %v", b.Get(i), b.Get(j))
 				}
 			}
-			expected.Bytes().UpdateOffsetsToBeNonDecreasing(3)
-			// require.Equal checks the "string-ified" versions of the vectors for
-			// equality. Bytes uses maxSetIndex to print out "truncated"
-			// representation, so we manually update it (Vec.Append will use
-			// AppendVal function that updates maxSetIndex itself).
-			expected.Bytes().maxSetIndex = 2
-			dest.Append(sliceArgs)
-			require.Equal(t, expected, dest)
-		})
+		}
+	})
+}
+
+func TestProportionalSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Use a large value so that the bytes vector needs to expand.
+	value := make([]byte, 3*BytesInitialAllocationFactor)
+
+	rng, _ := randutil.NewPseudoRand()
+	// We need a number divisible by 4.
+	fullCapacity := (1 + rng.Intn(100)) * 4
+	b := NewBytes(fullCapacity)
+	for i := 0; i < fullCapacity; i++ {
+		b.Set(i, value)
 	}
+
+	fullSize := b.ProportionalSize(int64(fullCapacity))
+
+	// Check that if we ask the size for a half of the capacity, we get the
+	// half of full size (modulo a fixed overhead value).
+	halfSize := b.ProportionalSize(int64(fullCapacity / 2))
+	require.Equal(t, int((fullSize-FlatBytesOverhead)/2), int(halfSize-FlatBytesOverhead))
+
+	// Check that if we create a window for a quarter of the capacity, we get
+	// the quarter of full size (modulo a fixed overhead value).
+	// Notably we don't start the window from the beginning.
+	quarterSize := b.Window(fullCapacity/4, fullCapacity/2).ProportionalSize(int64(fullCapacity / 4))
+	require.Equal(t, int(fullSize-FlatBytesOverhead)/4, int(quarterSize-FlatBytesOverhead))
+}
+
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
+func TestToArrowSerializationFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewPseudoRand()
+	nullChance := 0.2
+	maxStringLength := 10
+	numElements := 1 + rng.Intn(BatchSize())
+
+	b := NewBytes(numElements)
+	for i := 0; i < numElements; i++ {
+		if rng.Float64() < nullChance {
+			continue
+		}
+		element := []byte(randgen.RandString(rng, 1+rng.Intn(maxStringLength), letters))
+		b.Set(i, element)
+	}
+	// We have to call this in case there are trailing nulls.
+	b.UpdateOffsetsToBeNonDecreasing(numElements)
+
+	startIdx := rng.Intn(numElements)
+	endIdx := startIdx + rng.Intn(numElements-startIdx)
+	if endIdx == startIdx {
+		endIdx++
+	}
+	wind := b.Window(startIdx, endIdx)
+
+	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
+
+	require.Equal(t, wind.Len(), len(offsets)-1)
+	require.Equal(t, int32(0), offsets[0])
+	require.Equal(t, len(data), int(offsets[len(offsets)-1]))
+
+	// Verify that the offsets maintain the non-decreasing invariant.
+	for i := 1; i < len(offsets); i++ {
+		require.GreaterOrEqualf(t, offsets[i], offsets[i-1], "unexpectedly found decreasing offsets: %v", offsets)
+	}
+
+	// Verify that the data contains the correct values.
+	for i := 0; i < len(offsets)-1; i++ {
+		element := data[offsets[i]:offsets[i+1]]
+		require.Equal(t, wind.Get(i), element)
+	}
+}
+
+func TestForRegressions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("Regression test for #42054", func(t *testing.T) {
+		b := NewBytes(4)
+		b.Set(0, []byte("zero"))
+		b.Set(1, []byte("one"))
+		b.Set(2, []byte("two"))
+
+		// Emulate copying when the first two values are null and the last is
+		// non-null.
+		b.Reset()
+		b.Set(2, []byte("three"))
+		b.AssertOffsetsAreNonDecreasing(2)
+
+		b.Reset()
+		b.Set(0, []byte("zero"))
+		b.Set(1, []byte("one"))
+		b.Set(2, []byte("two"))
+		b.Set(3, []byte("three"))
+
+		// Emulate copying when the first and last values are non-null, and the
+		// middle two are null.
+		b.Reset()
+		b.Set(0, []byte("zero"))
+		b.Set(3, []byte("four"))
+		b.AssertOffsetsAreNonDecreasing(3)
+	})
 }

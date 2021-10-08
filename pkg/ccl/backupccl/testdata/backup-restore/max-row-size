@@ -1,0 +1,50 @@
+new-server name=m1
+----
+
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE maxrow (i INT PRIMARY KEY, s STRING);
+INSERT INTO maxrow VALUES (1, repeat('x', 20000));
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM maxrow ORDER BY i;
+----
+1 20004
+
+exec-sql
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = '16KiB';
+----
+
+query-sql
+INSERT INTO maxrow VALUES (2, repeat('x', 20000))
+----
+pq: row larger than max row size: table 55 family 0 primary key /Table/55/1/2/0 size 20013
+
+exec-sql
+BACKUP maxrow TO 'nodelocal://1/maxrow';
+CREATE DATABASE d2;
+RESTORE maxrow FROM 'nodelocal://1/maxrow' WITH into_db='d2';
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
+----
+1 20004
+
+query-sql
+INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
+----
+pq: row larger than max row size: table 57 family 0 primary key /Table/57/1/2/0 size 20013
+
+exec-sql
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
+INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
+----
+1 20004
+2 20004

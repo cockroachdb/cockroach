@@ -1,0 +1,92 @@
+exec-ddl
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT UNIQUE WITHOUT INDEX,
+  z INT NOT NULL UNIQUE WITHOUT INDEX,
+  a INT,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  UNIQUE WITHOUT INDEX (a, b),
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (c) WHERE a > 5
+)
+----
+
+# Test that we build appropriate strict or lax keys for each of the UNIQUE
+# WITHOUT INDEX constraints depending on whether or not the columns allow
+# NULL values. We should not build a key for the partial constraint.
+build
+SELECT * FROM t
+----
+project
+ ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6), (2)~~>(1,3-6), (3)-->(1,2,4-6), (4,5)~~>(1-3,6), (5,6)-->(1-4)
+ ├── prune: (1-6)
+ ├── interesting orderings: (+1)
+ └── scan t
+      ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal) tableoid:8(oid)
+      ├── key: (1)
+      ├── fd: (1)-->(2-8), (2)~~>(1,3-8), (3)-->(1,2,4-8), (4,5)~~>(1-3,6-8), (5,6)-->(1-4,7,8)
+      ├── prune: (1-8)
+      └── interesting orderings: (+1)
+
+# Because we're constraining a key to a constant, the resulting FDs should
+# show that all columns are now constant, and cardinality is at most 1.
+build
+SELECT * FROM t WHERE y = 5
+----
+project
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ ├── prune: (1-6)
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal) tableoid:8(oid)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-8)
+      ├── prune: (1,3-8)
+      ├── scan t
+      │    ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal) tableoid:8(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-8), (2)~~>(1,3-8), (3)-->(1,2,4-8), (4,5)~~>(1-3,6-8), (5,6)-->(1-4,7,8)
+      │    ├── prune: (1-8)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+                ├── variable: y:2 [type=int]
+                └── const: 5 [type=int]
+
+# Because we're constraining a key to a constant, the resulting FDs should
+# show that all columns are now constant, and cardinality is at most 1.
+build
+SELECT * FROM t WHERE a = 1 AND b = 1
+----
+project
+ ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ ├── prune: (1-6)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int!null) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal) tableoid:8(oid)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-8)
+      ├── prune: (1-3,6-8)
+      ├── scan t
+      │    ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal) tableoid:8(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-8), (2)~~>(1,3-8), (3)-->(1,2,4-8), (4,5)~~>(1-3,6-8), (5,6)-->(1-4,7,8)
+      │    ├── prune: (1-8)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── and [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/1 - /1]; tight), fd=()-->(4,5)]
+                ├── eq [type=bool]
+                │    ├── variable: a:4 [type=int]
+                │    └── const: 1 [type=int]
+                └── eq [type=bool]
+                     ├── variable: b:5 [type=int]
+                     └── const: 1 [type=int]

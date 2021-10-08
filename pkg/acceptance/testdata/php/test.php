@@ -21,3 +21,15 @@ $stmt = $dbh->prepare('UPDATE bank.accounts SET balance = balance + :deposit WHE
 $stmt->execute(array('account' => 1, 'deposit' => 10));
 $stmt->execute(array('account' => 2, 'deposit' => -10));
 $dbh->commit();
+
+// Regression test for #59007.
+$stmt = $dbh->prepare("insert into a_table (id, a) select ?, ?, ?, ? returning id");
+$stmt->bindValue(1, 'ed66e7c0-5c39-11eb-8992-89bd28f48e75');
+$stmt->bindValue(2, 'bugging_a');
+$stmt->bindValue(3, 'bugging_b');
+try {
+  $stmt->execute();
+  assert(false, "expected exception in execute");
+} catch (Exception $e) {
+  assert(strpos($e.getMessage(), "expected 4 arguments, got 3"));
+}

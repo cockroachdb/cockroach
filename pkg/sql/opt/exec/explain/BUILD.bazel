@@ -1,0 +1,80 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "explain",
+    srcs = [
+        "emit.go",
+        "explain_factory.go",
+        "flags.go",
+        "output.go",
+        "result_columns.go",
+        ":gen-explain-factory",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/inverted",  # keep
+        "//pkg/sql/opt",  # keep
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/invertedexpr",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/errorutil",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/treeprinter",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
+    ],
+)
+
+go_test(
+    name = "explain_test",
+    size = "small",
+    srcs = [
+        "explain_factory_test.go",
+        "main_test.go",
+        "output_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":explain"],
+    deps = [
+        "//pkg/base",
+        "//pkg/server",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/treeprinter",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+# Define a generator for factory explanation code.
+genrule(
+    name = "gen-explain-factory",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        "//pkg/sql/opt/exec:defs",
+    ],
+    outs = ["explain_factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execexplain $(locations //pkg/sql/opt/exec:defs)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

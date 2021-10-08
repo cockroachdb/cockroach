@@ -1,0 +1,18 @@
+# This file contains telemetry tests for the sql.reassign_owned_by counter.
+
+feature-allowlist
+sql.reassign_owned_by.*
+----
+
+exec
+CREATE ROLE testuser;
+CREATE ROLE testuser2;
+CREATE TABLE t();
+GRANT CREATE ON DATABASE defaultdb TO testuser, testuser2;
+ALTER TABLE t OWNER TO testuser
+----
+
+feature-usage
+REASSIGN OWNED BY testuser TO testuser2
+----
+sql.reassign_owned_by

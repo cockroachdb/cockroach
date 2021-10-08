@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlsmith",
+    srcs = [
+        "alter.go",
+        "bulkio.go",
+        "random.go",
+        "relational.go",
+        "sampler.go",
+        "scalar.go",
+        "schema.go",
+        "scope.go",
+        "setup.go",
+        "sqlsmith.go",
+        "tlp.go",
+        "type.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/sqlsmith",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "sqlsmith_test",
+    size = "medium",
+    srcs = [
+        "main_test.go",
+        "sqlsmith_test.go",
+    ],
+    data = ["@cockroach//c-deps:libgeos"],
+    embed = [":sqlsmith"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/parser",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

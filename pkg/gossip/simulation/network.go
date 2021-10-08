@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -43,7 +42,7 @@ type Node struct {
 	Server    *grpc.Server
 	Listener  net.Listener
 	Registry  *metric.Registry
-	Resolvers []resolver.Resolver
+	Addresses []util.UnresolvedAddr
 }
 
 // Addr returns the address of the connected listener.
@@ -63,7 +62,7 @@ type Network struct {
 
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(
-	stopper *stop.Stopper, nodeCount int, createResolvers bool, defaultZoneConfig *zonepb.ZoneConfig,
+	stopper *stop.Stopper, nodeCount int, createAddresses bool, defaultZoneConfig *zonepb.ZoneConfig,
 ) *Network {
 	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
@@ -95,13 +94,10 @@ func NewNetwork(
 		if err != nil {
 			log.Fatalf(context.TODO(), "%v", err)
 		}
-		// Build a resolver for each instance or we'll get data races.
-		if createResolvers {
-			r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr())
-			if err != nil {
-				log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr(), err)
+		if createAddresses {
+			node.Addresses = []util.UnresolvedAddr{
+				util.MakeUnresolvedAddr("tcp", n.Nodes[0].Addr().String()),
 			}
-			node.Resolvers = []resolver.Resolver{r}
 		}
 	}
 	return n
@@ -116,11 +112,10 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
 	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry, defaultZoneConfig)
-	n.Stopper.RunWorker(context.TODO(), func(context.Context) {
+	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
+	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
-		<-n.Stopper.ShouldStop()
-		server.Stop()
 		node.Gossip.EnableSimulationCycler(false)
 	})
 	n.Nodes = append(n.Nodes, node)
@@ -130,7 +125,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Addr(), node.Resolvers)
+	node.Gossip.Start(node.Addr(), node.Addresses)
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)
@@ -144,10 +139,9 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	n.Stopper.RunWorker(context.TODO(), func(context.Context) {
+	return n.Stopper.RunAsyncTask(context.TODO(), "start-node", func(context.Context) {
 		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
 	})
-	return nil
 }
 
 // GetNodeFromID returns the simulation node associated with

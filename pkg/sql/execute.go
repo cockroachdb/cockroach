@@ -13,11 +13,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,7 +47,7 @@ func fillInPlaceholders(
 		if !ok {
 			return nil, errors.AssertionFailedf("no type for placeholder %s", idx)
 		}
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, tree.VolatilityVolatile,
 		)
 		if err != nil {

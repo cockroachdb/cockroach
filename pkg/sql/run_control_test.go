@@ -13,82 +13,26 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
-	gosqldriver "database/sql/driver"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
-
-func TestCancelSelectQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const queryToCancel = "SELECT * FROM generate_series(1,20000000)"
-
-	var conn1 *gosql.DB
-	var conn2 *gosql.DB
-
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
-	defer tc.Stopper().Stop(context.Background())
-
-	conn1 = tc.ServerConn(0)
-	conn2 = tc.ServerConn(1)
-
-	sem := make(chan struct{})
-	errChan := make(chan error)
-
-	go func() {
-		sem <- struct{}{}
-		rows, err := conn2.Query(queryToCancel)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		for rows.Next() {
-		}
-		if err = rows.Err(); err != nil {
-			errChan <- err
-		}
-	}()
-
-	<-sem
-	time.Sleep(time.Second * 2)
-
-	const cancelQuery = "CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 2"
-
-	if _, err := conn1.Exec(cancelQuery); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case err := <-errChan:
-		if !isClientsideQueryCanceledErr(err) {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second * 5):
-		t.Fatal("no error received from query supposed to be canceled")
-	}
-
-}
 
 // TestCancelDistSQLQuery runs a distsql query and cancels it randomly at
 // various points of execution.
@@ -96,7 +40,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
-	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s'", queryToCancel)
+	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query = '%s'", queryToCancel)
 
 	// conn1 is used for the query above. conn2 is solely for the CANCEL statement.
 	var conn1 *gosql.DB
@@ -105,7 +49,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -178,165 +122,256 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		// A successful cancellation does not imply that the query was canceled.
 		return
 	}
-	if !isClientsideQueryCanceledErr(err) {
+	if !sqltestutils.IsClientSideQueryCanceledErr(err) {
 		t.Fatalf("expected error with specific error code, got: %s", err)
 	}
 }
 
-func testCancelSession(t *testing.T, hasActiveSession bool) {
-	ctx := context.Background()
+func TestCancelSessionPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
+	// getSessionIDs retrieves the IDs of any currently running queries for the
+	// specified user.
+	getSessionIDs := func(t *testing.T, ctx context.Context, conn *gosql.Conn, user string) []string {
+		rows, err := conn.QueryContext(
+			ctx, "SELECT session_id FROM [SHOW SESSIONS] WHERE user_name = $1", user,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sessionIDs []string
+		for rows.Next() {
+			var sessionID string
+			if err := rows.Scan(&sessionID); err != nil {
+				t.Fatal(err)
+			}
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return sessionIDs
+	}
+
+	ctx := context.Background()
 	numNodes := 2
-	tc := serverutils.StartTestCluster(t, numNodes,
+	testCluster := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Insecure: true,
+			},
 		})
-	defer tc.Stopper().Stop(ctx)
+	defer testCluster.Stopper().Stop(ctx)
 
-	// Since we're testing session cancellation, use single connections instead of
-	// connection pools.
-	var err error
-	conn1, err := tc.ServerConn(0).Conn(ctx)
+	// Create users with various permissions.
+	conn, err := testCluster.ServerConn(0).Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn2, err := tc.ServerConn(1).Conn(ctx)
+	_, err = conn.ExecContext(ctx, `
+CREATE USER has_admin;
+CREATE USER has_admin2;
+CREATE USER has_cancelquery CANCELQUERY;
+CREATE USER no_perms;
+GRANT admin TO has_admin;
+GRANT admin TO has_admin2;
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for node 2 to know about both sessions.
-	if err := retry.ForDuration(10*time.Second, func() error {
-		rows, err := conn2.QueryContext(ctx, "SELECT * FROM [SHOW CLUSTER SESSIONS] WHERE application_name NOT LIKE '$%'")
+	type testCase struct {
+		name          string
+		user          string
+		targetUser    string
+		shouldSucceed bool
+		expectedErrRE string
+	}
+	testCases := []testCase{
+		{"admins can cancel other admins", "has_admin", "has_admin2", true, ""},
+		{"non-admins with CANCELQUERY can cancel non-admins", "has_cancelquery", "no_perms", true,
+			""},
+		{"non-admins cannot cancel admins", "has_cancelquery", "has_admin", false,
+			"permission denied to cancel admin session"},
+		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
+			"this operation requires CANCELQUERY privilege"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Open a session for the target user.
+			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			defer targetDB.Close()
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+
+			// Retrieve the session ID.
+			var sessionID string
+			testutils.SucceedsSoon(t, func() error {
+				sessionIDs := getSessionIDs(t, ctx, conn, tc.targetUser)
+				if len(sessionIDs) == 0 {
+					return errors.New("could not find session")
+				}
+				if len(sessionIDs) > 1 {
+					return errors.New("found multiple sessions")
+				}
+				sessionID = sessionIDs[0]
+				return nil
+			})
+
+			// Attempt to cancel the session. We connect to the other node to make sure
+			// non-local sessions can be canceled.
+			db := getUserConn(t, tc.user, testCluster.Server(1))
+			defer db.Close()
+			runner := sqlutils.MakeSQLRunner(db)
+			if tc.shouldSucceed {
+				runner.Exec(t, `CANCEL SESSION $1`, sessionID)
+				testutils.SucceedsSoon(t, func() error {
+					sessionIDs := getSessionIDs(t, ctx, conn, tc.targetUser)
+					if len(sessionIDs) > 0 {
+						return errors.Errorf("expected no sessions for %q, found %d", tc.targetUser, len(sessionIDs))
+					}
+					return nil
+				})
+			} else {
+				runner.ExpectErr(t, tc.expectedErrRE, `CANCEL SESSION $1`, sessionID)
+			}
+		})
+	}
+}
+
+func TestCancelQueryPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// getQueryIDs retrieves the IDs of any currently running queries for the
+	// specified user.
+	getQueryIDs := func(t *testing.T, ctx context.Context, conn *gosql.Conn, user string) []string {
+		rows, err := conn.QueryContext(
+			ctx, "SELECT query_id FROM [SHOW QUERIES] WHERE user_name = $1", user,
+		)
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
-
-		m, err := sqlutils.RowsToStrMatrix(rows)
-		if err != nil {
-			return err
+		var queryIDs []string
+		for rows.Next() {
+			var queryID string
+			if err := rows.Scan(&queryID); err != nil {
+				t.Fatal(err)
+			}
+			queryIDs = append(queryIDs, queryID)
 		}
-
-		if numRows := len(m); numRows != numNodes {
-			return fmt.Errorf("expected %d sessions but found %d\n%s",
-				numNodes, numRows, sqlutils.MatrixToStr(m))
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
 		}
-
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+		return queryIDs
 	}
 
-	// Get node 1's session ID now, so that we don't need to serialize the session
-	// later and race with the active query's type-checking and name resolution.
-	rows, err := conn1.QueryContext(
-		ctx, "SELECT session_id FROM [SHOW LOCAL SESSIONS]",
-	)
+	ctx := context.Background()
+	numNodes := 2
+	testCluster := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Insecure: true,
+			},
+		})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Create users with various permissions.
+	conn, err := testCluster.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, `
+CREATE USER has_admin;
+CREATE USER has_admin2;
+CREATE USER has_cancelquery CANCELQUERY;
+CREATE USER no_perms;
+GRANT admin TO has_admin;
+GRANT admin TO has_admin2;
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var id string
-	if !rows.Next() {
-		t.Fatal("no sessions on node 1")
+	type testCase struct {
+		name          string
+		user          string
+		targetUser    string
+		shouldSucceed bool
+		expectedErrRE string
 	}
-	if err := rows.Scan(&id); err != nil {
-		t.Fatal(err)
+	testCases := []testCase{
+		{"admins can cancel other admins", "has_admin", "has_admin2", true, ""},
+		{"non-admins with CANCELQUERY can cancel non-admins", "has_cancelquery", "no_perms", true,
+			""},
+		{"non-admins cannot cancel admins", "has_cancelquery", "has_admin", false,
+			"permission denied to cancel admin session"},
+		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
+			"this operation requires CANCELQUERY privilege"},
 	}
-	if err := rows.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// Avoid using subtests with t.Run since we may need to access `t` after the
+	// subtest is done. Use a WaitGroup to make sure the error from the pg_sleep
+	// goroutine is checked.
+	wg := sync.WaitGroup{}
+	for _, tc := range testCases {
+		func() {
+			wg.Add(1)
+			// Start a query with the target user.
+			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			defer targetDB.Close()
+			go func() {
+				var errRE string
+				if tc.shouldSucceed {
+					errRE = "query execution canceled"
+				} else {
+					// The query should survive until the connection gets torn down at the
+					// end of the test.
+					errRE = "sql: database is closed"
+				}
+				_, err := targetDB.ExecContext(context.Background(), "SELECT pg_sleep(100)")
+				if !testutils.IsError(err, errRE) {
+					t.Errorf("expected error '%s', got: %v", errRE, err)
+				}
+				wg.Done()
+			}()
 
-	// Now that we've obtained the session ID, query planning won't race with
-	// session serialization, so we can kick it off now.
-	errChan := make(chan error, 1)
-	if hasActiveSession {
-		go func() {
-			var err error
-			_, err = conn1.ExecContext(ctx, "SELECT pg_sleep(1000000)")
-			errChan <- err
+			// Retrieve the query ID.
+			var queryID string
+			testutils.SucceedsSoon(t, func() error {
+				queryIDs := getQueryIDs(t, ctx, conn, tc.targetUser)
+				if len(queryIDs) == 0 {
+					return errors.New("could not find query")
+				}
+				if len(queryIDs) > 1 {
+					return errors.New("found multiple queries")
+				}
+				queryID = queryIDs[0]
+				return nil
+			})
+
+			// Attempt to cancel the query. We connect to the other node to make sure
+			// non-local queries can be canceled.
+			db := getUserConn(t, tc.user, testCluster.Server(1))
+			defer db.Close()
+			runner := sqlutils.MakeSQLRunner(db)
+			if tc.shouldSucceed {
+				runner.Exec(t, `CANCEL QUERY $1`, queryID)
+			} else {
+				runner.ExpectErr(t, tc.expectedErrRE, `CANCEL QUERY $1`, queryID)
+			}
 		}()
 	}
-
-	// Cancel the session on node 1.
-	if _, err = conn2.ExecContext(ctx, fmt.Sprintf("CANCEL SESSION '%s'", id)); err != nil {
-		t.Fatal(err)
-	}
-
-	if hasActiveSession {
-		// Verify that the query was canceled because the session closed.
-		err = <-errChan
-	} else {
-		// Verify that the connection is closed.
-		_, err = conn1.ExecContext(ctx, "SELECT 1")
-	}
-
-	if !errors.Is(err, gosqldriver.ErrBadConn) {
-		t.Fatalf("session not canceled; actual error: %s", err)
-	}
-}
-
-func TestCancelMultipleSessions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	// Open two connections on node 1.
-	var conns [2]*gosql.Conn
-	for i := 0; i < 2; i++ {
-		var err error
-		if conns[i], err = tc.ServerConn(0).Conn(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := conns[i].ExecContext(ctx, "SET application_name = 'killme'"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Open a control connection on node 2.
-	ctlconn, err := tc.ServerConn(1).Conn(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Cancel the sessions on node 1.
-	if _, err = ctlconn.ExecContext(ctx,
-		`CANCEL SESSIONS SELECT session_id FROM [SHOW CLUSTER SESSIONS] WHERE application_name = 'killme'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify that the connections on node 1 are closed.
-	for i := 0; i < 2; i++ {
-		_, err := conns[i].ExecContext(ctx, "SELECT 1")
-		if !errors.Is(err, gosqldriver.ErrBadConn) {
-			t.Fatalf("session %d not canceled; actual error: %s", i, err)
-		}
-	}
-}
-
-func TestIdleCancelSession(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testCancelSession(t, false /* hasActiveSession */)
-}
-
-func TestActiveCancelSession(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testCancelSession(t, true /* hasActiveSession */)
+	testCluster.Stopper().Stop(ctx)
+	wg.Wait()
 }
 
 func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -344,10 +379,8 @@ func TestCancelIfExists(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 
-	var err error
-
 	// Try to cancel a query that doesn't exist.
-	_, err = conn.Exec("CANCEL QUERY IF EXISTS '00000000000000000000000000000001'")
+	_, err := conn.Exec("CANCEL QUERY IF EXISTS '00000000000000000000000000000001'")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,29 +392,35 @@ func TestCancelIfExists(t *testing.T) {
 	}
 }
 
-func isClientsideQueryCanceledErr(err error) bool {
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
-	}
-	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
-}
-
 func TestIdleInSessionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	var err error
+	clusterSettingConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	clusterSettingConn.Exec(t, `SET CLUSTER SETTING sql.defaults.idle_in_session_timeout = '100s'`)
+	defer tc.ServerConn(0).Close()
+
 	conn, err := tc.ServerConn(0).Conn(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var idleInSessionTimeoutSetting string
+		err = conn.QueryRowContext(ctx, `SHOW idle_in_session_timeout`).Scan(&idleInSessionTimeoutSetting)
+		require.NoError(t, err)
+		if idleInSessionTimeoutSetting == "100000" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		return errors.Errorf("expected idle_in_session_timeout %s, got %s", "100000", idleInSessionTimeoutSetting)
+	})
 
 	_, err = conn.ExecContext(ctx, `SET idle_in_session_timeout = '2s'`)
 	if err != nil {
@@ -425,4 +464,262 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		t.Fatal("expected the connection to be killed " +
 			"but the connection is still alive")
 	}
+}
+
+func TestIdleInTransactionSessionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	clusterSettingConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	clusterSettingConn.Exec(t, `SET CLUSTER SETTING sql.defaults.idle_in_transaction_session_timeout = '123s'`)
+	defer tc.ServerConn(0).Close()
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var idleInTransactionSessionTimeoutSetting string
+		err = conn.QueryRowContext(ctx, `SHOW idle_in_transaction_session_timeout`).Scan(&idleInTransactionSessionTimeoutSetting)
+		require.NoError(t, err)
+		if idleInTransactionSessionTimeoutSetting == "123000" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		return errors.Errorf("expected idle_in_transaction_session_timeout %s, got %s", "123000", idleInTransactionSessionTimeoutSetting)
+	})
+
+	_, err = conn.ExecContext(ctx, `SET idle_in_transaction_session_timeout = '2s'`)
+	require.NoError(t, err)
+
+	time.Sleep(3 * time.Second)
+	// idle_in_transaction_session_timeout should only timeout if a transaction
+	// is active
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}
+
+func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.ServerConn(0)
+	_, err := conn.ExecContext(ctx, `SET idle_in_transaction_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Go into state aborted.
+	_, err = conn.ExecContext(ctx, `SELECT crdb_internal.force_error('', 'error')`)
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: error" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	// Statement should execute in aborted state.
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: current transaction is aborted, commands ignored until end of transaction block" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}
+
+func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.ServerConn(0)
+	_, err := conn.ExecContext(ctx, `SET idle_in_transaction_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Go into commit wait state.
+	_, err = conn.ExecContext(ctx, `SAVEPOINT cockroach_restart`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `RELEASE SAVEPOINT cockroach_restart`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	// This statement errors but should still reset the timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	// Statement should execute in aborted state.
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: current transaction is committed, commands ignored until end of transaction block" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}
+
+func TestStatementTimeoutRetryableErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	clusterSettingConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	clusterSettingConn.Exec(t, `SET CLUSTER SETTING sql.defaults.statement_timeout = '123s'`)
+	defer tc.ServerConn(0).Close()
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var statementTimeoutSetting string
+		err = conn.QueryRowContext(ctx, `SHOW statement_timeout`).Scan(&statementTimeoutSetting)
+		require.NoError(t, err)
+		if statementTimeoutSetting == "123000" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		return errors.Errorf("expected statement_timeout %s, got %s", "123000", statementTimeoutSetting)
+	})
+
+	_, err = conn.QueryContext(ctx, `SET statement_timeout = '0.1s'`)
+	require.NoError(t, err)
+
+	testutils.RunTrueAndFalse(t, "test statement timeout with explicit txn",
+		func(t *testing.T, explicitTxn bool) {
+			query := `SELECT crdb_internal.force_retry('2s');`
+			if explicitTxn {
+				query = `BEGIN; ` + query + ` COMMIT;`
+			}
+			startTime := timeutil.Now()
+			_, err = conn.QueryContext(ctx, query)
+			require.Regexp(t, "pq: query execution canceled due to statement timeout", err)
+
+			// The query timeout should be triggered and therefore the force retry
+			// should not last for 2 seconds as specified.
+			if timeutil.Since(startTime) >= 2*time.Second {
+				t.Fatal("expected the query to error out due to the statement_timeout.")
+			}
+		})
+}
+
+func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(username),
+		Host:     server.ServingSQLAddr(),
+		RawQuery: "sslmode=disable",
+	}
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
 }

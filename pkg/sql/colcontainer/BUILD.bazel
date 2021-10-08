@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colcontainer",
+    srcs = [
+        "diskqueue.go",
+        "partitionedqueue.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colcontainer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/colserde",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/types",
+        "//pkg/storage/fs",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_snappy//:snappy",
+        "@com_github_marusama_semaphore//:semaphore",
+    ],
+)
+
+go_test(
+    name = "colcontainer_test",
+    size = "small",
+    srcs = [
+        "diskqueue_test.go",
+        "main_test.go",
+        "partitionedqueue_test.go",
+    ],
+    deps = [
+        ":colcontainer",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
+        "//pkg/storage/fs",
+        "//pkg/testutils/colcontainerutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_stretchr_testify//require",
+    ],
+)

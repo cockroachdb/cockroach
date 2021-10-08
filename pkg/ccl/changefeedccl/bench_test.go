@@ -20,15 +20,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -132,9 +132,14 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, _ *descpb.TableDescriptor, k, v []byte, _ hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
-	return s.emit(int64(len(k) + len(v)))
+	defer alloc.Release(ctx)
+	return s.emit(int64(len(key) + len(value)))
 }
 func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc.Timestamp) error {
 	var noTopic string
@@ -146,6 +151,8 @@ func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc
 }
 func (s *benchSink) Flush(_ context.Context) error { return nil }
 func (s *benchSink) Close() error                  { return nil }
+func (s *benchSink) Dial() error                   { return nil }
+
 func (s *benchSink) emit(bytes int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -179,7 +186,7 @@ func (s *benchSink) WaitForEmit() (int, int64) {
 // if the changefeed had failed before the closure was called.
 //
 // This intentionally skips the distsql and sink parts to keep the benchmark
-// focused on the core changefeed work, but it does include the poller.
+// focused on the core changefeed work.
 func createBenchmarkChangefeed(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
@@ -189,15 +196,15 @@ func createBenchmarkChangefeed(
 	tableDesc := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
-		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
-			StatementTimeName: tableDesc.Name,
+		Targets: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.GetName(),
 		}},
 		Opts: map[string]string{
 			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts)
+	encoder, err := makeJSONEncoder(details.Opts, details.Targets)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,8 +212,7 @@ func createBenchmarkChangefeed(
 
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
-	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := s.LeaseManager().(*lease.Manager)
+	buf := kvevent.MakeChanBuffer()
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -223,20 +229,34 @@ func createBenchmarkChangefeed(
 		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
 		Targets:          details.Targets,
-		Sink:             buf,
-		LeaseMgr:         leaseMgr,
+		Writer:           buf,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
+		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}
 
-	rowsFn := kvsToRows(s.ExecutorConfig().(sql.ExecutorConfig).Codec,
-		s.LeaseManager().(*lease.Manager), details, buf.Get)
-	sf := span.MakeFrontier(spans...)
-	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
-		encoder, sink, rowsFn, TestingKnobs{}, metrics)
+	sf, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, nil, err
+	}
+	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
+		sink, encoder, details, TestingKnobs{})
+	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
+		event, err := buf.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if event.Type() == kvevent.TypeKV {
+			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
+				return nil, err
+			}
+		}
+		return event.Resolved(), nil
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = kvfeed.Run(ctx, kvfeedCfg) }()
@@ -247,22 +267,27 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := span.MakeFrontier(spans...)
+			sf, err := span.MakeFrontier(spans...)
+			if err != nil {
+				return err
+			}
 			for {
 				// This is basically the ChangeAggregator processor.
-				resolvedSpans, err := tickFn(ctx)
+				rs, err := tickFn(ctx)
 				if err != nil {
 					return err
 				}
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				for _, rs := range resolvedSpans {
-					if sf.Forward(rs.Span, rs.Timestamp) {
-						frontier := sf.Frontier()
-						if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
-							return err
-						}
+				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					return err
+				}
+				if advanced {
+					frontier := sf.Frontier()
+					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
+						return err
 					}
 				}
 			}

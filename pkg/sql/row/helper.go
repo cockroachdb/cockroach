@@ -11,24 +11,85 @@
 package row
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
+
+const (
+	// maxRowSizeFloor is the lower bound for sql.guardrails.max_row_size_{log|err}.
+	maxRowSizeFloor = 1 << 10
+	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
+	maxRowSizeCeil = 1 << 30
+)
+
+var maxRowSizeLog = settings.RegisterByteSizeSetting(
+	"sql.guardrails.max_row_size_log",
+	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
+		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
+		"if the mutating statement was internal); use 0 to disable",
+	kvserver.MaxCommandSizeDefault,
+	func(size int64) error {
+		if size != 0 && size < maxRowSizeFloor {
+			return errors.Newf(
+				"cannot set sql.guardrails.max_row_size_log to %v, must be 0 or >= %v",
+				size, maxRowSizeFloor,
+			)
+		} else if size > maxRowSizeCeil {
+			return errors.Newf(
+				"cannot set sql.guardrails.max_row_size_log to %v, must be <= %v",
+				size, maxRowSizeCeil,
+			)
+		}
+		return nil
+	},
+).WithPublic()
+
+var maxRowSizeErr = settings.RegisterByteSizeSetting(
+	"sql.guardrails.max_row_size_err",
+	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
+		"write to the database, above which an error is returned; use 0 to disable",
+	512<<20, /* 512 MiB */
+	func(size int64) error {
+		if size != 0 && size < maxRowSizeFloor {
+			return errors.Newf(
+				"cannot set sql.guardrails.max_row_size_err to %v, must be 0 or >= %v",
+				size, maxRowSizeFloor,
+			)
+		} else if size > maxRowSizeCeil {
+			return errors.Newf(
+				"cannot set sql.guardrails.max_row_size_err to %v, must be <= %v",
+				size, maxRowSizeCeil,
+			)
+		}
+		return nil
+	},
+).WithPublic()
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
 	Codec keys.SQLCodec
 
-	TableDesc *sqlbase.ImmutableTableDescriptor
+	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []descpb.IndexDescriptor
-	indexEntries []sqlbase.IndexEntry
+	Indexes      []catalog.Index
+	indexEntries []rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -36,23 +97,43 @@ type rowHelper struct {
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      map[descpb.ColumnID]struct{}
+	primaryIndexKeyCols   catalog.TableColSet
+	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
+
+	// Used to check row size.
+	maxRowSizeLog, maxRowSizeErr uint32
+	internal                     bool
+	metrics                      *Metrics
 }
 
 func newRowHelper(
-	codec keys.SQLCodec, desc *sqlbase.ImmutableTableDescriptor, indexes []descpb.IndexDescriptor,
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	sv *settings.Values,
+	internal bool,
+	metrics *Metrics,
 ) rowHelper {
-	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
+	rh := rowHelper{
+		Codec:     codec,
+		TableDesc: desc,
+		Indexes:   indexes,
+		internal:  internal,
+		metrics:   metrics,
+	}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(&rh.TableDesc.PrimaryIndex)
+	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
-		rh.secIndexValDirs[i] = sqlbase.IndexKeyValDirs(&rh.Indexes[i])
+		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
 	}
+
+	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
+	rh.maxRowSizeErr = uint32(maxRowSizeErr.Get(sv))
 
 	return rh
 }
@@ -62,11 +143,11 @@ func newRowHelper(
 // encodeSecondaryIndexes. includeEmpty details whether the results should
 // include empty secondary index k/v pairs.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[descpb.ColumnID]int,
+	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,
-) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
+) (primaryIndexKey []byte, secondaryIndexEntries []rowenc.IndexEntry, err error) {
 	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
@@ -80,14 +161,14 @@ func (rh *rowHelper) encodeIndexes(
 
 // encodePrimaryIndex encodes the primary index key.
 func (rh *rowHelper) encodePrimaryIndex(
-	colIDtoRowIndex map[descpb.ColumnID]int, values []tree.Datum,
+	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
-			rh.TableDesc.PrimaryIndex.ID)
+		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
+			rh.TableDesc.GetPrimaryIndexID())
 	}
-	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
+		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	return primaryIndexKey, err
 }
 
@@ -103,21 +184,21 @@ func (rh *rowHelper) encodePrimaryIndex(
 // includeEmpty details whether the results should include empty secondary index
 // k/v pairs.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[descpb.ColumnID]int,
+	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,
-) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
+) (secondaryIndexEntries []rowenc.IndexEntry, err error) {
 	if cap(rh.indexEntries) < len(rh.Indexes) {
-		rh.indexEntries = make([]sqlbase.IndexEntry, 0, len(rh.Indexes))
+		rh.indexEntries = make([]rowenc.IndexEntry, 0, len(rh.Indexes))
 	}
 
 	rh.indexEntries = rh.indexEntries[:0]
 
 	for i := range rh.Indexes {
-		index := &rh.Indexes[i]
-		if !ignoreIndexes.Contains(int(index.ID)) {
-			entries, err := sqlbase.EncodeSecondaryIndex(rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
+		index := rh.Indexes[i]
+		if !ignoreIndexes.Contains(int(index.GetID())) {
+			entries, err := rowenc.EncodeSecondaryIndex(rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}
@@ -128,22 +209,19 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 	return rh.indexEntries, nil
 }
 
-// skipColumnInPK returns true if the value at column colID does not need
-// to be encoded because it is already part of the primary key. Composite
+// skipColumnNotInPrimaryIndexValue returns true if the value at column colID
+// does not need to be encoded, either because it is already part of the primary
+// key, or because it is not part of the primary index altogether. Composite
 // datums are considered too, so a composite datum in a PK will return false.
-// TODO(dan): This logic is common and being moved into TableDescriptor (see
-// #6233). Once it is, use the shared one.
-func (rh *rowHelper) skipColumnInPK(
-	colID descpb.ColumnID, family descpb.FamilyID, value tree.Datum,
+func (rh *rowHelper) skipColumnNotInPrimaryIndexValue(
+	colID descpb.ColumnID, value tree.Datum,
 ) (bool, error) {
-	if rh.primaryIndexCols == nil {
-		rh.primaryIndexCols = make(map[descpb.ColumnID]struct{})
-		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
-			rh.primaryIndexCols[colID] = struct{}{}
-		}
+	if rh.primaryIndexKeyCols.Empty() {
+		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
+		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
 	}
-	if _, ok := rh.primaryIndexCols[colID]; !ok {
-		return false, nil
+	if !rh.primaryIndexKeyCols.Contains(colID) {
+		return !rh.primaryIndexValueCols.Contains(colID), nil
 	}
 	if cdatum, ok := value.(tree.CompositeDatum); ok {
 		// Composite columns are encoded in both the key and the value.
@@ -157,14 +235,58 @@ func (rh *rowHelper) skipColumnInPK(
 
 func (rh *rowHelper) sortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, len(rh.TableDesc.Families))
-		for i := range rh.TableDesc.Families {
-			family := &rh.TableDesc.Families[i]
-			colIDs := append([]descpb.ColumnID(nil), family.ColumnIDs...)
+		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, rh.TableDesc.NumFamilies())
+
+		_ = rh.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+			colIDs := append([]descpb.ColumnID{}, family.ColumnIDs...)
 			sort.Sort(descpb.ColumnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
-		}
+			return nil
+		})
 	}
 	colIDs, ok := rh.sortedColumnFamilies[famID]
 	return colIDs, ok
+}
+
+// checkRowSize compares the size of a primary key column family against the
+// max_row_size limits.
+func (rh *rowHelper) checkRowSize(
+	ctx context.Context, key *roachpb.Key, value *roachpb.Value, family descpb.FamilyID,
+) error {
+	size := uint32(len(*key)) + uint32(len(value.RawBytes))
+	shouldLog := rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog
+	shouldErr := rh.maxRowSizeErr != 0 && size > rh.maxRowSizeErr
+	if !shouldLog && !shouldErr {
+		return nil
+	}
+	details := eventpb.CommonLargeRowDetails{
+		RowSize:    size,
+		TableID:    uint32(rh.TableDesc.GetID()),
+		FamilyID:   uint32(family),
+		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
+	}
+	if rh.internal && shouldErr {
+		// Internal work should never err and always log if violating either limit.
+		shouldErr = false
+		shouldLog = true
+	}
+	if shouldLog {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeLogCount.Inc(1)
+		}
+		var event eventpb.EventPayload
+		if rh.internal {
+			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
+		} else {
+			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
+		}
+		log.StructuredEvent(ctx, event)
+	}
+	if shouldErr {
+		if rh.metrics != nil {
+			rh.metrics.MaxRowSizeErrCount.Inc(1)
+		}
+		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
+	}
+	return nil
 }

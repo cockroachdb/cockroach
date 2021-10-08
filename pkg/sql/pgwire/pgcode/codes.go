@@ -210,6 +210,7 @@ var (
 	CollationMismatch                  = MakeCode("42P21")
 	IndeterminateCollation             = MakeCode("42P22")
 	WrongObjectType                    = MakeCode("42809")
+	GeneratedAlways                    = MakeCode("428C9")
 	UndefinedColumn                    = MakeCode("42703")
 	UndefinedCursor                    = MakeCode("34000")
 	UndefinedDatabase                  = MakeCode("3D000")
@@ -374,17 +375,15 @@ var (
 	// RangeUnavailable signals that some data from the cluster cannot be
 	// accessed (e.g. because all replicas awol).
 	RangeUnavailable = MakeCode("58C00")
-	// DeprecatedRangeUnavailable is code that we used for RangeUnavailable until 19.2.
-	// 20.1 needs to recognize it coming from 19.2 nodes.
-	// TODO(andrei): remove in 20.2.
-	DeprecatedRangeUnavailable = MakeCode("XXC00")
 
 	// InternalConnectionFailure refers to a networking error encountered
 	// internally on a connection between different Cockroach nodes.
 	InternalConnectionFailure = MakeCode("58C01")
-	// DeprecatedInternalConnectionFailure is code that we used for
-	// InternalConnectionFailure until 19.2.
-	// 20.1 needs to recognize it coming from 19.2 nodes.
-	// TODO(andrei): remove in 20.2.
-	DeprecatedInternalConnectionFailure = ConnectionFailure
+
+	// Class XC - cockroach extension.
+	// CockroachDB distributed system related errors.
+
+	// UnsatisfiableBoundedStaleness signals that the bounded staleness query
+	// cannot be satisfied.
+	UnsatisfiableBoundedStaleness = MakeCode("XCUBS")
 )

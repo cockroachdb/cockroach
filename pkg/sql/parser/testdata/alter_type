@@ -1,0 +1,87 @@
+parse
+ALTER TYPE db.s.t ADD VALUE 'hi'
+----
+ALTER TYPE db.s.t ADD VALUE 'hi'
+ALTER TYPE db.s.t ADD VALUE 'hi' -- fully parenthesized
+ALTER TYPE db.s.t ADD VALUE 'hi' -- literals removed
+ALTER TYPE _._._ ADD VALUE _ -- identifiers removed
+
+parse
+ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello'
+----
+ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello'
+ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello' -- fully parenthesized
+ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello' -- literals removed
+ALTER TYPE _._ ADD VALUE _ BEFORE _ -- identifiers removed
+
+parse
+ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy'
+----
+ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy'
+ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy' -- fully parenthesized
+ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy' -- literals removed
+ALTER TYPE _ ADD VALUE _ AFTER _ -- identifiers removed
+
+parse
+ALTER TYPE t DROP VALUE 'hi'
+----
+ALTER TYPE t DROP VALUE 'hi'
+ALTER TYPE t DROP VALUE 'hi' -- fully parenthesized
+ALTER TYPE t DROP VALUE 'hi' -- literals removed
+ALTER TYPE _ DROP VALUE _ -- identifiers removed
+
+parse
+ALTER TYPE s.t ADD VALUE IF NOT EXISTS 'hi' BEFORE 'hello'
+----
+ALTER TYPE s.t ADD VALUE IF NOT EXISTS 'hi' BEFORE 'hello'
+ALTER TYPE s.t ADD VALUE IF NOT EXISTS 'hi' BEFORE 'hello' -- fully parenthesized
+ALTER TYPE s.t ADD VALUE IF NOT EXISTS 'hi' BEFORE 'hello' -- literals removed
+ALTER TYPE _._ ADD VALUE IF NOT EXISTS _ BEFORE _ -- identifiers removed
+
+parse
+ALTER TYPE t RENAME VALUE 'value1' TO 'value2'
+----
+ALTER TYPE t RENAME VALUE 'value1' TO 'value2'
+ALTER TYPE t RENAME VALUE 'value1' TO 'value2' -- fully parenthesized
+ALTER TYPE t RENAME VALUE 'value1' TO 'value2' -- literals removed
+ALTER TYPE _ RENAME VALUE _ TO _ -- identifiers removed
+
+parse
+ALTER TYPE t RENAME TO t2
+----
+ALTER TYPE t RENAME TO t2
+ALTER TYPE t RENAME TO t2 -- fully parenthesized
+ALTER TYPE t RENAME TO t2 -- literals removed
+ALTER TYPE _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER TYPE t SET SCHEMA newschema
+----
+ALTER TYPE t SET SCHEMA newschema
+ALTER TYPE t SET SCHEMA newschema -- fully parenthesized
+ALTER TYPE t SET SCHEMA newschema -- literals removed
+ALTER TYPE _ SET SCHEMA _ -- identifiers removed
+
+parse
+ALTER TYPE t OWNER TO foo
+----
+ALTER TYPE t OWNER TO foo
+ALTER TYPE t OWNER TO foo -- fully parenthesized
+ALTER TYPE t OWNER TO foo -- literals removed
+ALTER TYPE _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER TYPE t OWNER TO CURRENT_USER
+----
+ALTER TYPE t OWNER TO "current_user" -- normalized!
+ALTER TYPE t OWNER TO "current_user" -- fully parenthesized
+ALTER TYPE t OWNER TO "current_user" -- literals removed
+ALTER TYPE _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER TYPE t OWNER TO SESSION_USER
+----
+ALTER TYPE t OWNER TO "session_user" -- normalized!
+ALTER TYPE t OWNER TO "session_user" -- fully parenthesized
+ALTER TYPE t OWNER TO "session_user" -- literals removed
+ALTER TYPE _ OWNER TO _ -- identifiers removed

@@ -1,0 +1,351 @@
+# Should error when a role that does not exist is provided.
+statement error pq: user or role who does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT SELECT ON TABLES to testuser
+
+statement error pq: user or role who does not exist
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
+
+statement error pq: user or role who does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to who
+
+statement error pq: user or role who does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, who
+
+# Should not be able to use invalid privileges.
+statement error pq: invalid privilege type USAGE for table
+ALTER DEFAULT PRIVILEGES GRANT USAGE ON TABLES to testuser
+
+# For Tables.
+statement ok
+CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser;
+
+# By default, testuser should have ALL privileges on a table it creates.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TABLE testuser_t();
+
+query TTTTT colnames
+SHOW GRANTS ON testuser_t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       testuser_t  admin     ALL
+d              public       testuser_t  root      ALL
+d              public       testuser_t  testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser;
+
+statement ok
+CREATE TABLE testuser_t2();
+
+query TTTTT colnames
+SHOW GRANTS ON testuser_t2
+----
+database_name  schema_name  table_name   grantee   privilege_type
+d              public       testuser_t2  admin     ALL
+d              public       testuser_t2  root      ALL
+d              public       testuser_t2  testuser  CREATE
+
+user root
+
+statement ok
+USE test;
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to testuser
+
+statement ok
+CREATE TABLE t()
+
+query TTTTT colnames
+SHOW GRANTS ON t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t           admin     ALL
+test           public       t           root      ALL
+test           public       t           testuser  SELECT
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE VIEW vx AS SELECT 1
+
+query TTTTT colnames
+SHOW GRANTS ON s
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       s           admin    ALL
+test           public       s           root     ALL
+
+query TTTTT colnames
+SHOW GRANTS ON vx
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       vx          admin     ALL
+test           public       vx          root      ALL
+test           public       vx          testuser  SELECT
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser
+
+statement ok
+CREATE TABLE t2()
+
+query TTTTT colnames
+SHOW GRANTS ON t2
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       t2          admin    ALL
+test           public       t2          root     ALL
+
+statement ok
+CREATE SEQUENCE s2
+
+query TTTTT colnames
+SHOW GRANTS ON s2
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       s2          admin    ALL
+test           public       s2          root     ALL
+
+
+# Multiple users.
+statement ok
+CREATE USER testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser, testuser2
+
+statement ok
+CREATE TABLE t3()
+
+query TTTTT colnames
+SHOW GRANTS ON t3
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t3          admin      ALL
+test           public       t3          root       ALL
+test           public       t3          testuser   SELECT
+test           public       t3          testuser2  SELECT
+
+statement ok
+CREATE SEQUENCE s3
+
+query TTTTT colnames
+SHOW GRANTS ON s3
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       s3          admin    ALL
+test           public       s3          root     ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
+
+statement ok
+CREATE TABLE t4()
+
+query TTTTT colnames
+SHOW GRANTS ON t4
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       t4          admin    ALL
+test           public       t4          root     ALL
+
+statement ok
+CREATE SEQUENCE s4
+
+query TTTTT colnames
+SHOW GRANTS ON s4
+----
+database_name  schema_name  table_name  grantee  privilege_type
+test           public       s4          admin    ALL
+test           public       s4          root     ALL
+
+# ALTER DEFAULT PRIVILEGES FOR ROLE.
+
+statement ok
+GRANT CREATE ON DATABASE d TO testuser
+
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, testuser2
+
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TABLE t5()
+
+# testuser has ALL privileges since by default, ALL is defined as a default
+# privilege for the creator role of an object..
+query TTTTT colnames
+SHOW GRANTS ON t5
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t5          admin     ALL
+d              public       t5          root      ALL
+d              public       t5          testuser  CREATE
+
+user root
+
+statement ok
+USE d;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE SELECT ON TABLES FROM testuser, testuser2
+
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE TABLE t6()
+
+query TTTTT colnames
+SHOW GRANTS ON t6
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t6          admin     ALL
+d              public       t6          root      ALL
+d              public       t6          testuser  CREATE
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO testuser, testuser2
+
+statement ok
+CREATE TABLE t7()
+
+query TTTTT colnames
+SHOW GRANTS ON t7
+----
+database_name  schema_name  table_name  grantee    privilege_type
+d              public       t7          admin      ALL
+d              public       t7          root       ALL
+d              public       t7          testuser   ALL
+d              public       t7          testuser2  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
+
+statement ok
+CREATE TABLE t8()
+
+query TTTTT colnames
+SHOW GRANTS ON t8
+----
+database_name  schema_name  table_name  grantee    privilege_type
+d              public       t8          admin      ALL
+d              public       t8          root       ALL
+d              public       t8          testuser   CREATE
+d              public       t8          testuser   DELETE
+d              public       t8          testuser   DROP
+d              public       t8          testuser   GRANT
+d              public       t8          testuser   INSERT
+d              public       t8          testuser   UPDATE
+d              public       t8          testuser   ZONECONFIG
+d              public       t8          testuser2  CREATE
+d              public       t8          testuser2  DELETE
+d              public       t8          testuser2  DROP
+d              public       t8          testuser2  GRANT
+d              public       t8          testuser2  INSERT
+d              public       t8          testuser2  UPDATE
+d              public       t8          testuser2  ZONECONFIG
+
+# Ensure you can only ALTER DEFAULT PRIVILEGES for a role you're a part of.
+user testuser2
+
+statement ok
+USE d
+
+statement error pq: must be a member of root
+ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO testuser
+
+# Ensure you can ALTER DEFAULT PRIVILEGES for multiple roles.
+user root
+
+statement ok
+CREATE USER testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser REVOKE ALL ON TABLES FROM testuser, testuser2, testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser GRANT SELECT ON TABLES TO testuser2, testuser3
+
+statement ok
+CREATE TABLE t9()
+
+query TTTTT colnames
+SHOW GRANTS ON t9
+----
+database_name  schema_name  table_name  grantee    privilege_type
+d              public       t9          admin      ALL
+d              public       t9          root       ALL
+d              public       t9          testuser   CREATE
+d              public       t9          testuser2  SELECT
+d              public       t9          testuser3  SELECT
+
+user testuser
+
+statement ok
+CREATE TABLE t10()
+
+query TTTTT colnames
+SHOW GRANTS ON t10
+----
+database_name  schema_name  table_name  grantee    privilege_type
+d              public       t10         admin      ALL
+d              public       t10         root       ALL
+d              public       t10         testuser   CREATE
+d              public       t10         testuser2  SELECT
+d              public       t10         testuser3  SELECT
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser REVOKE SELECT ON TABLES FROM testuser2, testuser3
+
+statement ok
+CREATE TABLE t11()
+
+query TTTTT colnames
+SHOW GRANTS ON t11
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t11         admin     ALL
+d              public       t11         root      ALL
+d              public       t11         testuser  CREATE
+
+user testuser
+
+statement ok
+CREATE TABLE t12()
+
+query TTTTT colnames
+SHOW GRANTS ON t12
+----
+database_name  schema_name  table_name  grantee   privilege_type
+d              public       t12         admin     ALL
+d              public       t12         root      ALL
+d              public       t12         testuser  CREATE
+
+# Cannot specify PUBLIC as the target role.
+statement error pq: user or role public does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE public REVOKE SELECT ON TABLES FROM testuser2, testuser3
+
+# Can specify PUBLIC as a grantee.
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM public

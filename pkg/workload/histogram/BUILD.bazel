@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "histogram",
+    srcs = ["histogram.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+    ],
+)
+
+go_test(
+    name = "histogram_test",
+    srcs = ["histogram_test.go"],
+    embed = [":histogram"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)

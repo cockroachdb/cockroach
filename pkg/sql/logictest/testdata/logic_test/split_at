@@ -1,0 +1,30 @@
+# LogicTest: !3node-tenant
+
+# Test formatting of keys in output of SPLIT AT
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+----
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
+
+query TTT colnames
+ALTER TABLE t SPLIT AT VALUES (1), (10)
+----
+key            pretty    split_enforced_until
+[189 137 137]  /1        2262-04-11 23:47:16.854776 +0000 +0000
+[189 137 146]  /10       2262-04-11 23:47:16.854776 +0000 +0000
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /10      {1}       1
+/10        NULL     {1}       1
+
+statement ok
+DROP TABLE t

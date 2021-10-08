@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/linkedin/goavro/v2"
@@ -142,7 +142,7 @@ func (g *intArrGen) Gen() interface{} {
 // A testHelper to generate avro data.
 type testHelper struct {
 	schemaJSON  string
-	schemaTable *sqlbase.ImmutableTableDescriptor
+	schemaTable catalog.TableDescriptor
 	codec       *goavro.Codec
 	gens        []avroGen
 	settings    *cluster.Settings
@@ -155,7 +155,7 @@ var defaultGens = []avroGen{
 	&nilOrStrGen{namedField{name: "notes"}},
 }
 
-func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
+func newTestHelper(ctx context.Context, t *testing.T, gens ...avroGen) *testHelper {
 	if len(gens) == 0 {
 		gens = defaultGens
 	}
@@ -198,12 +198,13 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 	evalCtx := tree.MakeTestingEvalContext(st)
 
 	return &testHelper{
-		schemaJSON:  string(schemaJSON),
-		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs),
-		codec:       codec,
-		gens:        gens,
-		settings:    st,
-		evalCtx:     evalCtx,
+		schemaJSON: string(schemaJSON),
+		schemaTable: descForTable(ctx, t, createStmt, 100, 200, NoFKs).
+			ImmutableCopy().(catalog.TableDescriptor),
+		codec:    codec,
+		gens:     gens,
+		settings: st,
+		evalCtx:  evalCtx,
 	}
 }
 
@@ -245,14 +246,17 @@ func (th *testHelper) newRecordStream(
 		opts.SchemaJSON = th.schemaJSON
 		th.genRecordsData(t, format, numRecords, opts.RecordSeparator, records)
 	}
+	semaCtx := tree.MakeSemaContext()
 
-	avro, err := newAvroInputReader(nil, th.schemaTable, opts, 0, 1, &th.evalCtx)
+	avro, err := newAvroInputReader(&semaCtx, nil, th.schemaTable, opts, 0, 1, &th.evalCtx)
 	require.NoError(t, err)
 	producer, consumer, err := newImportAvroPipeline(avro, &fileReader{Reader: records})
 	require.NoError(t, err)
 
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil)
+		context.Background(), &semaCtx, th.schemaTable, nil, th.evalCtx.Copy(), nil,
+		nil /* seqChunkProvider */, nil, /* metrics */
+	)
 	require.NoError(t, err)
 	return &testRecordStream{
 		producer: producer,
@@ -319,7 +323,8 @@ func (th *testHelper) genRecordsData(
 func TestReadsAvroRecords(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	th := newTestHelper(t)
+	ctx := context.Background()
+	th := newTestHelper(ctx, t)
 
 	formats := []roachpb.AvroOptions_Format{
 		roachpb.AvroOptions_BIN_RECORDS,
@@ -356,7 +361,8 @@ func TestReadsAvroRecords(t *testing.T) {
 func TestReadsAvroOcf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	th := newTestHelper(t)
+	ctx := context.Background()
+	th := newTestHelper(ctx, t)
 
 	for _, skip := range []bool{false, true} {
 		t.Run(fmt.Sprintf("skip=%v", skip), func(t *testing.T) {
@@ -382,6 +388,7 @@ func TestReadsAvroOcf(t *testing.T) {
 func TestRelaxedAndStrictImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	tests := []struct {
 		name         string
@@ -406,7 +413,7 @@ func TestRelaxedAndStrictImport(t *testing.T) {
 				f1.excludeSQL = test.excludeTable
 				f2.excludeAvro = test.excludeAvro
 
-				th := newTestHelper(t, f1, f2)
+				th := newTestHelper(ctx, t, f1, f2)
 				stream := th.newRecordStream(t, format, test.strict, 1)
 
 				if !stream.producer.Scan() {
@@ -427,7 +434,8 @@ func TestRelaxedAndStrictImport(t *testing.T) {
 func TestHandlesArrayData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	th := newTestHelper(t, &intArrGen{namedField{
+	ctx := context.Background()
+	th := newTestHelper(ctx, t, &intArrGen{namedField{
 		name: "arr_of_ints",
 	}})
 
@@ -565,9 +573,8 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
     s_order_cnt  integer,
     s_remote_cnt integer,
     s_data       varchar(50),
-		primary key (s_w_id, s_i_id),
-    index stock_item_fk_idx (s_i_id))
-  `)
+    primary key (s_w_id, s_i_id)
+)`)
 
 	require.NoError(b, err)
 
@@ -576,7 +583,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	require.NoError(b, err)
 
 	kvCh := make(chan row.KVBatch)
@@ -589,8 +596,8 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
-	avro, err := newAvroInputReader(kvCh,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+	avro, err := newAvroInputReader(&semaCtx, kvCh,
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 

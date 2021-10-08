@@ -16,12 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // EnvTablesType tells JobSchedulerTestEnv whether to use the system tables,
-// or to use test tables.
+// or to use test tables. System tables such as system.jobs may be affected
+// by the system in the background, while test tables are completely isolated.
 type EnvTablesType bool
 
 // UseTestTables instructs JobSchedulerTestEnv to use test tables.
@@ -32,7 +34,9 @@ const UseSystemTables EnvTablesType = true
 
 // NewJobSchedulerTestEnv creates JobSchedulerTestEnv and initializes environments
 // current time to initial time.
-func NewJobSchedulerTestEnv(whichTables EnvTablesType, t time.Time) *JobSchedulerTestEnv {
+func NewJobSchedulerTestEnv(
+	whichTables EnvTablesType, t time.Time, allowedExecutors ...tree.ScheduledJobExecutorType,
+) *JobSchedulerTestEnv {
 	var env *JobSchedulerTestEnv
 	if whichTables == UseTestTables {
 		env = &JobSchedulerTestEnv{
@@ -46,6 +50,13 @@ func NewJobSchedulerTestEnv(whichTables EnvTablesType, t time.Time) *JobSchedule
 		}
 	}
 	env.mu.now = t
+	if len(allowedExecutors) > 0 {
+		env.allowedExecutors = make(map[string]struct{}, len(allowedExecutors))
+		for _, e := range allowedExecutors {
+			env.allowedExecutors[e.InternalName()] = struct{}{}
+		}
+	}
+
 	return env
 }
 
@@ -54,6 +65,7 @@ func NewJobSchedulerTestEnv(whichTables EnvTablesType, t time.Time) *JobSchedule
 type JobSchedulerTestEnv struct {
 	scheduledJobsTableName string
 	jobsTableName          string
+	allowedExecutors       map[string]struct{}
 	mu                     struct {
 		syncutil.Mutex
 		now time.Time
@@ -102,20 +114,29 @@ func (e *JobSchedulerTestEnv) NowExpr() string {
 	return fmt.Sprintf("TIMESTAMPTZ '%s'", e.mu.now.Format(timestampTZLayout))
 }
 
+// IsExecutorEnabled implements scheduledjobs.JobSchedulerEnv
+func (e *JobSchedulerTestEnv) IsExecutorEnabled(name string) bool {
+	enabled := e.allowedExecutors == nil
+	if !enabled {
+		_, enabled = e.allowedExecutors[name]
+	}
+	return enabled
+}
+
 // GetScheduledJobsTableSchema returns schema for the scheduled jobs table.
 func GetScheduledJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 	if env.ScheduledJobsTableName() == "system.jobs" {
-		return sqlbase.ScheduledJobsTableSchema
+		return systemschema.ScheduledJobsTableSchema
 	}
-	return strings.Replace(sqlbase.ScheduledJobsTableSchema,
+	return strings.Replace(systemschema.ScheduledJobsTableSchema,
 		"system.scheduled_jobs", env.ScheduledJobsTableName(), 1)
 }
 
 // GetJobsTableSchema returns schema for the jobs table.
 func GetJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 	if env.SystemJobsTableName() == "system.jobs" {
-		return sqlbase.JobsTableSchema
+		return systemschema.JobsTableSchema
 	}
-	return strings.Replace(sqlbase.JobsTableSchema,
+	return strings.Replace(systemschema.JobsTableSchema,
 		"system.jobs", env.SystemJobsTableName(), 1)
 }

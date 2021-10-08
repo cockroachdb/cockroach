@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "arrowserde",
+    srcs = [
+        "doc.go",
+        "file_generated.go",
+        "message_generated.go",
+        "schema_generated.go",
+        "tensor_generated.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_google_flatbuffers//go"],
+)

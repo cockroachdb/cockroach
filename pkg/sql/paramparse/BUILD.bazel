@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "paramparse",
+    srcs = [
+        "paramobserver.go",
+        "paramparse.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/paramparse",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

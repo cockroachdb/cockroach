@@ -36,24 +36,29 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory bool
-	EncryptionPassphrase   Expr
-	Detached               bool
-	EncryptionKMSURI       StringOrPlaceholderOptList
+	CaptureRevisionHistory       bool
+	EncryptionPassphrase         Expr
+	Detached                     bool
+	EncryptionKMSURI             StringOrPlaceholderOptList
+	IncludeDeprecatedInterleaves bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets            *TargetList
-	DescriptorCoverage DescriptorCoverage
-	To                 StringOrPlaceholderOptList
-	IncrementalFrom    Exprs
-	AsOf               AsOfClause
-	Options            BackupOptions
-	Nested             bool
-	AppendToLatest     bool
+	Targets         *TargetList
+	To              StringOrPlaceholderOptList
+	IncrementalFrom Exprs
+	AsOf            AsOfClause
+	Options         BackupOptions
+	Nested          bool
+	AppendToLatest  bool
+	// Subdir may be set by the parser when the SQL query is of the form
+	// `BACKUP INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir
+	// was not explicitly specified by the user, then this will be set during
+	// BACKUP planning once the destination has been resolved.
+	Subdir Expr
 }
 
 var _ Statement = &Backup{}
@@ -67,7 +72,10 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 	if node.Nested {
 		ctx.WriteString("INTO ")
-		if node.AppendToLatest {
+		if node.Subdir != nil {
+			ctx.FormatNode(node.Subdir)
+			ctx.WriteString(" IN ")
+		} else if node.AppendToLatest {
 			ctx.WriteString("LATEST IN ")
 		}
 	} else {
@@ -107,6 +115,9 @@ type RestoreOptions struct {
 	SkipMissingSequenceOwners bool
 	SkipMissingViews          bool
 	Detached                  bool
+	SkipLocalitiesCheck       bool
+	DebugPauseOn              Expr
+	NewDBName                 Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -167,7 +178,11 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&n.Key)
+		// KVOption Key values never contain PII and should be distinguished
+		// for feature tracking purposes.
+		ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+			ctx.FormatNode(&n.Key)
+		})
 		if n.Value != nil {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)
@@ -205,8 +220,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.EncryptionPassphrase != nil {
 		maybeAddSep()
-		ctx.WriteString("encryption_passphrase=")
-		o.EncryptionPassphrase.Format(ctx)
+		ctx.WriteString("encryption_passphrase = ")
+		if ctx.flags.HasFlags(FmtShowPasswords) {
+			ctx.FormatNode(o.EncryptionPassphrase)
+		} else {
+			ctx.WriteString(PasswordSubstitution)
+		}
 	}
 
 	if o.Detached {
@@ -216,8 +235,13 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.EncryptionKMSURI != nil {
 		maybeAddSep()
-		ctx.WriteString("kms=")
-		o.EncryptionKMSURI.Format(ctx)
+		ctx.WriteString("kms = ")
+		ctx.FormatNode(&o.EncryptionKMSURI)
+	}
+
+	if o.IncludeDeprecatedInterleaves {
+		maybeAddSep()
+		ctx.WriteString("include_deprecated_interleaves")
 	}
 }
 
@@ -252,6 +276,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("kms specified multiple times")
 	}
 
+	if o.IncludeDeprecatedInterleaves {
+		if other.IncludeDeprecatedInterleaves {
+			return errors.New("include_deprecated_interleaves option specified multiple times")
+		}
+	} else {
+		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
+	}
+
 	return nil
 }
 
@@ -274,20 +306,26 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	}
 	if o.EncryptionPassphrase != nil {
 		addSep = true
-		ctx.WriteString("encryption_passphrase=")
-		o.EncryptionPassphrase.Format(ctx)
+		ctx.WriteString("encryption_passphrase = ")
+		ctx.FormatNode(o.EncryptionPassphrase)
 	}
 
 	if o.DecryptionKMSURI != nil {
 		maybeAddSep()
-		ctx.WriteString("kms=")
-		o.DecryptionKMSURI.Format(ctx)
+		ctx.WriteString("kms = ")
+		ctx.FormatNode(&o.DecryptionKMSURI)
 	}
 
 	if o.IntoDB != nil {
 		maybeAddSep()
-		ctx.WriteString("into_db=")
-		o.IntoDB.Format(ctx)
+		ctx.WriteString("into_db = ")
+		ctx.FormatNode(o.IntoDB)
+	}
+
+	if o.DebugPauseOn != nil {
+		maybeAddSep()
+		ctx.WriteString("debug_pause_on = ")
+		ctx.FormatNode(o.DebugPauseOn)
 	}
 
 	if o.SkipMissingFKs {
@@ -313,6 +351,17 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.Detached {
 		maybeAddSep()
 		ctx.WriteString("detached")
+	}
+
+	if o.SkipLocalitiesCheck {
+		maybeAddSep()
+		ctx.WriteString("skip_localities_check")
+	}
+
+	if o.NewDBName != nil {
+		maybeAddSep()
+		ctx.WriteString("new_db_name = ")
+		ctx.FormatNode(o.NewDBName)
 	}
 }
 
@@ -377,6 +426,26 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.Detached = other.Detached
 	}
 
+	if o.SkipLocalitiesCheck {
+		if other.SkipLocalitiesCheck {
+			return errors.New("skip_localities_check specified multiple times")
+		}
+	} else {
+		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
+	}
+
+	if o.DebugPauseOn == nil {
+		o.DebugPauseOn = other.DebugPauseOn
+	} else if other.DebugPauseOn != nil {
+		return errors.New("debug_pause_on specified multiple times")
+	}
+
+	if o.NewDBName == nil {
+		o.NewDBName = other.NewDBName
+	} else if other.NewDBName != nil {
+		return errors.New("new_db_name specified multiple times")
+	}
+
 	return nil
 }
 
@@ -390,5 +459,8 @@ func (o RestoreOptions) IsDefault() bool {
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
-		o.Detached == options.Detached
+		o.Detached == options.Detached &&
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
+		o.DebugPauseOn == options.DebugPauseOn &&
+		o.NewDBName == options.NewDBName
 }

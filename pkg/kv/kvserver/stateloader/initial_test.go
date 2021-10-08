@@ -20,14 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	eng := storage.NewDefaultInMem()
+	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
 	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}

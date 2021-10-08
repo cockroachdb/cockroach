@@ -12,7 +12,6 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -87,13 +86,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 			case *memo.CaseExpr:
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
-					memo.BuildSharedProps(child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
 			case *memo.WhenExpr:
 				if child == t.Value {
-					memo.BuildSharedProps(child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
@@ -102,7 +101,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// other branches do is tricky because it's a list, but we know that
 				// it's at position 1.
 				if i == 1 {
-					memo.BuildSharedProps(child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 			}
@@ -349,33 +348,63 @@ func (c *CustomFuncs) ConstructApplyJoin(
 }
 
 // EnsureKey finds the shortest strong key for the input expression. If no
-// strong key exists and the input expression is a scan, EnsureKey returns a new
-// Scan with the preexisting primary key for the table. If the input is not a
-// Scan, EnsureKey wraps the input in an Ordinality operator, which provides a
-// key column by uniquely numbering the rows. EnsureKey returns the input
-// expression (perhaps augmented with a key column(s) or wrapped by Ordinality).
+// strong key exists and the input expression is a Scan or a Scan wrapped in a
+// Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
+// preexisting primary key for the table. If the input is not a Scan or
+// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
+// provides a key column by uniquely numbering the rows. EnsureKey returns the
+// input expression (perhaps augmented with a key column(s) or wrapped by
+// Ordinality).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	_, ok := c.CandidateKey(in)
 	if ok {
 		return in
 	}
 
-	switch t := in.(type) {
-	case *memo.ScanExpr:
-		// Add primary key columns if this is a non-virtual table.
-		private := t.ScanPrivate
-		tableID := private.Table
-		table := c.f.Metadata().Table(tableID)
-		if !table.IsVirtualTable() {
-			keyCols := c.f.Metadata().TableMeta(tableID).IndexKeyColumns(cat.PrimaryIndex)
-			private.Cols = private.Cols.Union(keyCols)
-			return c.f.ConstructScan(&private)
-		}
+	// Try to add the preexisting primary key if the input is a Scan or Scan
+	// wrapped in a Select.
+	if res, ok := c.TryAddKeyToScan(in); ok {
+		return res
 	}
 
+	// Otherwise, wrap the input in an Ordinality operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
 	private := memo.OrdinalityPrivate{ColID: colID}
 	return c.f.ConstructOrdinality(in, &private)
+}
+
+// TryAddKeyToScan checks whether the input expression is a non-virtual table
+// Scan, either alone or wrapped in a Select. If so, it returns a new Scan
+// (possibly wrapped in a Select) augmented with the preexisting primary key
+// for the table.
+func (c *CustomFuncs) TryAddKeyToScan(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
+	augmentScan := func(scan *memo.ScanExpr) (_ memo.RelExpr, ok bool) {
+		private := scan.ScanPrivate
+		tableID := private.Table
+		table := c.f.Metadata().Table(tableID)
+		if !table.IsVirtualTable() {
+			keyCols := c.PrimaryKeyCols(tableID)
+			private.Cols = private.Cols.Union(keyCols)
+			return c.f.ConstructScan(&private), true
+		}
+		return nil, false
+	}
+
+	switch t := in.(type) {
+	case *memo.ScanExpr:
+		if res, ok := augmentScan(t); ok {
+			return res, true
+		}
+
+	case *memo.SelectExpr:
+		if scan, ok := t.Input.(*memo.ScanExpr); ok {
+			if res, ok := augmentScan(scan); ok {
+				return c.f.ConstructSelect(res, t.Filters), true
+			}
+		}
+	}
+
+	return nil, false
 }
 
 // KeyCols returns a column set consisting of the columns that make up the
@@ -706,10 +735,14 @@ type subqueryHoister struct {
 }
 
 func (r *subqueryHoister) init(c *CustomFuncs, input memo.RelExpr) {
-	r.c = c
-	r.f = c.f
-	r.mem = c.mem
-	r.hoisted = input
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*r = subqueryHoister{
+		c:       c,
+		f:       c.f,
+		mem:     c.mem,
+		hoisted: input,
+	}
 }
 
 // input returns a single expression tree that contains the input expression

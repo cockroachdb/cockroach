@@ -1,0 +1,31 @@
+# We recognize lower(s) as equivalent to c.
+index-constraints vars=(s string, c string as (lower(s)) stored) index=(c)
+lower(s) = 'foo'
+----
+[/'foo' - /'foo']
+
+# Make sure that using the column directly still works.
+index-constraints vars=(s string, c string as (lower(s)) stored) index=(c)
+c = 'foo'
+----
+[/'foo' - /'foo']
+
+index-constraints vars=(s string, c string as (lower(s)) stored, x int) index=(x,c)
+x = 1 AND lower(s) LIKE 'foo%'
+----
+[/1/'foo' - /1/'fop')
+
+index-constraints vars=(s string, c string as (lower(s)) stored, x int) index=(c,x)
+x >= 1 AND x <= 10 AND lower(s) = 'foo'
+----
+[/'foo'/1 - /'foo'/10]
+
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c)
+a+b > 0
+----
+[/1 - ]
+
+index-constraints vars=(j json, field int as ((j->'foo')::string::int) stored) index=(field)
+(j->'foo')::string::int = 10
+----
+[/10 - /10]

@@ -1,0 +1,58 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvserverpb",
+    srcs = [
+        "lease_status.go",
+        "log.go",
+        "proposer_kv.go",
+    ],
+    embed = [":kvserverpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+    ],
+)
+
+proto_library(
+    name = "kvserverpb_proto",
+    srcs = [
+        "lease_status.proto",
+        "log.proto",
+        "proposer_kv.proto",
+        "state.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
+        "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+go_proto_library(
+    name = "kvserverpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
+    proto = ":kvserverpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",  # keep
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)

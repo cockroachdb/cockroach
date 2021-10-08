@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "prometheus",
+    srcs = [
+        "mock_generated.go",
+        "prometheus.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
+        "@com_github_golang_mock//gomock",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "prometheus_test",
+    srcs = ["prometheus_test.go"],
+    embed = [":prometheus"],
+    deps = [
+        "//pkg/cmd/roachtest/option",
+        "@com_github_golang_mock//gomock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

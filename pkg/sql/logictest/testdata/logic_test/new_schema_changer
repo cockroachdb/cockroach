@@ -1,0 +1,648 @@
+subtest add_column
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+EXPLAIN (DDL, DEPS) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+query II rowsort
+SELECT * FROM foo
+----
+1  1
+
+statement ok
+DROP TABLE foo;
+
+subtest multi_add_column
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+DROP TABLE foo;
+
+subtest add_column_default
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo(i) VALUES (0)
+
+query I rowsort
+SELECT * FROM foo
+----
+0
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 1
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+statement ok
+INSERT INTO foo(i) VALUES (2)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  1
+2  1
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_computed
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo VALUES (0);
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT AS (i+1) STORED
+
+statement ok
+INSERT INTO foo(i) VALUES (1)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  2
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_families
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT CREATE FAMILY f2
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT FAMILY f2
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+DROP TABLE foo
+
+subtest multi_table
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY);
+CREATE TABLE bar (j INT PRIMARY KEY);
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE foo ADD COLUMN a INT
+
+statement ok
+ALTER TABLE bar ADD COLUMN b INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2)
+
+query II colnames,rowsort
+SELECT * FROM foo
+----
+i  a
+1  2
+
+statement ok
+INSERT INTO bar VALUES (3, 4)
+
+query II colnames,rowsort
+SELECT * FROM bar
+----
+j  b
+3  4
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement error pq: cannot explain a non-schema change statement
+EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
+
+statement ok
+DROP TABLE foo, bar
+
+# Sequence sanity tests
+statement ok
+CREATE SEQUENCE sq1;
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+statement ok
+CREATE TABLE blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+# Failure without cascade
+statement error pq: cannot drop sequence sq1 because other objects depend on it
+EXPLAIN (DDL) DROP SEQUENCE sq1;
+
+statement ok
+EXPLAIN (DDL) DROP SEQUENCE sq1 CASCADE;
+
+# Success with cascade
+statement ok
+DROP SEQUENCE IF EXISTS doesnotexist, sq1 CASCADE;
+
+# Tables should be safe to drop since references are fixed.
+statement ok
+DROP TABLE blog_posts;
+
+statement ok
+DROP TABLE blog_posts2;
+
+# Test that user defined types used in views are tracked.
+subtest view_user_defined_types
+
+statement ok
+CREATE TYPE typ AS ENUM('a')
+
+statement ok
+CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE TABLE t (i INT, k STRING AS ('a'::typ::string) STORED)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+# Note that v does not depend on typ since it does not use column k.
+statement error cannot drop type "typ" because other objects \(\[test.public.t\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE VIEW v_dep AS (SELECT k FROM t)
+
+# Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
+statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a' AS k)
+
+statement ok
+DROP TYPE typ2
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+ALTER TYPE typ2 RENAME TO typ3
+
+statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ3
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+CREATE TABLE t4 (i INT, j typ4)
+
+statement ok
+CREATE VIEW v4 AS (SELECT i FROM t4)
+
+# Note that v4 does not depend on typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+ALTER TABLE t4 DROP COLUMN j
+
+statement ok
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+ALTER TABLE t4 ADD COLUMN j typ4
+
+statement ok
+CREATE VIEW v4_dep AS (SELECT j FROM t4)
+
+# Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
+DROP type typ4
+
+statement ok
+CREATE TYPE typ5 AS ENUM('a')
+
+statement ok
+CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
+
+# Note that v5 does not depend on typ5.
+statement ok
+CREATE VIEW v5 AS (SELECT i FROM t5)
+
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v5_dep AS (SELECT j FROM t5)
+
+# Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v6 AS (SELECT j FROM v4_dep)
+
+# v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ6 AS ENUM('a');
+CREATE TABLE t6 (i INT, k typ6);
+CREATE INDEX idx ON t6 (i) WHERE k < 'a'::typ6
+
+statement ok
+CREATE VIEW v7 AS (SELECT i FROM t6)
+
+# Note that v7 does not depend on t6.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it
+DROP TYPE typ6
+
+statement ok
+CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
+
+# v7_dep depends on typ6 now.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
+DROP TYPE typ6
+
+
+subtest view-sanity
+
+statement ok
+CREATE TABLE t1 (id INT PRIMARY KEY, name varchar(256));
+
+statement ok
+CREATE VIEW v1Dep AS (SELECT name FROM t1);
+
+statement ok
+CREATE VIEW v2Dep AS (SELECT name AS N1, name AS N2 FROM v1Dep);
+
+statement ok
+CREATE VIEW v3Dep AS (SELECT name, n1 FROM v1Dep, v2Dep);
+
+statement ok
+CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
+
+statement ok
+explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
+
+statement error cannot drop view "test.public.v1dep" because view "test.public.v2dep" depends on it
+DROP VIEW v1Dep RESTRICT;
+
+statement error pq: "v1dep" is not a materialized view
+DROP MATERIALIZED VIEW v1Dep
+
+statement ok
+DROP VIEW v1Dep CASCADE;
+
+statement error pq: relation "v4dep" does not exist
+SELECT * FROM v4Dep;
+
+statement error pq: relation "v3dep" does not exist
+SELECT * FROM v3Dep;
+
+statement error pq: relation "v2dep" does not exist
+SELECT * FROM v2Dep;
+
+statement error pq: relation "v1dep" does not exist
+SELECT * FROM v1Dep;
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT name FROM t1
+
+statement error pq: "mv" is a materialized view
+DROP VIEW mv
+
+statement ok
+DROP MATERIALIZED VIEW mv
+
+statement ok
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES defaultdb.customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+
+statement ok
+CREATE SEQUENCE defaultdb.sq2;
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+statement error "fk_customer_ref_customers" is referenced by foreign key from table "orders"
+DROP TABLE defaultdb.customers;
+
+statement ok
+CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
+
+statement error cannot drop table sq1 because other objects depend on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
+
+statement error pq: cannot drop table "shipments" because view "v1" depends on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.shipments CASCADE;
+
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+# Basic test -- create and drop a type.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+DROP TYPE typ8
+
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+
+# Now check all of the fun cases around object dependencies.
+# Test a simple column dependency.
+statement ok
+CREATE TABLE t8 (x typ8)
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now add a column with the using the type.
+statement ok
+ALTER TABLE t8 ADD COLUMN y typ8
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# If we drop the original column x, t8 should still depend on t.
+statement ok
+ALTER TABLE t8 DROP COLUMN x
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now remove the other column.
+statement ok
+ALTER TABLE t8 DROP COLUMN y
+
+statement ok
+DROP TYPE typ8
+
+# Ensure that references to the array type are tracked.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+ALTER TABLE t8 ADD COLUMN x typ8[]
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+statement ok
+ALTER TABLE t8 DROP COLUMN x;
+
+statement ok
+DROP TYPE typ8
+
+subtest drop-type-in-single-transaction
+
+statement ok
+CREATE TYPE defaultdb.typ AS ENUM('a');
+
+statement ok
+CREATE TABLE defaultdb.ttyp (id INT PRIMARY KEY, name varchar(256), x defaultdb.typ);
+
+statement ok
+BEGIN;
+
+statement ok;
+DROP TABLE defaultdb.ttyp;
+
+statement ok
+DROP TYPE defaultdb.typ;
+
+statement ok
+COMMIT;
+
+# Drop schema testing
+subtest drop-schema
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+statement ok
+CREATE SEQUENCE db1.sc1.sq1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+DROP DATABASE db1
+
+# Drop database testing
+subtest drop-database
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+statement ok
+CREATE SEQUENCE db1.public.sq1
+
+statement ok
+CREATE SEQUENCE db1.sc1.sq1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement error schema "sc1" is not empty and CASCADE was not specified
+DROP SCHEMA db1.sc1
+
+statement error database "db1" is not empty and CASCADE was not specified
+DROP DATABASE db1
+
+statement ok
+DROP DATABASE db1 CASCADE
+
+# Tests for computed column rewrites.
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
+
+statement error context-dependent operators are not allowed in computed column
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
+
+statement ok
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT new_primary_key PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts (k, ts, c)
+)

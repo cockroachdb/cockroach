@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bench",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/bench",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "bench_test",
+    size = "medium",
+    srcs = [
+        "bench_test.go",
+        "fk_test.go",
+    ],
+    embed = [":bench"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/exec/execbuilder",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+    ],
+)

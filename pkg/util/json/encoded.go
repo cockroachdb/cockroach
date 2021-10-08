@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -386,7 +388,10 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		return dec.FetchValIdx(idx)
 	}
 
-	if j.Type() == ArrayJSONType {
+	switch j.typ {
+	case NumberJSONType, StringJSONType, TrueJSONType, FalseJSONType, NullJSONType:
+		return fetchValIdxForScalar(j, idx), nil
+	case ArrayJSONType:
 		if idx < 0 {
 			idx = j.containerLen + idx
 		}
@@ -403,8 +408,11 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		}
 
 		return newEncoded(entry, j.arrayGetDataRange(begin, end))
+	case ObjectJSONType:
+		return nil, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown json type: %v", errors.Safe(j.typ))
 	}
-	return nil, nil
 }
 
 func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
@@ -420,18 +428,18 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 		// or maybe there's something fancier we could do if we know the locations
 		// of the offsets by strategically positioning our binary search guesses to
 		// land on them.
-		var err error
+		var searchErr error
 		i := sort.Search(j.containerLen, func(idx int) bool {
 			data, _, err := j.objectGetNthDataRange(idx)
 			if err != nil {
+				searchErr = err
 				return false
 			}
 			return string(data) >= key
 		})
-		if err != nil {
-			return nil, err
+		if searchErr != nil {
+			return nil, searchErr
 		}
-
 		// The sort.Search API implies that we have to double-check if the key we
 		// landed on is the one we were searching for in the first place.
 		if i >= j.containerLen {
@@ -551,7 +559,34 @@ func (j *jsonEncoded) AsText() (*string, error) {
 	return decoded.AsText()
 }
 
+func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsDecimal()
+	}
+
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, false
+	}
+	return decoded.AsDecimal()
+}
+
+func (j *jsonEncoded) AsBool() (bool, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsBool()
+	}
+
+	decoded, err := j.decode()
+	if err != nil {
+		return false, false
+	}
+	return decoded.AsBool()
+}
+
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
+	if other == nil {
+		return -1, nil
+	}
 	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
 		return cmp, nil
 	}
@@ -712,6 +747,26 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		return nil, err
 	}
 	return decoded.encodeInvertedIndexKeys(b)
+}
+
+func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
+	b []byte, isRoot, isObjectValue bool,
+) (inverted.Expression, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
+}
+
+func (j *jsonEncoded) encodeContainedInvertedIndexSpans(
+	b []byte, isRoot, isObjectValue bool,
+) (inverted.Expression, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.encodeContainedInvertedIndexSpans(b, isRoot, isObjectValue)
 }
 
 // numInvertedIndexEntries implements the JSON interface.

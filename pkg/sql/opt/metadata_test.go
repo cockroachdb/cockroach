@@ -13,11 +13,14 @@ package opt_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,9 +28,14 @@ import (
 )
 
 func TestMetadata(t *testing.T) {
-	var md opt.Metadata
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(&evalCtx, nil /* catalog */)
+	md := f.Metadata()
+
 	schID := md.AddSchema(&testcat.Schema{})
 	colID := md.AddColumn("col", types.Int)
+	cmpID := md.AddColumn("cmp", types.Bool)
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
@@ -38,6 +46,18 @@ func TestMetadata(t *testing.T) {
 	tab := &testcat.Table{Revoked: true}
 	testCat.AddTable(tab)
 
+	// Create a (col = 1) scalar expression.
+	scalar := &memo.EqExpr{
+		Left: &memo.VariableExpr{
+			Col: colID,
+			Typ: types.Int,
+		},
+		Right: &memo.ConstExpr{
+			Value: tree.NewDInt(1),
+			Typ:   types.Int,
+		},
+	}
+
 	md.Init()
 	if md.AddSchema(testCat.Schema()) != schID {
 		t.Fatalf("unexpected schema id")
@@ -45,9 +65,16 @@ func TestMetadata(t *testing.T) {
 	if md.AddColumn("col2", types.Int) != colID {
 		t.Fatalf("unexpected column id")
 	}
+	if md.AddColumn("cmp2", types.Bool) != cmpID {
+		t.Fatalf("unexpected column id")
+	}
 	if md.AddTable(tab, &tree.TableName{}) != tabID {
 		t.Fatalf("unexpected table id")
 	}
+	tabMeta := md.TableMeta(tabID)
+	tabMeta.SetConstraints(scalar)
+	tabMeta.AddComputedCol(cmpID, scalar)
+	tabMeta.AddPartialIndexPredicate(0, scalar)
 	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
 		t.Fatalf("unexpected sequence id")
 	}
@@ -73,7 +100,8 @@ func TestMetadata(t *testing.T) {
 	expr := &memo.ProjectExpr{}
 	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
-	mdNew.CopyFrom(&md)
+	mdNew.CopyFrom(md, f.CopyScalarWithoutPlaceholders)
+
 	if mdNew.Schema(schID) != testCat.Schema() {
 		t.Fatalf("unexpected schema")
 	}
@@ -81,8 +109,33 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected column")
 	}
 
-	if mdNew.TableMeta(tabID).Table != tab {
+	tabMetaNew := mdNew.TableMeta(tabID)
+	if tabMetaNew.Table != tab {
 		t.Fatalf("unexpected table")
+	}
+
+	if tabMetaNew.Constraints == scalar {
+		t.Fatalf("expected constraints to be copied")
+	}
+
+	compColsPtr := reflect.ValueOf(tabMeta.ComputedCols).Pointer()
+	newCompColsPtr := reflect.ValueOf(tabMetaNew.ComputedCols).Pointer()
+	if newCompColsPtr == compColsPtr {
+		t.Fatalf("expected computed columns map to be copied, not shared")
+	}
+
+	if tabMetaNew.ComputedCols[cmpID] == scalar {
+		t.Fatalf("expected computed column expression to be copied")
+	}
+
+	partialIdxPredPtr := reflect.ValueOf(tabMeta.PartialIndexPredicatesUnsafe()).Pointer()
+	newPartialIdxPredPtr := reflect.ValueOf(tabMetaNew.PartialIndexPredicatesUnsafe()).Pointer()
+	if newPartialIdxPredPtr == partialIdxPredPtr {
+		t.Fatalf("expected partial index predicates map to be copied, not shared")
+	}
+
+	if tabMetaNew.PartialIndexPredicatesUnsafe()[0] == scalar {
+		t.Fatalf("expected partial index predicate to be copied")
 	}
 
 	if mdNew.Sequence(seqID).(*testcat.Sequence).SeqID != 100 {
@@ -102,16 +155,16 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}
 
-	paniced := false
+	panicked := false
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				paniced = true
+				panicked = true
 			}
 		}()
 		mdNew.WithBinding(1)
 	}()
-	if !paniced {
+	if !panicked {
 		t.Fatalf("with bindings should not be copied!")
 	}
 }
@@ -185,16 +238,19 @@ func TestMetadataTables(t *testing.T) {
 
 	mkCol := func(ordinal int, name string) cat.Column {
 		var c cat.Column
-		c.InitNonVirtual(
+		c.Init(
 			ordinal,
 			cat.StableID(ordinal+1),
 			tree.Name(name),
 			cat.Ordinary,
 			types.Int,
 			false, /* nullable */
-			false, /* hidden */
-			nil,   /* defaultExpr */
-			nil,   /* computedExpr */
+			cat.Visible,
+			nil, /* defaultExpr */
+			nil, /* computedExpr */
+			nil, /* onUpdateExpr */
+			cat.NotGeneratedAsIdentity,
+			nil, /* generatedAsIdentitySequenceOption */
 		)
 		return c
 	}
@@ -281,7 +337,7 @@ func TestIndexColumns(t *testing.T) {
 // TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
 func TestDuplicateTable(t *testing.T) {
 	cat := testcat.New()
-	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL)")
+	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL, INDEX (b2) WHERE b)")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,11 +388,22 @@ func TestDuplicateTable(t *testing.T) {
 		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
 	}
 
-	if dupTabMeta.PartialIndexPredicates == nil || dupTabMeta.PartialIndexPredicates[1] == nil {
+	pred, isPartialIndex := dupTabMeta.PartialIndexPredicate(1)
+	if !isPartialIndex {
 		t.Fatalf("expected partial index predicates to be duplicated")
 	}
 
-	col = dupTabMeta.PartialIndexPredicates[1].(*memo.VariableExpr).Col
+	colMeta := md.ColumnMeta(dupB)
+	if colMeta.Table != dupA {
+		t.Fatalf("expected new column to reference new table ID")
+	}
+
+	colMeta = md.ColumnMeta(dupB2)
+	if colMeta.Table != dupA {
+		t.Fatalf("expected new column to reference new table ID")
+	}
+
+	col = pred.(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)
 	}

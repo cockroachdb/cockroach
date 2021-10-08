@@ -76,7 +76,7 @@ func s2PointToLatLng(fromPoint s2.Point) LatLng {
 }
 
 // AddGeography adds a given Geography to an image.
-func (img *Image) AddGeography(g *geo.Geography, title string, color string) {
+func (img *Image) AddGeography(g geo.Geography, title string, color string) {
 	regions, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		panic(err)

@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var comparisonOpInfix = map[tree.ComparisonOperator]string{
+var comparisonOpInfix = map[tree.ComparisonOperatorSymbol]string{
 	tree.EQ: "==",
 	tree.NE: "!=",
 	tree.LT: "<",
@@ -39,13 +39,14 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.FloatFamily:                    numericCanonicalTypeFamilies,
 	types.TimestampTZFamily:              {types.TimestampTZFamily},
 	types.IntervalFamily:                 {types.IntervalFamily},
+	types.JsonFamily:                     {types.JsonFamily},
 	typeconv.DatumVecCanonicalTypeFamily: {typeconv.DatumVecCanonicalTypeFamily},
 }
 
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
 // overloads that implement that comparison between two values of the same type
 // (meaning they have the same family and width).
-var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*oneArgOverload, len(execgen.ComparisonOpName))
+var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperatorSymbol][]*oneArgOverload, len(execgen.ComparisonOpName))
 
 // cmpOpOutputTypes contains a types.Bool entry for each type pair that we
 // support.
@@ -65,11 +66,11 @@ func registerCmpOpOutputTypes() {
 
 func populateCmpOpOverloads() {
 	registerCmpOpOutputTypes()
-	for _, op := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+	for _, op := range []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 		base := &overloadBase{
 			kind:  comparisonOverload,
 			Name:  execgen.ComparisonOpName[op],
-			CmpOp: op,
+			CmpOp: tree.MakeComparisonOperator(op),
 			OpStr: comparisonOpInfix[op],
 		}
 		sameTypeComparisonOpToOverloads[op] = populateTwoArgsOverloads(
@@ -221,7 +222,7 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -241,7 +242,7 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Right}}))
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
@@ -259,7 +260,7 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -279,7 +280,7 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Left}}))
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
@@ -331,6 +332,18 @@ func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 	}
 }
 
+func (c jsonCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
+		return fmt.Sprintf(`
+var err error
+%s, err = %s.Compare(%s)
+if err != nil {
+  colexecerror.ExpectedError(err)
+}
+`, targetElem, leftElem, rightElem)
+	}
+}
+
 // getDatumVecVariableName returns the variable name for a datumVec given
 // leftCol and rightCol (either of which could be "_" - meaning there is no
 // vector in scope for the corresponding side).
@@ -345,7 +358,7 @@ func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
 		datumVecVariableName := getDatumVecVariableName(leftCol, rightCol)
 		return fmt.Sprintf(`
-			%s = %s.(*coldataext.Datum).CompareDatum(%s, %s)
+			%s = coldataext.CompareDatum(%s, %s, %s)
 		`, targetElem, leftElem, datumVecVariableName, rightElem)
 	}
 }

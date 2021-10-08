@@ -19,14 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,7 +40,7 @@ import (
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
-	shouldQueueFn func(hlc.Timestamp, *Replica) (bool, float64)
+	shouldQueueFn func(hlc.ClockTimestamp, *Replica) (bool, float64)
 	processed     int32 // accessed atomically
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
@@ -52,13 +50,13 @@ type testQueueImpl struct {
 }
 
 func (tq *testQueueImpl) shouldQueue(
-	_ context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
+	_ context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ *config.SystemConfig,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
 ) (bool, error) {
 	atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -85,9 +83,7 @@ func (tq *testQueueImpl) purgatoryChan() <-chan time.Time {
 	return tq.pChan
 }
 
-func makeTestBaseQueue(
-	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
-) *baseQueue {
+func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.
 		cfg.needsSystemConfig = true
@@ -97,7 +93,7 @@ func makeTestBaseQueue(
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	return newBaseQueue(name, impl, store, gossip, cfg)
+	return newBaseQueue(name, impl, store, cfg)
 }
 
 func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
@@ -191,14 +187,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		r2: 2.0,
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -227,14 +223,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same replica twice.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -242,8 +238,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -262,10 +258,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Verify that priorities aren't lowered by a later MaybeAdd.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	priorityMap[r1] = 1.0
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -284,8 +280,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Try removing a replica.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	bq.MaybeRemove(r2.RangeID)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
@@ -321,13 +317,13 @@ func TestBaseQueueSamePriorityFIFO(t *testing.T) {
 	repls := createReplicas(t, &tc, 5)
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			t.Fatal("unexpected call to shouldQueue")
 			return false, 0.0
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 100})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 100})
 
 	for _, repl := range repls {
 		added, err := bq.testingAdd(ctx, repl, 0.0)
@@ -363,12 +359,12 @@ func TestBaseQueueAdd(t *testing.T) {
 	}
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 1})
-	bq.maybeAdd(context.Background(), r, hlc.Timestamp{})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 1})
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
@@ -388,6 +384,7 @@ func TestBaseQueueAdd(t *testing.T) {
 // are counted as successes, while no-ops are not.
 func TestBaseQueueNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -399,17 +396,17 @@ func TestBaseQueueNoop(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.RangeID)
 			return
 		},
 		noop: false,
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 	ctx := context.Background()
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	testQueue.blocker <- struct{}{}
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 1 {
@@ -424,7 +421,7 @@ func TestBaseQueueNoop(t *testing.T) {
 	// Ensure that when process is a no-op, the success count
 	// is not incremented
 	testQueue.noop = true
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	testQueue.blocker <- struct{}{}
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 2 {
@@ -454,18 +451,18 @@ func TestBaseQueueProcess(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.RangeID)
 			return
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	ctx := context.Background()
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	if pc := testQueue.getProcessed(); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
@@ -527,16 +524,16 @@ func TestBaseQueueAddRemove(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = 1.0
 			return
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
-	bq.maybeAdd(ctx, r, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
 	bq.MaybeRemove(r.RangeID)
 
 	// Wake the queue
@@ -557,11 +554,21 @@ func TestBaseQueueAddRemove(t *testing.T) {
 func TestNeedsSystemConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+
+	tc := testContext{}
+	cfg := TestStoreConfig(nil)
+	// Configure a gossip instance that won't have the system config available in it.
+	cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	{
+		confReader, err := tc.store.GetConfReader()
+		require.Nil(t, confReader)
+		require.True(t, errors.Is(err, errSysCfgUnavailable))
+	}
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -570,32 +577,21 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	queueFnCalled := 0
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (bool, float64) {
 			queueFnCalled++
 			return true, 1.0
 		},
 	}
 
-	// Use a gossip instance that won't have the system config available in it.
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: tc.store.cfg.AmbientCtx,
-		Config:     &base.Config{Insecure: true},
-		Clock:      tc.store.cfg.Clock,
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
-	emptyGossip := gossip.NewTest(
-		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry(), zonepb.DefaultZoneConfigRef())
-	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{
+	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
 		needsSystemConfig:    true,
 		acceptsUnsplitRanges: true,
 		maxSize:              1,
 	})
 
 	bqNeedsSysCfg.Start(stopper)
-	bqNeedsSysCfg.maybeAdd(ctx, r, hlc.Timestamp{})
+	bqNeedsSysCfg.maybeAdd(ctx, r, hlc.ClockTimestamp{})
 	if queueFnCalled != 0 {
 		t.Fatalf("expected shouldQueueFn not to be called without valid system config, got %d calls", queueFnCalled)
 	}
@@ -614,13 +610,13 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	// Now check that a queue which doesn't require the system config can
 	// successfully add and process a replica.
-	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{
+	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
 		needsSystemConfig:    false,
 		acceptsUnsplitRanges: true,
 		maxSize:              1,
 	})
 	bqNoSysCfg.Start(stopper)
-	bqNoSysCfg.maybeAdd(context.Background(), r, hlc.Timestamp{})
+	bqNoSysCfg.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	if queueFnCalled != 1 {
 		t.Fatalf("expected shouldQueueFn to be called even without valid system config, got %d calls", queueFnCalled)
 	}
@@ -684,13 +680,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
 			return true, float64(r.RangeID)
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, s, s.cfg.Gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	// Check our config.
@@ -713,8 +709,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
-	bq.maybeAdd(ctx, neverSplits, hlc.Timestamp{})
-	bq.maybeAdd(ctx, willSplit, hlc.Timestamp{})
+	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 2 {
@@ -747,8 +743,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
-	bq.maybeAdd(ctx, neverSplits, hlc.Timestamp{})
-	bq.maybeAdd(ctx, willSplit, hlc.Timestamp{})
+	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 3 {
@@ -788,7 +784,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.RangeID)
 			return
@@ -800,11 +796,11 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	const replicaCount = 10
 	repls := createReplicas(t, &tc, replicaCount)
 
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: replicaCount})
 	bq.Start(stopper)
 
 	for _, r := range repls {
-		bq.maybeAdd(context.Background(), r, hlc.Timestamp{})
+		bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -911,7 +907,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ *config.SystemConfig,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -935,19 +931,19 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	ptQueue := &processTimeoutQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},
 	}
-	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
+	bq := makeTestBaseQueue("test", ptQueue, tc.store,
 		queueConfig{
 			maxSize:              1,
 			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(stopper)
-	bq.maybeAdd(context.Background(), r, hlc.Timestamp{})
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 
 	if l := bq.Length(); l != 1 {
 		t.Errorf("expected one queued replica; got %d", l)
@@ -977,6 +973,7 @@ func (r mvccStatsReplicaInQueue) GetMVCCStats() enginepb.MVCCStats {
 func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	type testCase struct {
 		guaranteedProcessingTime time.Duration
 		rateLimit                int64 // bytes/s
@@ -986,8 +983,8 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	makeTest := func(tc testCase) (string, func(t *testing.T)) {
 		return fmt.Sprintf("%+v", tc), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			queueGuaranteedProcessingTimeBudget.Override(&st.SV, tc.guaranteedProcessingTime)
-			recoverySnapshotRate.Override(&st.SV, tc.rateLimit)
+			queueGuaranteedProcessingTimeBudget.Override(ctx, &st.SV, tc.guaranteedProcessingTime)
+			recoverySnapshotRate.Override(ctx, &st.SV, tc.rateLimit)
 			tf := makeRateLimitedTimeoutFunc(recoverySnapshotRate)
 			repl := mvccStatsReplicaInQueue{
 				size: tc.replicaSize,
@@ -1031,7 +1028,7 @@ type processTimeQueueImpl struct {
 }
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ *config.SystemConfig,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
@@ -1052,19 +1049,19 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 
 	ptQueue := &processTimeQueueImpl{
 		testQueueImpl: testQueueImpl{
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},
 	}
-	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
+	bq := makeTestBaseQueue("test", ptQueue, tc.store,
 		queueConfig{
 			maxSize:              1,
 			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(stopper)
-	bq.maybeAdd(context.Background(), r, hlc.Timestamp{})
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if v := bq.successes.Count(); v != 1 {
@@ -1127,16 +1124,16 @@ func TestBaseQueueDisable(t *testing.T) {
 	shouldQueueCalled := false
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (bool, float64) {
 			shouldQueueCalled = true
 			return true, 1.0
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	bq.SetDisabled(true)
-	bq.maybeAdd(context.Background(), r, hlc.Timestamp{})
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	if shouldQueueCalled {
 		t.Error("shouldQueue should not have been called")
 	}
@@ -1166,13 +1163,13 @@ type parallelQueueImpl struct {
 }
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, cfg)
+	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }
@@ -1195,13 +1192,13 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	pQueue := &parallelQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 				return true, 1
 			},
 		},
 		processBlocker: make(chan struct{}, 1),
 	}
-	bq := makeTestBaseQueue("test", pQueue, tc.store, tc.gossip,
+	bq := makeTestBaseQueue("test", pQueue, tc.store,
 		queueConfig{
 			maxSize:        3,
 			maxConcurrency: 2,
@@ -1210,9 +1207,9 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	bq.Start(stopper)
 
 	ctx := context.Background()
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
-	bq.maybeAdd(ctx, r3, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r3, hlc.ClockTimestamp{})
 
 	if exp, l := 3, bq.Length(); l != exp {
 		t.Errorf("expected %d queued replica; got %d", exp, l)
@@ -1257,11 +1254,11 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return true, 1.0
 		},
 	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
 		maxSize:              defaultQueueMaxSize,
 		acceptsUnsplitRanges: true,
 	})
@@ -1275,10 +1272,10 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 	}
 	bq.mu.Unlock()
 	require.Equal(t, 0, testQueue.getProcessed())
-	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
 	bq.DrainQueue(tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
-	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
 	r.replicaID = 2
 	bq.DrainQueue(tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
@@ -1305,7 +1302,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	pQueue := &parallelQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 				if atomic.AddInt64(&shouldQueueCount, 1) <= 4 {
 					return true, 1
 				}
@@ -1314,7 +1311,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 		},
 		processBlocker: make(chan struct{}, 1),
 	}
-	bq := makeTestBaseQueue("test", pQueue, tc.store, tc.gossip,
+	bq := makeTestBaseQueue("test", pQueue, tc.store,
 		queueConfig{
 			maxSize:        3,
 			maxConcurrency: 2,
@@ -1346,7 +1343,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	}
 	ctx := context.Background()
 	// MaybeAdd a replica. Should queue after checking ShouldQueue.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(1)
 	if exp, l := 1, bq.Length(); l != exp {
 		t.Errorf("expected %d queued replica; got %d", exp, l)
@@ -1357,7 +1354,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	assertProcessedAndProcessing(0, 1)
 
 	// MaybeAdd the same replica. Should requeue after checking ShouldQueue.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(2)
 
 	// Let the first processing attempt finish.
@@ -1367,7 +1364,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	assertProcessedAndProcessing(1, 1)
 
 	// MaybeAdd the same replica. Should requeue after checking ShouldQueue.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(4)
 
 	// Let the second processing attempt finish.
@@ -1377,7 +1374,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	assertProcessedAndProcessing(2, 0)
 
 	// MaybeAdd the same replica. Should NOT queue after checking ShouldQueue.
-	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
 }

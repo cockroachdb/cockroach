@@ -11,15 +11,13 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,7 +32,6 @@ type stmtDiagnosticsRequest struct {
 type stmtDiagnostics struct {
 	ID                   int
 	StatementFingerprint string
-	Trace                string
 	CollectedAt          time.Time
 }
 
@@ -54,7 +51,6 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 		Id:                   int64(diagnostics.ID),
 		StatementFingerprint: diagnostics.StatementFingerprint,
 		CollectedAt:          diagnostics.CollectedAt,
-		Trace:                diagnostics.Trace,
 	}
 	return resp
 }
@@ -68,7 +64,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -93,16 +89,16 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
 	var err error
 
 	// TODO(davidh): Add pagination to this request.
-	rows, err := s.internalExecutor.QueryEx(ctx, "stmt-diag-get-all", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{
-			User: security.RootUser,
+	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
 		},
 		`SELECT
 			id,
@@ -116,8 +112,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		return nil, err
 	}
 
-	requests := make([]stmtDiagnosticsRequest, len(rows))
-	for i, row := range rows {
+	var requests []stmtDiagnosticsRequest
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		id := int(*row[0].(*tree.DInt))
 		statementFingerprint := string(*row[1].(*tree.DString))
 		completed := bool(*row[2].(*tree.DBool))
@@ -136,7 +134,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			req.RequestedAt = requestedAt.Time
 		}
 
-		requests[i] = req
+		requests = append(requests, req)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	response := &serverpb.StatementDiagnosticsReportsResponse{
@@ -162,20 +163,19 @@ func (s *statusServer) StatementDiagnostics(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
 	var err error
 	row, err := s.internalExecutor.QueryRowEx(ctx, "stmt-diag-get-one", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{
-			User: security.RootUser,
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
 		},
 		`SELECT
 			id,
 			statement_fingerprint,
-			collected_at,
-			trace
+			collected_at
 		FROM
 			system.statement_diagnostics
 		WHERE
@@ -200,19 +200,6 @@ func (s *statusServer) StatementDiagnostics(
 
 	if collectedAt, ok := row[2].(*tree.DTimestampTZ); ok {
 		diagnostics.CollectedAt = collectedAt.Time
-	}
-
-	if traceJSON, ok := row[3].(*tree.DJSON); ok {
-		traceJSONString, err := traceJSON.AsText()
-		if err != nil {
-			return nil, err
-		}
-		var prettyJSON bytes.Buffer
-		if err := json.Indent(
-			&prettyJSON, []byte(*traceJSONString), "" /* prefix */, "\t" /* indent */); err != nil {
-			return nil, errors.Wrap(err, "failed to parse JSON")
-		}
-		diagnostics.Trace = prettyJSON.String()
 	}
 
 	diagnosticsProto := diagnostics.toProto()

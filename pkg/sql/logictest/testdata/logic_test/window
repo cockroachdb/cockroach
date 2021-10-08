@@ -979,47 +979,163 @@ SELECT k, ntile(20) OVER (ORDER BY k) FROM kv ORDER BY 1
 11  9
 
 # The value of 'w' in the first row will be 3.
-query II
-SELECT k, ntile(w) OVER (ORDER BY k) FROM kv ORDER BY 1
+query III
+SELECT k, w, ntile(w) OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
-1   1
-3   1
-5   1
-6   2
-7   2
-8   2
-9   3
-10  3
-11  3
+1   3  1
+3   5  1
+5   5  1
+6   3  2
+7   2  2
+8   2  2
+9   9  3
+10  9  3
+11  9  3
 
 query III
-SELECT k, v, ntile(3) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY 1
+SELECT k, v, ntile(3) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY v, k
 ----
-1   2     1
-3   4     1
 5   NULL  1
+11  NULL  2
+1   2     1
 6   2     1
 7   2     2
-8   4     2
 9   2     3
+3   4     1
+8   4     2
 10  4     3
-11  NULL  2
 
 query IIII
-SELECT k, v, w, ntile(6) OVER (PARTITION BY v ORDER BY w, k) FROM kv ORDER BY 1
+SELECT k, v, w, ntile(6) OVER (PARTITION BY v ORDER BY w, k) FROM kv ORDER BY v, w, k
 ----
-1   2     3  2
-3   4     5  2
 5   NULL  5  1
-6   2     3  3
-7   2     2  1
-8   4     2  1
-9   2     9  4
-10  4     9  3
 11  NULL  9  2
+7   2     2  1
+1   2     3  2
+6   2     3  3
+9   2     9  4
+8   4     2  1
+3   4     5  2
+10  4     9  3
+
+query III
+SELECT k, w, ntile(w) OVER (PARTITION BY k) FROM kv ORDER BY k
+----
+1   3  1
+3   5  1
+5   5  1
+6   3  1
+7   2  1
+8   2  1
+9   9  1
+10  9  1
+11  9  1
+
+query III
+SELECT k, v, ntile(3) OVER (PARTITION BY v, k) FROM kv ORDER BY v, k
+----
+5   NULL  1
+11  NULL  1
+1   2     1
+6   2     1
+7   2     1
+9   2     1
+3   4     1
+8   4     1
+10  4     1
+
+query IIII
+SELECT k, v, w, ntile(6) OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY v, k, w
+----
+5   NULL  5  1
+11  NULL  9  1
+1   2     3  1
+6   2     3  1
+7   2     2  1
+9   2     9  1
+3   4     5  1
+8   4     2  1
+10  4     9  1
+
+query IIII
+SELECT k, v, w, ntile(v) OVER (PARTITION BY w ORDER BY v, k) FROM kv ORDER BY w, v, k
+----
+7   2     2  1
+8   4     2  2
+1   2     3  1
+6   2     3  2
+5   NULL  5  NULL
+3   4     5  1
+11  NULL  9  NULL
+9   2     9  1
+10  4     9  1
+
+query III
+SELECT k, v, ntile(v) OVER (ORDER BY v, k) FROM kv ORDER BY v, k
+----
+5   NULL  NULL
+11  NULL  NULL
+1   2     1
+6   2     1
+7   2     1
+9   2     1
+3   4     1
+8   4     2
+10  4     2
+
+query III
+SELECT k, v, ntile(v) OVER (ORDER BY v, k)
+FROM (SELECT * FROM kv WHERE w != 3) ORDER BY v, k
+----
+5   NULL  NULL
+11  NULL  NULL
+7   2     1
+9   2     1
+3   4     1
+8   4     1
+10  4     2
+
+query III
+SELECT k, v, ntile(3::INT2) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY v, k
+----
+5   NULL  1
+11  NULL  2
+1   2     1
+6   2     1
+7   2     2
+9   2     3
+3   4     1
+8   4     2
+10  4     3
+
+query III
+SELECT k, v, ntile(3::INT4) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY v, k
+----
+5   NULL  1
+11  NULL  2
+1   2     1
+6   2     1
+7   2     2
+9   2     3
+3   4     1
+8   4     2
+10  4     3
+
+query III
+SELECT k, w, ntile(w::INT4) OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+1   3  1
+3   5  1
+5   5  1
+6   3  2
+7   2  2
+8   2  2
+9   9  3
+10  9  3
+11  9  3
 
 query II
-SELECT k, ntile(w) OVER (PARTITION BY k) FROM kv ORDER BY 1
+SELECT k, ntile(1::INT4) OVER () FROM kv ORDER BY 1
 ----
 1   1
 3   1
@@ -1030,32 +1146,6 @@ SELECT k, ntile(w) OVER (PARTITION BY k) FROM kv ORDER BY 1
 9   1
 10  1
 11  1
-
-query III
-SELECT k, v, ntile(3) OVER (PARTITION BY v, k) FROM kv ORDER BY 1
-----
-1   2     1
-3   4     1
-5   NULL  1
-6   2     1
-7   2     1
-8   4     1
-9   2     1
-10  4     1
-11  NULL  1
-
-query IIII
-SELECT k, v, w, ntile(6) OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
-----
-1   2     3  1
-3   4     5  1
-5   NULL  5  1
-6   2     3  1
-7   2     2  1
-8   4     2  1
-9   2     9  1
-10  4     9  1
-11  NULL  9  1
 
 query II
 SELECT k, lag(9) OVER (ORDER BY k) FROM kv ORDER BY 1
@@ -3555,9 +3645,308 @@ SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y 
 2  10  2  0  2
 4  10  2  0  4
 
-# Test that windower respects the memory limit set via the cluster setting.
+statement OK
+CREATE TABLE string_agg_test (
+  id INT PRIMARY KEY,
+  company_id INT,
+  employee STRING
+)
+
+statement OK
+INSERT INTO string_agg_test VALUES
+  (1, 1, 'A'),
+  (2, 2, 'B'),
+  (3, 3, 'C'),
+  (4, 4, 'D'),
+  (5, 3, 'C'),
+  (6, 4, 'D'),
+  (7, 4, 'D'),
+  (8, 4, 'D'),
+  (9, 3, 'C'),
+  (10, 2, 'B')
+
+query IT colnames
+SELECT company_id, string_agg(employee, ',')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           B,B
+3           C
+3           C,C
+3           C,C,C
+4           D
+4           D,D
+4           D,D,D
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b',')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           B,B
+3           C
+3           C,C
+3           C,C,C
+4           D
+4           D,D
+4           D,D,D
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(employee, '')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b'')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, employee)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, employee::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::STRING)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query error pq: ambiguous call: string_agg\(unknown, unknown\)
+SELECT company_id, string_agg(NULL, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query IT colnames
+SELECT company_id, string_agg(employee, lower(employee))
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           BbB
+2           BbB
+3           CcCcC
+3           CcCcC
+3           CcCcC
+4           DdDdDdD
+4           DdDdDdD
+4           DdDdDdD
+4           DdDdDdD
+
+query IT colnames
+SELECT company_id, string_agg(lower(employee), employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           a
+2           bBb
+2           bBb
+3           cCcCc
+3           cCcCc
+3           cCcCc
+4           dDdDdDd
+4           dDdDdDd
+4           dDdDdDd
+4           dDdDdDd
+
+statement error pq: unknown signature: string_agg\(string, string, string\)
+SELECT company_id, string_agg(employee, employee, employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string\)
+SELECT company_id, string_agg(employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string, string, string, string\)
+SELECT company_id, string_agg(employee, 'foo', employee, 'bar')
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+statement OK
+DROP TABLE string_agg_test
+
+# Test that windower respects the memory limit set via the session variable.
 statement ok
-SET CLUSTER SETTING sql.distsql.temp_storage.workmem='200KB'
+SET distsql_workmem='200KB'
 
 statement ok
 CREATE TABLE l (a INT PRIMARY KEY)
@@ -3569,7 +3958,7 @@ statement error memory budget exceeded
 SELECT array_agg(a) OVER () FROM l LIMIT 1
 
 statement ok
-RESET CLUSTER SETTING sql.distsql.temp_storage.workmem
+RESET distsql_workmem
 
 # Regression test for #38901 verifying that window frame takes precedence over
 # the concept of peers.
@@ -3688,119 +4077,227 @@ SELECT count(*) >= 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE '
 ----
 true
 
+# Regression test for peer group number computation overflow (#53654).
+query II rowsort
+SELECT
+  max(k) OVER (w GROUPS BETWEEN 9223372036854775807 FOLLOWING AND UNBOUNDED FOLLOWING),
+  max(k) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 9223372036854775807 FOLLOWING)
+FROM kv WINDOW w AS (PARTITION BY b ORDER BY v)
+----
+NULL  11
+NULL  11
+NULL  11
+NULL  8
+NULL  8
+NULL  7
+NULL  7
+NULL  7
+NULL  7
+
+# Regression test for #53442. Ordering columns are not pruned with RANGE mode
+# and an offset boundary of PRECEDING or FOLLOWING.
+
 statement ok
-DROP TABLE t; CREATE TABLE t (a INT, b INT, c INT PRIMARY KEY)
+CREATE TABLE t53442_a (a INT8 PRIMARY KEY);
+CREATE TABLE t53442_b (b INT2 PRIMARY KEY);
 
 statement ok
-INSERT INTO t VALUES
-  (0, 1, 0),
-  (1, 1, 1),
-  (0, 2, 2),
-  (1, 2, 3)
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY b RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
 
-# We sort the output on all queries with row_number window function to get
-# deterministic results.
-query III
-SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY a, b
-----
-0 1 1
-0 2 2
-1 1 3
-1 2 4
+statement ok
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY a RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
 
-query III
-SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM t ORDER BY a, b
-----
-0 1 1
-0 2 2
-1 1 1
-1 2 2
+# Regression test for a crash with json_object_agg used as a window function
+# (#54604).
+statement ok
+CREATE TABLE t54604 (s STRING);
+INSERT INTO t54604 SELECT g::STRING FROM generate_series(1, 5) AS g
 
-query III
-SELECT a, b, row_number() OVER (PARTITION BY a, b) FROM t ORDER BY a, b
+query T rowsort
+SELECT json_object_agg(s, s) OVER (ORDER BY s DESC) FROM t54604
 ----
-0 1 1
-0 2 1
-1 1 1
-1 2 1
+{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5"}
+{"2": "2", "3": "3", "4": "4", "5": "5"}
+{"3": "3", "4": "4", "5": "5"}
+{"4": "4", "5": "5"}
+{"5": "5"}
+
+query T rowsort
+SELECT jsonb_object_agg(s, s) OVER (ORDER BY s RANGE UNBOUNDED PRECEDING) FROM t54604
+----
+{"1": "1"}
+{"1": "1", "2": "2"}
+{"1": "1", "2": "2", "3": "3"}
+{"1": "1", "2": "2", "3": "3", "4": "4"}
+{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5"}
+
+# Regression test for window aggregate functions not making a deep copy of decimals on each iteration (#55944).
+statement ok
+CREATE TABLE t55944 (x decimal);
+INSERT INTO t55944 (x)
+VALUES (1.0),
+       (20.0),
+       (25.0),
+       (41.0),
+       (55.5),
+       (60.9),
+       (72.0),
+       (88.0),
+       (88.0),
+       (89.0);
+
+query RFFFFF
+SELECT x,
+       sqrdiff(x) OVER (ORDER BY x) as sqrdiff,
+       var_pop(x) OVER (ORDER BY x) as var_pop,
+       var_samp(x) OVER (ORDER BY x) as var_samp,
+       stddev_pop(x) OVER (ORDER BY x) as stddev_pop,
+       stddev_samp(x) OVER (ORDER BY x) as stddev_samp
+FROM t55944
+ORDER BY x
+----
+1.0  0                          0                     NULL                  0                     NULL
+20.0 180.5                      90.25                 180.5                 9.5                   13.435028842544402964
+25.0 320.6666666666666666666667 106.88888888888888889 160.33333333333333333 10.338708279513881752 12.662279942148385993
+41.0 814.7500000000000000000001 203.6875              271.58333333333333333 14.271912976192084391 16.479785597310825856
+55.5 1726                       345.2                 431.5                 18.579558659989746915 20.772578077840988103
+60.9 2600.8                     433.46666666666666667 520.16                20.819862311424316109 22.807016464237491316
+72.0 3845.037142857142857142857 549.29102040816326531 640.83952380952380952 23.436958429117103874 25.314808389745394427
+88.0 7527.842222222222222222222 836.42691358024691358 940.98027777777777778 28.921046204801217626 30.675401835636607970
+88.0 7527.842222222222222222222 836.42691358024691358 940.98027777777777778 28.921046204801217626 30.675401835636607970
+89.0 8885.844                   888.5844              987.316               29.809132828715430446 31.421584937746218024
+
+# Regression test for #64793. The output bytes column should not have decreasing
+# offsets.
+statement ok
+CREATE TABLE t64793 (b TEXT)
+
+statement ok
+INSERT INTO t64793 VALUES
+('alpha'),
+(NULL::TEXT)
+
+query T
+SELECT lag(b, 0) OVER (ORDER BY b DESC) FROM t64793 ORDER BY b
+----
+NULL
+alpha
+
+# Regression tests for integer overflow when computing window frame boundaries
+# for ROWS mode (#65978).
+statement ok
+CREATE TABLE t65978 (c INT);
+INSERT INTO t65978 VALUES (1), (2);
+
+query I
+SELECT max(c) OVER (ROWS BETWEEN 9223372036854775807::INT8 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t65978
+----
+NULL
+NULL
+
+query I
+SELECT max(c) OVER (ORDER BY c ROWS BETWEEN UNBOUNDED PRECEDING AND 9223372036854775807::INT8 FOLLOWING) FROM t65978
+----
+2
+2
+
+query I
+SELECT max(c) OVER (ROWS BETWEEN 9223372036854775807::INT8 PRECEDING AND UNBOUNDED FOLLOWING) FROM t65978
+----
+2
+2
+
+query I
+SELECT max(c) OVER (ORDER BY c ROWS BETWEEN UNBOUNDED PRECEDING AND 9223372036854775807::INT8 PRECEDING) FROM t65978
+----
+NULL
+NULL
+
+# Regression test for out-of-range error when computing window frame end index
+# for GROUPS mode with OFFSET PRECEDING (#66580).
+query II
+SELECT k, first_value(k) OVER (ORDER BY v GROUPS BETWEEN 0 PRECEDING AND 2 PRECEDING) FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   NULL
+8   NULL
+9   NULL
+10  NULL
+11  NULL
+
+# Regression test for incorrectly choosing NULL values as the minimum when
+# EXCLUDE clause is non-default (#68024).
+query I rowsort
+SELECT min(x)
+OVER
+(
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  EXCLUDE CURRENT ROW
+)
+FROM (VALUES (NULL::INT), (NULL::INT), (1)) v(x);
+----
+1
+1
+NULL
+
+# Regression test for panic during comparison for RANGE mode with
+# OFFSET PRECEDING or OFFSET FOLLOWING (#67975).
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x DATE);
+INSERT INTO t VALUES ('5874897-01-01'::DATE), ('1999-01-08'::DATE);
+SET vectorize=off;
+
+query error timestamp "5874897-01-01T00:00:00Z" exceeds supported timestamp bounds
+SELECT first_value(x) OVER (ORDER BY x RANGE BETWEEN CURRENT ROW AND '0 YEAR'::INTERVAL FOLLOWING) FROM t;
+
+statement ok
+RESET vectorize;
+
+# Regression test for incorrect results for min and max when the window frame
+# shrinks.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (a INT);
+INSERT INTO t VALUES (1), (-1), (NULL);
+SET vectorize=off;
 
 query III rowsort
-SELECT a, b, rank() OVER () FROM t
+SELECT a, max(a) OVER w, min(a) OVER w FROM t
+WINDOW w AS (ORDER BY a DESC RANGE BETWEEN 10 PRECEDING AND UNBOUNDED FOLLOWING);
 ----
-0 1 1
-0 2 1
-1 1 1
-1 2 1
+1     1     -1
+-1    1     -1
+NULL  NULL  NULL
 
-query III rowsort
-SELECT a, b, rank() OVER (ORDER BY a) FROM t
+statement ok
+RESET vectorize;
+
+# Regression test for incorrect bytes results when spilling to disk when there
+# are multiple partitions and one of the earlier partitions has trailing NULL
+# values.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT, y STRING);
+INSERT INTO t VALUES (1, 'NotNull'), (1, NULL), (1, NULL),
+(2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull');
+
+# Loading a batch with trailing nulls onto disk and then unloading it to
+# continue processing should not corrupt the output bytes.
+query ITT rowsort
+SELECT x, y, first_value(y) OVER (PARTITION BY x ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t;
 ----
-0 1 1
-0 2 1
-1 1 3
-1 2 3
-
-query IIII rowsort
-SELECT a, b, c, rank() OVER (PARTITION BY a ORDER BY c) FROM t
-----
-0 1 0 1
-0 2 2 2
-1 1 1 1
-1 2 3 2
-
-query III rowsort
-SELECT a, b, dense_rank() OVER () FROM t
-----
-0 1 1
-0 2 1
-1 1 1
-1 2 1
-
-query III rowsort
-SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t
-----
-0 1 1
-0 2 1
-1 1 2
-1 2 2
-
-query IIII rowsort
-SELECT a, b, c, dense_rank() OVER (PARTITION BY a ORDER BY c) FROM t
-----
-0 1 0 1
-0 2 2 2
-1 1 1 1
-1 2 3 2
-
-query IIIIRR rowsort
-SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS ()
-----
-0  1  1  1  0  1
-1  1  1  1  0  1
-0  2  1  1  0  1
-1  2  1  1  0  1
-
-query IIIIRR rowsort
-SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a)
-----
-0  1  1  1  0  1
-0  2  1  1  0  1
-1  1  1  1  0  1
-1  2  1  1  0  1
-
-
-query IIIIRR rowsort
-SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (ORDER BY a)
-----
-0  1  1  1  0                  0.5
-0  2  1  1  0                  0.5
-1  1  3  2  0.666666666666667  1
-1  2  3  2  0.666666666666667  1
-
-query IIIIRR rowsort
-SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY b)
-----
-0  1  1  1  0  0.5
-0  2  2  2  1  1
-1  1  1  1  0  0.5
-1  2  2  2  1  1
+1  NotNull  NotNull
+1  NULL     NULL
+1  NULL     NULL
+2  NotNull  NotNull
+2  NotNull  NotNull
+2  NotNull  NotNull
+2  NotNull  NotNull

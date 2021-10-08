@@ -23,10 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -56,7 +57,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.
 	for i := 0; i < 3; i++ {
-		rowRanges[i] = tc.AddReplicasOrFatal(
+		rowRanges[i] = tc.AddVotersOrFatal(
 			t, rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 	}
 
@@ -166,13 +167,13 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc *sqlbase.ImmutableTableDescriptor, pk int,
+	ts *server.TestServer, tableDesc catalog.TableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	if len(tableDesc.Indexes) != 0 {
+	if len(tableDesc.PublicNonPrimaryIndexes()) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
+	pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
@@ -320,7 +321,7 @@ func TestMixedDirections(t *testing.T) {
 
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
-) ([]roachpb.RangeDescriptor, *sqlbase.ImmutableTableDescriptor) {
+) ([]roachpb.RangeDescriptor, catalog.TableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
@@ -450,9 +451,9 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	return nil
 }
 
-func makeSpan(tableDesc *sqlbase.ImmutableTableDescriptor, i, j int) roachpb.Span {
+func makeSpan(tableDesc catalog.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
-		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
+		key, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {
 			panic(err)
 		}

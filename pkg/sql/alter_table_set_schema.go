@@ -13,18 +13,22 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterTableSetSchemaNode struct {
 	newSchema string
-	tableDesc *sqlbase.MutableTableDescriptor
+	prefix    catalog.ResolvedObjectPrefix
+	tableDesc *tabledesc.Mutable
 	n         *tree.AlterTableSetSchema
 }
 
@@ -33,6 +37,14 @@ type alterTableSetSchemaNode struct {
 func (p *planner) AlterTableSetSchema(
 	ctx context.Context, n *tree.AlterTableSetSchema,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER TABLE/VIEW/SEQUENCE SET SCHEMA",
+	); err != nil {
+		return nil, err
+	}
+
 	tn := n.Name.ToTableName()
 	requiredTableKind := tree.ResolveAnyTableKind
 	if n.IsView {
@@ -40,7 +52,7 @@ func (p *planner) AlterTableSetSchema(
 	} else if n.IsSequence {
 		requiredTableKind = tree.ResolveRequireSequenceDesc
 	}
-	tableDesc, err := p.ResolveMutableTableDescriptor(
+	prefix, tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &tn, !n.IfExists, requiredTableKind)
 	if err != nil {
 		return nil, err
@@ -65,32 +77,37 @@ func (p *planner) AlterTableSetSchema(
 		return nil, err
 	}
 
-	// Check if any views depend on this table/view. Because our views
-	// are currently just stored as strings, they explicitly specify the name
-	// of everything they depend on. Rather than trying to rewrite the view's
-	// query with the new name, we simply disallow such renames for now.
-	if len(tableDesc.DependedOnBy) > 0 {
-		return nil, p.dependentViewError(
-			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, tableDesc.DependedOnBy[0].ID,
-			"set schema on",
-		)
+	// Check if any objects depend on this table/view/sequence via its name.
+	// If so, then we disallow renaming, otherwise we allow it.
+	for _, dependent := range tableDesc.DependedOnBy {
+		if !dependent.ByID {
+			return nil, p.dependentViewError(
+				ctx, string(tableDesc.DescriptorType()), tableDesc.Name,
+				tableDesc.ParentID, dependent.ID, "set schema on",
+			)
+		}
 	}
 
 	return &alterTableSetSchemaNode{
-		newSchema: n.Schema,
+		newSchema: string(n.Schema),
+		prefix:    prefix,
 		tableDesc: tableDesc,
 		n:         n,
 	}, nil
 }
 
 func (n *alterTableSetSchemaNode) startExec(params runParams) error {
+	telemetry.Inc(n.n.TelemetryCounter())
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.tableDesc
 	schemaID := tableDesc.GetParentSchemaID()
 	databaseID := tableDesc.GetParentID()
 
-	desiredSchemaID, err := p.prepareSetSchema(ctx, tableDesc, n.newSchema)
+	kind := tree.GetTableType(tableDesc.IsSequence(), tableDesc.IsView(), tableDesc.GetIsMaterializedView())
+	oldName := tree.MakeTableNameFromPrefix(n.prefix.NamePrefix(), tree.Name(n.tableDesc.GetName()))
+
+	desiredSchemaID, err := p.prepareSetSchema(ctx, n.prefix.Database, tableDesc, n.newSchema)
 	if err != nil {
 		return err
 	}
@@ -101,6 +118,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return nil
 	}
 
+	// TODO(ajwerner): Use the collection here.
 	exists, _, err := catalogkv.LookupObjectID(
 		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, tableDesc.Name,
 	)
@@ -127,10 +145,25 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, tableDesc.Name)
+	if err := p.writeNameKey(ctx, tableDesc, tableDesc.ID); err != nil {
+		return err
+	}
 
-	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
+	newName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			DescriptorName:        oldName.FQString(),
+			NewDescriptorName:     newName.FQString(),
+			DescriptorType:        kind,
+		},
+	)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

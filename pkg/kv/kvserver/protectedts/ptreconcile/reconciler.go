@@ -33,11 +33,12 @@ import (
 
 // ReconcileInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReconcileInterval = settings.RegisterPublicNonNegativeDurationSetting(
+var ReconcileInterval = settings.RegisterDurationSetting(
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,
-)
+	settings.NonNegativeDuration,
+).WithPublic()
 
 // StatusFunc is used to check on the status of a Record based on its Meta
 // field.
@@ -102,7 +103,7 @@ func (r *Reconciler) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 	reconcileIntervalChanged := make(chan struct{}, 1)
-	ReconcileInterval.SetOnChange(&r.settings.SV, func() {
+	ReconcileInterval.SetOnChange(&r.settings.SV, func(ctx context.Context) {
 		select {
 		case reconcileIntervalChanged <- struct{}{}:
 		default:
@@ -132,12 +133,12 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 	}
 }
 
-func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
+func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
 	return r.localStores.IsMeta1Leaseholder(ctx, now)
 }
 
 func (r *Reconciler) reconcile(ctx context.Context) {
-	now := r.db.Clock().Now()
+	now := r.db.Clock().NowAsClockTimestamp()
 	isLeaseholder, err := r.isMeta1Leaseholder(ctx, now)
 	if err != nil {
 		log.Errorf(ctx, "failed to determine whether the local store contains the meta1 lease: %v", err)
@@ -146,7 +147,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	if !isLeaseholder {
 		return
 	}
-	if err := r.cache.Refresh(ctx, now); err != nil {
+	if err := r.cache.Refresh(ctx, now.ToTimestamp()); err != nil {
 		log.Errorf(ctx, "failed to refresh the protected timestamp cache to %v: %v", now, err)
 		return
 	}

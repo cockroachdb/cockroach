@@ -415,7 +415,8 @@
 [PruneMutationFetchCols, Normalize]
 (Update | Upsert | Delete
     $input:*
-    $checks:*
+    $uniqueChecks:*
+    $fkChecks:*
     $mutationPrivate:* &
         (CanPruneMutationFetchCols
             $mutationPrivate
@@ -428,7 +429,8 @@
 =>
 ((OpName)
     $input
-    $checks
+    $uniqueChecks
+    $fkChecks
     (PruneMutationFetchCols $mutationPrivate $needed)
 )
 
@@ -437,15 +439,25 @@
 [PruneMutationInputCols, Normalize]
 (Insert | Update | Upsert | Delete
     $input:*
-    $checks:*
+    $uniqueChecks:*
+    $fkChecks:*
     $mutationPrivate:* &
         (CanPruneCols
             $input
-            $needed:(NeededMutationCols $mutationPrivate $checks)
+            $needed:(NeededMutationCols
+                $mutationPrivate
+                $uniqueChecks
+                $fkChecks
+            )
         )
 )
 =>
-((OpName) (PruneCols $input $needed) $checks $mutationPrivate)
+((OpName)
+    (PruneCols $input $needed)
+    $uniqueChecks
+    $fkChecks
+    $mutationPrivate
+)
 
 # PruneReturningCols removes columns from the mutation operator's ReturnCols
 # set if they are not used in the RETURNING clause of the mutation.
@@ -457,7 +469,8 @@
 (Project
     $input:(Insert | Update | Upsert | Delete
         $innerInput:*
-        $checks:*
+        $uniqueChecks:*
+        $fkChecks:*
         $mutationPrivate:*
     )
     $projections:*
@@ -475,7 +488,8 @@
 (Project
     ((OpName $input)
         $innerInput
-        $checks
+        $uniqueChecks
+        $fkChecks
         (PruneMutationReturnCols $mutationPrivate $needed)
     )
     $projections

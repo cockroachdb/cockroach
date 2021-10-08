@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cloud",
+    srcs = [
+        "cloud_io.go",
+        "external_storage.go",
+        "impl_registry.go",
+        "kms.go",
+        "uris.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/sysutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

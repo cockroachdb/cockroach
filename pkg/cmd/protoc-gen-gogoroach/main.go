@@ -11,10 +11,40 @@
 package main
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	"github.com/gogo/protobuf/vanity"
 	"github.com/gogo/protobuf/vanity/command"
 )
+
+// As we invoke it, the generator will sometimes prepend the cockroachdb github
+// URL to what should be unqualified standard library imports. This regexp
+// allows us to identify and fix those bad imports.
+var builtinRegex *regexp.Regexp = regexp.MustCompile(`github.com/cockroachdb/cockroach/pkg/(?P<capture>(bytes|context|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)([^a-z]|$$))`)
+
+func fixImports(s string) string {
+	lines := strings.Split(s, "\n")
+	var builder strings.Builder
+	for _, line := range lines {
+		if strings.Contains(line, "import _ ") ||
+			strings.Contains(line, "import fmt \"github.com/cockroachdb/cockroach/pkg/fmt\"") ||
+			strings.Contains(line, "import math \"github.com/cockroachdb/cockroach/pkg/math\"") {
+			continue
+		}
+
+		line = strings.ReplaceAll(line, "github.com/cockroachdb/cockroach/pkg/etcd", "go.etcd.io/etcd")
+		line = strings.ReplaceAll(line, "github.com/cockroachdb/cockroach/pkg/errorspb", "github.com/cockroachdb/errors/errorspb")
+		line = strings.ReplaceAll(line, "golang.org/x/net/context", "context")
+		if builtinRegex.MatchString(line) {
+			line = builtinRegex.ReplaceAllString(line, "$1")
+		}
+		builder.WriteString(line)
+		builder.WriteByte('\n')
+	}
+	return builder.String()
+}
 
 func main() {
 	req := command.Read()
@@ -92,5 +122,8 @@ func main() {
 	}
 
 	resp := command.Generate(req)
+	for i := 0; i < len(resp.File); i++ {
+		*resp.File[i].Content = fixImports(*resp.File[i].Content)
+	}
 	command.Write(resp)
 }

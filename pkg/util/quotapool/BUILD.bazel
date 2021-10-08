@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "quotapool",
+    srcs = [
+        "config.go",
+        "int_rate.go",
+        "intpool.go",
+        "notify_queue.go",
+        "quotapool.go",
+        "token_bucket.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/quotapool",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "quotapool_test",
+    size = "small",
+    srcs = [
+        "bench_test.go",
+        "example_test.go",
+        "int_rate_test.go",
+        "intpool_test.go",
+        "node_size_test.go",
+        "notify_queue_test.go",
+        "token_bucket_test.go",
+    ],
+    embed = [":quotapool"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

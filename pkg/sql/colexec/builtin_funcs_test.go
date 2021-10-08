@@ -18,7 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -49,41 +52,42 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		desc         string
 		expr         string
 		inputCols    []int
-		inputTuples  tuples
+		inputTuples  colexectestutils.Tuples
 		inputTypes   []*types.T
-		outputTuples tuples
+		outputTuples colexectestutils.Tuples
 	}{
 		{
 			desc:         "AbsVal",
 			expr:         "abs(@1)",
 			inputCols:    []int{0},
-			inputTuples:  tuples{{1}, {-2}},
+			inputTuples:  colexectestutils.Tuples{{1}, {-2}},
 			inputTypes:   []*types.T{types.Int},
-			outputTuples: tuples{{1, 1}, {-2, 2}},
+			outputTuples: colexectestutils.Tuples{{1, 1}, {-2, 2}},
 		},
 		{
 			desc:         "StringLen",
 			expr:         "length(@1)",
 			inputCols:    []int{0},
-			inputTuples:  tuples{{"Hello"}, {"The"}},
+			inputTuples:  colexectestutils.Tuples{{"Hello"}, {"The"}},
 			inputTypes:   []*types.T{types.String},
-			outputTuples: tuples{{"Hello", 5}, {"The", 3}},
+			outputTuples: colexectestutils.Tuples{{"Hello", 5}, {"The", 3}},
 		},
 	}
 
 	for _, tc := range testCases {
 		log.Infof(ctx, "%s", tc.desc)
-		runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
+			func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes,
-					tc.expr, false, /* canFallbackToRowexec */
+					tc.expr, false /* canFallbackToRowexec */, testMemAcc,
 				)
 			})
 	}
 }
 
 func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls bool) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -125,18 +129,18 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	}
 
 	typs := []*types.T{types.Int}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := createTestProjectingOperator(
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+	op, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, source, typs,
-		"abs(@1)" /* projectingExpr */, false, /* canFallbackToRowexec */
+		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
-	op.Init()
+	op.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		op.Next(ctx)
+		op.Next()
 	}
 }
 
@@ -154,6 +158,7 @@ func BenchmarkBuiltinFunctions(b *testing.B) {
 // Perform a comparison between the default substring operator
 // and the specialized operator.
 func BenchmarkCompareSpecializedOperators(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
@@ -170,9 +175,9 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		eCol[i] = 4
 	}
 	batch.SetLength(coldata.BatchSize())
-	var source colexecbase.Operator
-	source = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source = newVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
+	var source colexecop.Operator
+	source = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source = colexecutils.NewVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
 
 	// Set up the default operator.
 	expr, err := parser.ParseExpr("substring(@1, @2, @3)")
@@ -180,7 +185,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	inputCols := []int{0, 1, 2}
-	p := &mockTypeContext{typs: typs}
+	p := &colexectestutils.MockTypeContext{Typs: typs}
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = p
 	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
@@ -188,31 +193,31 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode:        NewOneInputNode(source),
+		OneInputHelper:      colexecop.MakeOneInputHelper(source),
 		allocator:           testAllocator,
 		evalCtx:             evalCtx,
 		funcExpr:            typedExpr.(*tree.FuncExpr),
 		outputIdx:           outputIdx,
 		columnTypes:         typs,
 		outputType:          types.String,
-		toDatumConverter:    newVecToDatumConverter(len(typs), inputCols),
-		datumToVecConverter: GetDatumToPhysicalFn(types.String),
+		toDatumConverter:    colconv.NewVecToDatumConverter(len(typs), inputCols, false /* willRelease */),
+		datumToVecConverter: colconv.GetDatumToPhysicalFn(types.String),
 		row:                 make(tree.Datums, outputIdx),
 		argumentCols:        inputCols,
 	}
-	defaultOp.Init()
+	defaultOp.Init(ctx)
 
 	// Set up the specialized substring operator.
 	specOp := newSubstringOperator(
 		testAllocator, typs, inputCols, outputIdx, source,
 	)
-	specOp.Init()
+	specOp.Init(ctx)
 
 	b.Run("DefaultBuiltinOperator", func(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := defaultOp.Next(ctx)
+			b := defaultOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()
@@ -223,7 +228,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := specOp.Next(ctx)
+			b := specOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()

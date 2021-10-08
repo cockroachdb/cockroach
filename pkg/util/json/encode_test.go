@@ -16,10 +16,10 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -62,11 +62,7 @@ func TestJSONRandomEncodeRoundTrip(t *testing.T) {
 }
 
 func TestFilesEncode(t *testing.T) {
-	_, fname, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("couldn't get directory")
-	}
-	dir := filepath.Join(filepath.Dir(fname), "testdata", "raw")
+	dir := testutils.TestDataPath(t, "raw")
 	dirContents, err := ioutil.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -113,11 +109,8 @@ func TestFilesEncode(t *testing.T) {
 			// rerun with -rewrite-results-in-testfiles.
 			t.Run(`explicit encoding`, func(t *testing.T) {
 				stringifiedEncoding := fmt.Sprintf("%v", encoded)
-				fixtureFilename := filepath.Join(
-					filepath.Dir(fname),
-					"testdata", "encoded",
-					tc.Name()+".bytes",
-				)
+				fixtureFilename := testutils.TestDataPath(
+					t, "encoded", tc.Name()+".bytes")
 
 				if *rewriteResultsInTestfiles {
 					err := ioutil.WriteFile(fixtureFilename, []byte(stringifiedEncoding), 0644)

@@ -19,18 +19,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,8 +46,16 @@ func TestEval(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
+	dir := filepath.Join("../testdata", "eval")
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile("pkg/sql/sem/tree/testdata/eval/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir = runfile
+	}
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
-		datadriven.Walk(t, filepath.Join("../testdata", "eval"), func(t *testing.T, path string) {
+		datadriven.Walk(t, dir, func(t *testing.T, path string) {
 			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)
@@ -128,10 +138,12 @@ func TestEval(t *testing.T) {
 
 	t.Run("vectorized", func(t *testing.T) {
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
+			st := cluster.MakeTestingClusterSettings()
 			flowCtx := &execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: evalCtx,
 			}
-			memMonitor := execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
 			defer memMonitor.Stop(ctx)
 			acc := memMonitor.MakeBoundAccount()
 			defer acc.Close(ctx)
@@ -151,7 +163,7 @@ func TestEval(t *testing.T) {
 			}
 
 			batchesReturned := 0
-			args := &colexec.NewColOperatorArgs{
+			args := &colexecargs.NewColOperatorArgs{
 				Spec: &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{}},
 					Core: execinfrapb.ProcessorCoreUnion{
@@ -160,10 +172,11 @@ func TestEval(t *testing.T) {
 					Post: execinfrapb.PostProcessSpec{
 						RenderExprs: []execinfrapb.Expression{{LocalExpr: typedExpr}},
 					},
+					ResultTypes: []*types.T{typedExpr.ResolvedType()},
 				},
-				Inputs: []colexecbase.Operator{
-					&colexecbase.CallbackOperator{
-						NextCb: func(_ context.Context) coldata.Batch {
+				Inputs: []colexecargs.OpWithMetaInfo{{
+					Root: &colexecop.CallbackOperator{
+						NextCb: func() coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch
 							}
@@ -172,8 +185,8 @@ func TestEval(t *testing.T) {
 							batch.SetLength(1)
 							batchesReturned++
 							return batch
-						},
-					},
+						}},
+				},
 				},
 				StreamingMemAccount: &acc,
 				// Unsupported post processing specs are wrapped and run through the
@@ -184,24 +197,18 @@ func TestEval(t *testing.T) {
 			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 			require.NoError(t, err)
 
-			mat, err := colexec.NewMaterializer(
+			mat := colexec.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
-				result.Op,
+				result.OpWithMetaInfo,
 				[]*types.T{typedExpr.ResolvedType()},
-				nil, /* output */
-				result.MetadataSources,
-				nil, /* toClose */
-				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
 			)
-			require.NoError(t, err)
 
 			var (
-				row  sqlbase.EncDatumRow
+				row  rowenc.EncDatumRow
 				meta *execinfrapb.ProducerMetadata
 			)
-			ctx = mat.Start(ctx)
+			mat.Start(ctx)
 			row, meta = mat.Next()
 			if meta != nil {
 				if meta.Err != nil {

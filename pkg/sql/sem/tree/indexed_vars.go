@@ -97,7 +97,7 @@ func (v *IndexedVar) Format(ctx *FmtCtx) {
 	} else if f.HasFlags(fmtSymbolicVars) || v.col == nil {
 		ctx.Printf("@%d", v.Idx+1)
 	} else {
-		v.col.Format(ctx)
+		ctx.FormatNode(v.col)
 	}
 }
 
@@ -169,12 +169,6 @@ func (h *IndexedVarHelper) checkIndex(idx int) {
 		panic(errors.AssertionFailedf(
 			"invalid var index %d (columns: %d)", log.Safe(idx), log.Safe(len(h.vars))))
 	}
-}
-
-// NumVars returns the number of variables the IndexedVarHelper was initialized
-// for.
-func (h *IndexedVarHelper) NumVars() int {
-	return len(h.vars)
 }
 
 // IndexedVar returns an IndexedVar for the given index. The index must be

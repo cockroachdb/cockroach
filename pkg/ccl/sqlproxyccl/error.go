@@ -14,54 +14,78 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ErrorCode classifies errors emitted by Proxy().
-//go:generate stringer -type=ErrorCode
-type ErrorCode int
+// errorCode classifies errors emitted by Proxy().
+//go:generate stringer -type=errorCode
+type errorCode int
 
 const (
-	_ ErrorCode = iota
-	// CodeClientReadFailed indicates an error reading from the client connection
-	CodeClientReadFailed
-	// CodeClientWriteFailed indicates an error writing to the client connection.
-	CodeClientWriteFailed
+	_ errorCode = iota
 
-	// CodeUnexpectedInsecureStartupMessage indicates that the client sent a
+	// codeAuthFailed indicates that client authentication attempt has failed and
+	// backend has closed the connection.
+	codeAuthFailed
+
+	// codeBackendReadFailed indicates an error reading from backend connection.
+	codeBackendReadFailed
+	// codeBackendWriteFailed indicates an error writing to backend connection.
+	codeBackendWriteFailed
+
+	// codeClientReadFailed indicates an error reading from the client connection
+	codeClientReadFailed
+	// codeClientWriteFailed indicates an error writing to the client connection.
+	codeClientWriteFailed
+
+	// codeUnexpectedInsecureStartupMessage indicates that the client sent a
 	// StartupMessage which was unexpected. Typically this means that an
 	// SSLRequest was expected but the client attempted to go ahead without TLS,
 	// or vice versa.
-	CodeUnexpectedInsecureStartupMessage
+	codeUnexpectedInsecureStartupMessage
 
-	// CodeSNIRoutingFailed indicates an error choosing a backend address based on
+	// codeSNIRoutingFailed indicates an error choosing a backend address based on
 	// the client's SNI header.
-	CodeSNIRoutingFailed
+	codeSNIRoutingFailed
 
-	// CodeUnexpectedStartupMessage indicates an unexpected startup message
+	// codeUnexpectedStartupMessage indicates an unexpected startup message
 	// received from the client after TLS negotiation.
-	CodeUnexpectedStartupMessage
+	codeUnexpectedStartupMessage
 
-	// CodeParamsRoutingFailed indicates an error choosing a backend address based
+	// codeParamsRoutingFailed indicates an error choosing a backend address based
 	// on the client's session parameters.
-	CodeParamsRoutingFailed
+	codeParamsRoutingFailed
 
-	// CodeBackendDown indicates an error establishing or maintaining a connection
+	// codeBackendDown indicates an error establishing or maintaining a connection
 	// to the backend SQL server.
-	CodeBackendDown
+	codeBackendDown
 
-	// CodeBackendRefusedTLS indicates that the backend SQL server refused a TLS-
+	// codeBackendRefusedTLS indicates that the backend SQL server refused a TLS-
 	// enabled SQL connection.
-	CodeBackendRefusedTLS
+	codeBackendRefusedTLS
 
-	// CodeBackendDisconnected indicates that the backend disconnected (with a
+	// codeBackendDisconnected indicates that the backend disconnected (with a
 	// connection error) while serving client traffic.
-	CodeBackendDisconnected
+	codeBackendDisconnected
 
-	// CodeClientDisconnected indicates that the client disconnected unexpectedly
+	// codeClientDisconnected indicates that the client disconnected unexpectedly
 	// (with a connection error) while in a session with backend SQL server.
-	CodeClientDisconnected
+	codeClientDisconnected
+
+	// codeProxyRefusedConnection indicates that the proxy refused the connection
+	// request due to high load or too many connection attempts.
+	codeProxyRefusedConnection
+
+	// codeExpiredClientConnection indicates that proxy connection to the client
+	// has expired and should be closed.
+	codeExpiredClientConnection
+
+	// codeIdleDisconnect indicates that the connection was disconnected for
+	// being idle for longer than the specified timeout.
+	codeIdleDisconnect
 )
 
+// codeError is combines an error with one of the above codes to ease
+// the processing of the errors.
 type codeError struct {
-	code ErrorCode
+	code errorCode
 	err  error
 }
 
@@ -69,7 +93,8 @@ func (e *codeError) Error() string {
 	return fmt.Sprintf("%s: %s", e.code, e.err)
 }
 
-func newErrorf(code ErrorCode, format string, args ...interface{}) error {
+// newErrorf returns a new codeError out of the supplied args.
+func newErrorf(code errorCode, format string, args ...interface{}) error {
 	return &codeError{
 		code: code,
 		err:  errors.Errorf(format, args...),

@@ -16,6 +16,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -243,7 +245,7 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 }
 
-func TestZoneConfigValidateTandemFields(t *testing.T) {
+func TestZoneConfigValidateNonVoterSpecific(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -251,19 +253,56 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 		expected string
 	}{
 		{
-			ZoneConfig{
+			cfg: ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(1),
+				Constraints: []ConstraintsConjunction{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}}},
+				},
+				VoterConstraints: []ConstraintsConjunction{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}}},
+				},
+			},
+			expected: "prohibitive constraint .* conflicts with voter_constraint .*",
+		},
+	}
+
+	for i, c := range testCases {
+		err := c.cfg.Validate()
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+		}
+	}
+}
+
+func TestZoneConfigValidateTandemFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name       string
+		cfg        ZoneConfig
+		expected   string
+		shouldFail bool
+	}{
+		{
+			name: "range sizes not set in tandem#1",
+			cfg: ZoneConfig{
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
 			},
-			"range_min_bytes and range_max_bytes must be set together",
+			expected:   "range_min_bytes and range_max_bytes must be set together",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "range sizes not set in tandem#2",
+			cfg: ZoneConfig{
 				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
 			},
-			"range_min_bytes and range_max_bytes must be set together",
+			expected:   "range_min_bytes and range_max_bytes must be set together",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "per-replica constraints without num_replicas",
+			cfg: ZoneConfig{
 				Constraints: []ConstraintsConjunction{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -271,10 +310,26 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 					},
 				},
 			},
-			"when per-replica constraints are set, num_replicas must be set as well",
+			expected:   "when per-replica constraints are set, num_replicas must be set as well",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "per-voter constraints without num_voters",
+			cfg: ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				VoterConstraints: []ConstraintsConjunction{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			expected:   "when voter_constraints are set, num_voters must be set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without constraints",
+			cfg: ZoneConfig{
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: false,
 				LeasePreferences: []LeasePreference{
@@ -283,15 +338,51 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 					},
 				},
 			},
-			"lease preferences can not be set unless the constraints are explicitly set as well",
+			expected:   "lease preferences can not be set unless the constraints are explicitly set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without voter_constraints when voters are explicitly configured",
+			cfg: ZoneConfig{
+				NumVoters:                   proto.Int32(3),
+				NumReplicas:                 proto.Int32(3),
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: false,
+				InheritedLeasePreferences:   false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			expected:   "lease preferences can not be set unless the voter_constraints are explicitly set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without voter_constraints when voters not explicitly configured",
+			cfg: ZoneConfig{
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: false,
+				InheritedLeasePreferences:   false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			shouldFail: false,
 		},
 	}
 
 	for i, c := range testCases {
-		err := c.cfg.ValidateTandemFields()
-		if !testutils.IsError(err, c.expected) {
-			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			err := c.cfg.ValidateTandemFields()
+			if !c.shouldFail {
+				require.NoError(t, err)
+			} else if !testutils.IsError(err, c.expected) {
+				t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+			}
+		})
 	}
 }
 
@@ -393,11 +484,15 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		NumReplicas: proto.Int32(1),
+		GlobalReads:                 proto.Bool(true),
+		NullVoterConstraintsIsEmpty: true,
+		NumReplicas:                 proto.Int32(2),
+		NumVoters:                   proto.Int32(1),
 	}
 
 	testCases := []struct {
 		constraints      []ConstraintsConjunction
+		voterConstraints []ConstraintsConjunction
 		leasePreferences []LeasePreference
 		expected         string
 	}{
@@ -406,8 +501,11 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -423,12 +521,26 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "foo",
+							Value: "bar",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: [+duck=foo]
+voter_constraints: [+foo=bar]
 lease_preferences: []
 `,
 		},
@@ -457,8 +569,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: [foo, +duck=foo, -duck=foo]
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -475,12 +590,27 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: {+duck=foo: 3}
+voter_constraints: {+duck=foo: 1}
 lease_preferences: []
 `,
 		},
@@ -510,8 +640,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: {'foo,+duck=foo,-duck=foo': 3}
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -543,12 +676,42 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar1",
+						},
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar2",
+						},
+					},
+				},
+				{
+					NumReplicas: 2,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
+voter_constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 lease_preferences: []
 `,
 		},
@@ -558,8 +721,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -579,8 +745,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: [[+duck=foo]]
 `,
 		},
@@ -592,6 +761,17 @@ lease_preferences: [[+duck=foo]]
 							Type:  Constraint_REQUIRED,
 							Key:   "duck",
 							Value: "foo",
+						},
+					},
+				},
+			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "bar",
 						},
 					},
 				},
@@ -625,8 +805,11 @@ lease_preferences: [[+duck=foo]]
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+global_reads: true
+num_replicas: 2
+num_voters: 1
 constraints: [+duck=foo]
+voter_constraints: [-duck=bar]
 lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 `,
 		},
@@ -635,6 +818,7 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			original.Constraints = tc.constraints
+			original.VoterConstraints = tc.voterConstraints
 			original.LeasePreferences = tc.leasePreferences
 			body, err := yaml.Marshal(original)
 			if err != nil {
@@ -648,7 +832,7 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 			if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
 				t.Fatal(err)
 			}
-			if !proto.Equal(&unmarshaled, &original) {
+			if !unmarshaled.Equal(&original) {
 				t.Errorf("yaml.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
 			}
 		})
@@ -803,33 +987,45 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	// Simulate the following schema:
-	//   CREATE DATABASE db;   CREATE TABLE db.tbl ...
-	//   CREATE DATABASE carl; CREATE TABLE carl.toys ...
+	//   CREATE DATABASE db;        CREATE TABLE db.public.tbl ...
+	//   CREATE DATABASE carl;      CREATE TABLE carl.public.toys ...
+	//   CREATE SCHEMA test_schema; CREATE TABLE carl.test_schema.toys ...
 	type namespaceEntry struct {
 		parentID uint32
 		name     string
+		schemaID uint32
 	}
 	namespace := map[namespaceEntry]uint32{
-		{0, "db"}:               50,
-		{50, "tbl"}:             51,
-		{0, "carl"}:             55,
-		{55, "toys"}:            56,
-		{9000, "broken_parent"}: 57,
+		{parentID: 0, name: "db"}: 50,
+		{parentID: 50, name: "tbl",
+			schemaID: keys.PublicSchemaID,
+		}: 51,
+		{parentID: 0, name: "carl"}:                                            55,
+		{parentID: 55, name: "toys", schemaID: keys.PublicSchemaID}:            56,
+		{parentID: 9000, name: "broken_parent", schemaID: keys.PublicSchemaID}: 57,
+		{parentID: 55, name: "test_schema"}:                                    58,
+		// Test that a table with the same name as another table in a public
+		// schema works properly.
+		{parentID: 55, name: "toys", schemaID: 58}: 59,
 	}
-	resolveName := func(parentID uint32, name string) (uint32, error) {
-		key := namespaceEntry{parentID, name}
+
+	resolveName := func(parentID uint32, schemaID uint32, name string) (uint32, error) {
+		key := namespaceEntry{parentID: parentID, schemaID: schemaID, name: name}
 		if id, ok := namespace[key]; ok {
 			return id, nil
 		}
 		return 0, fmt.Errorf("%q not found", name)
 	}
-	resolveID := func(id uint32) (parentID uint32, name string, err error) {
+	resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
+		if id == keys.PublicSchemaID {
+			return 0, 0, string(tree.PublicSchemaName), nil
+		}
 		for entry, entryID := range namespace {
 			if id == entryID {
-				return entry.parentID, entry.name, nil
+				return entry.parentID, entry.schemaID, entry.name, nil
 			}
 		}
-		return 0, "", fmt.Errorf("%d not found", id)
+		return 0, 0, "", fmt.Errorf("%d not found", id)
 	}
 
 	for _, tc := range []struct {
@@ -850,6 +1046,11 @@ func TestZoneSpecifiers(t *testing.T) {
 		{tree.ZoneSpecifier{Database: "tbl"}, -1, `"tbl" not found`},
 		{tree.ZoneSpecifier{Database: "carl"}, 55, ""},
 		{tableSpecifier("carl", "toys", "", ""), 56, ""},
+		{tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableNameWithSchema("carl", "test_schema", "toys"),
+			},
+		}, 59, ""},
 		{tableSpecifier("carl", "love", "", ""), -1, `"love" not found`},
 	} {
 		t.Run(fmt.Sprintf("resolve-specifier=%s", tc.specifier.String()), func(t *testing.T) {
@@ -882,7 +1083,8 @@ func TestZoneSpecifiers(t *testing.T) {
 		{55, "DATABASE carl", ""},
 		{56, "TABLE carl.public.toys", ""},
 		{57, "", "9000 not found"},
-		{58, "", "58 not found"},
+		{59, "TABLE carl.test_schema.toys", ""},
+		{600, "", "600 not found"},
 	} {
 		t.Run(fmt.Sprintf("resolve-id=%d", tc.id), func(t *testing.T) {
 			zs, err := ZoneSpecifierFromID(tc.id, resolveID)
@@ -904,7 +1106,7 @@ func tableSpecifier(
 ) tree.ZoneSpecifier {
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableIndexName{
-			Table: tree.MakeTableName(db, tbl),
+			Table: tree.MakeTableNameWithSchema(db, tree.PublicSchemaName, tbl),
 			Index: idx,
 		},
 		Partition: partition,
@@ -918,4 +1120,317 @@ func TestDefaultRangeSizesAreSane(t *testing.T) {
 		DefaultSystemZoneConfigRef().String())
 	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
 		DefaultZoneConfigRef().String())
+}
+
+// TestZoneConfigToSpanConfigConversion tests zone configurations are correctly
+// translated to span configurations using `toSpanConfig`.
+func TestZoneConfigToSpanConfigConversion(t *testing.T) {
+	testCases := []struct {
+		zoneConfig       ZoneConfig
+		errorStr         string
+		expectSpanConfig roachpb.SpanConfig
+	}{
+		{
+			zoneConfig: ZoneConfig{},
+			errorStr:   "expected hydrated zone config: RangeMaxBytes, RangeMinBytes, GCPolicy, NumReplicas unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				NumReplicas: proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: RangeMaxBytes unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMaxBytes: proto.Int64(200000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				NumReplicas: proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: RangeMinBytes unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: GCPolicy unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			errorStr: "expected hydrated zone config: NumReplicas unset",
+		},
+		{
+			// Basic sanity check test.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test GlobalReads set to true.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(true),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads:      true,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test GlobalReads set to false (explicitly).
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(false),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test `DEPRECATED_POSITIVE` constraints throw an error.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(false),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				Constraints: []ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []Constraint{
+							{Type: Constraint_DEPRECATED_POSITIVE, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+			},
+			errorStr: "unknown constraint type",
+		},
+		{
+			// Test Constraints are translated correctly, both positive and negative.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				Constraints: []ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads: false,
+				NumVoters:   0,
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test VoterConstraints are translated properly.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				VoterConstraints: []ConstraintsConjunction{
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads: false,
+				NumVoters:   0,
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test LeasePreferences are translated properly.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: 2400,
+				},
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		spanConfig, err := tc.zoneConfig.toSpanConfig()
+		if tc.errorStr != "" {
+			require.Truef(t, testutils.IsError(err, tc.errorStr), "mismatched errors: expected %q got %q", tc.errorStr, err.Error())
+		}
+		require.Equal(t, tc.expectSpanConfig, spanConfig)
+	}
+}
+
+func TestDefaultZoneAndSpanConfigs(t *testing.T) {
+	converted := DefaultZoneConfigRef().AsSpanConfig()
+	require.True(t, converted.Equal(roachpb.TestingDefaultSpanConfig()))
 }

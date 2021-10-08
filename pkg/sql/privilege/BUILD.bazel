@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "privilege",
+    srcs = [
+        "privilege.go",
+        ":gen-kind-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "privilege_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "privilege_test.go",
+    ],
+    deps = [
+        ":privilege",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)
+
+stringer(
+    name = "gen-kind-stringer",
+    src = "privilege.go",
+    typ = "Kind",
+)

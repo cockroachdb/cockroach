@@ -1,0 +1,46 @@
+# LogicTest: 3node-tenant
+
+# Show that the version setting for the tenant is set and has the proper value.
+
+query B
+SELECT version = crdb_internal.node_executable_version()
+  FROM [SHOW CLUSTER SETTING version]
+ WHERE EXISTS(SELECT * FROM system.settings WHERE name = 'version');
+----
+true
+
+# This file documents operations that are supported when running a SQL tenant
+# server. It's mostly a dumping ground for tests moved from tenant_unsupported.
+
+statement ok
+SHOW SESSIONS
+
+statement ok
+SHOW QUERIES
+
+statement error could not cancel query 00000000000000000000000000000000: query ID 00000000000000000000000000000000 not found
+CANCEL QUERY ''
+
+statement error could not cancel session 00000000000000000000000000000000: session ID 00000000000000000000000000000000 not found
+CANCEL SESSION ''
+
+statement ok
+SELECT * FROM crdb_internal.node_transactions
+
+statement ok
+SELECT * FROM crdb_internal.node_sessions
+
+statement ok
+SELECT * FROM crdb_internal.node_queries
+
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_sessions
+
+statement ok
+SELECT * FROM crdb_internal.cluster_queries
+
+statement ok
+SELECT * FROM crdb_internal.cluster_contention_events

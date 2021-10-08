@@ -1,0 +1,87 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+
+// This file contains common payloads to multiple event types.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CommonEventDetails contains the fields common to all events.
+message CommonEventDetails {
+  // The timestamp of the event. Expressed as nanoseconds since
+  // the Unix epoch.
+  int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // The type of the event.
+  string event_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// CommonSQLEventDetails contains the fields common to all
+// SQL events.
+message CommonSQLEventDetails {
+  // A normalized copy of the SQL statement that triggered the event.
+  // The statement string contains a mix of sensitive and non-sensitive details (it is redactable).
+  string statement = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
+
+  // The statement tag. This is separate from the statement string,
+  // since the statement string can contain sensitive information. The
+  // tag is guaranteed not to.
+  string tag = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The user account that triggered the event.
+  // The special usernames `root` and `node` are not considered sensitive.
+  string user = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:root|node\""];
+
+  // The primary object descriptor affected by the operation. Set to zero for operations
+  // that don't affect descriptors.
+  uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The application name for the session where the event was emitted.
+  // This is included in the event to ease filtering of logging output
+  // by application.
+  // Application names starting with a dollar sign (`$`) are not considered sensitive.
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:\\$.*\""];
+
+  // The mapping of SQL placeholders to their values, for prepared statements.
+  repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CommonJobEventDetails contains the fields common to all job events.
+message CommonJobEventDetails {
+  // The ID of the job that triggered the event.
+  int64 job_id = 1 [(gogoproto.customname) = "JobID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The type of the job that triggered the event.
+  string job_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // A description of the job that triggered the event. Some jobs populate the
+  // description with an approximate representation of the SQL statement run to
+  // create the job.
+  string description = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The user account that triggered the event.
+  string user = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The object descriptors affected by the job. Set to zero for operations
+  // that don't affect descriptors.
+  repeated uint32 descriptor_ids = 5 [(gogoproto.customname) = "DescriptorIDs", (gogoproto.jsontag) = ",omitempty"];
+
+  // The status of the job that triggered the event. This allows the job to
+  // indicate which phase execution it is in when the event is triggered.
+  string status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+

@@ -13,29 +13,33 @@ package sysutil
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
-
-	"github.com/cockroachdb/errors"
 )
 
-func TestLargeFile(t *testing.T) {
-	f, err := ioutil.TempFile("", "input")
+func TestResizeLargeFile(t *testing.T) {
+	d, err := ioutil.TempDir("", t.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fname := f.Name()
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-	const n int64 = 1013
-	if err := CreateLargeFile(fname, n); err != nil {
-		t.Fatal(err)
-	}
-	s, err := os.Stat(fname)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s.Size() != n {
-		t.Fatal(errors.Errorf("expected size of file %d, got %d", n, s.Size()))
+	defer func() {
+		if err := os.RemoveAll(d); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	fname := filepath.Join(d, "ballast")
+
+	lens := []int64{2000, 1000, 64<<20 + 10, 0, 1}
+	for _, n := range lens {
+		if err := ResizeLargeFile(fname, n); err != nil {
+			t.Fatal(err)
+		}
+		fi, err := os.Stat(fname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != fi.Size() {
+			t.Fatalf("expected size of file %d, got %d", n, fi.Size())
+		}
 	}
 }

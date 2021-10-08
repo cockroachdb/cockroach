@@ -17,19 +17,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -43,25 +45,34 @@ type flowStreamClient interface {
 // be called with the necessary information to establish a connection to a
 // given remote endpoint.
 type Outbox struct {
-	colexec.OneInputNode
+	colexecop.OneInputNode
+	// inputMetaInfo contains all of the meta components that the outbox is
+	// responsible for. OneInputNode.Input is the deselector operator with Root
+	// field as its input. Notably StatsCollectors are not accessed directly -
+	// instead, getStats is used for those.
+	inputMetaInfo    colexecargs.OpWithMetaInfo
+	inputInitialized bool
 
 	typs []*types.T
-	// batch is the last batch received from the input.
-	batch coldata.Batch
 
+	allocator  *colmem.Allocator
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
 	// draining is an atomic that represents whether the Outbox is draining.
-	draining        uint32
-	metadataSources []execinfrapb.MetadataSource
-	// closers is a slice of Closers that need to be Closed on termination.
-	closers colexec.Closers
+	draining uint32
 
 	scratch struct {
 		buf *bytes.Buffer
 		msg *execinfrapb.ProducerMessage
 	}
+
+	span *tracing.Span
+	// getStats, when non-nil, returns all of the execution statistics of the
+	// operators that are in the same tree as this Outbox. The stats will be
+	// added into the span as Structured payload and returned to the gateway as
+	// execinfrapb.ProducerMetadata.
+	getStats func() []*execinfrapb.ComponentStats
 
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
@@ -69,12 +80,13 @@ type Outbox struct {
 }
 
 // NewOutbox creates a new Outbox.
+// - getStats, when non-nil, returns all of the execution statistics of the
+//   operators that are in the same tree as this Outbox.
 func NewOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
-	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.Closer,
+	getStats func() []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -87,12 +99,13 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		OneInputNode:    colexec.NewOneInputNode(colexec.NewDeselectorOp(allocator, input, typs)),
-		typs:            typs,
-		converter:       c,
-		serializer:      s,
-		metadataSources: metadataSources,
-		closers:         toClose,
+		OneInputNode:  colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(allocator, input.Root, typs)),
+		inputMetaInfo: input,
+		typs:          typs,
+		allocator:     allocator,
+		converter:     c,
+		serializer:    s,
+		getStats:      getStats,
 	}
 	o.scratch.buf = &bytes.Buffer{}
 	o.scratch.msg = &execinfrapb.ProducerMessage{}
@@ -100,15 +113,25 @@ func NewOutbox(
 }
 
 func (o *Outbox) close(ctx context.Context) {
-	o.closers.CloseAndLogOnErr(ctx, "outbox")
+	o.scratch.buf = nil
+	o.scratch.msg = nil
+	// Unset the input (which is a deselector operator) so that its output batch
+	// could be garbage collected. This allows us to release all memory
+	// registered with the allocator (the allocator is shared by the outbox and
+	// the deselector).
+	o.Input = nil
+	o.allocator.ReleaseMemory(o.allocator.Used())
+	o.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "outbox")
 }
 
 // Run starts an outbox by connecting to the provided node and pushing
 // coldata.Batches over the stream after sending a header with the provided flow
 // and stream ID. Note that an extra goroutine is spawned so that Recv may be
 // called concurrently wrt the Send goroutine to listen for drain signals.
-// If an io.EOF is received while sending, the outbox will call cancelFn to
-// indicate an unexpected termination of the stream.
+// If an io.EOF is received while sending, the outbox will cancel all components
+// from the same tree as the outbox.
+// If non-io.EOF is received while sending, the outbox will call flowCtxCancel
+// to shutdown all parts of the flow on this node.
 // If an error is encountered that cannot be sent over the stream, the error
 // will be logged but not returned.
 // There are several ways the bidirectional FlowStream RPC may terminate.
@@ -127,9 +150,22 @@ func (o *Outbox) Run(
 	nodeID roachpb.NodeID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
-	cancelFn context.CancelFunc,
+	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	// Derive a child context so that we can cancel all components rooted in
+	// this outbox.
+	var outboxCtxCancel context.CancelFunc
+	ctx, outboxCtxCancel = context.WithCancel(ctx)
+	// Calling outboxCtxCancel is not strictly necessary, but we do it just to
+	// be safe.
+	defer outboxCtxCancel()
+
+	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
+	if o.span != nil {
+		defer o.span.Finish()
+	}
+
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
@@ -177,31 +213,34 @@ func (o *Outbox) Run(
 	}
 
 	log.VEvent(ctx, 2, "Outbox starting normal operation")
-	o.runWithStream(ctx, stream, cancelFn)
+	o.runWithStream(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
 // handleStreamErr is a utility method used to handle an error when calling
-// a method on a flowStreamClient. If err is an io.EOF, cancelFn is called. The
-// given error is logged with the associated opName.
-func (o *Outbox) handleStreamErr(
-	ctx context.Context, opName string, err error, cancelFn context.CancelFunc,
+// a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
+// called, for all other errors flowCtxCancel is. The given error is logged with
+// the associated opName.
+func handleStreamErr(
+	ctx context.Context,
+	opName redact.SafeString,
+	err error,
+	flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
 	if err == io.EOF {
 		if log.V(1) {
-			log.Infof(ctx, "Outbox calling cancelFn after %s EOF", opName)
+			log.Infof(ctx, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		}
-		cancelFn()
+		outboxCtxCancel()
 	} else {
-		if log.V(1) {
-			log.Warningf(ctx, "Outbox %s connection error: %+v", opName, err)
-		}
+		log.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		flowCtxCancel()
 	}
 }
 
-func (o *Outbox) moveToDraining(ctx context.Context) {
+func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableString) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
-		log.VEvent(ctx, 2, "Outbox moved to draining")
+		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
 	}
 }
 
@@ -220,57 +259,68 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 //    stream as metadata.
 // 4) An error related to the stream occurs. In this case, the error is logged
 //    but not returned, as there is no way to propagate this error anywhere
-//    meaningful. false, nil is returned. NOTE: io.EOF is a special case. This
-//    indicates non-graceful termination initiated by the remote Inbox. cancelFn
-//    will be called in this case.
+//    meaningful. false, nil is returned.
+//    NOTE: if non-io.EOF error is encountered (indicating ungraceful shutdown
+//    of the stream), flowCtxCancel will be called. If an io.EOF is encountered
+//    (indicating a graceful shutdown initiated by the remote Inbox),
+//    outboxCtxCancel will be called.
 func (o *Outbox) sendBatches(
-	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
-) (terminatedGracefully bool, _ error) {
-	nextBatch := func() {
-		if o.runnerCtx == nil {
-			o.runnerCtx = ctx
-		}
-		o.batch = o.Input().Next(o.runnerCtx)
+	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
+) (terminatedGracefully bool, errToSend error) {
+	if o.runnerCtx == nil {
+		// In the non-testing path, runnerCtx has been set in Run() method;
+		// however, the tests might use runWithStream() directly in which case
+		// runnerCtx will remain unset, so we have this check.
+		o.runnerCtx = ctx
 	}
-	serializeBatch := func() {
-		o.scratch.buf.Reset()
-		d, err := o.converter.BatchToArrow(o.batch)
-		if err != nil {
-			colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
-		}
-		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
-			colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
-		}
-	}
-	for {
-		if atomic.LoadUint32(&o.draining) == 1 {
-			return true, nil
-		}
-
-		if err := colexecerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
-			if log.V(1) {
-				log.Warningf(ctx, "Outbox Next error: %+v", err)
+	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
+		o.Input.Init(o.runnerCtx)
+		o.inputInitialized = true
+		for {
+			if atomic.LoadUint32(&o.draining) == 1 {
+				terminatedGracefully = true
+				return
 			}
-			return false, err
-		}
-		if o.batch.Length() == 0 {
-			return true, nil
-		}
 
-		if err := colexecerror.CatchVectorizedRuntimeError(serializeBatch); err != nil {
-			log.Errorf(ctx, "%+v", err)
-			return false, err
-		}
-		o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+			batch := o.Input.Next()
+			n := batch.Length()
+			if n == 0 {
+				terminatedGracefully = true
+				return
+			}
 
-		// o.scratch.msg can be reused as soon as Send returns since it returns as
-		// soon as the message is written to the control buffer. The message is
-		// marshaled (bytes are copied) before writing.
-		if err := stream.Send(o.scratch.msg); err != nil {
-			o.handleStreamErr(ctx, "Send (batches)", err, cancelFn)
-			return false, nil
+			// Note that for certain types (like Decimals, Intervals,
+			// datum-backed types) BatchToArrow allocates some memory in order
+			// to perform the conversion, and we consciously choose to ignore it
+			// for the purposes of the memory accounting because the references
+			// to those slices are lost in Serialize call below.
+			d, err := o.converter.BatchToArrow(batch)
+			if err != nil {
+				colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
+			}
+
+			oldBufCap := o.scratch.buf.Cap()
+			o.scratch.buf.Reset()
+			if _, _, err := o.serializer.Serialize(o.scratch.buf, d, n); err != nil {
+				colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
+			}
+			// Account for the increase in the capacity of the scratch buffer.
+			// Note that because we never truncate the buffer, we are only
+			// adjusting the memory usage whenever the buffer's capacity
+			// increases (if it didn't increase, this call becomes a noop).
+			o.allocator.AdjustMemoryUsage(int64(o.scratch.buf.Cap() - oldBufCap))
+			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+
+			// o.scratch.msg can be reused as soon as Send returns since it returns as
+			// soon as the message is written to the control buffer. The message is
+			// marshaled (bytes are copied) before writing.
+			if err := stream.Send(o.scratch.msg); err != nil {
+				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				return
+			}
 		}
-	}
+	})
+	return terminatedGracefully, errToSend
 }
 
 // sendMetadata drains the Outbox.metadataSources and sends the metadata over
@@ -279,14 +329,31 @@ func (o *Outbox) sendBatches(
 func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
+		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
 	}
-	for _, src := range o.metadataSources {
-		for _, meta := range src.DrainMeta(ctx) {
+	if o.inputInitialized {
+		// Retrieving stats and draining the metadata is only safe if the input
+		// to the outbox was properly initialized.
+		if o.span != nil && o.getStats != nil {
+			for _, s := range o.getStats() {
+				o.span.RecordStructured(s)
+			}
+		}
+		for _, meta := range o.inputMetaInfo.MetadataSources.DrainMeta() {
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
+	}
+	if trace := execinfra.GetTraceData(ctx); trace != nil {
+		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
+			Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
+				TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{
+					CollectedSpans: trace,
+				},
+			},
+		})
 	}
 	if len(msg.Data.Metadata) == 0 {
 		return nil
@@ -297,44 +364,67 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 // runWithStream should be called after sending the ProducerHeader on the
 // stream. It implements the behavior described in Run.
 func (o *Outbox) runWithStream(
-	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
+	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
-	o.Input().Init()
-
+	// Cancellation functions might be nil in some tests, but we'll make them
+	// noops for convenience.
+	if flowCtxCancel == nil {
+		flowCtxCancel = func() {}
+	}
+	if outboxCtxCancel == nil {
+		outboxCtxCancel = func() {}
+	}
 	waitCh := make(chan struct{})
 	go func() {
+		// This goroutine's job is to listen continually on the stream from the
+		// consumer for errors or drain requests, while the remainder of this
+		// function concurrently is producing data and sending it over the
+		// network.
+		//
+		// This goroutine will tear down the flow if non-io.EOF error
+		// is received - without it, a producer goroutine might spin doing work
+		// forever after a connection is closed, since it wouldn't notice a
+		// closed connection until it tried to Send over that connection.
+		//
+		// Similarly, if an io.EOF error is received, it indicates that the
+		// server side of FlowStream RPC (the inbox) has exited gracefully, so
+		// the inbox doesn't need anything else from this outbox, and this
+		// goroutine will shut down the tree of operators rooted in this outbox.
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				if err != io.EOF {
-					if log.V(1) {
-						log.Warningf(ctx, "Outbox Recv connection error: %+v", err)
-					}
-				}
+				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
 				break
 			}
 			switch {
 			case msg.Handshake != nil:
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
-				o.moveToDraining(ctx)
+				log.VEventf(ctx, 2, "Outbox received drain request")
+				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
 			}
 		}
 		close(waitCh)
 	}()
 
-	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, cancelFn)
+	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {
-		o.moveToDraining(ctx)
+		var reason redact.RedactableString
+		if errToSend != nil {
+			reason = redact.Sprintf("encountered error when sending batches: %v", errToSend)
+		} else {
+			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
+		}
+		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			o.handleStreamErr(ctx, "Send (metadata)", err, cancelFn)
+			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
-			// The receiver goroutine will read from the stream until io.EOF is
-			// returned.
+			// The receiver goroutine will read from the stream until any error
+			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				o.handleStreamErr(ctx, "CloseSend", err, cancelFn)
+				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
 			}
 		}
 	}

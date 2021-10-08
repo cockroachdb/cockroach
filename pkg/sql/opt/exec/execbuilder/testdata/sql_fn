@@ -11,23 +11,32 @@ SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT
 ----
 test.public.my_spatial_table.geom1 SRID:4326 TYPE:POINT DIMS:2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
 ----
-·                           distribution         local                                                                               ·                    ·
-·                           vectorized           false                                                                               ·                    ·
-root                        ·                    ·                                                                                   (addgeometrycolumn)  ·
- ├── values                 ·                    ·                                                                                   (addgeometrycolumn)  ·
- │                          size                 1 column, 1 row                                                                     ·                    ·
- │                          row 0, expr 0        addgeometrycolumn('test', 'public', 'my_spatial_table', 'geom1', 4326, 'POINT', 2)  ·                    ·
- └── subquery               ·                    ·                                                                                   ·                    ·
-      │                     id                   @S1                                                                                 ·                    ·
-      │                     original sql         ALTER TABLE test.public.my_spatial_table ADD COLUMN geom1 GEOMETRY(POINT,4326)      ·                    ·
-      │                     exec mode            all rows                                                                            ·                    ·
-      └── buffer            ·                    ·                                                                                   ()                   ·
-           │                label                buffer 1                                                                            ·                    ·
-           └── alter table  ·                    ·                                                                                   ()                   ·
-·                           estimated row count  10 (missing stats)                                                                  ·                    ·
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (addgeometrycolumn)
+│
+├── • values
+│     columns: (addgeometrycolumn)
+│     size: 1 column, 1 row
+│     row 0, expr 0: addgeometrycolumn('test', 'public', 'my_spatial_table', 'geom1', 4326, 'POINT', 2)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: ALTER TABLE test.public.my_spatial_table ADD COLUMN geom1 GEOMETRY(POINT,4326)
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: ()
+        │ label: buffer 1
+        │
+        └── • alter table
+              columns: ()
+              estimated row count: 10 (missing stats)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
@@ -162,44 +171,58 @@ FROM other_table
 1  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
 2  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT
   k,
   AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
   AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
 FROM other_table
 ----
-·                           distribution         local                                                               ·                                          ·
-·                           vectorized           true                                                                ·                                          ·
-root                        ·                    ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
- ├── render                 ·                    ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
- │    │                     estimated row count  1000 (missing stats)                                                ·                                          ·
- │    │                     render 0             addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)    ·                                          ·
- │    │                     render 1             addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)    ·                                          ·
- │    │                     render 2             k                                                                   ·                                          ·
- │    └── scan              ·                    ·                                                                   (k)                                        ·
- │                          estimated row count  1000 (missing stats)                                                ·                                          ·
- │                          table                other_table@primary                                                 ·                                          ·
- │                          spans                FULL SCAN                                                           ·                                          ·
- ├── subquery               ·                    ·                                                                   ·                                          ·
- │    │                     id                   @S1                                                                 ·                                          ·
- │    │                     original sql         ALTER TABLE my_spatial_table ADD COLUMN geom7 GEOMETRY(POINT,4326)  ·                                          ·
- │    │                     exec mode            all rows                                                            ·                                          ·
- │    └── buffer            ·                    ·                                                                   ()                                         ·
- │         │                label                buffer 1                                                            ·                                          ·
- │         └── alter table  ·                    ·                                                                   ()                                         ·
- │                          estimated row count  10 (missing stats)                                                  ·                                          ·
- └── subquery               ·                    ·                                                                   ·                                          ·
-      │                     id                   @S2                                                                 ·                                          ·
-      │                     original sql         ALTER TABLE my_spatial_table ADD COLUMN geom8 GEOMETRY(POINT,4326)  ·                                          ·
-      │                     exec mode            all rows                                                            ·                                          ·
-      └── buffer            ·                    ·                                                                   ()                                         ·
-           │                label                buffer 2                                                            ·                                          ·
-           └── alter table  ·                    ·                                                                   ()                                         ·
-·                           estimated row count  10 (missing stats)                                                  ·                                          ·
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (k, addgeometrycolumn, addgeometrycolumn)
+│
+├── • render
+│   │ columns: (k, addgeometrycolumn, addgeometrycolumn)
+│   │ estimated row count: 1,000 (missing stats)
+│   │ render addgeometrycolumn: addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)
+│   │ render addgeometrycolumn: addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)
+│   │ render k: k
+│   │
+│   └── • scan
+│         columns: (k)
+│         estimated row count: 1,000 (missing stats)
+│         table: other_table@primary
+│         spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: ALTER TABLE my_spatial_table ADD COLUMN geom7 GEOMETRY(POINT,4326)
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ columns: ()
+│       │ label: buffer 1
+│       │
+│       └── • alter table
+│             columns: ()
+│             estimated row count: 10 (missing stats)
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: ALTER TABLE my_spatial_table ADD COLUMN geom8 GEOMETRY(POINT,4326)
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: ()
+        │ label: buffer 2
+        │
+        └── • alter table
+              columns: ()
+              estimated row count: 10 (missing stats)
 
-# TODO(rytaft): Figure out why goem7 didn't get added even though the ALTER
-# TABLE statement is included in the EXPLAIN plan above.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
@@ -211,9 +234,10 @@ CREATE TABLE public.my_spatial_table (
    geom4 GEOMETRY(LINESTRING,4326) NULL,
    geom5 GEOMETRY(MULTIPOINT,4326) NULL,
    geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+   geom7 GEOMETRY(POINT,4326) NULL,
    geom8 GEOMETRY(POINT,4326) NULL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
-   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom8)
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom7, geom8)
 )
 
 # In a WHERE clause.
@@ -240,11 +264,12 @@ CREATE TABLE public.my_spatial_table (
    geom4 GEOMETRY(LINESTRING,4326) NULL,
    geom5 GEOMETRY(MULTIPOINT,4326) NULL,
    geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+   geom7 GEOMETRY(POINT,4326) NULL,
    geom8 GEOMETRY(POINT,4326) NULL,
    geom9 GEOMETRY(GEOMETRY,4326) NULL,
    geom10 GEOMETRY(GEOMETRYCOLLECTION) NULL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
-   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom8, geom9, geom10)
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom7, geom8, geom9, geom10)
 )
 
 # Regression test for #50296. Using AddGeometryColumn with NULL arguments must

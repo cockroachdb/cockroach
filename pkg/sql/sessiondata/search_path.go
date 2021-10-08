@@ -11,34 +11,20 @@
 package sessiondata
 
 import (
+	"bytes"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
-// PgCatalogName is the name of the pg_catalog system schema.
-const PgCatalogName = "pg_catalog"
-
-// PublicSchemaName is the name of the pg_catalog system schema.
-const PublicSchemaName = "public"
-
-// InformationSchemaName is the name of the information_schema system schema.
-const InformationSchemaName = "information_schema"
-
-// CRDBInternalSchemaName is the name of the crdb_internal system schema.
-const CRDBInternalSchemaName = "crdb_internal"
-
-// PgSchemaPrefix is a prefix for Postgres system schemas. Users cannot
-// create schemas with this prefix.
-const PgSchemaPrefix = "pg_"
-
-// PgTempSchemaName is the alias for temporary schemas across sessions.
-const PgTempSchemaName = "pg_temp"
-
-// PgExtensionSchemaName is the alias for schemas which are usually "public" in postgres
-// when installing an extension, but must be stored as a separate schema in CRDB.
-const PgExtensionSchemaName = "pg_extension"
+// DefaultSearchPath is the search path used by virgin sessions.
+var DefaultSearchPath = MakeSearchPath(
+	[]string{catconstants.UserSchemaName, catconstants.PublicSchemaName},
+)
 
 // SearchPath represents a list of namespaces to search builtins in.
 // The names must be normalized (as per Name.Normalize) already.
@@ -48,10 +34,17 @@ type SearchPath struct {
 	containsPgExtension  bool
 	containsPgTempSchema bool
 	tempSchemaName       string
+	userSchemaName       string
 }
 
 // EmptySearchPath is a SearchPath with no schema names in it.
 var EmptySearchPath = SearchPath{}
+
+// DefaultSearchPathForUser returns the default search path with the user
+// specific schema name set so that it can be expanded during resolution.
+func DefaultSearchPathForUser(username security.SQLUsername) SearchPath {
+	return DefaultSearchPath.WithUserSchemaName(username.Normalized())
+}
 
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice
 // must not be modified after hand-off to MakeSearchPath.
@@ -61,11 +54,11 @@ func MakeSearchPath(paths []string) SearchPath {
 	containsPgTempSchema := false
 	for _, e := range paths {
 		switch e {
-		case PgCatalogName:
+		case catconstants.PgCatalogName:
 			containsPgCatalog = true
-		case PgTempSchemaName:
+		case catconstants.PgTempSchemaName:
 			containsPgTempSchema = true
-		case PgExtensionSchemaName:
+		case catconstants.PgExtensionSchemaName:
 			containsPgExtension = true
 		}
 	}
@@ -87,14 +80,28 @@ func (s SearchPath) WithTemporarySchemaName(tempSchemaName string) SearchPath {
 		containsPgCatalog:    s.containsPgCatalog,
 		containsPgTempSchema: s.containsPgTempSchema,
 		containsPgExtension:  s.containsPgExtension,
+		userSchemaName:       s.userSchemaName,
 		tempSchemaName:       tempSchemaName,
 	}
 }
 
+// WithUserSchemaName returns a new immutable SearchPath struct with the
+// userSchemaName populated and the same values for all other fields as before.
+func (s SearchPath) WithUserSchemaName(userSchemaName string) SearchPath {
+	return SearchPath{
+		paths:                s.paths,
+		containsPgCatalog:    s.containsPgCatalog,
+		containsPgTempSchema: s.containsPgTempSchema,
+		containsPgExtension:  s.containsPgExtension,
+		userSchemaName:       userSchemaName,
+		tempSchemaName:       s.tempSchemaName,
+	}
+}
+
 // UpdatePaths returns a new immutable SearchPath struct with the paths supplied
-// and the same tempSchemaName as before.
+// and the same tempSchemaName and userSchemaName as before.
 func (s SearchPath) UpdatePaths(paths []string) SearchPath {
-	return MakeSearchPath(paths).WithTemporarySchemaName(s.tempSchemaName)
+	return MakeSearchPath(paths).WithTemporarySchemaName(s.tempSchemaName).WithUserSchemaName(s.userSchemaName)
 }
 
 // MaybeResolveTemporarySchema returns the session specific temporary schema
@@ -102,12 +109,12 @@ func (s SearchPath) UpdatePaths(paths []string) SearchPath {
 // through for all other schema names.
 func (s SearchPath) MaybeResolveTemporarySchema(schemaName string) (string, error) {
 	// Only allow access to the session specific temporary schema.
-	if strings.HasPrefix(schemaName, PgTempSchemaName) && schemaName != PgTempSchemaName && schemaName != s.tempSchemaName {
+	if strings.HasPrefix(schemaName, catconstants.PgTempSchemaName) && schemaName != catconstants.PgTempSchemaName && schemaName != s.tempSchemaName {
 		return schemaName, pgerror.New(pgcode.FeatureNotSupported, "cannot access temporary tables of other sessions")
 	}
 	// If the schemaName is pg_temp and the tempSchemaName has been set, pg_temp
 	// is an alias the session specific temp schema.
-	if schemaName == PgTempSchemaName && s.tempSchemaName != "" {
+	if schemaName == catconstants.PgTempSchemaName && s.tempSchemaName != "" {
 		return s.tempSchemaName, nil
 	}
 	return schemaName, nil
@@ -135,6 +142,7 @@ func (s SearchPath) Iter() SearchPathIter {
 		implicitPgExtension:  !s.containsPgExtension,
 		implicitPgTempSchema: implicitPgTempSchema,
 		tempSchemaName:       s.tempSchemaName,
+		userSchemaName:       s.userSchemaName,
 	}
 	return sp
 }
@@ -147,6 +155,7 @@ func (s SearchPath) IterWithoutImplicitPGSchemas() SearchPathIter {
 		implicitPgCatalog:    false,
 		implicitPgTempSchema: false,
 		tempSchemaName:       s.tempSchemaName,
+		userSchemaName:       s.userSchemaName,
 	}
 	return sp
 }
@@ -168,7 +177,11 @@ func (s SearchPath) Contains(target string) bool {
 }
 
 // GetTemporarySchemaName returns the temporary schema specific to the current
-// session.
+// session, or an empty string if the current session has not yet created a
+// temporary schema.
+//
+// Note that even after the current session has created a temporary schema, a
+// schema with that name may not exist in the session's current database.
 func (s SearchPath) GetTemporarySchemaName() string {
 	return s.tempSchemaName
 }
@@ -201,8 +214,20 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 	return true
 }
 
+// SQLIdentifiers returns quotes for string starting with special characters.
+func (s SearchPath) SQLIdentifiers() string {
+	var buf bytes.Buffer
+	for i, path := range s.paths {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		lexbase.EncodeRestrictedSQLIdent(&buf, path, lexbase.EncNoFlags)
+	}
+	return buf.String()
+}
+
 func (s SearchPath) String() string {
-	return strings.Join(s.paths, ", ")
+	return strings.Join(s.paths, ",")
 }
 
 // SearchPathIter enables iteration over the search paths without triggering an
@@ -216,6 +241,7 @@ type SearchPathIter struct {
 	implicitPgExtension  bool
 	implicitPgTempSchema bool
 	tempSchemaName       string
+	userSchemaName       string
 	i                    int
 }
 
@@ -229,7 +255,7 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 	}
 	if iter.implicitPgCatalog {
 		iter.implicitPgCatalog = false
-		return PgCatalogName, true
+		return catconstants.PgCatalogName, true
 	}
 
 	if iter.i < len(iter.paths) {
@@ -237,7 +263,7 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 		// If pg_temp is explicitly present in the paths, it must be resolved to the
 		// session specific temp schema (if one exists). tempSchemaName is set in the
 		// iterator iff the session has created a temporary schema.
-		if iter.paths[iter.i-1] == PgTempSchemaName {
+		if iter.paths[iter.i-1] == catconstants.PgTempSchemaName {
 			// If the session specific temporary schema has not been created we can
 			// preempt the resolution failure and iterate to the next entry.
 			if iter.tempSchemaName == "" {
@@ -245,12 +271,20 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 			}
 			return iter.tempSchemaName, true
 		}
+		if iter.paths[iter.i-1] == catconstants.UserSchemaName {
+			// In case the user schema name is unset, we simply iterate to the next
+			// entry.
+			if iter.userSchemaName == "" {
+				return iter.Next()
+			}
+			return iter.userSchemaName, true
+		}
 		// pg_extension should be read before delving into the schema.
-		if iter.paths[iter.i-1] == PublicSchemaName && iter.implicitPgExtension {
+		if iter.paths[iter.i-1] == catconstants.PublicSchemaName && iter.implicitPgExtension {
 			iter.implicitPgExtension = false
 			// Go back one so `public` can be found again next.
 			iter.i--
-			return PgExtensionSchemaName, true
+			return catconstants.PgExtensionSchemaName, true
 		}
 		return iter.paths[iter.i-1], true
 	}

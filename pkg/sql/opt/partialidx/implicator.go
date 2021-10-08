@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // Implicator is used to 1) prove that query filters imply a partial index
@@ -36,7 +37,8 @@ import (
 // We use the same logic as Postgres's predtest library to prove implication.
 // Note that this "proof" is not mathematically formal or rigorous. For the sake
 // of efficiency and reduced complexity this proof is a best-effort attempt and
-// false-negatives are possible.
+// false negatives are possible (see the false-negative test file for known
+// false negatives).
 //
 // The logic is as follows, where "=>" means "implies" and an "atom" is any
 // expression that is not a logical conjunction or disjunction.
@@ -112,8 +114,8 @@ import (
 // remaining filters. It would be difficult to support this case without
 // breaking the other cases prevented by each of the three rules.
 //
-// A set of opt.Expr keeps track of exact matches encountered while exploring
-// the filters and predicate expressions. If implication is proven, the filters
+// An exprSet keeps track of exact matches encountered while exploring the
+// filters and predicate expressions. If implication is proven, the filters
 // expression is traversed and the expressions in the opt.Expr set are removed.
 // While proving implication this set is not passed to recursive calls when a
 // disjunction is encountered in the predicate (rule #2), and disjunctions in
@@ -127,23 +129,31 @@ type Implicator struct {
 	// constraintCache stores constraints built from atoms. Caching the
 	// constraints prevents building constraints for the same atom multiple
 	// times.
-	constraintCache map[opt.ScalarExpr]constraintResult
+	constraintCache map[opt.ScalarExpr]constraintCacheItem
 }
 
-// constraintResult contains the result of building the constraint for an atom.
+// constraintCacheItem contains the result of building the constraint for an atom.
 // It includes both the constraint and the tight boolean.
-type constraintResult struct {
+type constraintCacheItem struct {
 	c     *constraint.Set
 	tight bool
 }
 
 // Init initializes an Implicator with the given factory, metadata, and eval
-// context.
+// context. It also resets the constraint cache.
 func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.EvalContext) {
-	im.f = f
-	im.md = md
-	im.evalCtx = evalCtx
-	im.constraintCache = make(map[opt.ScalarExpr]constraintResult)
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*im = Implicator{
+		f:       f,
+		md:      md,
+		evalCtx: evalCtx,
+	}
+}
+
+// ClearCache empties the Implicator's constraint cache.
+func (im *Implicator) ClearCache() {
+	im.constraintCache = nil
 }
 
 // FiltersImplyPredicate attempts to prove that a partial index predicate is
@@ -175,9 +185,9 @@ func (im *Implicator) FiltersImplyPredicate(
 
 	// If no exact match was found, recursively check the sub-expressions of the
 	// filters and predicate. Use exactMatches to keep track of expressions in
-	// filters that exactly matches expressions in pred, so that the can be
+	// filters that exactly match expressions in pred, so that they can be
 	// removed from the remaining filters.
-	exactMatches := make(map[opt.Expr]struct{})
+	exactMatches := make(exprSet)
 	if im.scalarExprImpliesPredicate(&filters, &pred, exactMatches) {
 		remainingFilters = im.simplifyFiltersExpr(filters, exactMatches)
 		return remainingFilters, true
@@ -253,14 +263,12 @@ func (im *Implicator) filtersImplyPredicateFastPath(
 // Also note that exactMatches is optional, and nil can be passed when it is not
 // necessary to keep track of exactly matching expressions.
 func (im *Implicator) scalarExprImpliesPredicate(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 
 	// If the expressions are an exact match, then e implies pred.
 	if e == pred {
-		if exactMatches != nil {
-			exactMatches[e] = struct{}{}
-		}
+		exactMatches.add(e)
 		return true
 	}
 
@@ -278,6 +286,9 @@ func (im *Implicator) scalarExprImpliesPredicate(
 	case *memo.OrExpr:
 		return im.orExprImpliesPredicate(t, pred)
 
+	case *memo.InExpr:
+		return im.inExprImpliesPredicate(t, pred, exactMatches)
+
 	default:
 		return im.atomImpliesPredicate(e, pred, exactMatches)
 	}
@@ -286,7 +297,7 @@ func (im *Implicator) scalarExprImpliesPredicate(
 // filtersExprImpliesPredicate returns true if the FiltersExpr e implies the
 // ScalarExpr pred.
 func (im *Implicator) filtersExprImpliesPredicate(
-	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.FiltersExpr:
@@ -316,7 +327,7 @@ func (im *Implicator) filtersExprImpliesPredicate(
 		//   any of A's children => B
 		//
 		// Here we handle the first part, checking if A implies any of B's
-		// children. The second part is logically equivalent AND => atom
+		// children. The second part is logically equivalent to AND => atom
 		// implication, and is handled after the switch statement.
 		//
 		// Do not pass exactMatches to the recursive call with pt.Left or
@@ -350,7 +361,7 @@ func (im *Implicator) filtersExprImpliesPredicate(
 // passed to filtersExprImpliesPredicate to prevent duplicating logic for both
 // types of conjunctions.
 func (im *Implicator) andExprImpliesPredicate(
-	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	f := make(memo.FiltersExpr, 2)
 	f[0] = memo.FiltersItem{Condition: e.Left}
@@ -358,8 +369,8 @@ func (im *Implicator) andExprImpliesPredicate(
 	return im.filtersExprImpliesPredicate(&f, pred, exactMatches)
 }
 
-// orExprImpliesPredicate returns true if the FiltersExpr e implies the
-// ScalarExpr pred.
+// orExprImpliesPredicate returns true if the OrExpr e implies the ScalarExpr
+// pred.
 //
 // Note that in all recursive calls within this function, we do not pass
 // exactMatches. See FiltersImplyPredicate (rule #3) for more details.
@@ -414,11 +425,40 @@ func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 	}
 }
 
+// inExprImpliesPredicate returns true if the InExpr e implies the ScalarExpr
+// pred. It is similar to atomImpliesPredicate, except that it handles a special
+// case where e is an IN expression and pred is an OR expression, such as:
+//
+//   a IN (1, 2)
+//   =>
+//   a = 1 OR a = 2
+//
+// Bespoke logic for IN filters and OR predicates in this form is required
+// because the OrExpr must be considered as a single atomic unit in order to
+// prove that the InExpr implies it. If the OrExpr was not treated as an atom,
+// then (a = 1) and (a = 2) are considered individually. Neither expression
+// individually contains (a IN (1, 2)), so implication could not be proven.
+//
+// If pred is not an OrExpr, it falls-back to treating pred as a non-atom and
+// calls atomImpliesPredicate.
+func (im *Implicator) inExprImpliesPredicate(
+	e *memo.InExpr, pred opt.ScalarExpr, exactMatches exprSet,
+) bool {
+	// If pred is an OrExpr, treat it as an atom.
+	if pt, ok := pred.(*memo.OrExpr); ok {
+		return im.atomImpliesAtom(e, pt, exactMatches)
+	}
+
+	// If pred is not an OrExpr, then fallback to standard atom-filter
+	// implication.
+	return im.atomImpliesPredicate(e, pred, exactMatches)
+}
+
 // atomImpliesPredicate returns true if the atom expression e implies the
 // ScalarExpr pred. The atom e cannot be an AndExpr, OrExpr, RangeExpr, or
 // FiltersExpr.
 func (im *Implicator) atomImpliesPredicate(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.FiltersExpr:
@@ -450,28 +490,49 @@ func (im *Implicator) atomImpliesPredicate(
 
 	default:
 		// atom A => atom B iff B contains A.
-		return im.atomContainsAtom(pred, e)
+		return im.atomImpliesAtom(e, pred, exactMatches)
 	}
 }
 
-// atomContainsAtom returns true if atom expression a contains atom expression
-// b, meaning that all values for variables in which b evaluates to true, a also
-// evaluates to true.
+// atomImpliesAtom returns true if the predicate atom expression, pred, contains
+// atom expression e, meaning that all values for variables in which e evaluates
+// to true, pred also evaluates to true.
 //
 // Constraints are used to prove containment because they make it easy to assess
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
-func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
-	// Build constraint sets for a and b, unless they have been cached.
-	aSet, aTight, ok := im.fetchConstraint(a)
-	if !ok {
-		aSet, aTight = memo.BuildConstraints(a, im.md, im.evalCtx)
-		im.cacheConstraint(a, aSet, aTight)
+func (im *Implicator) atomImpliesAtom(
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
+) bool {
+	// Check for containment of comparison expressions with two variables, like
+	// a = b.
+	if res, ok := im.twoVarComparisonImpliesTwoVarComparison(e, pred, exactMatches); ok {
+		return res
 	}
-	bSet, bTight, ok := im.fetchConstraint(b)
+
+	// Build constraint sets for e and pred, unless they have been cached.
+	eSet, eTight, ok := im.fetchConstraint(e)
 	if !ok {
-		bSet, bTight = memo.BuildConstraints(b, im.md, im.evalCtx)
-		im.cacheConstraint(b, bSet, bTight)
+		eSet, eTight = memo.BuildConstraints(e, im.md, im.evalCtx)
+		im.cacheConstraint(e, eSet, eTight)
+	}
+	predSet, predTight, ok := im.fetchConstraint(pred)
+	if !ok {
+		predSet, predTight = memo.BuildConstraints(pred, im.md, im.evalCtx)
+		im.cacheConstraint(pred, predSet, predTight)
+	}
+
+	// If e is a contradiction, it represents an empty set of rows. The empty
+	// set is contained by all sets, so a contradiction implies all predicates.
+	if eSet == constraint.Contradiction {
+		return true
+	}
+
+	// If pred is a contradiction, it represents an empty set of rows. The only
+	// set contained by the empty set is itself (handled in the conditional
+	// above). No other filters imply a contradiction.
+	if predSet == constraint.Contradiction {
+		return false
 	}
 
 	// If either set has more than one constraint, then constraints cannot be
@@ -484,35 +545,143 @@ func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	//
 	//   /1: (/NULL - ]; /2: (/NULL - ]
 	//
-	// TODO(mgartner): Prove implication in cases like (a > b) => (a >= b),
-	// without using constraints.
-	if aSet.Length() > 1 || bSet.Length() > 1 {
+	if eSet.Length() > 1 || predSet.Length() > 1 {
 		return false
 	}
 
 	// Containment cannot be proven if either constraint is not tight, because
 	// the constraint does not fully represent the expression.
-	if !aTight || !bTight {
+	if !eTight || !predTight {
 		return false
 	}
 
-	ac := aSet.Constraint(0)
-	bc := bSet.Constraint(0)
+	eConstraint := eSet.Constraint(0)
+	predConstraint := predSet.Constraint(0)
 
-	// If the columns in ac are not a prefix of the columns in bc, then ac
-	// cannot contain bc.
-	if !ac.Columns.IsPrefixOf(&bc.Columns) {
+	// If the columns in predConstraint are not a prefix of the columns in
+	// eConstraint, then predConstraint cannot contain eConstraint.
+	if !predConstraint.Columns.IsPrefixOf(&eConstraint.Columns) {
 		return false
 	}
 
-	return ac.Contains(im.evalCtx, bc)
+	// If predConstraint contains eConstraint, then eConstraint implies
+	// predConstraint.
+	if predConstraint.Contains(im.evalCtx, eConstraint) {
+		// If the constraints contain each other, then they are semantically
+		// equivalent and the filter atom can be removed from the remaining filters.
+		// For example:
+		//
+		//   (a::INT > 17)
+		//   =>
+		//   (a::INT >= 18)
+		//
+		// (a > 17) is not the same expression as (a >= 18) syntactically, but
+		// they are semantically equivalent because there are no integers
+		// between 17 and 18. Therefore, there is no need to apply (a > 17) as a
+		// filter after the partial index scan.
+		exactMatches.addIf(e, func() bool {
+			return eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
+				eConstraint.Contains(im.evalCtx, predConstraint)
+		})
+		return true
+	}
+
+	return false
+}
+
+// twoVarComparisonImpliesTwoVarComparison returns true if pred contains e,
+// where both expressions are comparisons (=, <, >, <=, >=, !=) of two
+// variables. If either expressions is not a comparison of two variables, this
+// function returns ok=false.
+//
+// For example, it can be prove that (a > b) implies (a >= b) because all
+// values of a and b that satisfy the first expression also satisfy the second
+// expression.
+func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
+) (containment bool, ok bool) {
+	if !isTwoVarComparison(e) || !isTwoVarComparison(pred) {
+		return false, false
+	}
+
+	commutedOp := func(op opt.Operator) opt.Operator {
+		switch op {
+		case opt.EqOp:
+			return opt.EqOp
+		case opt.NeOp:
+			return opt.NeOp
+		case opt.LtOp:
+			return opt.GtOp
+		case opt.GtOp:
+			return opt.LtOp
+		case opt.LeOp:
+			return opt.GeOp
+		case opt.GeOp:
+			return opt.LeOp
+		default:
+			panic(errors.AssertionFailedf("%s has no commuted operator", op))
+		}
+	}
+
+	predLeftCol := pred.Child(0).(*memo.VariableExpr).Col
+	predRightCol := pred.Child(1).(*memo.VariableExpr).Col
+	impliesPred := func(a opt.ColumnID, b opt.ColumnID, op opt.Operator) bool {
+		// If the columns are not the same, then pred is not implied.
+		if a != predLeftCol || b != predRightCol {
+			return false
+		}
+
+		// If the columns are the same and the ops are the same, then pred is
+		// implied.
+		if op == pred.Op() {
+			return true
+		}
+
+		switch op {
+		case opt.EqOp:
+			// a = b implies a <= b and a >= b
+			return pred.Op() == opt.LeOp || pred.Op() == opt.GeOp
+		case opt.LtOp:
+			// a < b implies a <= b and a != b
+			return pred.Op() == opt.LeOp || pred.Op() == opt.NeOp
+		case opt.GtOp:
+			// a > b implies a >= b and a != b
+			return pred.Op() == opt.GeOp || pred.Op() == opt.NeOp
+		default:
+			return false
+		}
+	}
+
+	eLeftCol := e.Child(0).(*memo.VariableExpr).Col
+	eRightCol := e.Child(1).(*memo.VariableExpr).Col
+	if impliesPred(eLeftCol, eRightCol, e.Op()) || impliesPred(eRightCol, eLeftCol, commutedOp(e.Op())) {
+		// If both operators are equal, or e's commuted operator is equal to
+		// pred's operator, then e is an exact match to pred and it should be
+		// removed from the remaining filters. For example, (a > b) and
+		// (b < a) both individually imply (a > b) with no remaining filters.
+		exactMatches.addIf(e, func() bool {
+			return e.Op() == pred.Op() || commutedOp(e.Op()) == pred.Op()
+		})
+		return true, true
+	}
+
+	return false, true
+}
+
+// initConstraintCache initializes the constraintCache field if it has not yet
+// been initialized.
+func (im *Implicator) initConstraintCache() {
+	if im.constraintCache == nil {
+		im.constraintCache = make(map[opt.ScalarExpr]constraintCacheItem)
+	}
 }
 
 // cacheConstraint caches a constraint set and a tight boolean for the given
 // scalar expression.
 func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
+	im.initConstraintCache()
 	if _, ok := im.constraintCache[e]; !ok {
-		im.constraintCache[e] = constraintResult{
+		im.constraintCache[e] = constraintCacheItem{
 			c:     c,
 			tight: tight,
 		}
@@ -523,6 +692,7 @@ func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight
 // cache contains an entry for the given scalar expression. It returns
 // ok = false if the scalar expression does not exist in the cache.
 func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (_ *constraint.Set, tight bool, ok bool) {
+	im.initConstraintCache()
 	if res, ok := im.constraintCache[e]; ok {
 		return res.c, res.tight, true
 	}
@@ -548,14 +718,18 @@ func (im *Implicator) warmCache(filters memo.FiltersExpr) {
 // is omitted from the returned FiltersItem. If not, the FiltersItem is
 // recursively searched. See simplifyScalarExpr for more details.
 func (im *Implicator) simplifyFiltersExpr(
-	e memo.FiltersExpr, exactMatches map[opt.Expr]struct{},
+	e memo.FiltersExpr, exactMatches exprSet,
 ) memo.FiltersExpr {
-	filters := make(memo.FiltersExpr, 0, len(e))
+	// If exactMatches is empty, then e cannot be simplified.
+	if exactMatches.empty() {
+		return e
+	}
 
+	filters := make(memo.FiltersExpr, 0, len(e))
 	for i := range e {
 		// If an entire FiltersItem exists in exactMatches, don't add it to the
 		// output filters.
-		if _, ok := exactMatches[e[i].Condition]; ok {
+		if exactMatches.contains(e[i].Condition) {
 			continue
 		}
 
@@ -581,9 +755,7 @@ func (im *Implicator) simplifyFiltersExpr(
 //
 // Also note that we do not attempt to traverse OrExprs. See
 // FiltersImplyPredicate (rule #3) for more details.
-func (im *Implicator) simplifyScalarExpr(
-	e opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
-) opt.ScalarExpr {
+func (im *Implicator) simplifyScalarExpr(e opt.ScalarExpr, exactMatches exprSet) opt.ScalarExpr {
 
 	switch t := e.(type) {
 	case *memo.RangeExpr:
@@ -591,8 +763,8 @@ func (im *Implicator) simplifyScalarExpr(
 		return im.f.ConstructRange(and)
 
 	case *memo.AndExpr:
-		_, leftIsExactMatch := exactMatches[t.Left]
-		_, rightIsExactMatch := exactMatches[t.Right]
+		leftIsExactMatch := exactMatches.contains(t.Left)
+		rightIsExactMatch := exactMatches.contains(t.Right)
 		if leftIsExactMatch && rightIsExactMatch {
 			return memo.TrueSingleton
 		}
@@ -637,4 +809,51 @@ func flattenOrExpr(or *memo.OrExpr) []opt.ScalarExpr {
 	collect(or)
 
 	return ors
+}
+
+// isTwoVarComparison returns true if the expression is a comparison
+// expression (=, <, >, <=, >=, !=) and both side of the comparison are
+// variables.
+func isTwoVarComparison(e opt.ScalarExpr) bool {
+	op := e.Op()
+	return (op == opt.EqOp || op == opt.LtOp || op == opt.GtOp || op == opt.LeOp || op == opt.GeOp || op == opt.NeOp) &&
+		e.Child(0).Op() == opt.VariableOp &&
+		e.Child(1).Op() == opt.VariableOp
+}
+
+// exprSet represents a set of opt.Expr. It prevents nil pointer exceptions when
+// tracking exact expression matches during implication. The nil value is passed
+// in several places to avoid adding child expressions to the exact matches set,
+// such as when traversing an OrExpr.
+type exprSet map[opt.Expr]struct{}
+
+// add adds an expression to the set if the set is non-nil.
+func (s exprSet) add(e opt.Expr) {
+	if s != nil {
+		s[e] = struct{}{}
+	}
+}
+
+// addIf adds an expression to the set if the set is non-nil and the given
+// function returns true. addIf short-circuits and does not call the function if
+// the set is nil.
+func (s exprSet) addIf(e opt.Expr, fn func() bool) {
+	if s != nil && fn() {
+		s[e] = struct{}{}
+	}
+}
+
+// empty returns true if the set is nil or empty.
+func (s exprSet) empty() bool {
+	return len(s) == 0
+}
+
+// contains returns true if the set is non-nil and the given expression exists
+// in the set.
+func (s exprSet) contains(e opt.Expr) bool {
+	if s != nil {
+		_, ok := s[e]
+		return ok
+	}
+	return false
 }

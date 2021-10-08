@@ -1,0 +1,200 @@
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO t VALUES (1, 2, 3)
+
+# Get the timestamp for row (1, 2, 3).
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM t
+----
+true
+
+let $base_ts
+SELECT crdb_internal_mvcc_timestamp FROM t
+
+# Insert a new value into t.
+statement ok
+INSERT INTO t VALUES (2, 3, 4)
+
+# Its timestamp should be bigger than the timestamp of the first row.
+query B
+SELECT crdb_internal_mvcc_timestamp > $base_ts FROM t WHERE x = 2
+----
+true
+
+# Check that trying to get the timestamp from t@i succeeds too.
+query B
+SELECT crdb_internal_mvcc_timestamp = $base_ts FROM t@i WHERE x = 1
+----
+true
+
+# We should be able to produce the mvcc column as many times as needed.
+query BBBB
+SELECT crdb_internal_mvcc_timestamp = $base_ts, crdb_internal_mvcc_timestamp = $base_ts, crdb_internal_mvcc_timestamp = $base_ts, crdb_internal_mvcc_timestamp = $base_ts FROM t@i WHERE x = 1
+----
+true true true true
+
+# Update the original row.
+statement ok
+UPDATE t SET z = 5 WHERE x = 1
+
+query B
+SELECT crdb_internal_mvcc_timestamp > $base_ts FROM t
+----
+true
+true
+
+# Ensure that we can use the timestamp column in different places.
+query III rowsort
+SELECT * FROM t WHERE crdb_internal_mvcc_timestamp IS NOT NULL
+----
+1 2 5
+2 3 4
+
+query IIIIII rowsort
+SELECT t1.*, t2.* FROM t t1 JOIN t t2 ON t1.crdb_internal_mvcc_timestamp = t2.crdb_internal_mvcc_timestamp
+----
+1 2 5 1 2 5
+2 3 4 2 3 4
+
+let $update_ts
+SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 2
+
+statement ok
+UPDATE t SET z = 6 WHERE crdb_internal_mvcc_timestamp = $update_ts
+
+query III rowsort
+SELECT * FROM t
+----
+1 2 5
+2 3 6
+
+let $del_ts
+SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 2
+
+statement ok
+DELETE FROM t WHERE crdb_internal_mvcc_timestamp = $del_ts
+
+query III
+SELECT * FROM t
+----
+1 2 5
+
+let $update_ts
+SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 1
+
+statement ok
+UPDATE t SET z = (crdb_internal_mvcc_timestamp + 1.0)::INT WHERE x = 1
+
+query B
+SELECT z = ($update_ts + 1.0)::INT FROM t WHERE x = 1
+----
+true
+
+let $update_ts
+SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 1
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3) ON CONFLICT (x) DO UPDATE SET z = (crdb_internal_mvcc_timestamp + 1.0)::INT
+
+query B
+SELECT z = ($update_ts + 1.0)::INT FROM t WHERE x = 1
+----
+true
+
+query IIB
+SELECT x, y, crdb_internal_mvcc_timestamp IS NOT NULL AS foo FROM t ORDER BY foo
+----
+1 2 true
+
+query B
+SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) < now() FROM t
+----
+true
+
+# Ensure that standard lookup joins can produce the timestamp column.
+statement ok
+CREATE TABLE t2 (x INT, INDEX (x));
+INSERT INTO t2 VALUES (1)
+
+query BII
+SELECT t.crdb_internal_mvcc_timestamp IS NOT NULL, t.x, t2.x FROM t2 INNER LOOKUP JOIN t ON t.x = t2.x
+----
+true 1 1
+
+# We shouldn't be able to insert into the MVCC column.
+statement error pq: cannot modify system column \"crdb_internal_mvcc_timestamp\"
+INSERT INTO t (x, crdb_internal_mvcc_timestamp) VALUES (1, 0)
+
+statement error pq: cannot modify system column \"crdb_internal_mvcc_timestamp\"
+UPDATE t SET crdb_internal_mvcc_timestamp = 1.0 WHERE x = 1
+
+statement error pq: cannot modify system column \"crdb_internal_mvcc_timestamp\"
+UPSERT INTO t (x, crdb_internal_mvcc_timestamp) VALUES (1, 0)
+
+statement error pq: INSERT has more expressions than target columns, 4 expressions for 3 targets
+INSERT INTO t VALUES (7, 8, 9, 1.0)
+
+statement error pq: column \"crdb_internal_mvcc_timestamp\" does not exist
+INSERT INTO t VALUES (1, 2, 3) RETURNING crdb_internal_mvcc_timestamp
+
+# Ensure that we can't create columns that conflict with system column names.
+statement error pq: relation "bad" \([0-9]+\): column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
+CREATE TABLE bad (crdb_internal_mvcc_timestamp int)
+
+statement error pq: column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
+ALTER TABLE t ADD COLUMN crdb_internal_mvcc_timestamp INT
+
+statement error pq: column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
+ALTER TABLE t RENAME COLUMN x TO crdb_internal_mvcc_timestamp
+
+subtest tableoid
+
+statement ok
+CREATE TABLE tab1 (x INT PRIMARY KEY);
+CREATE TABLE tab2 (x INT PRIMARY KEY);
+INSERT INTO tab1 VALUES (1), (2);
+INSERT INTO tab2 VALUES (1), (2);
+
+query OI rowsort
+SELECT tableoid, x FROM tab1
+----
+56 1
+56 2
+
+query OI rowsort
+SELECT tableoid, x FROM tab2
+----
+57 1
+57 2
+
+query OIOI rowsort
+SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 JOIN tab2 ON tab1.x = tab2.x
+----
+56 1 57 1
+56 2 57 2
+
+query OIOI rowsort
+SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 INNER LOOKUP JOIN tab2 ON tab1.x = tab2.x
+----
+56 1 57 1
+56 2 57 2
+
+# We should be able to produce both system columns.
+query OB
+SELECT tableoid, crdb_internal_mvcc_timestamp IS NOT NULL FROM tab1
+----
+56 true
+56 true
+
+# We should be able to index join against the primary key to get the tableoid column.
+statement ok
+CREATE TABLE tab3 (x INT, INDEX i (x));
+INSERT INTO tab3 VALUES (1)
+
+query OI
+SELECT tableoid, x FROM tab3@i WHERE x = 1
+----
+58 1
+
+statement error pq: relation "bad" \([0-9]+\): column name "tableoid" conflicts with a system column name
+CREATE TABLE bad (tableoid int)

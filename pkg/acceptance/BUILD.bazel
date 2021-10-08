@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "acceptance",
+    srcs = [
+        "flags.go",
+        "test_main.go",
+        "util_cluster.go",
+        "util_docker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/acceptance/cluster",
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/testutils",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_containerd_containerd//platforms",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+    ],
+)
+
+go_test(
+    name = "acceptance_test",
+    size = "enormous",
+    srcs = [
+        "adapter_test.go",
+        "cli_test.go",
+        "compose_test.go",
+        "debug_remote_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":acceptance"],
+    tags = ["broken_in_bazel"],
+    deps = [
+        "//pkg/acceptance/cluster",
+        "//pkg/security",
+        "//pkg/testutils/skip",
+        "//pkg/util/log",
+    ],
+)

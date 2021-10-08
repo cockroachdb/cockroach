@@ -12,6 +12,8 @@ package gcjob
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -57,7 +59,7 @@ func markIndexGCed(
 // initDetailsAndProgress sets up the job progress if not already populated and
 // validates that the job details is properly formatted.
 func initDetailsAndProgress(
-	ctx context.Context, execCfg *sql.ExecutorConfig, jobID int64,
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
 ) (*jobspb.SchemaChangeGCDetails, *jobspb.SchemaChangeGCProgress, error) {
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
@@ -89,25 +91,33 @@ func initDetailsAndProgress(
 func initializeProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
+	jobID jobspb.JobID,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
+	var update bool
+	if details.Tenant != nil {
+		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
+			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
+		}
+		update = true
+	} else if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
+		update = true
 		for _, table := range details.Tables {
 			progress.Tables = append(progress.Tables, jobspb.SchemaChangeGCProgress_TableProgress{ID: table.ID})
 		}
 		for _, index := range details.Indexes {
 			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{IndexID: index.IndexID})
 		}
+	}
 
-		// Write out new progress.
+	if update {
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 			if err != nil {
 				return err
 			}
-			return job.SetProgress(ctx, *progress)
+			return job.SetProgress(ctx, txn, *progress)
 		}); err != nil {
 			return err
 		}
@@ -127,8 +137,77 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 			return false
 		}
 	}
+	if progress.Tenant != nil && progress.Tenant.Status != jobspb.SchemaChangeGCProgress_DELETED {
+		return false
+	}
 
 	return true
+}
+
+// runningStatusGC generates a RunningStatus string which always remains under
+// a certain size, given any progress struct.
+func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus {
+	tableIDs := make([]string, 0, len(progress.Tables))
+	indexIDs := make([]string, 0, len(progress.Indexes))
+	for _, table := range progress.Tables {
+		if table.Status == jobspb.SchemaChangeGCProgress_DELETING {
+			tableIDs = append(tableIDs, strconv.Itoa(int(table.ID)))
+		}
+	}
+	for _, index := range progress.Indexes {
+		if index.Status == jobspb.SchemaChangeGCProgress_DELETING {
+			indexIDs = append(indexIDs, strconv.Itoa(int(index.IndexID)))
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("performing garbage collection on")
+	var flag bool
+	if progress.Tenant != nil && progress.Tenant.Status == jobspb.SchemaChangeGCProgress_DELETING {
+		b.WriteString(" tenant")
+		flag = true
+	}
+
+	for _, s := range []struct {
+		ids      []string
+		singular string
+		plural   string
+	}{
+		{tableIDs, "table", "tables"},
+		{indexIDs, "index", "indexes"},
+	} {
+		if len(s.ids) == 0 {
+			continue
+		}
+		if flag {
+			b.WriteRune(';')
+		}
+		b.WriteRune(' ')
+		switch len(s.ids) {
+		case 1:
+			// one id, e.g. "table 123"
+			b.WriteString(s.singular)
+			b.WriteRune(' ')
+			b.WriteString(s.ids[0])
+		case 2, 3, 4, 5:
+			// a few ids, e.g. "tables 123, 456, 789"
+			b.WriteString(s.plural)
+			b.WriteRune(' ')
+			b.WriteString(strings.Join(s.ids, ", "))
+		default:
+			// too many ids to print, e.g. "25 tables"
+			b.WriteString(strconv.Itoa(len(s.ids)))
+			b.WriteRune(' ')
+			b.WriteString(s.plural)
+		}
+		flag = true
+	}
+
+	if !flag {
+		// `flag` not set implies we're not GCing anything.
+		return sql.RunningStatusWaitingGC
+	}
+	return jobs.RunningStatus(b.String())
 }
 
 // getAllTablesWaitingForGC returns a slice with all of the table IDs which have
@@ -153,6 +232,12 @@ func getAllTablesWaitingForGC(
 // validateDetails ensures that the job details payload follows the structure
 // described in the comment for SchemaChangeGCDetails.
 func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
+	if details.Tenant != nil &&
+		(len(details.Tables) > 0 || len(details.Indexes) > 0) {
+		return errors.AssertionFailedf(
+			"Either field Tenant is set or any of Tables or Indexes: %+v", *details,
+		)
+	}
 	if len(details.Indexes) > 0 {
 		if details.ParentID == descpb.InvalidID {
 			return errors.Errorf("must provide a parentID when dropping an index")
@@ -161,25 +246,34 @@ func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	return nil
 }
 
-// persistProgress sets the current state of the progress back on the job.
+// persistProgress sets the current state of the progress and running status
+// back on the job.
 func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
+	jobID jobspb.JobID,
 	progress *jobspb.SchemaChangeGCProgress,
+	runningStatus jobs.RunningStatus,
 ) {
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 		if err != nil {
 			return err
 		}
-		if err := job.SetProgress(ctx, *progress); err != nil {
+		if err := job.SetProgress(ctx, txn, *progress); err != nil {
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
+		err = job.RunningStatus(ctx, txn, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return runningStatus, nil
+		})
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "updated running status: %+v", runningStatus)
 		return nil
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload err: %+v", err)
+		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
 }
 

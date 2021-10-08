@@ -1,0 +1,1568 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (a+b) VIRTUAL,
+  w INT AS (c+1) VIRTUAL,
+  INDEX (v),
+  UNIQUE (w),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
+)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   v INT8 NULL AS (a + b) VIRTUAL,
+   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   FAMILY fam_0_a (a),
+   FAMILY fam_1_b (b)
+)
+
+query TT
+SHOW CREATE TABLE t_idx
+----
+t_idx  CREATE TABLE public.t_idx (
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       c INT8 NULL,
+       v INT8 NULL AS (a + b) VIRTUAL,
+       w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       INDEX t_idx_v_idx (v ASC),
+       UNIQUE INDEX t_idx_w_key (w ASC),
+       FAMILY fam_0_a (a),
+       FAMILY fam_1_b (b),
+       FAMILY fam_2_c (c)
+)
+
+subtest Select
+
+# Verify that the primary index doesn't contain the virtual column.
+query T
+EXPLAIN (OPT, CATALOG) SELECT * from t
+----
+TABLE t
+ ├── a int not null
+ ├── b int
+ ├── v int as (a + b) virtual
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_a (a)
+ ├── FAMILY fam_1_b (b)
+ └── PRIMARY INDEX primary
+      └── a int not null
+project
+ ├── scan t
+ │    └── computed column expressions
+ │         └── v
+ │              └── a + b
+ └── projections
+      └── a + b
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a, b, v)
+│ estimated row count: 1,000 (missing stats)
+│ render v: a + b
+│ render a: a
+│ render b: b
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE a+b=1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 10 (missing stats)
+  table: t_idx@t_idx_v_idx
+  spans: /1-/2
+
+query T
+EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE v=1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 10 (missing stats)
+  table: t_idx@t_idx_v_idx
+  spans: /1-/2
+
+# TODO(radu): allow retrieving the virtual column from the index.
+query T
+EXPLAIN (VERBOSE) SELECT a, v FROM t_idx WHERE v=1
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a, v)
+│ estimated row count: 333 (missing stats)
+│ render v: a + b
+│ render a: a
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 333 (missing stats)
+    │ table: t_idx@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 10 (missing stats)
+          table: t_idx@t_idx_v_idx
+          spans: /1-/2
+
+# Covering lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@t_idx_v_idx
+│ equality: (column1) = (v)
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 3 rows
+      row 0, expr 0: 1
+      row 1, expr 0: 10
+      row 2, expr 0: 5
+
+# Non-covering lookup join that requires a second join on the primary index.
+query T
+EXPLAIN (VERBOSE) SELECT a, b, v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│
+└── • lookup join (inner)
+    │ columns: (column1, a, v)
+    │ estimated row count: 30 (missing stats)
+    │ table: t_idx@t_idx_v_idx
+    │ equality: (column1) = (v)
+    │
+    └── • values
+          columns: (column1)
+          size: 1 column, 3 rows
+          row 0, expr 0: 1
+          row 1, expr 0: 10
+          row 2, expr 0: 5
+
+subtest Insert
+
+# TODO(radu): we shouldn't need to synthesize v here.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t(a, b, v)
+  auto commit
+  size: 3 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 0, expr 2: 2
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 1
+│
+└── • insert fast path
+      columns: (a, v)
+      estimated row count: 1
+      into: t(a, b, v)
+      auto commit
+      size: 3 columns, 1 row
+      row 0, expr 0: 1
+      row 0, expr 1: 1
+      row 0, expr 2: 2
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_idx(a, b, c, v, w)
+  auto commit
+  size: 5 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 0, expr 2: 1
+  row 0, expr 3: 2
+  row 0, expr 4: 2
+
+subtest Delete
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1
+----
+distribution: local
+vectorized: true
+·
+• delete range
+  columns: ()
+  estimated row count: 0 (missing stats)
+  from: t
+  spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 333 (missing stats)
+│
+└── • delete
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ from: t
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, v)
+        │ estimated row count: 333 (missing stats)
+        │ render v: a + b
+        │ render a: a
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 333 (missing stats)
+              table: t@primary
+              spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t
+│ auto commit
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 333 (missing stats)
+    │
+    └── • filter
+        │ columns: (a, b)
+        │ estimated row count: 333 (missing stats)
+        │ filter: (a + b) = 1
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v, w)
+    │ estimated row count: 333 (missing stats)
+    │ render v: a + b
+    │ render w: c + 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a, b, c)
+          estimated row count: 333 (missing stats)
+          table: t_idx@primary
+          spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 333 (missing stats)
+│
+└── • delete
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ from: t_idx
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, v, w)
+        │ estimated row count: 333 (missing stats)
+        │ render v: a + b
+        │ render w: c + 1
+        │ render a: a
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 333 (missing stats)
+              table: t_idx@primary
+              spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v, w)
+    │ estimated row count: 333 (missing stats)
+    │ render v: a + b
+    │ render w: c + 1
+    │ render a: a
+    │
+    └── • index join
+        │ columns: (a, b, c)
+        │ estimated row count: 333 (missing stats)
+        │ table: t_idx@primary
+        │ key columns: a
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 10 (missing stats)
+              table: t_idx@t_idx_v_idx
+              spans: /1-/2
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v, w)
+    │ estimated row count: 333 (missing stats)
+    │ render v: a + b
+    │ render w: c + 1
+    │ render a: a
+    │
+    └── • index join
+        │ columns: (a, b, c)
+        │ estimated row count: 333 (missing stats)
+        │ table: t_idx@primary
+        │ key columns: a
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 10 (missing stats)
+              table: t_idx@t_idx_v_idx
+              spans: /1-/2
+
+subtest Update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t SET a=a+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, v, a_new, v_comp)
+    │ estimated row count: 1,000 (missing stats)
+    │ render v_comp: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render v: v
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, a, b)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render a: a
+        │ render b: b
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: (a, b, v)
+│ estimated row count: 333 (missing stats)
+│ table: t
+│ set: b, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, v, b_new, v_comp)
+    │ estimated row count: 333 (missing stats)
+    │ render v_comp: a + b_new
+    │ render a: a
+    │ render b: b
+    │ render v: v
+    │ render b_new: b_new
+    │
+    └── • render
+        │ columns: (b_new, v, a, b)
+        │ estimated row count: 333 (missing stats)
+        │ render b_new: b + 1
+        │ render v: a + b
+        │ render a: a
+        │ render b: b
+        │
+        └── • filter
+            │ columns: (a, b)
+            │ estimated row count: 333 (missing stats)
+            │ filter: (a + b) = 45
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@primary
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_idx
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, v, w, a_new, v_comp)
+    │ estimated row count: 1,000 (missing stats)
+    │ render v_comp: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render v: v
+    │ render w: w
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, w, a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render w: c + 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 1,000 (missing stats)
+              table: t_idx@primary
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v, w)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • update
+    │ columns: (a, v, w)
+    │ estimated row count: 1,000 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, v_comp)
+        │ estimated row count: 1,000 (missing stats)
+        │ render v_comp: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 1,000 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_idx@primary
+                  spans: FULL SCAN
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v, w)
+│ estimated row count: 333 (missing stats)
+│
+└── • update
+    │ columns: (a, v, w)
+    │ estimated row count: 333 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, v_comp)
+        │ estimated row count: 333 (missing stats)
+        │ render v_comp: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 333 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • index join
+                │ columns: (a, b, c)
+                │ estimated row count: 333 (missing stats)
+                │ table: t_idx@primary
+                │ key columns: a
+                │
+                └── • scan
+                      columns: (a)
+                      estimated row count: 10 (missing stats)
+                      table: t_idx@t_idx_v_idx
+                      spans: /45-/46
+                      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_idx
+│ set: c, w
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, w, c_new, w_comp)
+    │ estimated row count: 1 (missing stats)
+    │ render w_comp: 7
+    │ render c_new: 6
+    │ render w: c + 1
+    │ render a: a
+    │ render c: c
+    │
+    └── • scan
+          columns: (a, c)
+          estimated row count: 1 (missing stats)
+          table: t_idx@primary
+          spans: /2/0 /2/2/1
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1 RETURNING a,v,w
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: (a, v, w)
+│ estimated row count: 1,000 (missing stats)
+│ table: t_idx
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, v, w, a_new, v_comp)
+    │ estimated row count: 1,000 (missing stats)
+    │ render v_comp: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render v: v
+    │ render w: w
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, w, a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render w: c + 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 1,000 (missing stats)
+              table: t_idx@primary
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (w)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • update
+    │ columns: (a, w)
+    │ estimated row count: 1,000 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, v_comp)
+        │ estimated row count: 1,000 (missing stats)
+        │ render v_comp: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 1,000 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_idx@primary
+                  spans: FULL SCAN
+                  locking strength: for update
+
+subtest Upsert
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│
+└── • project
+    │ columns: (column1, column2, v_comp, column2, v_comp)
+    │
+    └── • render
+        │ columns: (v_comp, column1, column2)
+        │ estimated row count: 4
+        │ render v_comp: column1 + column2
+        │ render column1: column1
+        │ render column2: column2
+        │
+        └── • values
+              columns: (column1, column2)
+              size: 2 columns, 4 rows
+              row 0, expr 0: 1
+              row 0, expr 1: 10
+              row 1, expr 0: 2
+              row 1, expr 1: 20
+              row 2, expr 0: 3
+              row 2, expr 1: 30
+              row 3, expr 0: 4
+              row 3, expr 1: 40
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (5, 51), (6, 60) ON CONFLICT DO NOTHING RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 0 (missing stats)
+│
+└── • insert
+    │ columns: (a, v)
+    │ estimated row count: 0 (missing stats)
+    │ into: t(a, b, v)
+    │ auto commit
+    │ arbiter indexes: primary
+    │
+    └── • lookup join (anti)
+        │ columns: (column1, column2, v_comp)
+        │ estimated row count: 0 (missing stats)
+        │ table: t@primary
+        │ equality: (column1) = (a)
+        │ equality cols are key
+        │
+        └── • render
+            │ columns: (v_comp, column1, column2)
+            │ estimated row count: 2
+            │ render v_comp: column1 + column2
+            │ render column1: column1
+            │ render column2: column2
+            │
+            └── • values
+                  columns: (column1, column2)
+                  size: 2 columns, 2 rows
+                  row 0, expr 0: 5
+                  row 0, expr 1: 51
+                  row 1, expr 0: 6
+                  row 1, expr 1: 60
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
+    │
+    └── • render
+        │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v END
+        │ render column1: column1
+        │ render column2: column2
+        │ render v_comp: v_comp
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │
+        └── • render
+            │ columns: (v, column1, column2, v_comp, a, b)
+            │ estimated row count: 3 (missing stats)
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render column1: column1
+            │ render column2: column2
+            │ render v_comp: v_comp
+            │ render a: a
+            │ render b: b
+            │
+            └── • lookup join (left outer)
+                │ columns: (v_comp, column1, column2, a, b)
+                │ estimated row count: 3 (missing stats)
+                │ table: t@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • render
+                    │ columns: (v_comp, column1, column2)
+                    │ estimated row count: 3
+                    │ render v_comp: column1 + column2
+                    │ render column1: column1
+                    │ render column2: column2
+                    │
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 100
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(a, b, v)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
+    │
+    └── • render
+        │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v_comp END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v_comp END
+        │ render column1: column1
+        │ render column2: column2
+        │ render v_comp: v_comp
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │
+        └── • render
+            │ columns: (v, column1, column2, v_comp, a, b)
+            │ estimated row count: 3 (missing stats)
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render column1: column1
+            │ render column2: column2
+            │ render v_comp: v_comp
+            │ render a: a
+            │ render b: b
+            │
+            └── • lookup join (left outer)
+                │ columns: (v_comp, column1, column2, a, b)
+                │ estimated row count: 3 (missing stats)
+                │ table: t@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • render
+                    │ columns: (v_comp, column1, column2)
+                    │ estimated row count: 3
+                    │ render v_comp: column1 + column2
+                    │ render column1: column1
+                    │ render column2: column2
+                    │
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 3 rows
+                          row 0, expr 0: 2
+                          row 0, expr 1: 100
+                          row 1, expr 0: 5
+                          row 1, expr 1: 100
+                          row 2, expr 0: 8
+                          row 2, expr 1: 100
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
+    │
+    └── • render
+        │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
+        │ estimated row count: 4 (missing stats)
+        │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+        │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • lookup join (left outer)
+            │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
+            │ estimated row count: 4 (missing stats)
+            │ table: t_idx@primary
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │ locking strength: for update
+            │
+            └── • render
+                │ columns: (v_comp, w_comp, column1, column2, column3)
+                │ estimated row count: 4
+                │ render v_comp: column1 + column2
+                │ render w_comp: column3 + 1
+                │ render column1: column1
+                │ render column2: column2
+                │ render column3: column3
+                │
+                └── • values
+                      columns: (column1, column2, column3)
+                      size: 3 columns, 4 rows
+                      row 0, expr 0: 1
+                      row 0, expr 1: 10
+                      row 0, expr 2: 100
+                      row 1, expr 0: 2
+                      row 1, expr 1: 20
+                      row 1, expr 2: 200
+                      row 2, expr 0: 3
+                      row 2, expr 1: 30
+                      row 2, expr 2: 300
+                      row 3, expr 0: 4
+                      row 3, expr 1: 40
+                      row 3, expr 2: 400
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (a, v, w)
+│ estimated row count: 2 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
+    │
+    └── • render
+        │ columns: (upsert_a, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
+        │ estimated row count: 2 (missing stats)
+        │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • render
+            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
+            │ estimated row count: 2 (missing stats)
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
+            │ render a: a
+            │ render b: b
+            │ render c: c
+            │
+            └── • lookup join (left outer)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
+                │ estimated row count: 2 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • render
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
+                    │ estimated row count: 2
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 2 rows
+                          row 0, expr 0: 3
+                          row 0, expr 1: 31
+                          row 0, expr 2: 301
+                          row 1, expr 0: 5
+                          row 1, expr 1: 50
+                          row 1, expr 2: 500
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (w)
+│ estimated row count: 0 (missing stats)
+│
+└── • insert
+    │ columns: (a, w)
+    │ estimated row count: 0 (missing stats)
+    │ into: t_idx(a, b, c, v, w)
+    │ auto commit
+    │ arbiter indexes: primary, t_idx_w_key
+    │
+    └── • distinct
+        │ columns: (column1, column2, column3, v_comp, w_comp)
+        │ estimated row count: 0 (missing stats)
+        │ distinct on: w_comp
+        │ nulls are distinct
+        │
+        └── • lookup join (anti)
+            │ columns: (v_comp, w_comp, column1, column2, column3)
+            │ estimated row count: 0 (missing stats)
+            │ table: t_idx@primary
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │
+            └── • hash join (right anti)
+                │ columns: (v_comp, w_comp, column1, column2, column3)
+                │ estimated row count: 0 (missing stats)
+                │ equality: (w) = (w_comp)
+                │
+                ├── • render
+                │   │ columns: (w)
+                │   │ estimated row count: 1,000 (missing stats)
+                │   │ render w: c + 1
+                │   │
+                │   └── • scan
+                │         columns: (c)
+                │         estimated row count: 1,000 (missing stats)
+                │         table: t_idx@primary
+                │         spans: FULL SCAN
+                │
+                └── • render
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 41
+                          row 0, expr 2: 301
+                          row 1, expr 0: 6
+                          row 1, expr 1: 60
+                          row 1, expr 2: 600
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 100
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, c, w, upsert_c, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_c, upsert_w, column1, column2, column3, v_comp, w_comp, a, c, w)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 0 END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
+        │ render a: a
+        │ render c: c
+        │ render w: w
+        │
+        └── • render
+            │ columns: (w, column1, column2, column3, v_comp, w_comp, a, c)
+            │ estimated row count: 3 (missing stats)
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
+            │ render a: a
+            │ render c: c
+            │
+            └── • lookup join (left outer)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, c)
+                │ estimated row count: 3 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • render
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 10
+                          row 0, expr 2: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 10
+                          row 1, expr 2: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 700
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (a, b, c, v, w)
+│ estimated row count: 3 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, upsert_c, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_a, upsert_b, upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
+        │ estimated row count: 3 (missing stats)
+        │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE b END
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE w END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE v END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE w + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • render
+            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
+            │ estimated row count: 3 (missing stats)
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
+            │ render a: a
+            │ render b: b
+            │ render c: c
+            │
+            └── • lookup join (left outer)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
+                │ estimated row count: 3 (missing stats)
+                │ table: t_idx@primary
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • render
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
+                    │ estimated row count: 3
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 3 rows
+                          row 0, expr 0: 4
+                          row 0, expr 1: 10
+                          row 0, expr 2: 100
+                          row 1, expr 0: 6
+                          row 1, expr 1: 10
+                          row 1, expr 2: 100
+                          row 2, expr 0: 7
+                          row 2, expr 1: 70
+                          row 2, expr 2: 700
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_idx(a, b, c, v, w)
+│ auto commit
+│ arbiter indexes: t_idx_w_key
+│
+└── • project
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column1, upsert_c, upsert_v, upsert_w, a)
+    │
+    └── • render
+        │ columns: (upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
+        │ estimated row count: 20 (missing stats)
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE v_comp END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE column1 + b END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE v_comp + 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │ render w: w
+        │
+        └── • hash join (right outer)
+            │ columns: (v, w, a, b, c, v_comp, w_comp, column1, column2, column3)
+            │ estimated row count: 20 (missing stats)
+            │ equality: (w) = (w_comp)
+            │ right cols are key
+            │
+            ├── • render
+            │   │ columns: (v, w, a, b, c)
+            │   │ estimated row count: 1,000 (missing stats)
+            │   │ render v: a + b
+            │   │ render w: c + 1
+            │   │ render a: a
+            │   │ render b: b
+            │   │ render c: c
+            │   │
+            │   └── • scan
+            │         columns: (a, b, c)
+            │         estimated row count: 1,000 (missing stats)
+            │         table: t_idx@primary
+            │         spans: FULL SCAN
+            │
+            └── • distinct
+                │ columns: (v_comp, w_comp, column1, column2, column3)
+                │ estimated row count: 2
+                │ distinct on: w_comp
+                │ nulls are distinct
+                │ error on duplicate
+                │
+                └── • render
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
+                    │ estimated row count: 2
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • values
+                          columns: (column1, column2, column3)
+                          size: 3 columns, 2 rows
+                          row 0, expr 0: 8
+                          row 0, expr 1: 80
+                          row 0, expr 2: 800
+                          row 1, expr 0: 10
+                          row 1, expr 1: 100
+                          row 1, expr 2: 700
+
+subtest Checks
+
+statement ok
+CREATE TABLE checks (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  v INT NOT NULL AS (b % 4) VIRTUAL CHECK (v IN (0,1,2,3)),
+  INDEX (v, b)
+)
+
+# Verify that we use the (v,b) index.
+query T
+EXPLAIN (VERBOSE) SELECT a FROM checks WHERE b BETWEEN 10 and 15
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a)
+│ estimated row count: 60 (missing stats)
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 60 (missing stats)
+      table: checks@checks_v_b_idx
+      spans: /0/10-/0/16 /1/10-/1/16 /2/10-/2/16 /3/10-/3/16
+
+subtest InvertedIndexes
+
+statement ok
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  iv INT AS (i + 10) VIRTUAL,
+  jv JSON AS (j->'a') VIRTUAL,
+  INVERTED INDEX jv_idx (jv),
+  INVERTED INDEX i_jv_idx (i, jv),
+  INVERTED INDEX iv_j_idx (iv, j),
+  INVERTED INDEX iv_jv_idx (iv, jv)
+)
+
+# Verify that we use jv_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 111 (missing stats)
+  table: inv@jv_idx
+  spans: /"a"/"b"-/"a"/"b"/PrefixEnd
+
+# Verify that we use i_jv_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE i IN (10, 20, 30) AND jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@i_jv_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Verify that we use iv_j_idx.
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND j @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@iv_j_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+statement ok
+DROP INDEX inv@iv_j_idx
+
+# Verify that we use iv_jv_idx
+query T
+EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k)
+  estimated row count: 3 (missing stats)
+  table: inv@iv_jv_idx
+  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Regression tests for #65343. Collated string locales should be normalized so
+# that indexes on collated string virtual columns are scanned for any given
+# locale format in a query.
+subtest 65343
+
+statement ok
+CREATE TABLE t65343 (
+  s STRING,
+  c STRING COLLATE en_US AS (s COLLATE en_US) VIRTUAL,
+  INDEX (c)
+)
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]

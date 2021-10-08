@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "singleflight",
+    srcs = ["singleflight.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/syncutil"],
+)
+
+go_test(
+    name = "singleflight_test",
+    size = "small",
+    srcs = ["singleflight_test.go"],
+    embed = [":singleflight"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)

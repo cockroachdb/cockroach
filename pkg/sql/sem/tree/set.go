@@ -21,19 +21,38 @@ package tree
 
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
-	Name   string
-	Values Exprs
+	Name     string
+	Local    bool
+	Values   Exprs
+	Reset    bool
+	ResetAll bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *SetVar) Format(ctx *FmtCtx) {
+	if node.ResetAll {
+		ctx.WriteString("RESET ALL")
+		return
+	}
+	if node.Reset {
+		ctx.WriteString("RESET ")
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
+			// Session var names never contain PII and should be distinguished
+			// for feature tracking purposes.
+			ctx.FormatNameP(&node.Name)
+		})
+		return
+	}
 	ctx.WriteString("SET ")
+	if node.Local {
+		ctx.WriteString("LOCAL ")
+	}
 	if node.Name == "" {
 		ctx.WriteString("ROW (")
 		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
 	} else {
-		ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 			// Session var names never contain PII and should be distinguished
 			// for feature tracking purposes.
 			ctx.FormatNameP(&node.Name)
@@ -55,12 +74,20 @@ func (node *SetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 
 	ctx.WriteString(" = ")
-	ctx.FormatNode(node.Value)
+
+	switch v := node.Value.(type) {
+	case *DBool, *DInt:
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
+			ctx.FormatNode(v)
+		})
+	default:
+		ctx.FormatNode(v)
+	}
 }
 
 // SetTransaction represents a SET TRANSACTION statement.
@@ -71,7 +98,7 @@ type SetTransaction struct {
 // Format implements the NodeFormatter interface.
 func (node *SetTransaction) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET TRANSACTION")
-	node.Modes.Format(ctx)
+	ctx.FormatNode(&node.Modes)
 }
 
 // SetSessionAuthorizationDefault represents a SET SESSION AUTHORIZATION DEFAULT
@@ -92,7 +119,7 @@ type SetSessionCharacteristics struct {
 // Format implements the NodeFormatter interface.
 func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
-	node.Modes.Format(ctx)
+	ctx.FormatNode(&node.Modes)
 }
 
 // SetTracing represents a SET TRACING statement.
@@ -103,5 +130,9 @@ type SetTracing struct {
 // Format implements the NodeFormatter interface.
 func (node *SetTracing) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET TRACING = ")
-	ctx.FormatNode(&node.Values)
+	// Set tracing values never contain PII and should be distinguished
+	// for feature tracking purposes.
+	ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+		ctx.FormatNode(&node.Values)
+	})
 }

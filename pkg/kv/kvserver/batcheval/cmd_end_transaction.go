@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,9 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 func init() {
@@ -43,10 +42,7 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans *spanset.SpanSet,
+	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -57,13 +53,13 @@ func declareKeysWriteTransaction(
 }
 
 func declareKeysEndTxn(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
-	declareKeysWriteTransaction(desc, header, req, latchSpans)
+	declareKeysWriteTransaction(rs, header, req, latchSpans)
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -78,7 +74,7 @@ func declareKeysEndTxn(
 			abortSpanAccess = spanset.SpanReadWrite
 		}
 		latchSpans.AddNonMVCC(abortSpanAccess, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+			Key: keys.AbortSpanKey(rs.GetRangeID(), header.Txn.ID),
 		})
 	}
 
@@ -88,7 +84,9 @@ func declareKeysEndTxn(
 		// All requests that intend on resolving local locks need to depend on
 		// the range descriptor because they need to determine which locks are
 		// within the local range.
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
+		})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
@@ -122,7 +120,7 @@ func declareKeysEndTxn(
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 
-				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(rs.GetRangeID())
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
@@ -147,8 +145,8 @@ func declareKeysEndTxn(
 				})
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key:    abortspan.MinKey(header.RangeID),
-					EndKey: abortspan.MaxKey(header.RangeID),
+					Key:    abortspan.MinKey(rs.GetRangeID()),
+					EndKey: abortspan.MaxKey(rs.GetRangeID()),
 				})
 			}
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
@@ -161,6 +159,13 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
 					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
+				})
+				// Merges incorporate the prior read summary from the RHS into
+				// the LHS, which ensures that the current and all future
+				// leaseholders on the joint range respect reads served on the
+				// RHS.
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.RangePriorReadSummaryKey(mt.LeftDesc.RangeID),
 				})
 			}
 		}
@@ -184,24 +189,24 @@ func EndTxn(
 	}
 	if args.Require1PC {
 		// If a 1PC txn was required and we're in EndTxn, we've failed to evaluate
-		// the batch as a 1PC. We're returning early instead of preferring a
-		// possible retriable error because we might want to leave locks behind in
-		// case of retriable errors - which Require1PC does not want.
-		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+		// the batch as a 1PC. We shouldn't have gotten here; if we couldn't
+		// evaluate as 1PC, evaluateWriteBatch() was supposed to short-circuit.
+		return result.Result{}, errors.AssertionFailedf("unexpectedly trying to evaluate EndTxn with the Require1PC flag set")
 	}
 	if args.Commit && args.Poison {
-		return result.Result{}, errors.Errorf("cannot poison during a committing EndTxn request")
+		return result.Result{}, errors.AssertionFailedf("cannot poison during a committing EndTxn request")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
-	if ok, err := storage.MVCCGetProto(
+	recordAlreadyExisted, err := storage.MVCCGetProto(
 		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{},
-	); err != nil {
+	)
+	if err != nil {
 		return result.Result{}, err
-	} else if !ok {
+	} else if !recordAlreadyExisted {
 		// No existing transaction record was found - create one by writing it
 		// below in updateFinalizedTxn.
 		reply.Txn = h.Txn.Clone()
@@ -233,7 +238,9 @@ func EndTxn(
 			// meantime. The TransactionStatusError is going to be handled by the
 			// txnCommitter interceptor.
 			log.VEventf(ctx, 2, "transaction found to be already committed")
-			return result.Result{}, roachpb.NewTransactionCommittedStatusError()
+			return result.Result{}, roachpb.NewTransactionStatusError(
+				roachpb.TransactionStatusError_REASON_TXN_COMMITTED,
+				"already committed")
 
 		case roachpb.ABORTED:
 			if !args.Commit {
@@ -246,7 +253,7 @@ func EndTxn(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, ms, key, args, reply.Txn, externalLocks,
+					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -325,7 +332,9 @@ func EndTxn(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalLocks); err != nil {
+	if err := updateFinalizedTxn(
+		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+	); err != nil {
 		return result.Result{}, err
 	}
 
@@ -361,7 +370,7 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
@@ -417,22 +426,6 @@ func IsEndTxnTriggeringRetryError(
 	return retry, reason, extraMsg
 }
 
-// CanForwardCommitTimestampWithoutRefresh returns whether a txn can be
-// safely committed with a timestamp above its read timestamp without
-// requiring a read refresh (see txnSpanRefresher). This requires that
-// the transaction's timestamp has not leaked and that the transaction
-// has encountered no spans which require refreshing at the forwarded
-// timestamp. If either of those conditions are true, a client-side
-// retry is required.
-//
-// Note that when deciding whether a transaction can be bumped to a particular
-// timestamp, the transaction's deadling must also be taken into account.
-func CanForwardCommitTimestampWithoutRefresh(
-	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
-) bool {
-	return !txn.CommitTimestampFixed && args.CanCommitAtHigherTimestamp
-}
-
 const lockResolutionBatchSize = 500
 
 // resolveLocalLocks synchronously resolves any locks that are local to this
@@ -458,17 +451,18 @@ func resolveLocalLocks(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iter := readWriter.NewIterator(storage.IterOptions{
-		UpperBound: desc.EndKey.AsRawKey(),
-	})
-	iterAndBuf := storage.GetBufUsingIter(iter)
-	defer iterAndBuf.Cleanup()
-
 	var resolveAllowance int64 = lockResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
 		// These transactions rely on having their locks resolved synchronously.
 		resolveAllowance = math.MaxInt64
+	}
+	onlySeparatedIntents := false
+	st := evalCtx.ClusterSettings()
+	// Some tests have st == nil.
+	if st != nil {
+		onlySeparatedIntents = st.Version.ActiveVersionOrEmpty(ctx).IsActive(
+			clusterversion.PostSeparatedIntentsMigration)
 	}
 	for _, span := range args.LockSpans {
 		if err := func() error {
@@ -484,8 +478,15 @@ func resolveLocalLocks(
 					externalLocks = append(externalLocks, span)
 					return nil
 				}
-				resolveMS := ms
-				ok, err := storage.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, update)
+				// It may be tempting to reuse an iterator here, but this call
+				// can create the iterator with Prefix:true which is much faster
+				// than seeking -- especially for intents that are missing, e.g.
+				// due to async intent resolution. See:
+				// https://github.com/cockroachdb/cockroach/issues/64092
+				//
+				// Note that the underlying pebbleIterator will still be reused
+				// since readWriter is a pebbleBatch in the typical case.
+				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
 				if err != nil {
 					return err
 				}
@@ -502,7 +503,8 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, update, resolveAllowance)
+				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
+					ctx, readWriter, ms, update, resolveAllowance, onlySeparatedIntents)
 				if err != nil {
 					return err
 				}
@@ -564,11 +566,18 @@ func updateFinalizedTxn(
 	key []byte,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
+	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
 	if txnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
+		}
+		if !recordAlreadyExisted {
+			// Nothing to delete, so there's no use writing a deletion tombstone. This
+			// can help avoid sending a proposal through Raft, if nothing else in the
+			// BatchRequest writes.
+			return nil
 		}
 		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
@@ -592,15 +601,39 @@ func RunCommitTrigger(
 		return result.Result{}, nil
 	}
 
+	// The transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+
+	// The transaction should not have a commit timestamp in the future of present
+	// time, even it its commit timestamp is synthetic. Such cases should be
+	// caught in maybeCommitWaitBeforeCommitTrigger before getting here, which
+	// should sleep for long enough to ensure that the local clock leads the
+	// commit timestamp. An error here may indicate that the transaction's commit
+	// timestamp was bumped after it acquired latches.
+	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
+			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
+	}
+
+	// Stage the commit trigger's side-effects so that they will go into effect on
+	// each Replica when the corresponding Raft log entry is applied. Only one
+	// commit trigger can be set.
 	if ct.GetSplitTrigger() != nil {
-		newMS, trigger, err := splitTrigger(
+		newMS, res, err := splitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
 		*ms = newMS
-		return trigger, err
+		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		return mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
+		return res, nil
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		// TODO(tbg): once we support atomic replication changes, check that
@@ -651,7 +684,7 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		if sbt.StickyBit != (hlc.Timestamp{}) {
+		if !sbt.StickyBit.IsEmpty() {
 			newDesc.StickyBit = &sbt.StickyBit
 		} else {
 			newDesc.StickyBit = nil
@@ -827,11 +860,6 @@ func splitTrigger(
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
-	// TODO(andrei): should this span be a child of the ctx's (if any)?
-	sp := rec.ClusterSettings().Tracer.StartRootSpan(
-		"split", logtags.FromContext(ctx), tracing.NonRecordableSpan,
-	)
-	defer sp.Finish()
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
@@ -904,15 +932,6 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
-		// Since the stats here is used to seed the initial state for the RHS
-		// replicas, we need to be careful about zero-ing out the abort span
-		// bytes if the cluster version introducing it is not yet active. Not
-		// doing so can result in inconsistencies in MVCCStats across replicas
-		// in a mixed-version cluster.
-		h.AbsPostSplitRight().AbortSpanBytes = 0
-	}
-
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The
@@ -924,7 +943,7 @@ func splitTriggerHelper(
 	// initial state. Additionally, since bothDeltaMS is tracking writes to
 	// both sides, we need to update it as well.
 	{
-		// Various pieces of code rely on a replica's lease never being unitialized,
+		// Various pieces of code rely on a replica's lease never being uninitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
 		// of the original Range.  We found out about a regression here the hard way
@@ -939,10 +958,8 @@ func splitTriggerHelper(
 		// - node two becomes the lease holder for [c,e). Its timestamp cache does
 		//   not know about the read at 'd' which happened at the beginning.
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
-		//
-		// TODO(tschottdorf): why would this use r.store.Engine() and not the
-		// batch?
-		leftLease, err := MakeStateLoader(rec).LoadLease(ctx, rec.Engine())
+		sl := MakeStateLoader(rec)
+		leftLease, err := sl.LoadLease(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -959,12 +976,11 @@ func splitTriggerHelper(
 		}
 		rightLease := leftLease
 		rightLease.Replica = replica
-
-		gcThreshold, err := MakeStateLoader(rec).LoadGCThreshold(ctx, rec.Engine())
+		gcThreshold, err := sl.LoadGCThreshold(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
-		if (*gcThreshold == hlc.Timestamp{}) {
+		if gcThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
@@ -989,6 +1005,11 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load legacy truncated state")
 		} else if found {
 			truncStateType = stateloader.TruncatedStateLegacyReplicated
+		}
+
+		replicaVersion, err := sl.LoadVersion(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 
 		// Writing the initial state is subtle since this also seeds the Raft
@@ -1023,7 +1044,7 @@ func splitTriggerHelper(
 
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, truncStateType,
+			*gcThreshold, truncStateType, replicaVersion,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -1039,9 +1060,6 @@ func splitTriggerHelper(
 	}
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-		deltaPostSplitLeft.ContainsEstimates = 0
-	}
 	return deltaPostSplitLeft, pd, nil
 }
 
@@ -1058,11 +1076,11 @@ func mergeTrigger(
 ) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
-		return result.Result{}, errors.Errorf("LHS range start keys do not match: %s != %s",
+		return result.Result{}, errors.AssertionFailedf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
-		return result.Result{}, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+		return result.Result{}, errors.AssertionFailedf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
@@ -1072,6 +1090,37 @@ func mergeTrigger(
 		return result.Result{}, err
 	}
 
+	// If we collected a read summary from the right-hand side when freezing it,
+	// merge that summary into the left-hand side's prior read summary. In the
+	// usual case, the RightReadSummary in the MergeTrigger will be used to
+	// update the left-hand side's leaseholder's timestamp cache when applying
+	// the merge trigger's Raft log entry. However, if the left-hand side's
+	// leaseholder hears about the merge through a Raft snapshot, the merge
+	// trigger will not be available, so it will need to use the range's prior
+	// read summary to update its timestamp cache to ensure that it does not
+	// serve any writes that invalidate previous reads served on the right-hand
+	// side range. See TestStoreRangeMergeTimestampCache for an example of where
+	// this behavior is necessary.
+	//
+	// This communication from the RHS to the LHS is handled differently from
+	// how we copy over the abortspan. In this case, the read summary is passed
+	// through the SubsumeResponse and into the MergeTrigger. In the abortspan's
+	// case, we read from local RHS replica (which may not be the leaseholder)
+	// directly in this method. The primary reason why these are different is
+	// because the RHS's persistent read summary may not be up-to-date, as it is
+	// not updated by the SubsumeRequest.
+	if merge.RightReadSummary != nil {
+		mergedSum := merge.RightReadSummary.Clone()
+		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
+			return result.Result{}, err
+		} else if priorSum != nil {
+			mergedSum.Merge(*priorSum)
+		}
+		if err := readsummary.Set(ctx, batch, rec.GetRangeID(), ms, mergedSum); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	// The stats for the merged range are the sum of the LHS and RHS stats, less
 	// the RHS's replicated range ID stats. The only replicated range ID keys we
 	// copy from the RHS are the keys in the abort span, and we've already
@@ -1079,7 +1128,8 @@ func mergeTrigger(
 	ms.Add(merge.RightMVCCStats)
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		iter := batch.NewIterator(storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		// NB: Range-ID local keys have no versions and no intents.
+		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
@@ -1115,20 +1165,8 @@ func changeReplicasTrigger(
 	// holding the lease.
 	pd.Local.GossipFirstRange = rec.IsFirstRange()
 
-	var desc roachpb.RangeDescriptor
-	if change.Desc != nil {
-		// Trigger proposed by a 19.2+ node (and we're a 19.2+ node as well).
-		desc = *change.Desc
-	} else {
-		// Trigger proposed by a 19.1 node. Reconstruct descriptor from deprecated
-		// fields.
-		desc = *rec.Desc()
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.DeprecatedUpdatedReplicas))
-		desc.NextReplicaID = change.DeprecatedNextReplicaID
-	}
-
 	pd.Replicated.State = &kvserverpb.ReplicaState{
-		Desc: &desc,
+		Desc: change.Desc,
 	}
 	pd.Replicated.ChangeReplicas = &kvserverpb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,

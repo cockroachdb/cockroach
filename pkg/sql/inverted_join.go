@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type invertedJoinNode struct {
@@ -25,16 +25,27 @@ type invertedJoinNode struct {
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.
 	joinType descpb.JoinType
 
+	// prefixEqCols identifies the columns from the input which are used for the
+	// lookup if the index is a multi-column inverted index. These correspond to
+	// the non-inverted prefix columns of the index we are looking up. This is
+	// empty if the index is not a multi-column inverted index.
+	prefixEqCols []int
+
 	// The inverted expression to evaluate.
 	invertedExpr tree.TypedExpr
 
 	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns in the table scanNode.
-	columns sqlbase.ResultColumns
+	// join type is semi or anti join) the columns in the table scanNode. It can
+	// include an additional continuation column for paired joins.
+	columns colinfo.ResultColumns
 
 	// onExpr is any ON condition to be used in conjunction with the inverted
 	// expression.
 	onExpr tree.TypedExpr
+
+	isFirstJoinInPairedJoiner bool
+
+	reqOrdering ReqOrdering
 }
 
 func (ij *invertedJoinNode) startExec(params runParams) error {

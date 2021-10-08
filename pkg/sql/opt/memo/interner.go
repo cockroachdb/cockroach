@@ -17,13 +17,15 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -93,12 +95,6 @@ type interner struct {
 	// cache is a helper struct that implements the interning pattern described
 	// in the header over a Go map.
 	cache internCache
-}
-
-// Clear clears all interned expressions. Expressions interned before the call
-// to Clear will not be connected to expressions interned after.
-func (in *interner) Clear() {
-	in.cache.Clear()
 }
 
 // Count returns the number of expressions that have been interned.
@@ -189,11 +185,6 @@ func (c *internCache) Count() int {
 	return len(c.cache)
 }
 
-// Clear clears all items in the cache.
-func (c *internCache) Clear() {
-	c.cache = nil
-}
-
 // Start prepares to look up an item in the cache by its hash value. It must be
 // called before Next.
 func (c *internCache) Start(hash internHash) {
@@ -276,7 +267,13 @@ type hasher struct {
 }
 
 func (h *hasher) Init() {
-	h.hash = offset64
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*h = hasher{
+		bytes:  h.bytes,
+		bytes2: h.bytes2,
+		hash:   offset64,
+	}
 }
 
 // ----------------------------------------------------------------------
@@ -298,6 +295,11 @@ func (h *hasher) HashBool(val bool) {
 }
 
 func (h *hasher) HashInt(val int) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashInt64(val int64) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
 }
@@ -409,7 +411,9 @@ func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 }
 
 func (h *hasher) HashStatement(val tree.Statement) {
-	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+	if val != nil {
+		h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+	}
 }
 
 func (h *hasher) HashColumnID(val opt.ColumnID) {
@@ -434,6 +438,15 @@ func (h *hasher) HashColList(val opt.ColList) {
 	h.hash = hash
 }
 
+func (h *hasher) HashOptionalColList(val opt.OptionalColList) {
+	hash := h.hash
+	for _, id := range val {
+		hash ^= internHash(id)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashOrdering(val opt.Ordering) {
 	hash := h.hash
 	for _, id := range val {
@@ -443,7 +456,7 @@ func (h *hasher) HashOrdering(val opt.Ordering) {
 	h.hash = hash
 }
 
-func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
+func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
 	h.HashColSet(val.Optional)
 
 	for i := range val.Columns {
@@ -479,9 +492,17 @@ func (h *hasher) HashScanLimit(val ScanLimit) {
 
 func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
+	h.HashBool(val.NoZigzagJoin)
 	h.HashBool(val.ForceIndex)
+	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
+	if !val.ZigzagIndexes.Empty() {
+		s := val.ZigzagIndexes
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			h.HashInt(i)
+		}
+	}
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {
@@ -506,7 +527,7 @@ func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.hash = hash
 }
 
-func (h *hasher) HashStatementType(val tree.StatementType) {
+func (h *hasher) HashStatementReturnType(val tree.StatementReturnType) {
 	h.HashUint64(uint64(val))
 }
 
@@ -526,12 +547,39 @@ func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
 
+func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
+	hash := h.hash
+	for _, ord := range val {
+		hash ^= internHash(ord)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
+func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
+	hash := h.hash
+	for _, ord := range val {
+		hash ^= internHash(ord)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
 	if len(val) > 0 {
 		h.HashPointer(unsafe.Pointer(&val[0]))
 	}
+}
+
+func (h *hasher) HashViewTypeDeps(val opt.ViewTypeDeps) {
+	hash := h.hash
+	val.ForEach(func(i int) {
+		hash ^= internHash(i)
+		hash *= prime64
+	})
+	h.hash = hash
 }
 
 func (h *hasher) HashWindowFrame(val WindowFrame) {
@@ -566,7 +614,7 @@ func (h *hasher) HashLockingItem(val *tree.LockingItem) {
 	}
 }
 
-func (h *hasher) HashInvertedSpans(val invertedexpr.InvertedSpans) {
+func (h *hasher) HashInvertedSpans(val inverted.Spans) {
 	for i := range val {
 		span := &val[i]
 		h.HashBytes(span.Start)
@@ -633,6 +681,12 @@ func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 	}
 }
 
+func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+	}
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -682,6 +736,10 @@ func (h *hasher) IsBoolEqual(l, r bool) bool {
 }
 
 func (h *hasher) IsIntEqual(l, r int) bool {
+	return l == r
+}
+
+func (h *hasher) IsInt64Equal(l, r int64) bool {
 	return l == r
 }
 
@@ -818,11 +876,15 @@ func (h *hasher) IsColListEqual(l, r opt.ColList) bool {
 	return l.Equals(r)
 }
 
+func (h *hasher) IsOptionalColListEqual(l, r opt.OptionalColList) bool {
+	return l.Equals(r)
+}
+
 func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
+func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
 	return l.Equals(&r)
 }
 
@@ -875,7 +937,7 @@ func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
 	return l == r
 }
 
-func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
+func (h *hasher) IsStatementReturnTypeEqual(l, r tree.StatementReturnType) bool {
 	return l == r
 }
 
@@ -895,11 +957,39 @@ func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
 	return l == r
 }
 
+func (h *hasher) IsIndexOrdinalsEqual(l, r cat.IndexOrdinals) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
 	if len(l) != len(r) {
 		return false
 	}
 	return len(l) == 0 || &l[0] == &r[0]
+}
+
+func (h *hasher) IsViewTypeDepsEqual(l, r opt.ViewTypeDeps) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
@@ -924,7 +1014,7 @@ func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
 	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
 }
 
-func (h *hasher) IsInvertedSpansEqual(l, r invertedexpr.InvertedSpans) bool {
+func (h *hasher) IsInvertedSpansEqual(l, r inverted.Spans) bool {
 	return l.Equals(r)
 }
 
@@ -1026,6 +1116,18 @@ func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
 	return true
 }
 
+func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
 	if len(l) != len(r) {
 		return false
@@ -1074,14 +1176,14 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// work, because the encoding does not uniquely represent some values which
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
-	if !sqlbase.HasCompositeKeyEncoding(val.ResolvedType()) {
-		b, err = sqlbase.EncodeTableKey(b, val, encoding.Ascending)
+	if !colinfo.CanHaveCompositeKeyEncoding(val.ResolvedType()) {
+		b, err = rowenc.EncodeTableKey(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}
 	}
 
-	b, err = sqlbase.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = rowenc.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 //go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
@@ -46,5 +47,6 @@ func TestForbiddenDeps(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+	randutil.SeedForTests()
 	os.Exit(m.Run())
 }

@@ -1,0 +1,103 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
+
+# Tests in this file assume no multi-region tenant setup as tenants have no
+# access to nodelocal.
+
+query TTTT colnames
+SHOW REGIONS
+----
+region          zones                   database_names  primary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}
+us-east-1       {us-az1,us-az2,us-az3}  {}              {}
+
+query TT colnames
+SHOW REGIONS FROM CLUSTER
+----
+region          zones
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}
+ca-central-1    {ca-az1,ca-az2,ca-az3}
+us-east-1       {us-az1,us-az2,us-az3}
+
+statement ok
+CREATE DATABASE non_multi_region_db
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db;
+CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+CREATE TABLE "regional_us-east-1_table" (a int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+CREATE TABLE global_table (a int) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE regional_by_row_table (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+use non_multi_region_db
+
+statement ok
+CREATE TABLE team (
+  id int PRIMARY KEY,
+  name string,
+  likes string[],
+  dislikes string[]
+)
+
+statement ok
+INSERT INTO team VALUES (1, 'arulajmani', ARRAY['turkey','coffee','ps5'], ARRAY['going outside in winter','denormalization']);
+INSERT INTO team VALUES (2, 'otan', ARRAY['Sydney suburbs','cricket','vim'], ARRAY['flaky tests','onboarding'])
+
+query ITTT colnames
+SELECT * FROM team
+----
+id  name        likes                           dislikes
+1   arulajmani  {turkey,coffee,ps5}             {"going outside in winter",denormalization}
+2   otan        {"Sydney suburbs",cricket,vim}  {"flaky tests",onboarding}
+
+statement ok
+EXPORT INTO CSV 'nodelocal://1/team_export/' WITH DELIMITER = '|' FROM TABLE team
+
+statement ok
+use multi_region_test_db;
+IMPORT TABLE team (
+  id int PRIMARY KEY,
+  name string,
+  likes string[],
+  dislikes string[]
+)
+CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
+
+query ITTT colnames
+SELECT * FROM team
+----
+id  name        likes                           dislikes
+1   arulajmani  {turkey,coffee,ps5}             {"going outside in winter",denormalization}
+2   otan        {"Sydney suburbs",cricket,vim}  {"flaky tests",onboarding}
+
+query TT
+SHOW CREATE TABLE team
+----
+team                                            CREATE TABLE public.team (
+                                                id INT8 NOT NULL,
+                                                name STRING NULL,
+                                                likes STRING[] NULL,
+                                                dislikes STRING[] NULL,
+                                                CONSTRAINT "primary" PRIMARY KEY (id ASC),
+                                                FAMILY "primary" (id, name, likes, dislikes)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION

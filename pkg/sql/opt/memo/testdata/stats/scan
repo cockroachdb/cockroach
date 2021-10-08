@@ -22,10 +22,10 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=2000]
       ├── key: (1)
-      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
 
 # Check that boolean columns have distinct count 2 when there are no stats
 # available.
@@ -38,15 +38,15 @@ project
  ├── key: (1)
  ├── fd: ()-->(5), (1)-->(2-4), (3,4)~~>(1,2)
  └── select
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool!null) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool!null) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=990, distinct(5)=1, null(5)=0]
       ├── key: (1)
-      ├── fd: ()-->(5), (1)-->(2-4,6), (3,4)~~>(1,2,6)
+      ├── fd: ()-->(5), (1)-->(2-4,6,7), (3,4)~~>(1,2,6,7)
       ├── scan a
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(4)=200, null(4)=0, distinct(5)=3, null(5)=20]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
       └── filters
            └── b:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
@@ -100,10 +100,10 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=3000]
       ├── key: (1)
-      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
 
 # Test constrained scan.
 opt
@@ -133,13 +133,13 @@ opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
 group-by
- ├── columns: count:7(int!null) y:2(int) x:1(int!null)
+ ├── columns: count:8(int!null) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── internal-ordering: +1
  ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0]
  ├── key: (1)
- ├── fd: (1)-->(2,7)
+ ├── fd: (1)-->(2,8)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
@@ -149,7 +149,7 @@ group-by
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── count-rows [as=count_rows:7, type=int]
+      ├── count-rows [as=count_rows:8, type=int]
       └── const-agg [as=y:2, type=int, outer=(2)]
            └── y:2 [type=int]
 
@@ -525,36 +525,38 @@ WHERE
   subq.col1;
 ----
 project
- ├── columns: "?column?":28(int!null)
+ ├── columns: "?column?":30(int!null)
  ├── immutable
  ├── stats: [rows=1]
- ├── fd: ()-->(28)
+ ├── fd: ()-->(30)
  ├── select
- │    ├── columns: col1:27(bool!null)
+ │    ├── columns: col1:29(bool!null)
  │    ├── immutable
- │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
- │    ├── fd: ()-->(27)
+ │    ├── stats: [rows=1, distinct(29)=1, null(29)=0]
+ │    ├── fd: ()-->(29)
  │    ├── project
- │    │    ├── columns: col1:27(bool)
+ │    │    ├── columns: col1:29(bool)
  │    │    ├── immutable
- │    │    ├── stats: [rows=333333.333, distinct(27)=333333.333, null(27)=0]
- │    │    ├── inner-join (cross)
- │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
- │    │    │    ├── stats: [rows=333333.333, distinct(5,6,8,17,18)=333333.333, null(5,6,8,17,18)=3.33333333e-05]
- │    │    │    ├── scan tab0
+ │    │    ├── stats: [rows=10000, distinct(29)=10000, null(29)=0]
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:18(varchar) tab1.f:19("char") tab1.j:23(float!null)
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    │    ├── stats: [rows=10000, distinct(10)=100, null(10)=0, distinct(23)=100, null(23)=0, distinct(5,6,8,18,19)=10000, null(5,6,8,18,19)=1e-06]
+ │    │    │    ├── fd: (10)==(23), (23)==(10)
+ │    │    │    ├── scan t37953 [as=tab0]
  │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(5,6,8)=1000, null(5,6,8)=0.001]
- │    │    │    ├── scan tab1
- │    │    │    │    ├── columns: tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(17,18)=1000, null(17,18)=0.1]
+ │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=0.001]
+ │    │    │    ├── scan t37953 [as=tab1]
+ │    │    │    │    ├── columns: tab1.e:18(varchar) tab1.f:19("char") tab1.j:23(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(23)=100, null(23)=0, distinct(18,19)=1000, null(18,19)=0.1]
  │    │    │    └── filters
- │    │    │         └── tab0.j:10 IN (tab1.j:22,) [type=bool, outer=(10,22)]
+ │    │    │         └── tab0.j:10 = tab1.j:23 [type=bool, outer=(10,23), constraints=(/10: (/NULL - ]; /23: (/NULL - ]), fd=(10)==(23), (23)==(10)]
  │    │    └── projections
- │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:17, tab0.f:6, tab0.e:5::STRING), tab1.f:18, '') THEN true ELSE false END [as=col1:27, type=bool, outer=(5,6,8,17,18), immutable]
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:18, tab0.f:6, tab0.e:5::STRING), tab1.f:19, '') THEN true ELSE false END [as=col1:29, type=bool, outer=(5,6,8,18,19), immutable]
  │    └── filters
- │         └── col1:27 [type=bool, outer=(27), constraints=(/27: [/true - /true]; tight), fd=()-->(27)]
+ │         └── col1:29 [type=bool, outer=(29), constraints=(/29: [/true - /true]; tight), fd=()-->(29)]
  └── projections
-      └── 1 [as="?column?":28, type=int]
+      └── 1 [as="?column?":30, type=int]
 
 # ---------------------
 # Tests with Histograms
@@ -775,21 +777,21 @@ index-join hist
       └── fd: (8)-->(3)
 
 opt
-SELECT * FROM hist WHERE (d >= 5 AND d < 15) OR d >= 40
+SELECT * FROM hist WHERE (d >= 5 AND d < 12) OR d >= 40
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float!null) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=185, distinct(4)=11.5, null(4)=0]
- │   histogram(4)=  0          0          45   10   90          0           0   40
- │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
+ ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
+ │   histogram(4)=  0          0          45   10   36          0           0   40
+ │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
  └── scan hist@idx_d
       ├── columns: d:4(float!null) rowid:8(int!null)
       ├── constraint: /4/8
-      │    ├── [/5.0 - /14.999999999999998]
+      │    ├── [/5.0 - /11.999999999999998]
       │    └── [/40.0 - ]
-      ├── stats: [rows=185, distinct(4)=11.5, null(4)=0]
-      │   histogram(4)=  0          0          45   10   90          0           0   40
-      │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
+      ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
+      │   histogram(4)=  0          0          45   10   36          0           0   40
+      │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
       ├── key: (8)
       └── fd: (8)-->(4)
 
@@ -1035,26 +1037,26 @@ opt
 SELECT a, b::string FROM t47742 WHERE b = true
 ----
 project
- ├── columns: a:1(int) b:5(string!null)
+ ├── columns: a:1(int) b:6(string!null)
  ├── immutable
- ├── stats: [rows=2640.64496]
- ├── fd: ()-->(5)
+ ├── stats: [rows=3063.49984]
+ ├── fd: ()-->(6)
  ├── index-join t47742
  │    ├── columns: a:1(int) t47742.b:2(bool!null)
- │    ├── stats: [rows=2640.64496, distinct(2)=2.00246926, null(2)=0]
- │    │   histogram(2)=  0    0    0.0021284 2640.6
+ │    ├── stats: [rows=3063.49984, distinct(2)=1.00246926, null(2)=0]
+ │    │   histogram(2)=  0    0    0.0024693 3063.5
  │    │                <--- false ----------- true
  │    ├── fd: ()-->(2)
  │    └── scan t47742@b_idx
  │         ├── columns: t47742.b:2(bool!null) rowid:3(int!null)
  │         ├── constraint: /-2/3: [/true - /true]
- │         ├── stats: [rows=2640.64496, distinct(2)=2.00246926, null(2)=0]
- │         │   histogram(2)=  0    0    0.0021284 2640.6
- │         │                <--- false ----------- true
+ │         ├── stats: [rows=3063.49984, distinct(2)=11, null(2)=0]
+ │         │   histogram(2)=  0   0    0.0024693 3063.5
+ │         │                <--- NULL ----------- true
  │         ├── key: (3)
  │         └── fd: ()-->(2)
  └── projections
-      └── t47742.b:2::STRING [as=b:5, type=string, outer=(2), immutable]
+      └── t47742.b:2::STRING [as=b:6, type=string, outer=(2), immutable]
 
 # Multi-column stats tests.
 exec-ddl
@@ -1126,7 +1128,7 @@ select
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       ├── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
@@ -1192,7 +1194,7 @@ select
  │              └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── c:3 = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
 # A different combination of predicates.
@@ -1223,7 +1225,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1494,7 +1496,7 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=27.8153382, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=27.8153382, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=27.8153382, null(2,3,5,6)=0]
+ ├── stats: [rows=27.8153383, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=27.8153383, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=27.8153383, null(2,3,5,6)=0]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
@@ -1512,7 +1514,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1525,7 +1527,7 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=27.8153382, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=27.8153382, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=27.8153382, null(2,3,5,6)=0]
+ ├── stats: [rows=27.8153383, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=27.8153383, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=27.8153383, null(2,3,5,6)=0]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
@@ -1800,23 +1802,23 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=8.09111244, distinct(1)=1, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=8.09111244, null(5)=0, distinct(6)=8.09111244, null(6)=0, distinct(1,3,4)=1, null(1,3,4)=0, distinct(1-6)=8.09111244, null(1-6)=0]
- │   histogram(2)=  0 8.0911
+ ├── stats: [rows=16.1809855, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=16.1809855, null(6)=0, distinct(1-4)=1, null(1-4)=0, distinct(1-6)=16.1809855, null(1-6)=0]
+ │   histogram(2)=  0 16.181
  │                <--- true
- │   histogram(4)=  0 8.0911
+ │   histogram(4)=  0 16.181
  │                <--- 'foo'
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=8.09114009]
+ │    ├── stats: [rows=16.1810131]
  │    ├── fd: ()-->(1-4)
  │    └── scan multi_col@abcde_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) rowid:7(int!null)
  │         ├── constraint: /1/2/-3/4/5/7: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/11 - /'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/20]
- │         ├── stats: [rows=8.09114009, distinct(1)=1, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=8.09114009, null(5)=0, distinct(1,3,4)=1, null(1,3,4)=0, distinct(1-5)=8.09114009, null(1-5)=0]
- │         │   histogram(2)=  0 8.0911
+ │         ├── stats: [rows=16.1810131, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0, distinct(1-4)=1, null(1-4)=0, distinct(1-5)=10, null(1-5)=0]
+ │         │   histogram(2)=  0 16.181
  │         │                <--- true
- │         │   histogram(4)=  0 8.0911
+ │         │   histogram(4)=  0 16.181
  │         │                <--- 'foo'
  │         ├── key: (7)
  │         └── fd: ()-->(1-4), (7)-->(5)
@@ -1833,8 +1835,8 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=81.87, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=81.87, null(6)=0, distinct(2,3,5,6)=81.87, null(2,3,5,6)=0]
- │   histogram(2)=  0 81.87
+ ├── stats: [rows=55.6195504, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=55.6195504, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=55.6195504, null(2,3,5,6)=0]
+ │   histogram(2)=  0 55.62
  │                <--- true
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
@@ -1853,7 +1855,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1866,13 +1868,13 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=81.87, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=81.87, null(6)=0, distinct(2,3,5,6)=81.87, null(2,3,5,6)=0]
- │   histogram(2)=  0 81.87
+ ├── stats: [rows=55.6195504, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=5, null(5)=0, distinct(6)=55.6195504, null(6)=0, distinct(2,3)=1, null(2,3)=0, distinct(2,3,5,6)=55.6195504, null(2,3,5,6)=0]
+ │   histogram(2)=  0 55.62
  │                <--- true
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=416.509091]
+ │    ├── stats: [rows=394.208847]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1883,8 +1885,8 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=416.509091, distinct(2)=2, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=416.509091, null(6)=0, distinct(2,5,6)=416.509091, null(2,5,6)=0]
- │         │   histogram(2)=  0 416.51
+ │         ├── stats: [rows=394.208847, distinct(2)=1, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=394.208847, null(6)=0, distinct(2,5,6)=394.208847, null(2,5,6)=0]
+ │         │   histogram(2)=  0 394.21
  │         │                <--- true
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
@@ -1895,7 +1897,7 @@ select
 # values for b and d.
 
 opt
-SELECT * FROM multi_col
+SELECT * FROM multi_col@bef_idx
 WHERE a = '37685f26-4b07-40ba-9bbf-42916ed9bc61'
 AND b = true
 AND d = 'foo'
@@ -1904,22 +1906,23 @@ AND f = 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=8.09028187, distinct(1)=1, null(1)=0, distinct(2)=2, null(2)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(1,4-6)=1, null(1,4-6)=0, distinct(1,2,4-6)=2, null(1,2,4-6)=0]
- │   histogram(2)=  0 8.0903
+ ├── stats: [rows=17.9784056, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(1,2,4-6)=1, null(1,2,4-6)=0]
+ │   histogram(2)=  0 17.978
  │                <--- true
- │   histogram(4)=  0 8.0903
+ │   histogram(4)=  0 17.978
  │                <--- 'foo'
  ├── fd: ()-->(1,2,4-6)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.811629073]
+ │    ├── stats: [rows=1.9907231]
  │    ├── fd: ()-->(2,5,6)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
  │         ├── constraint: /2/5/6/7: [/true/5/0.0 - /true/5/0.0]
- │         ├── stats: [rows=0.811629073, distinct(2)=0.811629073, null(2)=0, distinct(5)=0.811629073, null(5)=0, distinct(6)=0.811629073, null(6)=0, distinct(5,6)=0.811629073, null(5,6)=0, distinct(2,5,6)=0.811629073, null(2,5,6)=0]
- │         │   histogram(2)=  0 0.81163
- │         │                <--- true -
+ │         ├── flags: force-index=bef_idx
+ │         ├── stats: [rows=1.9907231, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(2,5,6)=1, null(2,5,6)=0]
+ │         │   histogram(2)=  0 1.9907
+ │         │                <--- true
  │         ├── key: (7)
  │         └── fd: ()-->(2,5,6)
  └── filters
@@ -1936,29 +1939,27 @@ AND f = 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.000809838025, distinct(1)=0.000809838025, null(1)=0, distinct(2)=0.000809838025, null(2)=0, distinct(4)=0.000809838025, null(4)=0, distinct(5)=0.000809838025, null(5)=0, distinct(6)=0.000809838025, null(6)=0, distinct(1,4-6)=0.000809838025, null(1,4-6)=0, distinct(1,2,4-6)=0.000809838025, null(1,2,4-6)=0]
- │   histogram(2)=  0 0.00080984
- │                <----- true --
- │   histogram(4)=  0 0.00080984
- │                <---- 'bar' --
+ ├── stats: [rows=0.0017996402, distinct(1)=0.0017996402, null(1)=0, distinct(2)=0.0017996402, null(2)=0, distinct(4)=0.0017996402, null(4)=0, distinct(5)=0.0017996402, null(5)=0, distinct(6)=0.0017996402, null(6)=0, distinct(1,2,4-6)=0.0017996402, null(1,2,4-6)=0]
+ │   histogram(2)=  0 0.0017996
+ │                <---- true --
+ │   histogram(4)=  0 0.0017996
+ │                <---- 'bar' -
  ├── fd: ()-->(1,2,4-6)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.0008238352]
- │    ├── fd: ()-->(1,2,4)
- │    └── scan multi_col@bad_idx
- │         ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) rowid:7(int!null)
- │         ├── constraint: /2/-1/4/7: [/true/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar' - /true/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar']
- │         ├── stats: [rows=0.0008238352, distinct(1)=0.0008238352, null(1)=0, distinct(2)=0.0008238352, null(2)=0, distinct(4)=0.0008238352, null(4)=0, distinct(1,4)=0.0008238352, null(1,4)=0, distinct(1,2,4)=0.0008238352, null(1,2,4)=0]
- │         │   histogram(2)=  0 0.00082384
- │         │                <----- true --
- │         │   histogram(4)=  0 0.00082384
+ │    ├── stats: [rows=0.000900180036]
+ │    ├── fd: ()-->(4-6)
+ │    └── scan multi_col@def_idx
+ │         ├── columns: d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
+ │         ├── constraint: /4/5/6/7: [/'bar'/5/0.0 - /'bar'/5/0.0]
+ │         ├── stats: [rows=0.000900180036, distinct(4)=0.000900180036, null(4)=0, distinct(5)=0.000900180036, null(5)=0, distinct(6)=0.000900180036, null(6)=0, distinct(4-6)=0.000900180036, null(4-6)=0]
+ │         │   histogram(4)=  0 0.00090018
  │         │                <---- 'bar' --
  │         ├── key: (7)
- │         └── fd: ()-->(1,2,4)
+ │         └── fd: ()-->(4-6)
  └── filters
-      ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-      └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
+      ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
+      └── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
 opt
 SELECT * FROM multi_col
@@ -1970,24 +1971,24 @@ AND f = 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=1.62000005e-07, distinct(1)=1.62000005e-07, null(1)=0, distinct(2)=1.62000005e-07, null(2)=0, distinct(4)=1.62000005e-07, null(4)=0, distinct(5)=1.62000005e-07, null(5)=0, distinct(6)=1.62000005e-07, null(6)=0, distinct(1,4-6)=1.62000005e-07, null(1,4-6)=0, distinct(1,2,4-6)=1.62000005e-07, null(1,2,4-6)=0]
- │   histogram(2)=  0 1.62e-07
- │                <--- false -
- │   histogram(4)=  0 1.62e-07
- │                <--- 'bar' -
+ ├── stats: [rows=3.6000004e-07, distinct(1)=3.6000004e-07, null(1)=0, distinct(2)=3.6000004e-07, null(2)=0, distinct(4)=3.6000004e-07, null(4)=0, distinct(5)=3.6000004e-07, null(5)=0, distinct(6)=3.6000004e-07, null(6)=0, distinct(1,2,4-6)=3.6000004e-07, null(1,2,4-6)=0]
+ │   histogram(2)=  0 3.6e-07
+ │                <--- false
+ │   histogram(4)=  0 3.6e-07
+ │                <--- 'bar'
  ├── fd: ()-->(1,2,4-6)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=1.648e-07]
+ │    ├── stats: [rows=3.61e-07]
  │    ├── fd: ()-->(1,2,4)
  │    └── scan multi_col@bad_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) rowid:7(int!null)
  │         ├── constraint: /2/-1/4/7: [/false/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar' - /false/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar']
- │         ├── stats: [rows=1.648e-07, distinct(1)=1.648e-07, null(1)=0, distinct(2)=1.648e-07, null(2)=0, distinct(4)=1.648e-07, null(4)=0, distinct(1,4)=1.648e-07, null(1,4)=0, distinct(1,2,4)=1.648e-07, null(1,2,4)=0]
- │         │   histogram(2)=  0 1.648e-07
- │         │                <---- false -
- │         │   histogram(4)=  0 1.648e-07
- │         │                <---- 'bar' -
+ │         ├── stats: [rows=3.61e-07, distinct(1)=3.61e-07, null(1)=0, distinct(2)=3.61e-07, null(2)=0, distinct(4)=3.61e-07, null(4)=0, distinct(1,2,4)=3.61e-07, null(1,2,4)=0]
+ │         │   histogram(2)=  0 3.61e-07
+ │         │                <--- false -
+ │         │   histogram(4)=  0 3.61e-07
+ │         │                <--- 'bar' -
  │         ├── key: (7)
  │         └── fd: ()-->(1,2,4)
  └── filters
@@ -2004,21 +2005,21 @@ AND f = 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.00161838005, distinct(1)=0.00161838005, null(1)=0, distinct(2)=0.00161838005, null(2)=0, distinct(4)=0.00161838005, null(4)=0, distinct(5)=0.00161838005, null(5)=0, distinct(6)=0.00161838005, null(6)=0, distinct(1,4-6)=0.00161838005, null(1,4-6)=0, distinct(1,2,4-6)=0.00161838005, null(1,2,4-6)=0]
- │   histogram(2)=  0 0.0016184
+ ├── stats: [rows=0.0035964004, distinct(1)=0.0035964004, null(1)=0, distinct(2)=0.0035964004, null(2)=0, distinct(4)=0.0035964004, null(4)=0, distinct(5)=0.0035964004, null(5)=0, distinct(6)=0.0035964004, null(6)=0, distinct(1,2,4-6)=0.0035964004, null(1,2,4-6)=0]
+ │   histogram(2)=  0 0.0035964
  │                <---- false -
- │   histogram(4)=  0 0.0016184
+ │   histogram(4)=  0 0.0035964
  │                <---- 'foo' -
  ├── fd: ()-->(1,2,4-6)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.000162358286]
+ │    ├── stats: [rows=0.000398224265]
  │    ├── fd: ()-->(2,5,6)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
  │         ├── constraint: /2/5/6/7: [/false/5/0.0 - /false/5/0.0]
- │         ├── stats: [rows=0.000162358286, distinct(2)=0.000162358286, null(2)=0, distinct(5)=0.000162358286, null(5)=0, distinct(6)=0.000162358286, null(6)=0, distinct(5,6)=0.000162358286, null(5,6)=0, distinct(2,5,6)=0.000162358286, null(2,5,6)=0]
- │         │   histogram(2)=  0 0.00016236
+ │         ├── stats: [rows=0.000398224265, distinct(2)=0.000398224265, null(2)=0, distinct(5)=0.000398224265, null(5)=0, distinct(6)=0.000398224265, null(6)=0, distinct(2,5,6)=0.000398224265, null(2,5,6)=0]
+ │         │   histogram(2)=  0 0.00039822
  │         │                <---- false --
  │         ├── key: (7)
  │         └── fd: ()-->(2,5,6)
@@ -2072,7 +2073,7 @@ index-join t
       ├── constraint: /2/1
       │    ├── [/NULL/5 - /NULL/5]
       │    └── [/5 - /5]
-      ├── stats: [rows=1.95200401, distinct(1)=1.95200401, null(1)=0, distinct(2)=1.95200401, null(2)=1.95200401]
+      ├── stats: [rows=1.95200406, distinct(1)=1.95200406, null(1)=0, distinct(2)=1.95200406, null(2)=1.95200406]
       ├── key: (1)
       └── fd: (1)-->(2)
 

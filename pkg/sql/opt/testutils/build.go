@@ -14,7 +14,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -41,4 +44,41 @@ func BuildQuery(
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// BuildScalar builds the given input string as a ScalarExpr and returns it.
+func BuildScalar(
+	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, input string,
+) opt.ScalarExpr {
+	expr, err := parser.ParseExpr(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	if err := b.Build(expr); err != nil {
+		t.Fatal(err)
+	}
+
+	return f.Memo().RootExpr().(opt.ScalarExpr)
+}
+
+// BuildFilters builds the given input string as a FiltersExpr and returns it.
+// Calls a subset of the normalization rules that would apply if these filters
+// were built as part of a Select or Join.
+func BuildFilters(
+	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, input string,
+) memo.FiltersExpr {
+	if input == "" {
+		return memo.TrueFilter
+	}
+	root := BuildScalar(t, f, semaCtx, evalCtx, input)
+
+	if _, ok := root.(*memo.TrueExpr); ok {
+		return memo.TrueFilter
+	}
+	filters := memo.FiltersExpr{f.ConstructFiltersItem(root)}
+	filters = f.CustomFuncs().SimplifyFilters(filters)
+	filters = f.CustomFuncs().ConsolidateFilters(filters)
+	return filters
 }

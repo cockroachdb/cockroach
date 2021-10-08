@@ -25,16 +25,16 @@ func init() {
 }
 
 func declareKeysPut(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
 	args := req.(*roachpb.PutRequest)
 	if args.Inline {
-		DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
 	} else {
-		DefaultDeclareIsolatedKeys(desc, header, req, latchSpans, lockSpans)
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	}
 }
 
@@ -49,15 +49,6 @@ func Put(
 	var ts hlc.Timestamp
 	if !args.Inline {
 		ts = h.Timestamp
-	}
-	if h.DistinctSpans {
-		if b, ok := readWriter.(storage.Batch); ok {
-			// Use the distinct batch for both blind and normal ops so that we don't
-			// accidentally flush mutations to make them visible to the distinct
-			// batch.
-			readWriter = b.Distinct()
-			defer readWriter.Close()
-		}
 	}
 	var err error
 	if args.Blind {

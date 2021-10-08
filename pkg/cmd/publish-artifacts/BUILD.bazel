@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "publish-artifacts_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/publish-artifacts",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/release",
+        "//pkg/util/version",
+        "@com_github_aws_aws_sdk_go//aws",
+        "@com_github_aws_aws_sdk_go//aws/session",
+        "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_kr_pretty//:pretty",
+    ],
+)
+
+go_binary(
+    name = "publish-artifacts",
+    embed = [":publish-artifacts_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "publish-artifacts_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    embed = [":publish-artifacts_lib"],
+    tags = ["broken_in_bazel"],
+    deps = [
+        "//pkg/testutils/skip",
+        "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_stretchr_testify//require",
+    ],
+)

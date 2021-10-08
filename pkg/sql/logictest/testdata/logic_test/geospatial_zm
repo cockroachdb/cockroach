@@ -1,0 +1,399 @@
+# All dimensions
+statement ok
+CREATE TABLE geom_all(geom geometry)
+
+statement ok
+INSERT INTO geom_all VALUES('point(1 2)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointm(1 2 3)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointz(1 2 3)')
+
+statement ok
+INSERT INTO geom_all VALUES ('pointzm(1 2 3 4)')
+
+# 2D
+statement ok
+CREATE TABLE geom_2d(geom geometry(geometry))
+
+statement ok
+INSERT INTO geom_2d VALUES('point(1 2)')
+
+statement error q: object type PointM does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointm(1 2 3)')
+
+statement error q: object type PointZ does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointz(1 2 3)')
+
+statement error q: object type PointZM does not match column dimensionality Geometry
+INSERT INTO geom_2d VALUES ('pointzm(1 2 3 4)')
+
+# 2D+M
+statement ok
+CREATE TABLE geom_2d_m(geomm geometry(geometrym))
+
+statement ok
+INSERT INTO geom_2d_m VALUES ('pointm(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('point(1 2)')
+
+statement error pq: object type PointZ does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('pointz(1 2 3)')
+
+statement error pq: object type PointZM does not match column dimensionality GeometryM
+INSERT INTO geom_2d_m VALUES ('pointzm(1 2 3 4)')
+
+# 3D
+statement ok
+CREATE TABLE geom_3d(geomz geometry(geometryz))
+
+statement ok
+INSERT INTO geom_3d VALUES ('pointz(1 2 3)')
+
+statement ok
+INSERT INTO geom_3d VALUES ('point(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('point(1 2)')
+
+statement error pq: object type PointM does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('pointm(1 2 3)')
+
+statement error pq: object type PointZM does not match column dimensionality GeometryZ
+INSERT INTO geom_3d VALUES ('pointzm(1 2 3 4)')
+
+# 4D
+statement ok
+CREATE TABLE geom_4d(geomzm geometry(geometryzm))
+
+statement ok
+INSERT INTO geom_4d VALUES ('pointzm(1 2 3 4)')
+
+statement ok
+INSERT INTO geom_4d VALUES ('point(1 2 3 4)')
+
+statement error pq: object type PointM does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('pointm(1 2 3)')
+
+statement error pq: object type Point does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('point(1 2)')
+
+statement error pq: object type PointZ does not match column dimensionality GeometryZM
+INSERT INTO geom_4d VALUES ('pointz(1 2 3)')
+
+# Builtins for creating Points
+query T
+SELECT st_astext(point) FROM
+( VALUES
+  (st_point(1, 2)),
+  (st_makepoint(1, 2)),
+  (st_makepoint(1, 2, 3)),
+  (st_makepoint(1, 2, 3, 4)),
+  (st_makepointm(1, 2, 3))
+) AS t(point)
+----
+POINT (1 2)
+POINT (1 2)
+POINT Z (1 2 3)
+POINT ZM (1 2 3 4)
+POINT M (1 2 3)
+
+query T
+SELECT ST_AsEWKT(ST_Affine(the_geom, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, pi()/2, pi()), 3)
+	FROM (SELECT ST_GeomFromEWKT('LINESTRING(1 2 3, 4 5 6, 7 8 9)') AS the_geom) AS _;
+----
+LINESTRING Z (24 33.571 53.142, 42 78.571 125.142, 60 123.571 197.142)
+
+# Point specific operations
+query RRRRI
+SELECT
+  st_x(a.geom),
+  st_y(a.geom),
+  st_z(a.geom),
+  st_m(a.geom),
+  st_zmflag(a.geom)
+FROM (VALUES
+  (NULL::geometry),
+  ('POINT EMPTY'::geometry),
+  ('POINT M EMPTY'::geometry),
+  ('POINT Z EMPTY'::geometry),
+  ('POINT ZM EMPTY'::geometry),
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) a(geom)
+----
+NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  0
+NULL  NULL  NULL  NULL  1
+NULL  NULL  NULL  NULL  2
+NULL  NULL  NULL  NULL  3
+1     2     NULL  NULL  0
+1     2     NULL  3     1
+1     2     3     NULL  2
+1     2     3     4     3
+
+statement error argument to st_z\(\) must have shape POINT
+SELECT st_z('LINESTRING(0 0 0, 1 1 1)')
+
+statement error argument to st_m\(\) must have shape POINT
+SELECT st_m('LINESTRING M (0 0 0, 1 1 1)')
+
+# ST_Zmflag tests
+query I
+SELECT
+  ST_Zmflag(a.geom)
+FROM (VALUES
+  ('GEOMETRYCOLLECTION EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION M EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION Z EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION ZM EMPTY'::geometry)
+) a(geom)
+----
+0
+1
+2
+3
+
+# ST_Translate tests
+
+query TT
+SELECT
+  ST_AsText(geom) d,
+  ST_AsText(ST_Translate(geom, 1, 1, 1))
+FROM 
+( VALUES
+  ('POINT(1.0 1.0 1.0)'::geometry),
+  ('MULTIPOINT (1 1 1, 2 2 2)'::geometry),
+  ('LINESTRING (1 1 1, 2 2 2)'::geometry),
+  ('MULTILINESTRING ((1 1 1, 2 2 2), (3 3 3, 4 4 4))'::geometry),
+  ('POLYGON ((0 0 0, 1 0 0, 1 1 0, 0 0 0))'::geometry)
+) AS t(geom)
+ORDER BY d ASC
+----
+LINESTRING Z (1 1 1, 2 2 2)                         LINESTRING Z (2 2 2, 3 3 3)
+MULTILINESTRING Z ((1 1 1, 2 2 2), (3 3 3, 4 4 4))  MULTILINESTRING Z ((2 2 2, 3 3 3), (4 4 4, 5 5 5))
+MULTIPOINT Z (1 1 1, 2 2 2)                         MULTIPOINT Z (2 2 2, 3 3 3)
+POINT Z (1 1 1)                                     POINT Z (2 2 2)
+POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 0 0))            POLYGON Z ((1 1 1, 2 1 1, 2 2 1, 1 1 1))
+
+# Builtins for forcing geometries into other dimensions
+query T
+SELECT st_astext(st_force2d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('POINT M EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION Z EMPTY'::geometry)
+) AS t(geom)
+----
+POINT (1 2)
+POINT (1 2)
+POINT (1 2)
+POINT (1 2)
+POINT EMPTY
+GEOMETRYCOLLECTION EMPTY
+
+query T
+SELECT st_astext(st_force3d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(POINT(1 2))'::geometry)
+) AS t(geom)
+----
+POINT Z (1 2 0)
+POINT Z (1 2 0)
+POINT Z (1 2 3)
+POINT Z (1 2 3)
+GEOMETRYCOLLECTION Z (POINT Z (1 2 0))
+
+query T
+SELECT st_astext(st_force3dz(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(LINESTRING(1 2, 3 4))'::geometry)
+) AS t(geom)
+----
+POINT Z (1 2 7)
+POINT Z (1 2 7)
+POINT Z (1 2 3)
+POINT Z (1 2 3)
+GEOMETRYCOLLECTION Z (LINESTRING Z (1 2 7, 3 4 7))
+
+query T
+SELECT st_astext(st_force3dm(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(MULTIPOINT((1 2 3), (4 5 6)))'::geometry)
+) AS t(geom)
+----
+POINT M (1 2 0)
+POINT M (1 2 3)
+POINT M (1 2 0)
+POINT M (1 2 4)
+GEOMETRYCOLLECTION M (MULTIPOINT M (1 2 0, 4 5 0))
+
+query T
+SELECT st_astext(st_force3dm(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) AS t(geom)
+----
+POINT M (1 2 7)
+POINT M (1 2 3)
+POINT M (1 2 7)
+POINT M (1 2 4)
+
+query T
+SELECT st_astext(st_force4d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('POLYGON((1 2, 5 5, 0 8, 1 2))'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 0 0)
+POINT ZM (1 2 0 3)
+POINT ZM (1 2 3 0)
+POINT ZM (1 2 3 4)
+POLYGON ZM ((1 2 0 0, 5 5 0 0, 0 8 0 0, 1 2 0 0))
+
+query T
+SELECT st_astext(st_force4d(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 7 0)
+POINT ZM (1 2 7 3)
+POINT ZM (1 2 3 0)
+POINT ZM (1 2 3 4)
+
+query T
+SELECT st_astext(st_force4d(geom, 7, 17)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(POINT EMPTY, LINESTRING(1 2, 3 4))'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 7 17)
+POINT ZM (1 2 7 3)
+POINT ZM (1 2 3 17)
+POINT ZM (1 2 3 4)
+GEOMETRYCOLLECTION ZM (POINT ZM EMPTY, LINESTRING ZM (1 2 7 17, 3 4 7 17))
+
+query T
+SELECT st_astext(st_addmeasure(geom, 0, 10)) FROM
+( VALUES
+  ('LINESTRING(0 0, 1 1, 2 2)'::geometry),
+  ('MULTILINESTRING((0 0, 1 1, 2 2), EMPTY)'::geometry)
+) AS t(geom)
+----
+LINESTRING M (0 0 0, 1 1 5, 2 2 10)
+MULTILINESTRING M ((0 0 0, 1 1 5, 2 2 10), EMPTY)
+
+statement error input geometry must be LINESTRING or MULTILINESTRING
+SELECT st_astext(st_addmeasure('POINT(0 0)'::geometry, 0, 1))
+
+query T
+SELECT distinct(st_astext(geom)) FROM
+( VALUES
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 2, 1)),
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 0, 0, 2, 1)),
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 'POINT EMPTY'::geometry, 2, 1, 0, 0)),
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 'POINT EMPTY'::geometry, 2, 1, 2, 1)),
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 'POINT(0 0)'::geometry, 2, 1, 0, 0)),
+  (st_snaptogrid('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4)'::geometry, 'POINT(0 0 4 5)'::geometry, 2, 1, 2, 1))
+) AS t(geom)
+----
+LINESTRING (0 0, 0 1, 2 2, 4 3, 4 4)
+
+query T
+SELECT distinct(st_astext(geom)) FROM
+( VALUES
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 2)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 2, 2)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 0, 0, 2, 2)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 'POINT EMPTY'::geometry, 2, 2, 0, 0)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 'POINT(0 0)'::geometry, 2, 2, 0, 0)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 'POINT(0 0 0 0)'::geometry, 2, 2, 0, 0)),
+  (st_snaptogrid('MULTIPOINT(0 0 0, 7 5 5, 6 6 7)'::geometry, 'POINT(0 0 3 2)'::geometry, 2, 2, 0, 0))
+) AS t(geom)
+----
+MULTIPOINT Z (0 0 0, 8 4 5, 6 6 7)
+
+query T
+SELECT st_astext(st_snaptogrid(geom, 'POINT(2 2)'::geometry, 2, 3, 5, 4)) FROM
+( VALUES
+  ('POINT(2 1)'::geometry),
+  ('LINESTRING(2 1 7 2, 5 6 3 7)'::geometry),
+  ('POLYGON((2 3 1, 3 4 1, 1 3 6, 2 3 1))'::geometry)
+) AS t(geom)
+----
+POINT (2 2)
+LINESTRING ZM (2 2 5 0, 6 5 5 8)
+POLYGON Z ((2 2 0, 2 5 0, 2 2 5, 2 2 0))
+
+statement error origin must be a POINT
+SELECT st_snaptogrid('POINT(0 0 0)'::geometry, 'LINESTRING(0 0 0, 1 1 1)'::geometry, 1, 1, 1, 1)
+
+query T
+SELECT ST_AsEWKT(ST_RotateX(ST_GeomFromEWKT('LINESTRING(1 2 3, 1 1 1)'), pi()/2));
+----
+LINESTRING Z (1 -3 2, 1 -1 1)
+
+query T
+SELECT ST_AsEWKT(ST_RotateY(ST_GeomFromEWKT('LINESTRING(1 2 3, 1 1 1)'), pi()/2));
+----
+LINESTRING Z (3 2 -1, 1 1 -1)
+
+query T
+SELECT ST_AsEWKT(ST_RotateZ(ST_GeomFromEWKT('LINESTRING(1 2 3, 1 1 1)'), pi()/2));
+----
+LINESTRING Z (-2 1 3, -1 1 1)
+
+query R
+SELECT st_length('LINESTRING M(0 0 -25, 1 1 -50, 2 2 0)')
+----
+2.82842712474619
+
+query TTT
+SELECT
+  encode(ST_AsTWKB(t, 5), 'hex'),
+  encode(ST_AsTWKB(t, 5, 3), 'hex'),
+  encode(ST_AsTWKB(t, 5, 3, 4), 'hex')
+FROM ( VALUES
+  ('POINT(2 1)'::geometry),
+  ('LINESTRING(2 1 7 2, 5 6 3 7)'::geometry),
+  ('POLYGON((2 3 1, 3 4 1, 1 3 6, 2 3 1))'::geometry)
+) AS t(t)
+----
+a10080b518c09a0c                                                a10080b518c09a0c                                                      a10080b518c09a0c
+a208030280b518c09a0c0e04c0cf24c0843d070a                        a2080f0280b518c09a0cb06d04c0cf24c0843dbf3e0a                          a2088f0280b518c09a0cb06dc0b802c0cf24c0843dbf3ea08d06
+a30801010480b518c0cf2402c09a0cc09a0c00ffb418bf9a0c0ac09a0c0009  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e

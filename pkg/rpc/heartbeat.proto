@@ -42,18 +42,24 @@ message PingRequest {
   // The last offset the client measured with the server.
   optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
   // The address of the client.
-  optional string addr = 3 [(gogoproto.nullable) = false];
+  optional string origin_addr = 3 [(gogoproto.nullable) = false];
   // The configured maximum clock offset (in nanoseconds) on the server.
-  optional int64 max_offset_nanos = 4 [(gogoproto.nullable) = false];
+  optional int64 origin_max_offset_nanos = 4 [(gogoproto.nullable) = false];
   // Cluster ID to prevent connections between nodes in different clusters.
-  optional bytes cluster_id = 5 [
+  optional bytes origin_cluster_id = 5 [
     (gogoproto.customname) = "ClusterID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
-  // Node ID to prevent connections from being misrouted to an invalid node inside the cluster.
-  optional int32 node_id = 7 [
+  // NodeID the originator of the request wishes to connect to.
+  // This helps prevent connections from being misrouted when addresses are reused.
+  optional int32 target_node_id = 7 [
     (gogoproto.nullable) = false,
-    (gogoproto.customname) = "NodeID",
+    (gogoproto.customname) = "TargetNodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // NodeID of the originator of the PingRequest.
+  optional int32 origin_node_id = 8 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "OriginNodeID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 

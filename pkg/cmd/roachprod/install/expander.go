@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var parameterRe = regexp.MustCompile(`{[^}]*}`)
+var parameterRe = regexp.MustCompile(`{[^{}]*}`)
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
@@ -176,7 +176,7 @@ func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool
 	if !storeDirRe.MatchString(s) {
 		return s, false, nil
 	}
-	return c.Impl.NodeDir(c, e.node), true, nil
+	return c.Impl.NodeDir(c, e.node, 1 /* storeIndex */), true, nil
 }
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"

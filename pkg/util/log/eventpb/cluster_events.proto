@@ -1,0 +1,107 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: Cluster-level events
+// Channel: OPS
+//
+// Events in this category pertain to an entire cluster and are
+// not relative to any particular tenant.
+//
+// In a multi-tenant setup, the `system.eventlog` table for individual
+// tenants cannot contain a copy of cluster-level events; conversely,
+// the `system.eventlog` table in the system tenant cannot contain the
+// SQL-level events for individual tenants.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// The comment at the top has a specific format for the doc generator.
+// *Really look at doc.go before modifying this file.*
+
+// CommonNodeEventDetails contains the fields common to all
+// node-level events.
+message CommonNodeEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The time when this node was last started.
+  int64 started_at = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The approximate last time the node was up before the last restart.
+  int64 last_up = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeJoin is recorded when a node joins the cluster.
+message NodeJoin {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRestart is recorded when an existing node rejoins the cluster
+// after being offline.
+message NodeRestart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+// CommonNodeDecommissionDetails contains the fields common to all
+// node-level decommission/recommission events.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this.*
+message CommonNodeDecommissionDetails {
+  // The node ID where the event was originated.
+  int32 requesting_node_id = 1 [(gogoproto.customname) = "RequestingNodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The node ID affected by the operation.
+  int32 target_node_id = 2 [(gogoproto.customname) = "TargetNodeID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeDecommissioning is recorded when a node is marked as
+// decommissioning.
+message NodeDecommissioning {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioned.
+message NodeDecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRecommissioned is recorded when a decommissioning node is
+// recommissioned.
+message NodeRecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+
+// CertsReload is recorded when the TLS certificates are
+// reloaded/rotated from disk.
+message CertsReload {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Whether the operation completed without errors.
+  bool success = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // If an error was encountered, the text of the error.
+  string error_message = 3 [(gogoproto.jsontag) = ",omitempty"];
+}

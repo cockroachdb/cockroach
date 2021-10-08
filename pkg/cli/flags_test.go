@@ -11,43 +11,41 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
-			return
-		}
-		switch f.Name {
-		case logflags.LogDirName,
-			logflags.LogFileMaxSizeName,
-			logflags.LogFilesCombinedMaxSizeName,
-			logflags.LogFileVerbosityThresholdName:
 			return
 		}
 		if pf := cf.Lookup(f.Name); pf == nil {
@@ -59,6 +57,7 @@ func TestStdFlagToPflag(t *testing.T) {
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,
@@ -228,7 +227,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
-	cleanup := createTestCerts(defCertsDirPath)
+	cleanup := securitytest.CreateTestCerts(defCertsDirPath)
 	defer func() { _ = cleanup() }()
 
 	// Prepare a custom certificate directory.
@@ -237,14 +236,15 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		t.Fatal(err)
 	}
 	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
-	cleanup2 := createTestCerts(testCertsDirPath)
+	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
 
 	anyCmd := []string{"sql", "quit"}
 	anyNonSQL := []string{"quit", "init"}
-	anySQL := []string{"sql", "dump"}
+	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
-	anyNonSQLShell := []string{"dump", "quit"}
+	anyNonSQLShell := []string{"quit"}
+	anyImportCmd := []string{"import db pgdump", "import table pgdump"}
 
 	testData := []struct {
 		cmds       []string
@@ -254,7 +254,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		reparseErr string
 	}{
 		// Check individual URL components.
-		{anyCmd, []string{"--url=http://foo"}, nil, `URL scheme must be "postgresql"`, ""},
+		{anyCmd, []string{"--url=http://foo"}, nil, `unrecognized URL scheme: http`, ""},
 		{anyCmd, []string{"--url=postgresql:foo/bar"}, nil, `unknown URL format`, ""},
 
 		{anyCmd, []string{"--url=postgresql://foo"}, []string{"--host=foo"}, "", ""},
@@ -262,6 +262,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--url=postgresql://:12345"}, []string{"--port=12345"}, "", ""},
 
 		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
+		{anyImportCmd, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
 		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, "", ""},
 
 		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, "", ""},
@@ -274,8 +275,12 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://b:12345"}, []string{"--host=b", "--port=12345"}, "", ""},
 		{anyNonSQL, []string{"--url=postgresql://b:c"}, nil, `invalid port ":c" after host`, ""},
 
-		{anyCmd, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo", "--insecure"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo"}, "", ""},
+
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo"}, "", ""},
+
 		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, "", ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full", ""},
 		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
@@ -286,18 +291,25 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=12345", "--url=postgresql://foo"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, "", ""},
+		{anyImportCmd, []string{"--database=baz", "--url=postgresql://"}, []string{"--database=baz"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, "", ""},
+
 		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, "", ""},
-		{anyCmd, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, "", ""},
+		// Only non-SQL lets --insecure bleed into a URL that does not specify sslmode.
+		{anyNonSQL, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// URL overrides previous flags if component specified.
 		{anyCmd, []string{"--host=baz", "--url=postgresql://bar"}, []string{"--host=bar"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:12345"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, "", ""},
+		{anyImportCmd, []string{"--database=baz", "--url=postgresql:///bar"}, []string{"--database=bar"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, "", ""},
-		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+
+		{anyNonSQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
 		{anyCmd, []string{"--insecure", "--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		// SQL is special case: specifying sslmode= does not imply insecure mode. So the insecure bit does not get reset.
+		{anySQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo"}, "", ""},
 
 		// Discrete flag overrides URL if specified afterwards.
 		{anyCmd, []string{"--url=postgresql://bar", "--host=baz"}, []string{"--host=baz"}, "", ""},
@@ -306,8 +318,9 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--url=postgresql://foo:bar", "--port=baz"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--url=postgresql://foo/bar", "--database=baz"}, []string{"--host=foo", "--database=baz"}, "", ""},
 		{anySQL, []string{"--url=postgresql://bar@foo", "--user=baz"}, []string{"--host=foo", "--user=baz"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, "", ""},
+
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// Check that the certs dir is extracted properly.
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=" + testCertsDirPath + "/ca.crt"}, []string{"--host=foo", "--certs-dir=" + testCertsDirPath}, "", ""},
@@ -346,10 +359,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		}
 	}
 
-	for _, test := range testData {
+	for testNum, test := range testData {
 		for _, cmdName := range test.cmds {
-			t.Run(fmt.Sprintf("%s/%s", cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
-				cmd, _, _ := cockroachCmd.Find([]string{cmdName})
+			t.Run(fmt.Sprintf("%d/%s/%s", testNum+1, cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
+				cmd, _, _ := cockroachCmd.Find(strings.Split(cmdName, " "))
 
 				// Parse using the URL.
 				// This checks the URL parser works and/or that it produces the expected error.
@@ -367,7 +380,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				resultURL := connURL.String()
+				resultURL := connURL.ToPQ().String()
 
 				// Parse using the discrete flags.
 				// We use this to generate the reference parameter values for the comparison below.
@@ -381,11 +394,20 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defaultURL := connURL.String()
+				defaultURL := connURL.ToPQ().String()
 
 				// Verify that parsing the URL produces the same parameters as parsing the discrete flags.
 				if urlParams != discreteParams {
 					t.Fatalf("mismatch: URL %q parses\n%+v,\ndiscrete parses\n%+v", resultURL, urlParams, discreteParams)
+				}
+
+				// For SQL commands only, test that reconstructing the URL
+				// from discrete flags yield equivalent connection parameters.
+				// (RPC commands never reconstruct a URL.)
+				for _, s := range anyNonSQL {
+					if cmdName == s {
+						return
+					}
 				}
 
 				// Re-parse using the derived URL.
@@ -457,14 +479,14 @@ func TestServerConnSettings(t *testing.T) {
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":"},
-			":", ":",
-			":", ":",
-			":", ":",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:"},
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":12345"},
 			":12345", ":12345",
@@ -751,9 +773,6 @@ func TestServerSocketSettings(t *testing.T) {
 		// Empty socket dir disables the socket.
 		{[]string{"start", "--socket-dir="}, ""},
 		{[]string{"start", "--socket-dir=", "--listen-addr=:12345"}, ""},
-		// Deprecated behavior (remove in 20.2):
-		{[]string{"start", "--socket=/blah/xxxx"}, "/blah/xxxx"},
-		{[]string{"start", "--socket-dir=/foo", "--socket=/blah/xxxx"}, "/blah/xxxx"},
 	}
 
 	for i, td := range testData {
@@ -867,19 +886,66 @@ func TestServerJoinSettings(t *testing.T) {
 
 		var actual []string
 		myHostname, _ := os.Hostname()
-		for _, addr := range serverCfg.JoinList {
-			res, err := resolver.NewResolver(addr)
-			if err != nil {
-				t.Error(err)
-			}
-			actualAddr := res.Addr()
+		for _, j := range serverCfg.JoinList {
+			addr := util.MakeUnresolvedAddrWithDefaults("tcp", j, base.DefaultPort)
+
 			// Normalize the local hostname to make the test location-agnostic.
-			actualAddr = strings.ReplaceAll(actualAddr, myHostname, "HOSTNAME")
-			actual = append(actual, actualAddr)
+			actual = append(actual, strings.ReplaceAll(addr.String(), myHostname, "HOSTNAME"))
 		}
 		if !reflect.DeepEqual(td.expectedJoin, actual) {
 			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
 				i, td.expectedJoin, actual, td.args)
+		}
+	}
+}
+
+func TestConnectJoinSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := connectInitCmd.Flags()
+	testData := []struct {
+		args         []string
+		expectedJoin []string
+	}{
+		{[]string{"connect", "init", "--join=a"},
+			[]string{"a:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=a,b,c"},
+			[]string{"a:" + base.DefaultPort, "b:" + base.DefaultPort, "c:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=a", "--join=b"},
+			[]string{"a:" + base.DefaultPort, "b:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=127.0.0.1"},
+			[]string{"127.0.0.1:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=127.0.0.1:"},
+			[]string{"127.0.0.1:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=127.0.0.1,abc"},
+			[]string{"127.0.0.1:" + base.DefaultPort, "abc:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=[::1],[::2]"},
+			[]string{"[::1]:" + base.DefaultPort, "[::2]:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=[::1]:123,[::2]"},
+			[]string{"[::1]:123", "[::2]:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=[::1],127.0.0.1"},
+			[]string{"[::1]:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort}},
+		{[]string{"connect", "init", "--join=[::1]:123", "--join=[::2]"},
+			[]string{"[::1]:123", "[::2]:" + base.DefaultPort}},
+	}
+
+	for i, td := range testData {
+		initCLIDefaults()
+		if err := f.Parse(td.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+		}
+
+		if err := extraClientFlagInit(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(td.expectedJoin, []string(serverCfg.JoinList)) {
+			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
+				i, td.expectedJoin, serverCfg.JoinList, td.args)
 		}
 	}
 }
@@ -1012,5 +1078,154 @@ func TestHttpHostFlagValue(t *testing.T) {
 		if exp != serverCfg.HTTPRequestScheme() {
 			t.Errorf("%d. TLS config expected %s, got %s. td.args was '%#v'.", i, exp, serverCfg.HTTPRequestScheme(), td.args)
 		}
+	}
+}
+
+func TestMaxDiskTempStorageFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args     []string
+		expected string
+	}{
+		{nil, "<nil>"},
+		{[]string{"--max-disk-temp-storage", "1GiB"}, "1.0 GiB"},
+		{[]string{"--max-disk-temp-storage", "1GB"}, "954 MiB"},
+	}
+
+	for i, td := range testData {
+		initCLIDefaults()
+
+		if err := f.Parse(td.args); err != nil {
+			t.Fatal(err)
+		}
+		tempStorageFlag := f.Lookup("max-disk-temp-storage")
+		if tempStorageFlag == nil {
+			t.Fatalf("%d. max-disk-temp-storage flag was nil", i)
+		}
+		if tempStorageFlag.DefValue != "<nil>" {
+			t.Errorf("%d. tempStorageFlag.DefValue expected <nil>, got %s", i, tempStorageFlag.DefValue)
+		}
+		if td.expected != tempStorageFlag.Value.String() {
+			t.Errorf("%d. tempStorageFlag.Value expected %v, but got %v", i, td.expected, tempStorageFlag.Value)
+		}
+	}
+}
+
+// TestFlagUsage is a basic test to make sure the fragile
+// help template does not break.
+func TestFlagUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	expUsage := `Usage:
+  cockroach [command]
+
+Available Commands:
+  start             start a node in a multi-node cluster
+  start-single-node start a single-node cluster
+  connect           Create certificates for securely connecting with clusters
+
+  init              initialize a cluster
+  cert              create ca, node, and client certs
+  sql               open a sql shell
+  statement-diag    commands for managing statement diagnostics bundles
+  auth-session      log in and out of HTTP sessions
+  node              list, inspect, drain or remove nodes
+
+  nodelocal         upload and delete nodelocal files
+  userfile          upload, list and delete user scoped files
+  import            import a db or table from a local PGDUMP or MYSQLDUMP file
+  demo              open a demo sql shell
+  convert-url       convert a SQL connection string for use with various client drivers
+  gen               generate auxiliary files
+  version           output version information
+  debug             debugging commands
+  sqlfmt            format SQL statements
+  workload          generators for data and query loads
+  help              Help about any command
+
+Flags:
+  -h, --help                     help for cockroach
+      --log <string>             
+                                  Logging configuration, expressed using YAML syntax. For example, you can
+                                  change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                  See the documentation for more options and details.  To preview how the log
+                                  configuration is applied, or preview the default configuration, you can use
+                                  the 'cockroach debug check-log-config' sub-command.
+                                 
+      --log-config-file <file>   
+                                  File name to read the logging configuration from. This has the same effect as
+                                  passing the content of the file via the --log flag.
+                                  (default <unset>)
+      --version                  version for cockroach
+
+Use "cockroach [command] --help" for more information about a command.
+`
+	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
+		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
+		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
+		strings.ReplaceAll(expUsage, "      --version                  version for cockroach\n", ""))
+	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
+
+	testCases := []struct {
+		flags    []string
+		expErr   bool
+		expected string
+	}{
+		{[]string{"help"}, false, helpExpected},    // request help specifically
+		{[]string{"--foo"}, true, badFlagExpected}, // unknown flag
+	}
+	for _, test := range testCases {
+		t.Run(strings.Join(test.flags, ","), func(t *testing.T) {
+			// Override os.Stdout or os.Stderr with our own.
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cockroachCmd.SetOutput(w)
+			defer cockroachCmd.SetOutput(nil)
+
+			done := make(chan error)
+			var buf bytes.Buffer
+			// copy the output in a separate goroutine so printing can't block indefinitely.
+			go func() {
+				// Copy reads 'r' until EOF is reached.
+				_, err := io.Copy(&buf, r)
+				done <- err
+			}()
+
+			if err := Run(test.flags); err != nil {
+				fmt.Fprintln(w, "Error:", err)
+				if !test.expErr {
+					t.Error(err)
+				}
+			}
+
+			// back to normal state
+			w.Close()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+
+			// Filter out all test flags.
+			testFlagRE := regexp.MustCompile(`--(test\.|vmodule|rewrite)`)
+			lines := strings.Split(buf.String(), "\n")
+			final := []string{}
+			for _, l := range lines {
+				if testFlagRE.MatchString(l) {
+					continue
+				}
+				final = append(final, l)
+			}
+			got := strings.Join(final, "\n")
+
+			assert.Equal(t, test.expected, got)
+		})
 	}
 }

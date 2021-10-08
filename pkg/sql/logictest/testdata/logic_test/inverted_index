@@ -13,10 +13,10 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: inverted indexes can't be unique
@@ -52,7 +52,7 @@ c  CREATE TABLE public.c (
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error indexing more than one column with an inverted index is not supported
+statement error column foo of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo JSONB,
@@ -60,7 +60,7 @@ CREATE TABLE d (
   INVERTED INDEX (foo, bar)
 )
 
-statement error column foo is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
+statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
@@ -69,11 +69,6 @@ CREATE TABLE d (
 
 statement ok
 CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
-
-statement error pq: inverted indexes don't support interleaved tables
-CREATE INDEX c on t1 USING GIN (id2)
-   STORING (id1,id3)
-   INTERLEAVE in PARENT t1 (id2);
 
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
@@ -474,6 +469,29 @@ SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
 
+# Filter with a fully-specified array.
+query IT
+SELECT * FROM d WHERE b @> '[1, 2]' ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+
+# Combine predicates with AND. Should have the same rows as b @> '[1, 2]'.
+query I
+SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
+----
+2
+22
+
+statement ok
+INSERT INTO d VALUES (32, '[[1, 2]]');
+INSERT INTO d VALUES (33, '[[1], [2]]')
+
+# Filter with a nested array. This index expression is not tight.
+query IT
+SELECT * FROM d WHERE b @> '[[1, 2]]' ORDER BY a
+----
+32  [[1, 2]]
 
 statement ok
 CREATE TABLE users (
@@ -705,6 +723,372 @@ DROP TABLE table_with_nulls
 statement ok
 DROP TABLE c
 
+subtest json_fetch_val
+
+statement ok
+CREATE TABLE f (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX i (j)
+)
+
+statement ok
+INSERT INTO f VALUES
+  (0, '{"a": 1}'),
+  (1, '{"a": 10}'),
+  (2, '{"b": 2}'),
+  (3, '{"b": 2, "a": 1}'),
+  (4, '{"a": 1, "c": 3}'),
+  (5, '{"a": [1, 2]}'),
+  (6, '{"a": {"b": 1}}'),
+  (7, '{"a": {"b": 1, "d": 2}}'),
+  (8, '{"a": {"d": 2}}'),
+  (9, '{"a": {"b": [1, 2]}}'),
+  (10, '{"a": {"b": {"c": 1}}}'),
+  (11, '{"a": {"b": {"c": 1, "d": 2}}}}'),
+  (12, '{"a": {"b": {"d": 2}}}}'),
+  (13, '{"a": {"b": {"c": [1, 2]}}}'),
+  (14, '{"a": {"b": {"c": [1, 2, 3]}}}'),
+  (15, '{"a": []}'),
+  (16, '{"a": {}}}'),
+  (17, '{"a": {"b": "c"}}'),
+  (18, '{"a": {"b": ["c", "d", "e"]}}'),
+  (19, '{"a": ["b", "c", "d", "e"]}'),
+  (20, '{"a": ["b", "e", "c", "d"]}'),
+  (21, '{"z": {"a": "b", "c": "d"}}'),
+  (22, '{"z": {"a": "b", "c": "d", "e": "f"}}'),
+  (23, '{"a": "b", "x": ["c", "d", "e"]}}'),
+  (24, '{"a": "b", "c": [{"d": 1}, {"e": 2}]}}'),
+  (25, '{"a": {"b": "c", "d": "e"}}'),
+  (26, '{"a": {"b": "c"}, "d": "e"}'),
+  (27, '[1, 2, {"b": "c"}]'),
+  (28, '[{"a": {"b": "c"}}, "d", "e"]'),
+  (29, '{"a": null}'),
+  (30, '{"a": [1, 2, null]}'),
+  (31, 'null'),
+  (32, '{}'),
+  (33, '[]'),
+  (34, '{"a": {"b": []}}')
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
+----
+{"a": 1}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' OR j->'b' = '2' ORDER BY k
+----
+{"a": 1}
+{"b": 2}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' OR j @> '{"b": 2}' ORDER BY k
+----
+{"a": 1}
+{"b": 2}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' = '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b'->'c' = '1' ORDER BY k
+----
+{"a": {"b": {"c": 1}}}
+{"a": {"b": {"c": 1, "d": 2}}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '[]' ORDER BY k
+----
+{"a": []}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{}' ORDER BY k
+----
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '["b"]' ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"' ORDER BY k
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{"b": "c"}' ORDER BY k
+----
+{"a": {"b": "c"}}
+{"a": {"b": "c"}, "d": "e"}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b'->'c' = '[1, 2]' ORDER BY k
+----
+{"a": {"b": {"c": [1, 2]}}}
+
+query T
+SELECT j FROM f@i WHERE j->'z' = '{"a": "b", "c": "d"}' ORDER BY k
+----
+{"z": {"a": "b", "c": "d"}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '["b", "c", "d", "e"]' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '["b", "c", "d", "e"]' OR  j->'a' = '["b", "e", "c", "d"]' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '{"b": ["c", "d", "e"]}' ORDER BY k
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' = '["c", "d", "e"]' ORDER BY k
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'z'->'c' = '"d"' ORDER BY k
+----
+{"z": {"a": "b", "c": "d"}}
+{"z": {"a": "b", "c": "d", "e": "f"}}
+
+query T
+SELECT j FROM f@i WHERE j->'z' = '{"c": "d"}' ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}]' ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}, {"e": 2}]' ORDER BY k
+----
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+# Expressions with fetch val and containment operators use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '"b"' ORDER BY k
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> 'null' ORDER BY k
+----
+{"a": null}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ 'null' ORDER BY k
+----
+{"a": null}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '[]' ORDER BY k
+----
+{"a": []}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{}' ORDER BY k
+----
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '[]' ORDER BY k
+----
+{"a": [1, 2]}
+{"a": []}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{}' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": {"c": 1}}}
+{"a": {"b": {"c": 1, "d": 2}}}
+{"a": {"b": {"d": 2}}}
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": {"c": [1, 2, 3]}}}
+{"a": {}}
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+{"a": {}}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": {"c": [1, 2]}}' ORDER BY k
+----
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{"b": ["c"]}' ORDER BY k
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'c' @> '[{"d": 1}]' ORDER BY k
+----
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+# Expressions with chained fetch val and containment operators use the inverted
+# index.
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '"c"' ORDER BY k
+----
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+
+# Expressions with fetch val on the right side should use the inverted index.
+query T
+SELECT j FROM f@i WHERE '"b"' <@ j->'a' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE '[1, 2]' <@ j->'a'->'b' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE '{"b": {"c": [1, 2]}}' <@ j->'a' ORDER BY k
+----
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": {"c": [1, 2, 3]}}}
+
+# Conjunctions of fetch val and containment expressions use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND '["c"]' <@ j->'a' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' AND j->'a'->'b' @> '[1]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' <@ '["b", "c", "d", "e"]' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{"d": 2}' AND '[1, 2]' @> j->'a'->'b' ORDER BY k
+----
+{"a": {"b": 1, "d": 2}}
+
+# Disjunctions of fetch val and containment expressions use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '[1, 2]' OR j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": [1, 2]}
+{"a": {"b": [1, 2]}}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' OR j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '{"c": [1, 2], "d": 2}' OR j->'a'->'b' <@ '["c", "d", "e", 1, 2, 3]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": {"d": 2}}}
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+{"a": {"b": []}}
+
+# Regression test for #63180. This query should not cause an index out of range
+# error in the inverted filterer.
+query T
+SELECT j FROM f@i WHERE j @> '{"a": "c"}' AND (j @> '{"a": "b"}' OR j @> '{"a": "c"}')
+----
+
 subtest arrays
 
 statement ok
@@ -814,3 +1198,276 @@ SELECT * FROM c WHERE bar @> ARRAY[]::TEXT[] ORDER BY id
 3  {0,1,NULL}  {a,NULL,b,NULL}
 4  {1,2,3}     {b,NULL,c}
 5  {}          {NULL,NULL}
+
+query ITT
+SELECT * FROM c WHERE foo @> '{1, 2}' ORDER BY id
+----
+4  {1,2,3}  {b,NULL,c}
+
+subtest contained_by_arrays
+
+statement ok
+CREATE TABLE cb (
+  id INT PRIMARY KEY,
+  numbers INT[],
+  words STRING[],
+  INVERTED INDEX n (numbers),
+  INVERTED INDEX w (words)
+)
+
+statement ok
+INSERT INTO cb VALUES
+  (0, ARRAY[], ARRAY[]),
+  (1, ARRAY[0], ARRAY[NULL]),
+  (2, ARRAY[1], ARRAY['cat']),
+  (3, ARRAY[0,1], ARRAY['mouse']),
+  (4, ARRAY[NULL], ARRAY['cat', 'mouse']),
+  (5, ARRAY[0,1,2], ARRAY['cat', NULL, 'mouse']),
+  (6, ARRAY[3,4,5], ARRAY['rat']),
+  (7, ARRAY[1,2,1], ARRAY['rat', NULL]),
+  (8, ARRAY[0,1,NULL], ARRAY[''])
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[]::INT[]
+----
+{}
+
+query T rowsort
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1]
+----
+{}
+{1}
+
+query T rowsort
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,2]
+----
+{}
+{0}
+{1}
+{0,1}
+{0,1,2}
+{1,2,1}
+
+query T rowsort
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1,2,3]
+----
+{}
+{1}
+{1,2,1}
+
+query T rowsort
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,NULL]
+----
+{}
+{0}
+{1}
+{0,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[NULL]::INT[]
+----
+{}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY[]::STRING[]
+----
+{}
+
+query T rowsort
+SELECT words FROM cb@w WHERE words <@ ARRAY['']::STRING[]
+----
+{}
+{""}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY[NULL]::STRING[]
+----
+{}
+
+
+query T rowsort
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat']
+----
+{}
+{cat}
+
+
+query T rowsort
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse']
+----
+{}
+{cat}
+{mouse}
+{cat,mouse}
+
+query T rowsort
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse', NULL]
+----
+{}
+{cat}
+{mouse}
+{cat,mouse}
+
+query T rowsort
+SELECT words FROM cb@w WHERE words <@ ARRAY[NULL, 'rat']
+----
+{}
+{rat}
+
+subtest contained_by_json
+
+statement ok
+CREATE TABLE cb2 (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX i (j)
+)
+
+statement ok
+INSERT INTO cb2 VALUES
+  (0, '{}'),
+  (1, '[]'),
+  (2, '1'),
+  (3, '"a"'),
+  (4, 'true'),
+  (5, 'null'),
+  (6, '{"a": "b"}'),
+  (7, '{"a": {"b": "c", "d": "e"}}'),
+  (8, '{"a": {"b": "c"}, "d": "e"}'),
+  (9, '{"a": {"b": [1, 2]}}'),
+  (10, '{"a": {"b": {"c": [1, 2, 3]}}}'),
+  (11, '{"a": {"b": {"c": {"d": "e"}}}}'),
+  (12, '{"a": {"b": {"d": 2}}}}'),
+  (13, '{"a": [{"b": {"c": [1, 2]}}]}'),
+  (14, '{"b": {"c": [1, 2]}}'),
+  (15, '{"a": []}'),
+  (16, '{"a": {}}}'),
+  (17, '{"a": [[2]]}'),
+  (18, '[[2]]'),
+  (19, '[1, 2]'),
+  (20, '[1, 2, 3]'),
+  (21, '[{}]'),
+  (22, '[{"a": "b"}]'),
+  (23, '[{"a": "b", "c": ["d", "e"]}]'),
+  (24, '[[1], [2]]'),
+  (25, '[[1, 2]]'),
+  (26, '["a", "b", "b"]'),
+  (27, '[1, 2, {"b": "c"}]'),
+  (28, '[{"a": {"b": "c"}}, "d", "e"]'),
+  (29, '{"a": {"d": null}}'),
+  (30, '{"d": null}'),
+  (31, '[null]'),
+  (32, '[[], null]'),
+  (33, '[null, []]'),
+  (34, '[null, {}]'),
+  (35, '[[null]]'),
+  (36, '[1, 2, null]')
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{}' ORDER BY k
+----
+{}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[]' ORDER BY k
+----
+[]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '1' ORDER BY k
+----
+1
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '"a"' ORDER BY k
+----
+"a"
+
+query T
+SELECT j FROM cb2@i WHERE j <@ 'null' ORDER BY k
+----
+null
+
+query T
+SELECT j FROM cb2@i WHERE j <@ 'true' ORDER BY k
+----
+true
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": "b"}' ORDER BY k
+----
+{}
+{"a": "b"}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": [1]}' ORDER BY k
+----
+{}
+{"a": []}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[null, 1, 2, 3, "d"]' ORDER BY k
+----
+[]
+1
+null
+[1, 2]
+[1, 2, 3]
+[null]
+[1, 2, null]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1, 2], null]' ORDER BY k
+----
+[]
+null
+[[2]]
+[[1], [2]]
+[[1, 2]]
+[null]
+[[], null]
+[null, []]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": {"b": [1, 2], "d": null}}' ORDER BY k
+----
+{}
+{"a": {"b": [1, 2]}}
+{"a": {}}
+{"a": {"d": null}}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1, 2, {"hello": 3}], {"a": "b"}]' ORDER BY k
+----
+[]
+[[2]]
+[{}]
+[{"a": "b"}]
+[[1], [2]]
+[[1, 2]]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[{}, []]' ORDER BY k
+----
+[]
+[{}]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[{"a": "b"}, [1, 2]]' ORDER BY k
+----
+[]
+[[2]]
+[{}]
+[{"a": "b"}]
+[[1], [2]]
+[[1, 2]]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
+----
+[]
+[[2]]
+[[1], [2]]
+
+statement error pq: index element j->'some_key' of type jsonb is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE t2 (j JSON, INDEX ((j->'some_key')))

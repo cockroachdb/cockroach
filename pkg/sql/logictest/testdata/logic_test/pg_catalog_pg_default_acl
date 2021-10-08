@@ -1,0 +1,254 @@
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
+ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
+
+# Public should appear as an empty string with privileges.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {=r/}
+4149409857  1546506610  0                S              {=r/}
+4149409857  1546506610  0                n              {=U/}
+
+statement ok
+CREATE USER foo
+
+statement ok
+CREATE USER bar
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+statement ok
+GRANT foo, bar TO root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TABLES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
+
+# 12 rows should exist, 4 for each role, root, foo and bar.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+542080048   1791217281  0                r              {foo=Cadrw/}
+542080048   1791217281  0                S              {foo=Cadrw/}
+542080048   1791217281  0                T              {foo=U/}
+542080048   1791217281  0                n              {foo=CU/}
+38059971    2026795574  0                r              {bar=Cadrw/}
+38059971    2026795574  0                S              {bar=Cadrw/}
+38059971    2026795574  0                T              {bar=U/}
+38059971    2026795574  0                n              {bar=CU/}
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
+
+# Revoking all will result in rows with empty privileges since the privileges
+# are revoked from the creator role.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+542080048   1791217281  0                r              {}
+542080048   1791217281  0                S              {}
+542080048   1791217281  0                T              {=U/}
+542080048   1791217281  0                n              {}
+38059971    2026795574  0                r              {}
+38059971    2026795574  0                S              {}
+38059971    2026795574  0                T              {=U/}
+38059971    2026795574  0                n              {}
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TABLES TO foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON SEQUENCES TO foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON SCHEMAS TO foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TYPES TO foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON TABLES TO bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON SEQUENCES TO bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON SCHEMAS TO bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON TYPES TO bar;
+
+# Entries should disappear since the previous ALTER DEFAULT PRIVILEGE commands
+# revert the default privileges to the default state.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+# Revoke SELECT from foo and GRANT it back with foo being the creator role.
+# Ensure revoking a single privilege reflects correctly.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE SELECT ON TABLES FROM foo;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+38059971    2026795574  0                r              {foo=Cadw/}
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT SELECT ON TABLES TO foo;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
+4149409857  1546506610  0                T              {bar=U/,foo=U/}
+4149409857  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo, bar;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {bar=Cadw/,foo=Cadw/}
+
+# GRANT, DROP and ZONECONFIG should not show up in defaclacl.
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
+ALTER DEFAULT PRIVILEGES GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4149409857  1546506610  0                r              {foo=/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE GRANT, DROP, ZONECONFIG ON TABLES FROM foo;
+
+# Check that entries show up for default privileges defined for all roles.
+# The defaclrole oid should be 0.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TABLES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TYPES TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON SCHEMAS TO foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON SEQUENCES TO foo, bar;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+2946850069  0           0                r              {bar=Cadrw/,foo=Cadrw/}
+2946850069  0           0                S              {bar=Cadrw/,foo=Cadrw/}
+2946850069  0           0                T              {bar=U/,foo=U/}
+2946850069  0           0                n              {bar=CU/,foo=CU/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON TABLES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON TYPES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SCHEMAS FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM foo, bar;
+
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid  defaclrole  defaclnamespace  defaclobjtype  defaclacl
+
+user testuser
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser;
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser;
+
+# Empty entries should appear for testuser indicating that testuser
+# has no default privileges.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+3084847592  2264919399  0                r              {}
+3084847592  2264919399  0                S              {}
+3084847592  2264919399  0                T              {=U/}
+3084847592  2264919399  0                n              {}
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
+
+# Revoking privileges from Public should make the entry for T empty.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+3084847592  2264919399  0                r              {}
+3084847592  2264919399  0                S              {}
+3084847592  2264919399  0                T              {}
+3084847592  2264919399  0                n              {}
+
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO testuser;
+
+# Now that Public does not have USAGE on type but testuser has ALL on types,
+# the defaclacl array should show the default privileges for testuser.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+3084847592  2264919399  0                r              {}
+3084847592  2264919399  0                S              {}
+3084847592  2264919399  0                T              {testuser=U/}
+3084847592  2264919399  0                n              {}
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo;
+
+# Ensure that the empty arrays are populated with the default privileges
+# for foo.
+query OOOTT colnames,rowsort
+SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
+----
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+3084847592  2264919399  0                r              {foo=Cadrw/}
+3084847592  2264919399  0                S              {foo=Cadrw/}
+3084847592  2264919399  0                T              {foo=U/,testuser=U/}
+3084847592  2264919399  0                n              {foo=CU/}

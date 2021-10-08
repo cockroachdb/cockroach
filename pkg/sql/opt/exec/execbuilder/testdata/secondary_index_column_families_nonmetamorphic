@@ -1,0 +1,477 @@
+# LogicTest: local !metamorphic
+
+statement ok
+CREATE TABLE t1 (
+  x INT PRIMARY KEY, y INT, z INT, a INT, b INT,
+  FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (a, b),
+  INDEX nonuniqueidx (y), UNIQUE INDEX uniqueidx (y),
+  INDEX nonuniqueidxstoring (y) STORING (z, a, b),
+  UNIQUE INDEX uniqueidxstoring (y) STORING (z, a, b)
+)
+
+# Ensure that inserts into each index look like we expect them to.
+
+# Inserts into nonuniqueidx or uniqueidx (which don't store anything) should
+# be a single kv pair of the old format (BYTES value with PK cols in
+# the value, if needed). Inserts into nonuniqueidxstoring and
+# uniqueidxstoring both should generate 3 K/V pairs.
+query T kvtrace(InitPut)
+INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
+----
+InitPut /Table/53/2/1/1/0 -> /BYTES/
+InitPut /Table/53/3/1/0 -> /BYTES/0x89
+InitPut /Table/53/4/1/1/0 -> /BYTES/
+InitPut /Table/53/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+InitPut /Table/53/5/1/0 -> /BYTES/0x89
+InitPut /Table/53/5/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+
+
+# Deletes on nonuniqueidx or uniqueidx should result in a deletion
+# of a single key. Deletes on nonuniqueidxstoring and uniqueidxstoring
+# should result in 3 K/V pair deletions.
+query T kvtrace(Del,prefix=/Table/53/2/,prefix=/Table/53/3/,prefix=/Table/53/4/,prefix=/Table/53/5/)
+DELETE FROM t1 WHERE x = 1
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+
+# Put some data back into the table.
+statement ok
+INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
+
+# Selects (as of now) should scan all of the K/V pairs for each index.
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@nonuniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidx/%'
+----
+fetched: /t1/nonuniqueidx/1/1 -> NULL
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@uniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidx/%'
+----
+fetched: /t1/uniqueidx/1 -> /1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@nonuniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidxstoring/%'
+----
+fetched: /t1/nonuniqueidxstoring/1/1 -> NULL
+fetched: /t1/nonuniqueidxstoring/1/1/z -> /1
+fetched: /t1/nonuniqueidxstoring/1/1/a/b -> /1/1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+
+
+#Test some specific behavior with nulls on unique indexes.
+statement ok
+INSERT INTO t1 VALUES (3, NULL, 3, 3, 3), (4, NULL, 4, 4, 4)
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring ORDER BY x;
+SET TRACING=off
+----
+1 1 1 1 1
+3 NULL 3 3 3
+4 NULL 4 4 4
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+ORDER BY message
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/NULL -> /3
+fetched: /t1/uniqueidxstoring/NULL -> /4
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /3/3
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /4/4
+fetched: /t1/uniqueidxstoring/NULL/z -> /3
+fetched: /t1/uniqueidxstoring/NULL/z -> /4
+
+# Ensure that updates delete and insert all K/V pairs for each index.
+# Note: we don't use kvtrace query type here because it is clearer to
+# replay the trace multiple times to separate the operations by index.
+statement ok
+SET TRACING=on,kv,results;
+UPDATE t1 SET
+x = 2, y = 2, z = 2, a = 2, b = 2
+WHERE x = 1;
+SET TRACING=off;
+
+# Updates on nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/2/%' OR
+message LIKE 'InitPut /Table/53/2/%' OR
+message LIKE 'Del /Table/53/3/%' OR
+message LIKE 'InitPut /Table/53/3/%'
+ORDER BY message
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+InitPut /Table/53/2/2/2/0 -> /BYTES/
+InitPut /Table/53/3/2/0 -> /BYTES/0x8a
+
+# Updates on nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/4/%' OR
+message LIKE 'InitPut /Table/53/4/%'
+ORDER BY message
+----
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+InitPut /Table/53/4/2/2/0 -> /BYTES/
+InitPut /Table/53/4/2/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
+
+# Updates on uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/5/%' OR
+message LIKE 'InitPut /Table/53/5/%'
+ORDER BY message
+----
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+InitPut /Table/53/5/2/0 -> /BYTES/0x8a
+InitPut /Table/53/5/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/5/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
+
+# Ensure that reads only scan the necessary k/v's.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT, y INT, z INT,
+  FAMILY (x), FAMILY (y), FAMILY (z),
+  UNIQUE INDEX i (x) STORING (y, z),
+  INDEX i2 (x) STORING (y, z)
+);
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SELECT y FROM t@i WHERE x = 1
+----
+2
+
+# In this case, we scan only families 0 and 1.
+query T kvtrace(Scan,prefix=/Table/54/2/)
+SELECT y FROM t@i WHERE x = 1
+----
+Scan /Table/54/2/1/{0-1/2}
+
+# Make sure that family splitting doesn't affect
+# lookups when there are null values along the
+# secondary index.
+statement ok
+INSERT INTO t VALUES (NULL, 3, 4)
+
+query I
+SELECT y FROM t@i WHERE x IS NULL
+----
+3
+
+query T kvtrace(Scan,prefix=/Table/54/2/)
+SELECT y FROM t@i WHERE x IS NULL
+----
+Scan /Table/54/2/{NULL-!NULL}
+
+# Ensure that updates only touch the changed column families.
+query T kvtrace(CPut,prefix=/Table/54/2/)
+UPDATE t SET y = 5 WHERE x = 1
+----
+CPut /Table/54/2/1/1/1 -> /TUPLE/2:2:Int/5 (replacing [10 35 4], if exists)
+
+# Test composite datatypes.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y DECIMAL,
+  z DECIMAL,
+  w INT,
+  v INT,
+  FAMILY (x, w), FAMILY (y, z), FAMILY (v),
+  UNIQUE INDEX i (y, z) STORING (w, v)
+);
+INSERT INTO t VALUES (1, 2.01, 3.001, 4, 5)
+
+query TTI
+SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
+----
+2.01 3.001 5
+
+# We only need a point scan on family 0, because the composite values
+# are stored in family 0, and a scan on family 2 for v.
+query T kvtrace(Scan,prefix=/Table/55/2/)
+SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
+----
+Scan /Table/55/2/2.01/3.001/0, /Table/55/2/2.01/3.001/2/1
+
+query T
+EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@i
+  spans: [/2.01/3.001 - /2.01/3.001]
+
+# Ensure that we always have a k/v in family 0.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  UNIQUE INDEX i (y) STORING (z),
+  FAMILY (y), FAMILY (x), FAMILY (z)
+);
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SELECT y FROM t@i WHERE y = 2
+----
+2
+
+# Prove that we can scan only column family 0 and find the row.
+query T kvtrace(Scan,prefix=/Table/56/2/)
+SELECT y FROM t@i WHERE y = 2
+----
+Scan /Table/56/2/2/0
+
+# Ensure that when backfilling an index we only insert the needed k/vs.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY, y INT, z INT, w INT,
+  FAMILY (y), FAMILY (x), FAMILY (z), FAMILY (w)
+);
+INSERT INTO t VALUES (1, 2, NULL, 3), (4, 5, 6, NULL), (8, 9, NULL, NULL);
+CREATE INDEX i ON t (y) STORING (z, w)
+
+query IIII rowsort
+SET TRACING=on,kv,results;
+SELECT * FROM t@i;
+SET TRACING=off
+----
+1 2 NULL 3
+4 5 6 NULL
+8 9 NULL NULL
+
+# Ensure by scanning that we fetch 2 k/v's for row (1, 2, NULL, 3),
+# 2 k/v's for row (4, 5, 6, NULL), and 1 k/v for row (8, 9, NULL, NULL).
+# In particular, we shouldn't see:
+# * a k/v for column z for the row (1, 2, NULL, 3)
+# * a k/v for column w for the row (4, 5, 6, NULL)
+# * a k/v for either z or w for the row (8, 9, NULL, NULL)
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched%'
+ORDER BY message
+----
+fetched: /t/i/2/1 -> NULL
+fetched: /t/i/2/1/w -> /3
+fetched: /t/i/5/4 -> NULL
+fetched: /t/i/5/4/z -> /6
+fetched: /t/i/9/8 -> NULL
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY, y INT, z INT, w INT,
+  FAMILY (y), FAMILY (x), FAMILY (z), FAMILY (w)
+);
+INSERT INTO t VALUES (1, 2, NULL, NULL)
+
+statement ok
+BEGIN
+
+# Place i on the mutations queue in a delete only state.
+statement ok
+CREATE INDEX i ON t (y) STORING (z, w)
+
+# Because i is in a delete only state, we should see a delete
+# for each k/v for i for the row (1, 2, NULL, NULL).
+query T kvtrace(Del,prefix=/Table/58/2/)
+UPDATE t SET z = 3 WHERE y = 2
+----
+Del /Table/58/2/2/1/0
+Del /Table/58/2/2/1/2/1
+Del /Table/58/2/2/1/3/1
+
+statement ok
+COMMIT
+
+query IIII
+SELECT * FROM t@i
+----
+1 2 3 NULL
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY, y INT, a INT, b INT, c INT, d INT, e INT, f INT,
+  FAMILY (x), FAMILY (y), FAMILY (a, b), FAMILY (c, d), FAMILY (e), FAMILY (f),
+  INDEX i1 (y) STORING (a, b, c, d, e, f),
+  UNIQUE INDEX i2 (y) STORING (a, b, c, d, e, f)
+);
+
+# Ensure we only insert the correct keys.
+query T kvtrace(InitPut,prefix=/Table/59/2/,prefix=/Table/59/3/)
+INSERT INTO t VALUES (1, 2, 3, NULL, 5, 6, NULL, 8)
+----
+InitPut /Table/59/2/2/1/0 -> /BYTES/
+InitPut /Table/59/2/2/1/2/1 -> /TUPLE/3:3:Int/3
+InitPut /Table/59/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
+InitPut /Table/59/2/2/1/5/1 -> /TUPLE/8:8:Int/8
+InitPut /Table/59/3/2/0 -> /BYTES/0x89
+InitPut /Table/59/3/2/2/1 -> /TUPLE/3:3:Int/3
+InitPut /Table/59/3/2/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
+InitPut /Table/59/3/2/5/1 -> /TUPLE/8:8:Int/8
+
+# Test some cases of the updater.
+
+# Ensure success when some family k/v's are deleted,
+# some family k/v's have different values, and some
+# family k/v's are added.
+query T kvtrace(Put,Del,CPut,prefix=/Table/59/2/)
+UPDATE t SET b = 4, c = NULL, d = NULL, e = 7, f = NULL WHERE y = 2
+----
+CPut /Table/59/2/2/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4 (replacing [10 51 6], if exists)
+Del /Table/59/2/2/1/3/1
+CPut /Table/59/2/2/1/4/1 -> /TUPLE/7:7:Int/7 (expecting does not exist)
+Del /Table/59/2/2/1/5/1
+
+query IIIIIIII
+SELECT * FROM t@i2
+----
+1 2 3 4 NULL NULL 7 NULL
+
+# Test a case where no k/v's other than the sentinel exist
+# and all new k/v's have to be added.
+statement ok
+INSERT INTO t VALUES (3, 3, NULL, NULL, NULL, NULL, NULL, NULL)
+
+query T kvtrace(Put,Del,CPut,prefix=/Table/59/2/)
+UPDATE t SET a = 10, b = 11, c = 12, d = 13, e = 14, f = 15 WHERE y = 3
+----
+CPut /Table/59/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11 (expecting does not exist)
+CPut /Table/59/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13 (expecting does not exist)
+CPut /Table/59/2/3/3/4/1 -> /TUPLE/7:7:Int/14 (expecting does not exist)
+CPut /Table/59/2/3/3/5/1 -> /TUPLE/8:8:Int/15 (expecting does not exist)
+
+# Test a case where the update causes all k/v's other than
+# the sentinel k/v to get deleted.
+query T kvtrace(Del,Put,CPut,prefix=/Table/59/2/)
+UPDATE t SET a = NULL, b = NULL, c = NULL, d = NULL, e = NULL, f = NULL WHERE y = 3
+----
+Del /Table/59/2/3/3/2/1
+Del /Table/59/2/3/3/3/1
+Del /Table/59/2/3/3/4/1
+Del /Table/59/2/3/3/5/1
+
+
+# Test a case that each k/v in the index entry gets
+# rewritten when the key changes.
+statement ok
+INSERT INTO t VALUES (20, 21, 22, NULL, NULL, 25, NULL, 27);
+
+query T kvtrace(Put,Del,CPut,prefix=/Table/59/2/)
+UPDATE t SET y = 22 WHERE y = 21
+----
+Del /Table/59/2/21/20/0
+CPut /Table/59/2/22/20/0 -> /BYTES/ (expecting does not exist)
+Del /Table/59/2/21/20/2/1
+CPut /Table/59/2/22/20/2/1 -> /TUPLE/3:3:Int/22 (expecting does not exist)
+Del /Table/59/2/21/20/3/1
+CPut /Table/59/2/22/20/3/1 -> /TUPLE/6:6:Int/25 (expecting does not exist)
+Del /Table/59/2/21/20/5/1
+CPut /Table/59/2/22/20/5/1 -> /TUPLE/8:8:Int/27 (expecting does not exist)
+
+# Ensure that the final results on both indexes make sense.
+query IIIIIIII rowsort
+SELECT * FROM t@i1
+----
+1 2 3 4 NULL NULL 7 NULL
+3 3 NULL NULL NULL NULL NULL NULL
+20 22 22 NULL NULL 25 NULL 27
+
+query IIIIIIII rowsort
+SELECT * FROM t@i2
+----
+1 2 3 4 NULL NULL 7 NULL
+3 3 NULL NULL NULL NULL NULL NULL
+20 22 22 NULL NULL 25 NULL 27
+
+# Ensure that updating a row in the single family case still works.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY, y INT, z INT, w INT,
+  INDEX i (y) STORING (z, w),
+  FAMILY (x, y, z, w)
+);
+INSERT INTO t VALUES (1, 2, 3, 4)
+
+# When the key is changed, we always delete and cput.
+query T kvtrace(Put,CPut,Del,prefix=/Table/60/2/)
+UPDATE t SET y = 5 where y = 2
+----
+Del /Table/60/2/2/1/0
+CPut /Table/60/2/5/1/0 -> /BYTES/0x33061308 (expecting does not exist)
+
+# Changing the value just results in a cput.
+query T kvtrace(Put,Del,CPut,prefix=/Table/60/2/)
+UPDATE t SET z = 5 where y = 5
+----
+CPut /Table/60/2/5/1/0 -> /BYTES/0x330a1308 (replacing [3 51 6 19 8], if exists)

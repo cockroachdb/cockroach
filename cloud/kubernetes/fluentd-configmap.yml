@@ -60,7 +60,7 @@ data:
       format multi_format
       <pattern>
         # CockroachDB log format
-        format /^(?<severity>\w{1})(?<time>\d{6}\s\d{2}:\d{2}:\d{2})\.\d{6}\s*(?<log>.*)/
+        format /^(?<severity>\w{1})(?<time>\d{6}\s\d{2}:\d{2}:\d{2}\.\d{6})\s*(?<log>.*)/
         time_key time
         time_format %y%m%d %H:%M:%S.%N
       </pattern>

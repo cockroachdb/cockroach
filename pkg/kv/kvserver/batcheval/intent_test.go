@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,11 +33,13 @@ type instrumentedEngine struct {
 	// ... can be extended ...
 }
 
-func (ie *instrumentedEngine) NewIterator(opts storage.IterOptions) storage.Iterator {
+func (ie *instrumentedEngine) NewMVCCIterator(
+	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) storage.MVCCIterator {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}
-	return ie.Engine.NewIterator(opts)
+	return ie.Engine.NewMVCCIterator(iterKind, opts)
 }
 
 // TestCollectIntentsUsesSameIterator tests that all uses of CollectIntents
@@ -54,6 +57,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		Timestamp:       ts,
 		ReadConsistency: roachpb.READ_UNCOMMITTED,
 	}
+	evalCtx := (&MockEvalCtx{ClusterSettings: cluster.MakeClusterSettings()}).EvalContext()
 
 	testCases := []struct {
 		name              string
@@ -68,7 +72,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key},
 				}
 				var resp roachpb.GetResponse
-				if _, err := Get(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := Get(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				if resp.IntentValue == nil {
@@ -86,7 +90,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
 				var resp roachpb.ScanResponse
-				if _, err := Scan(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := Scan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				return resp.IntentRows, nil
@@ -101,7 +105,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
 				var resp roachpb.ReverseScanResponse
-				if _, err := ReverseScan(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := ReverseScan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				return resp.IntentRows, nil
@@ -117,7 +121,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 			// the request should ignore the intent and should not return any
 			// corresponding intent row.
 			testutils.RunTrueAndFalse(t, "deletion intent", func(t *testing.T, delete bool) {
-				db := &instrumentedEngine{Engine: storage.NewDefaultInMem()}
+				db := &instrumentedEngine{Engine: storage.NewDefaultInMemForTesting()}
 				defer db.Close()
 
 				// Write an intent.

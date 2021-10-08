@@ -69,10 +69,7 @@ func (sw *slidingWindow) add(iv *indexedValue) {
 // indices smaller than given 'idx'. This operation corresponds to shifting the
 // start of the frame up to 'idx'.
 func (sw *slidingWindow) removeAllBefore(idx int) {
-	for i := 0; i < sw.values.Len() && i < idx; i++ {
-		if sw.values.Get(i).(*indexedValue).idx >= idx {
-			break
-		}
+	for sw.values.Len() > 0 && sw.values.Get(0).(*indexedValue).idx < idx {
 		sw.values.RemoveFirst()
 	}
 }
@@ -122,6 +119,12 @@ func (w *slidingWindowFunc) Compute(
 			args, err := wfr.ArgsByRowIdx(ctx, idx)
 			if err != nil {
 				return nil, err
+			}
+			if args[0] == tree.DNull {
+				// Null value can neither be minimum nor maximum over a window frame
+				// with non-null values, so we're not adding them to the sliding window.
+				// The case of a window frame with no non-null values is handled below.
+				continue
 			}
 			if res == nil {
 				res = args[0]

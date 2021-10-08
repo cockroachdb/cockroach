@@ -1,0 +1,66 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: Zone config events
+// Channel: OPS
+//
+// Events in this category pertain to zone configuration changes on
+// the SQL schema or system ranges.
+//
+// When zone configs apply to individual tables or other objects in a
+// SQL logical schema, they are relative to a particular SQL tenant.
+// In a multi-tenant setup, copies of these zone config events are preserved
+// in each tenant's own `system.eventlog` table.
+//
+// When they apply to cluster-level ranges (e.g., the system zone config),
+// they are stored in the system tenant's own `system.eventlog` table.
+
+// TODO(knz): explore whether we should have separate notable event
+// types for table-level and cluster-level zone config changes.
+// See: https://github.com/cockroachdb/cockroach/issues/57897
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// The comment at the top has a specific format for the doc generator.
+// *Really look at doc.go before modifying this file.*
+
+// CommonZoneConfigDetails is common to zone config change events.
+message CommonZoneConfigDetails {
+  // The target object of the zone config change.
+  string target = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // The applied zone config in YAML format.
+  string config = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The SQL representation of the applied zone config options.
+  repeated string options = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// SetZoneConfig is recorded when a zone config is changed.
+message SetZoneConfig {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// RemoveZoneConfig is recorded when a zone config is removed.
+message RemoveZoneConfig {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+

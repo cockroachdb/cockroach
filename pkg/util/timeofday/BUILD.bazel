@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timeofday",
+    srcs = ["time_of_day.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeofday",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/duration",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "timeofday_test",
+    size = "small",
+    srcs = ["time_of_day_test.go"],
+    embed = [":timeofday"],
+    deps = ["//pkg/util/duration"],
+)

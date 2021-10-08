@@ -39,8 +39,6 @@ run build/builder.sh make -Otarget c-deps GOFLAGS=-race &> artifacts/race-c-buil
 rm artifacts/race-c-build.log
 tc_end_block "Compile C dependencies"
 
-maybe_stress "stressrace"
-
 # Expect the timeout to come from the TC environment.
 TESTTIMEOUT=${TESTTIMEOUT:-45m}
 
@@ -48,13 +46,12 @@ for pkg in $pkgspec; do
   tc_start_block "Run ${pkg} under race detector"
   run_json_test build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \
+    GOMAXPROCS=8 \
     stdbuf -oL -eL \
     make testrace \
     GOTESTFLAGS=-json \
     PKG="$pkg" \
     TESTTIMEOUT="${TESTTIMEOUT}" \
-    TESTFLAGS="-v $TESTFLAGS" \
-    ENABLE_ROCKSDB_ASSERTIONS=1 \
-    ENABLE_LIBROACH_ASSERTIONS=1
+    TESTFLAGS="-v $TESTFLAGS"
   tc_end_block "Run ${pkg} under race detector"
 done

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "vm",
+    srcs = ["vm.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/config",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "vm_test",
+    size = "small",
+    srcs = ["vm_test.go"],
+    embed = [":vm"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)

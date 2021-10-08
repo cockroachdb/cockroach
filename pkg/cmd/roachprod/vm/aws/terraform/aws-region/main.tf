@@ -10,7 +10,7 @@ provider "aws" {}
 variable "region"                 { description = "AWS Region name" }
 variable "image_name"             { 
     description = "CockroachDB base image name" 
-    default = "ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20180126"
+    default = "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20210325"
 }
 
 variable "label" {

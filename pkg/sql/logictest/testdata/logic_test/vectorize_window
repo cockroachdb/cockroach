@@ -1,0 +1,297 @@
+# LogicTest: local fakedist fakedist-disk 3node-tenant
+
+# Ensure that all these queries can be executed in the vectorized engine.
+statement ok
+SET vectorize = experimental_always
+
+statement ok
+CREATE TABLE t (a INT, b INT, c INT PRIMARY KEY, d BOOL, e STRING)
+
+statement ok
+INSERT INTO t VALUES
+  (0, 1, 0, true, 'foo'),
+  (1, 1, 1, false, 'bar'),
+  (0, 2, 2, true, 'baz'),
+  (1, 2, 3, false, 'deadbeef')
+
+# We sort the output on all queries with row_number window function to get
+# deterministic results.
+query III
+SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 2
+1 1 3
+1 2 4
+
+query III
+SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 2
+1 1 1
+1 2 2
+
+query III
+SELECT a, b, row_number() OVER (PARTITION BY a, b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, rank() OVER () FROM t
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, rank() OVER (ORDER BY a) FROM t
+----
+0 1 1
+0 2 1
+1 1 3
+1 2 3
+
+query IIII rowsort
+SELECT a, b, c, rank() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0 1 0 1
+0 2 2 2
+1 1 1 1
+1 2 3 2
+
+query III rowsort
+SELECT a, b, dense_rank() OVER () FROM t
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t
+----
+0 1 1
+0 2 1
+1 1 2
+1 2 2
+
+query IIII rowsort
+SELECT a, b, c, dense_rank() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0 1 0 1
+0 2 2 2
+1 1 1 1
+1 2 3 2
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS ()
+----
+0  1  1  1  0  1
+1  1  1  1  0  1
+0  2  1  1  0  1
+1  2  1  1  0  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a)
+----
+0  1  1  1  0  1
+0  2  1  1  0  1
+1  1  1  1  0  1
+1  2  1  1  0  1
+
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (ORDER BY a)
+----
+0  1  1  1  0                  0.5
+0  2  1  1  0                  0.5
+1  1  3  2  0.666666666666667  1
+1  2  3  2  0.666666666666667  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY b)
+----
+0  1  1  1  0  0.5
+0  2  2  2  1  1
+1  1  1  1  0  0.5
+1  2  2  2  1  1
+
+query IIR rowsort
+SELECT a, b, percent_rank() OVER () FROM t
+----
+0  1  0
+1  1  0
+0  2  0
+1  2  0
+
+query IIR rowsort
+SELECT a, b, percent_rank() OVER (ORDER BY a) FROM t
+----
+0  1  0
+0  2  0
+1  1  0.666666666666667
+1  2  0.666666666666667
+
+query IIIR rowsort
+SELECT a, b, c, percent_rank() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0  1  0  0
+0  2  2  1
+1  1  1  0
+1  2  3  1
+
+query IIR rowsort
+SELECT a, b, cume_dist() OVER () FROM t
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query IIR rowsort
+SELECT a, b, cume_dist() OVER (ORDER BY a) FROM t
+----
+0  1  0.5
+0  2  0.5
+1  1  1
+1  2  1
+
+query IIIR rowsort
+SELECT a, b, c, cume_dist() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0  1  0  0.5
+0  2  2  1
+1  1  1  0.5
+1  2  3  1
+
+query III rowsort
+SELECT a, b, ntile(2) OVER (ORDER BY a, b) FROM t
+----
+0  1  1
+0  2  1
+1  1  2
+1  2  2
+
+query IIII rowsort
+SELECT a, b, c, ntile(2) OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0 1 0 1
+0 2 2 2
+1 1 1 1
+1 2 3 2
+
+query IIII rowsort
+SELECT a, b, lag(a, b) OVER w, lead(a, b) OVER w FROM t WINDOW w AS (ORDER BY a, b)
+----
+0  1  NULL  0
+0  2  NULL  1
+1  1  0     1
+1  2  0     NULL
+
+query IIIII rowsort
+SELECT a, b, c, lag(a, b) OVER w, lead(a, b) OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY c)
+----
+0  1  0  NULL  0
+0  2  2  NULL  NULL
+1  1  1  NULL  1
+1  2  3  NULL  NULL
+
+query IIIIII rowsort
+SELECT a, b, c, first_value(a) OVER w, last_value(a) OVER w, nth_value(a, b) OVER w
+FROM t WINDOW w AS (ORDER BY c, b)
+----
+0  1  0  0  0  0
+1  1  1  0  1  0
+0  2  2  0  0  1
+1  2  3  0  1  1
+
+query IIIIII rowsort
+SELECT a, b, c, first_value(a) OVER w, last_value(a) OVER w, nth_value(a, b) OVER w
+FROM t WINDOW w AS (PARTITION BY a ORDER BY c)
+----
+0  1  0  0  0  0
+0  2  2  0  0  0
+1  1  1  1  1  1
+1  2  3  1  1  1
+
+query IIIIII rowsort
+SELECT a, b, c, first_value(a) OVER w, last_value(a) OVER w, nth_value(a, b) OVER w
+FROM t WINDOW w AS (ORDER BY c, b ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  1  0  0  0  0
+1  1  1  0  1  0
+0  2  2  0  0  1
+1  2  3  0  1  1
+
+query IIIIII rowsort
+SELECT a, b, c, first_value(a) OVER w, last_value(a) OVER w, nth_value(a, b) OVER w
+FROM t WINDOW w AS (ORDER BY c, b GROUPS BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  1  0  0  0  0
+1  1  1  0  1  0
+0  2  2  0  0  1
+1  2  3  0  1  1
+
+query IIII rowsort
+SELECT c, first_value(c) OVER w, last_value(c) OVER w, nth_value(c, 2) OVER w
+FROM t WINDOW w AS (ORDER BY c RANGE BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  0  0  NULL
+1  0  1  1
+2  0  2  1
+3  0  3  1
+
+query IIIIRIIRIIBBT rowsort
+SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
+       max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
+FROM t WINDOW w AS (ORDER BY c, b)
+----
+0  1  0  0  0  1  1  0                       0  0  true   true  foo
+1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
+1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+
+query IIIIRIIRIIBBT rowsort
+SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
+       max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
+FROM t WINDOW w AS (PARTITION BY a ORDER BY c)
+----
+0  1  0  0  0  1  1  0  0  0  true   true   foo
+0  2  2  0  0  2  2  0  0  0  true   true   foobaz
+1  1  1  1  1  1  1  1  1  1  false  false  bar
+1  2  3  2  2  2  2  1  1  1  false  false  bardeadbeef
+
+query IIIIRIIRIIBBT rowsort
+SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
+       max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
+FROM t WINDOW w AS (ORDER BY c, b ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  1  0  0  0  1  1  0                       0  0  true   true  foo
+1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
+1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+
+query IIIIRIIRIIBBT rowsort
+SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
+       max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
+FROM t WINDOW w AS (ORDER BY c, b GROUPS BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  1  0  0  0  1  1  0                       0  0  true   true  foo
+1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
+1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+
+query IIIIRIIRIIBBT rowsort
+SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
+       max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
+FROM t WINDOW w AS (ORDER BY c RANGE BETWEEN 5 PRECEDING AND CURRENT ROW)
+----
+0  1  0  0  0  1  1  0                       0  0  true   true  foo
+1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
+1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef

@@ -16,11 +16,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/exp/rand"
 )
 
@@ -161,8 +162,11 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	}
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
-	// remote.
-	if rng.Intn(100) < 85 {
+	// remote. This only applies to the customer update below, and not the
+	// warehouse and district updates.
+	// NOTE: If localWarehouses is set, keep all transactions local. This is for
+	// testing only, as it violates the spec.
+	if p.config.localWarehouses || rng.Intn(100) < 85 {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
@@ -186,13 +190,9 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = p.config.randCustomerID(rng)
 	}
 
-	tx, err := p.mcp.Get().BeginEx(ctx, p.config.txOpts)
-	if err != nil {
-		return nil, err
-	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
-		func() error {
+	if err := crdbpgx.ExecuteTx(
+		ctx, p.mcp.Get(), p.config.txOpts,
+		func(tx pgx.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
 			if err := p.updateWarehouse.QueryRowTx(

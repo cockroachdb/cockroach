@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "skipped-tests_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/skipped-tests",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ghemawat_stream//:stream",
+        "@com_github_nlopes_slack//:slack",
+    ],
+)
+
+go_binary(
+    name = "skipped-tests",
+    embed = [":skipped-tests_lib"],
+    visibility = ["//visibility:public"],
+)

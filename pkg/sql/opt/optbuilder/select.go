@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -59,7 +59,7 @@ func (b *Builder) buildDataSource(
 		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
 
 		if source.Ordinality {
-			outScope = b.buildWithOrdinality("ordinality", outScope)
+			outScope = b.buildWithOrdinality(outScope)
 		}
 
 		// Overwrite output properties with any alias information.
@@ -77,16 +77,44 @@ func (b *Builder) buildDataSource(
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			locking.ignoreLockingForCTE()
 			outScope = inScope.push()
-			inCols := make(opt.ColList, len(cte.cols))
-			outCols := make(opt.ColList, len(cte.cols))
-			outScope.cols = nil
+			inCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outScope.cols, outScope.extraCols = nil, nil
 			for i, col := range cte.cols {
 				id := col.ID
 				c := b.factory.Metadata().ColumnMeta(id)
-				newCol := b.synthesizeColumn(outScope, col.Alias, c.Type, nil, nil)
+				newCol := b.synthesizeColumn(outScope, scopeColName(tree.Name(col.Alias)), c.Type, nil, nil)
 				newCol.table = *tn
 				inCols[i] = id
 				outCols[i] = newCol.id
+			}
+
+			if b.evalCtx.SessionData().PropagateInputOrdering && len(inScope.ordering) > 0 {
+				var oldToNew opt.ColMap
+				for i := range inCols {
+					oldToNew.Set(int(inCols[i]), int(outCols[i]))
+				}
+				outScope.ordering = make(opt.Ordering, len(inScope.ordering))
+				for i, col := range inScope.ordering {
+					var newID int
+					var ok bool
+					if newID, ok = oldToNew.Get(int(col.ID())); !ok {
+						c := b.factory.Metadata().ColumnMeta(col.ID())
+						outScope.extraCols = append(outScope.extraCols,
+							scopeColumn{
+								name: scopeColName(tree.Name("order_" + c.Alias)),
+								typ:  c.Type,
+							},
+						)
+						newCol := &outScope.extraCols[len(outScope.extraCols)-1]
+						b.populateSynthesizedColumn(newCol, nil)
+						newCol.table = *tn
+						newID = int(newCol.id)
+						inCols = append(inCols, col.ID())
+						outCols = append(outCols, newCol.id)
+					}
+					outScope.ordering[i] = opt.MakeOrderingColumn(opt.ColumnID(newID), col.Descending())
+				}
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
@@ -100,23 +128,24 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		priv := privilege.SELECT
+		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
+
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
-			// SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges.
-			priv = privilege.UPDATE
+			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
+			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
-		ds, resName := b.resolveDataSource(tn, priv)
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
-					includeMutations: false,
-					includeSystem:    true,
-					includeVirtual:   false,
+					includeMutations:       false,
+					includeSystem:          true,
+					includeInverted:        false,
+					includeVirtualComputed: true,
 				}),
 				indexFlags, locking, inScope,
 			)
@@ -167,14 +196,14 @@ func (b *Builder) buildDataSource(
 
 		id := b.factory.Memo().NextWithID()
 		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
-		cte := cteSource{
+		cte := &cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
 			originalExpr: source.Statement,
 			expr:         innerScope.expr,
 			id:           id,
 		}
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+		b.addCTE(cte)
 
 		inCols := make(opt.ColList, len(cte.cols))
 		outCols := make(opt.ColList, len(cte.cols))
@@ -205,14 +234,14 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		priv := privilege.SELECT
+		ds, depName := b.resolveDataSourceRef(source, privilege.SELECT)
+
 		locking = locking.filter(source.As.Alias)
 		if locking.isSet() {
-			// SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges.
-			priv = privilege.UPDATE
+			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
+			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
-		ds := b.resolveDataSourceRef(source, priv)
 		switch t := ds.(type) {
 		case cat.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, locking, inScope)
@@ -302,7 +331,7 @@ func (b *Builder) buildView(
 	for i := range outScope.cols {
 		outScope.cols[i].table = *viewName
 		if hasCols {
-			outScope.cols[i].name = view.ColumnName(i)
+			outScope.cols[i].name = scopeColName(view.ColumnName(i))
 		}
 	}
 
@@ -356,10 +385,10 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 					))
 				}
 				col := &scope.cols[colIdx]
-				if col.hidden {
+				if col.visibility != visible {
 					continue
 				}
-				col.name = colAlias[aliasIdx]
+				col.name = scopeColName(colAlias[aliasIdx])
 				if isScan {
 					// Override column metadata alias.
 					colMeta := b.factory.Metadata().ColumnMeta(col.id)
@@ -397,9 +426,10 @@ func (b *Builder) buildScanFromTableRef(
 		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	} else {
 		ordinals = tableOrdinals(tab, columnKinds{
-			includeMutations: false,
-			includeSystem:    true,
-			includeVirtual:   false,
+			includeMutations:       false,
+			includeSystem:          true,
+			includeInverted:        false,
+			includeVirtualComputed: true,
 		})
 	}
 
@@ -417,17 +447,24 @@ func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta 
 	return md.TableMeta(tabID)
 }
 
-// buildScan builds a memo group for a ScanOp expression on the given table.
+// buildScan builds a memo group for a ScanOp expression on the given table. If
+// the ordinals list contains any VirtualComputed columns, a ProjectOp is built
+// on top.
 //
-// The scan projects the given table ordinals.
+// The resulting scope and expression output the given table ordinals. If an
+// ordinal is for a VirtualComputed column, the ordinals it depends on must also
+// be in the list (in practice, this coincides with all "ordinary" table columns
+// being in the list).
 //
 // If scanMutationCols is true, then include columns being added or dropped from
 // the table. These are currently required by the execution engine as "fetch
 // columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
 // DELETE).
 //
-// NOTE: Callers must take care that these mutation columns are never used in
-//       any other way, since they may not have been initialized yet by the
+// NOTE: Callers must take care that mutation columns (columns that are being
+//       added or dropped from the table) are only used when performing mutation
+//       DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
+//       any other way because they may not have been initialized yet by the
 //       backfiller!
 //
 // See Builder.buildStmt for a description of the remaining input and return
@@ -445,26 +482,37 @@ func (b *Builder) buildScan(
 	tab := tabMeta.Table
 	tabID := tabMeta.MetaID
 
-	if indexFlags != nil && indexFlags.IgnoreForeignKeys {
-		tabMeta.IgnoreForeignKeys = true
+	if indexFlags != nil {
+		if indexFlags.IgnoreForeignKeys {
+			tabMeta.IgnoreForeignKeys = true
+		}
+		if indexFlags.IgnoreUniqueWithoutIndexKeys {
+			tabMeta.IgnoreUniqueWithoutIndexKeys = true
+		}
 	}
 
 	outScope = inScope.push()
 
-	var tabColIDs opt.ColSet
+	// We collect VirtualComputed columns separately; these cannot be scanned,
+	// they can only be projected afterward.
+	var scanColIDs, virtualColIDs opt.ColSet
 	outScope.cols = make([]scopeColumn, len(ordinals))
 	for i, ord := range ordinals {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
-		tabColIDs.Add(colID)
 		name := col.ColName()
+		if col.IsVirtualComputed() {
+			virtualColIDs.Add(colID)
+		} else {
+			scanColIDs.Add(colID)
+		}
 		kind := col.Kind()
 		outScope.cols[i] = scopeColumn{
 			id:           colID,
-			name:         name,
+			name:         scopeColName(name),
 			table:        tabMeta.Alias,
 			typ:          col.DatumType(),
-			hidden:       col.IsHidden() || kind != cat.Ordinary,
+			visibility:   columnVisibility(col.Visibility()),
 			kind:         kind,
 			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
 			tableOrdinal: ord,
@@ -480,61 +528,127 @@ func (b *Builder) buildScan(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s not allowed with virtual tables", locking.get().Strength))
 		}
-		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
+		private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 		outScope.expr = b.factory.ConstructScan(&private)
 
-		// Virtual tables should not be collected as view dependencies.
-	} else {
-		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
-		if indexFlags != nil {
-			private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
-			if indexFlags.Index != "" || indexFlags.IndexID != 0 {
-				idx := -1
+		// Note: virtual tables should not be collected as view dependencies.
+		return outScope
+	}
+
+	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
+	if indexFlags != nil {
+		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
+		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
+			idx := -1
+			for i := 0; i < tab.IndexCount(); i++ {
+				if tab.Index(i).Name() == tree.Name(indexFlags.Index) ||
+					tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
+					idx = i
+					break
+				}
+			}
+			if idx == -1 {
+				var err error
+				if indexFlags.Index != "" {
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index %q not found", tree.ErrString(&indexFlags.Index))
+				} else {
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index [%d] not found", indexFlags.IndexID)
+				}
+				panic(err)
+			}
+			private.Flags.ForceIndex = true
+			private.Flags.Index = idx
+			private.Flags.Direction = indexFlags.Direction
+		}
+		private.Flags.ForceZigzag = indexFlags.ForceZigzag
+		if len(indexFlags.ZigzagIndexes) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, name := range indexFlags.ZigzagIndexes {
+				var found bool
 				for i := 0; i < tab.IndexCount(); i++ {
-					if tab.Index(i).Name() == tree.Name(indexFlags.Index) ||
-						tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
-						idx = i
+					if tab.Index(i).Name() == tree.Name(name) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
 						break
 					}
 				}
-				if idx == -1 {
-					var err error
-					if indexFlags.Index != "" {
-						err = errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
-					} else {
-						err = errors.Errorf("index [%d] not found", indexFlags.IndexID)
-					}
-					panic(err)
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
 				}
-				private.Flags.ForceIndex = true
-				private.Flags.Index = idx
-				private.Flags.Direction = indexFlags.Direction
 			}
 		}
-		if locking.isSet() {
-			private.Locking = locking.get()
-		}
-
-		b.addCheckConstraintsForTable(tabMeta)
-		b.addComputedColsForTable(tabMeta)
-		b.addPartialIndexPredicatesForTable(tabMeta)
-
-		outScope.expr = b.factory.ConstructScan(&private)
-
-		if b.trackViewDeps {
-			dep := opt.ViewDep{DataSource: tab}
-			dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
-			// We will track the ColumnID to Ord mapping so Ords can be added
-			// when a column is referenced.
-			for i, col := range outScope.cols {
-				dep.ColumnIDToOrd[col.id] = ordinals[i]
+		if len(indexFlags.ZigzagIndexIDs) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, id := range indexFlags.ZigzagIndexIDs {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).ID() == cat.StableID(id) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index [%d] not found", id))
+				}
 			}
-			if private.Flags.ForceIndex {
-				dep.SpecificIndex = true
-				dep.Index = private.Flags.Index
-			}
-			b.viewDeps = append(b.viewDeps, dep)
 		}
+	}
+	if locking.isSet() {
+		private.Locking = locking.get()
+	}
+	if b.evalCtx.AsOfSystemTime != nil && b.evalCtx.AsOfSystemTime.BoundedStaleness {
+		private.Flags.NoIndexJoin = true
+		private.Flags.NoZigzagJoin = true
+	}
+
+	b.addCheckConstraintsForTable(tabMeta)
+	b.addComputedColsForTable(tabMeta)
+
+	outScope.expr = b.factory.ConstructScan(&private)
+
+	// Add the partial indexes after constructing the scan so we can use the
+	// logical properties of the scan to fully normalize the index predicates.
+	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
+
+	if !virtualColIDs.Empty() {
+		// Project the expressions for the virtual columns (and pass through all
+		// scanned columns).
+		// TODO(radu): we don't currently support virtual columns depending on other
+		// virtual columns.
+		proj := make(memo.ProjectionsExpr, 0, virtualColIDs.Len())
+		virtualColIDs.ForEach(func(col opt.ColumnID) {
+			item := b.factory.ConstructProjectionsItem(tabMeta.ComputedCols[col], col)
+			if !item.ScalarProps().OuterCols.SubsetOf(scanColIDs) {
+				panic(errors.AssertionFailedf("scanned virtual column depends on non-scanned column"))
+			}
+			proj = append(proj, item)
+		})
+		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
+	}
+
+	if b.trackViewDeps {
+		dep := opt.ViewDep{DataSource: tab}
+		dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
+		// We will track the ColumnID to Ord mapping so Ords can be added
+		// when a column is referenced.
+		for i, col := range outScope.cols {
+			dep.ColumnIDToOrd[col.id] = ordinals[i]
+		}
+		if private.Flags.ForceIndex {
+			dep.SpecificIndex = true
+			dep.Index = private.Flags.Index
+		}
+		b.viewDeps = append(b.viewDeps, dep)
 	}
 	return outScope
 }
@@ -547,6 +661,17 @@ func (b *Builder) buildScan(
 // These expressions are used as "known truths" about table data; as such they
 // can only contain immutable operators.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
+	// Columns of a user defined type have a constraint to ensure
+	// enum values for that column belong to the UDT. We do not want to
+	// track view deps here, or else a view depending on a table with a
+	// column that is a UDT will result in a type dependency being added
+	// between the view and the UDT, even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
@@ -600,7 +725,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		if memo.ExprIsNeverNull(condition, notNullCols) {
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(condition, &sharedProps)
+			memo.BuildSharedProps(condition, &sharedProps, b.evalCtx)
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				filters = append(filters, b.factory.ConstructFiltersItem(condition))
 			}
@@ -616,6 +741,16 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+	// We do not want to track view deps here, otherwise a view depending
+	// on a table with a computed column of a UDT will result in a
+	// type dependency being added between the view and the UDT,
+	// even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -638,7 +773,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
-		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
+		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType()); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
@@ -646,81 +781,11 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			})
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(scalar, &sharedProps)
+			memo.BuildSharedProps(scalar, &sharedProps, b.evalCtx)
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				tabMeta.AddComputedCol(colID, scalar)
 			}
 		}
-	}
-}
-
-// addPartialIndexPredicatesForTable finds all partial indexes in the table and
-// adds their predicates to the table metadata (see
-// TableMeta.PartialIndexPredicates). The predicates are converted from strings
-// to ScalarExprs here.
-//
-// The predicates are used as "known truths" about table data. Any predicates
-// containing non-immutable operators are omitted.
-func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
-	tab := tabMeta.Table
-
-	// Find the first partial index.
-	numIndexes := tab.IndexCount()
-	indexOrd := 0
-	for ; indexOrd < numIndexes; indexOrd++ {
-		if _, ok := tab.Index(indexOrd).Predicate(); ok {
-			break
-		}
-	}
-
-	// Return early if there are no partial indexes. Only partial indexes have
-	// predicates.
-	if indexOrd == numIndexes {
-		return
-	}
-
-	// Create a scope that can be used for building the scalar expressions.
-	tableScope := b.allocScope()
-	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
-
-	// Skip to the first partial index we found above.
-	for ; indexOrd < numIndexes; indexOrd++ {
-		index := tab.Index(indexOrd)
-		pred, ok := index.Predicate()
-
-		// If the index is not a partial index, do nothing.
-		if !ok {
-			continue
-		}
-
-		expr, err := parser.ParseExpr(pred)
-		if err != nil {
-			panic(err)
-		}
-
-		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-
-		var scalar opt.ScalarExpr
-		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
-		})
-
-		// Wrap the scalar in a FiltersItem.
-		filter := b.factory.ConstructFiltersItem(scalar)
-
-		// Expressions with non-immutable operators are not supported as partial
-		// index predicates.
-		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
-			panic(errors.AssertionFailedf("partial index predicate is not immutable"))
-		}
-
-		// Wrap the predicate filter expression in a FiltersExpr and normalize
-		// it.
-		filters := memo.FiltersExpr{filter}
-		filters = b.factory.NormalizePartialIndexPredicate(filters)
-
-		// Add the filters to the table metadata.
-		tabMeta.AddPartialIndexPredicate(indexOrd, &filters)
 	}
 }
 
@@ -730,9 +795,9 @@ func (b *Builder) buildSequenceSelect(
 	md := b.factory.Metadata()
 	outScope = inScope.push()
 
-	cols := make(opt.ColList, len(sqlbase.SequenceSelectColumns))
+	cols := make(opt.ColList, len(colinfo.SequenceSelectColumns))
 
-	for i, c := range sqlbase.SequenceSelectColumns {
+	for i, c := range colinfo.SequenceSelectColumns {
 		cols[i] = md.AddColumn(c.Name, c.Typ)
 	}
 
@@ -741,7 +806,7 @@ func (b *Builder) buildSequenceSelect(
 		col := md.ColumnMeta(c)
 		outScope.cols[i] = scopeColumn{
 			id:    c,
-			name:  tree.Name(col.Alias),
+			name:  scopeColName(tree.Name(col.Alias)),
 			table: *seqName,
 			typ:   col.Type,
 		}
@@ -759,14 +824,13 @@ func (b *Builder) buildSequenceSelect(
 	return outScope
 }
 
-// buildWithOrdinality builds a group which appends an increasing integer column to
-// the output. colName optionally denotes the name this column is given, or can
-// be blank for none.
+// buildWithOrdinality builds a group which appends an increasing integer column
+// to the output.
 //
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
-func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope *scope) {
-	col := b.synthesizeColumn(inScope, colName, types.Int, nil, nil /* scalar */)
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) buildWithOrdinality(inScope *scope) (outScope *scope) {
+	col := b.synthesizeColumn(inScope, scopeColName("ordinality"), types.Int, nil, nil /* scalar */)
 
 	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
 	// for the semantics around WITH ORDINALITY and ordering.
@@ -778,110 +842,6 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	})
 
 	return inScope
-}
-
-func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
-	if with == nil {
-		return inScope
-	}
-
-	outScope = inScope.push()
-	addedCTEs := make([]cteSource, len(with.CTEList))
-	hasRecursive := false
-
-	// Make a fake subquery to ensure that no CTEs are correlated.
-	// TODO(justin): relax this restriction.
-	outer := b.subquery
-	defer func() { b.subquery = outer }()
-	b.subquery = &subquery{}
-
-	outScope.ctes = make(map[string]*cteSource)
-	for i, cte := range with.CTEList {
-		hasRecursive = hasRecursive || with.Recursive
-		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
-
-		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
-		if b.subquery != nil && !b.subquery.outerCols.Empty() {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
-		}
-
-		aliasStr := cte.Name.Alias.String()
-		if _, ok := outScope.ctes[aliasStr]; ok {
-			panic(pgerror.Newf(
-				pgcode.DuplicateAlias, "WITH query name %s specified more than once", aliasStr,
-			))
-		}
-
-		id := b.factory.Memo().NextWithID()
-		b.factory.Metadata().AddWithBinding(id, cteExpr)
-
-		addedCTEs[i] = cteSource{
-			name:         cte.Name,
-			cols:         cteCols,
-			originalExpr: cte.Stmt,
-			expr:         cteExpr,
-			id:           id,
-			mtr:          cte.Mtr,
-		}
-		cte := &addedCTEs[i]
-		outScope.ctes[cte.name.Alias.String()] = cte
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
-
-		if cteExpr.Relational().CanMutate && !inScope.atRoot {
-			panic(
-				pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"WITH clause containing a data-modifying statement must be at the top level",
-				),
-			)
-		}
-
-	}
-
-	telemetry.Inc(sqltelemetry.CteUseCounter)
-	if hasRecursive {
-		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
-	}
-
-	return outScope
-}
-
-// A WITH constructed within an EXPLAIN should not be hoisted above it, and so
-// we need to denote a boundary which blocks them.
-func (b *Builder) pushWithFrame() {
-	b.cteStack = append(b.cteStack, []cteSource{})
-}
-
-// popWithFrame wraps the given scope's expression in the CTEs that have been
-// queued up at this level.
-func (b *Builder) popWithFrame(s *scope) {
-	s.expr = b.flushCTEs(s.expr)
-}
-
-// flushCTEs adds With expressions on top of an expression.
-func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
-	ctes := b.cteStack[len(b.cteStack)-1]
-	b.cteStack = b.cteStack[:len(b.cteStack)-1]
-
-	if len(ctes) == 0 {
-		return expr
-	}
-
-	// Since later CTEs can refer to earlier ones, we want to add these in
-	// reverse order.
-	for i := len(ctes) - 1; i >= 0; i-- {
-		expr = b.factory.ConstructWith(
-			ctes[i].expr,
-			expr,
-			&memo.WithPrivate{
-				ID:           ctes[i].id,
-				Name:         string(ctes[i].name.Alias),
-				Mtr:          ctes[i].mtr,
-				OriginalExpr: ctes[i].originalExpr,
-			},
-		)
-	}
-	return expr
 }
 
 // buildSelectStmt builds a set of memo groups that represent the given select
@@ -1008,10 +968,10 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := b.addColumn(projectionsScope, "" /* alias */, expr)
+			col := projectionsScope.addColumn(scopeColName(""), expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
-		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)
+		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
@@ -1056,7 +1016,7 @@ func (b *Builder) buildSelectClause(
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.
 	havingExpr := b.analyzeHaving(sel.Having, fromScope)
-	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope)
+	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope, tree.RejectGenerators)
 	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
 
 	var having opt.ScalarExpr
@@ -1290,18 +1250,27 @@ func (b *Builder) buildFromWithLateral(
 
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
-func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
+func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
+	asOf, err := tree.EvalAsOfTimestamp(
+		b.ctx,
+		asOfClause,
+		b.semaCtx,
+		b.evalCtx,
+		tree.EvalAsOfTimestampOptionAllowBoundedStaleness,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	if b.semaCtx.AsOfTimestamp == nil {
+	if b.evalCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.semaCtx.AsOfTimestamp != ts {
+	// Allow anything with max_timestamp_bound to differ, as this
+	// is a retry and we expect AOST to differ.
+	if *b.evalCtx.AsOfSystemTime != asOf &&
+		b.evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}

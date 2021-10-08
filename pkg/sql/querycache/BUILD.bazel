@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "querycache",
+    srcs = [
+        "prepared_statement.go",
+        "query_cache.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/querycache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "querycache_test",
+    size = "small",
+    srcs = ["query_cache_test.go"],
+    embed = [":querycache"],
+    deps = [
+        "//pkg/sql/opt/memo",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

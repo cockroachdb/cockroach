@@ -8,325 +8,481 @@ CREATE TABLE kv (
   s STRING
 )
 
-query TTTTT
-EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
+query T
+EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1),
+bool_and(true), bool_or(false), xor_agg(b'\x01'), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1),
+regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
+FROM kv
 ----
-·               distribution         local                 ·                                                                                                                                                   ·
-·               vectorized           true                  ·                                                                                                                                                   ·
-group (scalar)  ·                    ·                     (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
- │              estimated row count  1 (missing stats)     ·                                                                                                                                                   ·
- │              aggregate 0          min(column6)          ·                                                                                                                                                   ·
- │              aggregate 1          max(column6)          ·                                                                                                                                                   ·
- │              aggregate 2          count(column9)        ·                                                                                                                                                   ·
- │              aggregate 3          sum_int(column6)      ·                                                                                                                                                   ·
- │              aggregate 4          avg(column6)          ·                                                                                                                                                   ·
- │              aggregate 5          sum(column6)          ·                                                                                                                                                   ·
- │              aggregate 6          stddev(column6)       ·                                                                                                                                                   ·
- │              aggregate 7          variance(column6)     ·                                                                                                                                                   ·
- │              aggregate 8          bool_and(column16)    ·                                                                                                                                                   ·
- │              aggregate 9          bool_or(column18)     ·                                                                                                                                                   ·
- │              aggregate 10         xor_agg(column20)     ·                                                                                                                                                   ·
- └── render     ·                    ·                     (column6 int, column9 unknown, column16 bool, column18 bool, column20 bytes)                                                                        ·
-      │         estimated row count  1000 (missing stats)  ·                                                                                                                                                   ·
-      │         render 0             (1)[int]              ·                                                                                                                                                   ·
-      │         render 1             (NULL)[unknown]       ·                                                                                                                                                   ·
-      │         render 2             (true)[bool]          ·                                                                                                                                                   ·
-      │         render 3             (false)[bool]         ·                                                                                                                                                   ·
-      │         render 4             ('\x01')[bytes]       ·                                                                                                                                                   ·
-      └── scan  ·                    ·                     ()                                                                                                                                                  ·
-·               estimated row count  1000 (missing stats)  ·                                                                                                                                                   ·
-·               table                kv@primary            ·                                                                                                                                                   ·
-·               spans                FULL SCAN             ·                                                                                                                                                   ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(column7)
+│ aggregate 1: max(column7)
+│ aggregate 2: count(column10)
+│ aggregate 3: sum_int(column7)
+│ aggregate 4: avg(column7)
+│ aggregate 5: sum(column7)
+│ aggregate 6: stddev(column7)
+│ aggregate 7: variance(column7)
+│ aggregate 8: bool_and(column17)
+│ aggregate 9: bool_or(column19)
+│ aggregate 10: xor_agg(column21)
+│ aggregate 11: corr(column7, column7)
+│ aggregate 12: covar_pop(column7, column7)
+│ aggregate 13: covar_samp(column7, column7)
+│ aggregate 14: sqrdiff(column7)
+│ aggregate 15: regr_intercept(column7, column7)
+│ aggregate 16: regr_r2(column7, column7)
+│ aggregate 17: regr_slope(column7, column7)
+│ aggregate 18: regr_sxx(column7, column7)
+│ aggregate 19: regr_sxy(column7, column7)
+│ aggregate 20: regr_syy(column7, column7)
+│ aggregate 21: count_rows()
+│ aggregate 22: regr_avgx(column7, column7)
+│ aggregate 23: regr_avgy(column7, column7)
+│
+└── • render
+    │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column7: (1)[int]
+    │ render column10: (NULL)[unknown]
+    │ render column17: (true)[bool]
+    │ render column19: (false)[bool]
+    │ render column21: ('\x01')[bytes]
+    │
+    └── • scan
+          columns: ()
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
-EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+query T
+EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v),
+bool_and(v = 1), bool_or(v = 1), xor_agg(s::bytes), corr(v, k), covar_pop(v, k), covar_samp(v, k), sqrdiff(v),
+regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
+FROM kv
 ----
-·                    distribution         local                        ·                                                                                                                                                    ·
-·                    vectorized           true                         ·                                                                                                                                                    ·
-project              ·                    ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
- └── group (scalar)  ·                    ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, xor_agg bytes)                 ·
-      │              estimated row count  1 (missing stats)            ·                                                                                                                                                    ·
-      │              aggregate 0          min(v)                       ·                                                                                                                                                    ·
-      │              aggregate 1          max(v)                       ·                                                                                                                                                    ·
-      │              aggregate 2          count(v)                     ·                                                                                                                                                    ·
-      │              aggregate 3          sum_int(column9)             ·                                                                                                                                                    ·
-      │              aggregate 4          avg(v)                       ·                                                                                                                                                    ·
-      │              aggregate 5          sum(v)                       ·                                                                                                                                                    ·
-      │              aggregate 6          stddev(v)                    ·                                                                                                                                                    ·
-      │              aggregate 7          variance(v)                  ·                                                                                                                                                    ·
-      │              aggregate 8          bool_and(column15)           ·                                                                                                                                                    ·
-      │              aggregate 9          xor_agg(column17)            ·                                                                                                                                                    ·
-      └── render     ·                    ·                            (column9 int, column15 bool, column17 bytes, v int)                                                                                                  ·
-           │         estimated row count  1000 (missing stats)         ·                                                                                                                                                    ·
-           │         render 0             (1)[int]                     ·                                                                                                                                                    ·
-           │         render 1             ((v)[int] = (1)[int])[bool]  ·                                                                                                                                                    ·
-           │         render 2             ((s)[string]::BYTES)[bytes]  ·                                                                                                                                                    ·
-           │         render 3             (v)[int]                     ·                                                                                                                                                    ·
-           └── scan  ·                    ·                            (v int, s string)                                                                                                                                    ·
-·                    estimated row count  1000 (missing stats)         ·                                                                                                                                                    ·
-·                    table                kv@primary                   ·                                                                                                                                                    ·
-·                    spans                FULL SCAN                    ·                                                                                                                                                    ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(v)
+│ aggregate 1: max(v)
+│ aggregate 2: count(v)
+│ aggregate 3: sum_int(column10)
+│ aggregate 4: avg(v)
+│ aggregate 5: sum(v)
+│ aggregate 6: stddev(v)
+│ aggregate 7: variance(v)
+│ aggregate 8: bool_and(column16)
+│ aggregate 9: bool_or(column16)
+│ aggregate 10: xor_agg(column19)
+│ aggregate 11: corr(v, k)
+│ aggregate 12: covar_pop(v, k)
+│ aggregate 13: covar_samp(v, k)
+│ aggregate 14: sqrdiff(v)
+│ aggregate 15: regr_intercept(column10, column10)
+│ aggregate 16: regr_r2(column10, column10)
+│ aggregate 17: regr_slope(column10, column10)
+│ aggregate 18: regr_sxx(column10, column10)
+│ aggregate 19: regr_sxy(column10, column10)
+│ aggregate 20: regr_syy(column10, column10)
+│ aggregate 21: count_rows()
+│ aggregate 22: regr_avgx(column10, column10)
+│ aggregate 23: regr_avgy(column10, column10)
+│
+└── • render
+    │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column10: (1)[int]
+    │ render column16: ((v)[int] = (1)[int])[bool]
+    │ render column19: ((s)[string]::BYTES)[bytes]
+    │ render k: (k)[int]
+    │ render v: (v)[int]
+    │
+    └── • scan
+          columns: (k int, v int, s string)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
 # Aggregate functions trigger aggregation and computation when there is no source.
-query TTTTT
-EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+query T
+EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1),
+bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1),
+regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 ----
-·                    distribution         local                               ·                                                                                                                                                   ·
-·                    vectorized           false                               ·                                                                                                                                                   ·
-render               ·                    ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
- │                   estimated row count  1                                   ·                                                                                                                                                   ·
- │                   render 0             ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
- │                   render 1             (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
- │                   render 2             (min)[int]                          ·                                                                                                                                                   ·
- │                   render 3             (count)[int]                        ·                                                                                                                                                   ·
- │                   render 4             (max)[int]                          ·                                                                                                                                                   ·
- │                   render 5             (sum_int)[int]                      ·                                                                                                                                                   ·
- │                   render 6             (sum)[decimal]                      ·                                                                                                                                                   ·
- │                   render 7             (stddev)[decimal]                   ·                                                                                                                                                   ·
- │                   render 8             (variance)[decimal]                 ·                                                                                                                                                   ·
- │                   render 9             (bool_and)[bool]                    ·                                                                                                                                                   ·
- │                   render 10            (bool_or)[bool]                     ·                                                                                                                                                   ·
- └── group (scalar)  ·                    ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
-      │              estimated row count  1                                   ·                                                                                                                                                   ·
-      │              aggregate 0          min(column1)                        ·                                                                                                                                                   ·
-      │              aggregate 1          count(column3)                      ·                                                                                                                                                   ·
-      │              aggregate 2          max(column1)                        ·                                                                                                                                                   ·
-      │              aggregate 3          sum_int(column1)                    ·                                                                                                                                                   ·
-      │              aggregate 4          avg(column1)                        ·                                                                                                                                                   ·
-      │              aggregate 5          sum(column1)                        ·                                                                                                                                                   ·
-      │              aggregate 6          stddev(column1)                     ·                                                                                                                                                   ·
-      │              aggregate 7          variance(column1)                   ·                                                                                                                                                   ·
-      │              aggregate 8          bool_and(column11)                  ·                                                                                                                                                   ·
-      │              aggregate 9          bool_or(column11)                   ·                                                                                                                                                   ·
-      │              aggregate 10         xor_agg(column14)                   ·                                                                                                                                                   ·
-      └── values     ·                    ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
-·                    size                 4 columns, 1 row                    ·                                                                                                                                                   ·
-·                    row 0, expr 0        (1)[int]                            ·                                                                                                                                                   ·
-·                    row 0, expr 1        (NULL)[unknown]                     ·                                                                                                                                                   ·
-·                    row 0, expr 2        (true)[bool]                        ·                                                                                                                                                   ·
-·                    row 0, expr 3        ('\x01')[bytes]                     ·                                                                                                                                                   ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
+│ estimated row count: 1
+│ render avg: ((avg)[decimal]::FLOAT8)[float]
+│ render to_hex: (to_hex((xor_agg)[bytes]))[string]
+│ render min: (min)[int]
+│ render count: (count)[int]
+│ render max: (max)[int]
+│ render sum_int: (sum_int)[int]
+│ render sum: (sum)[decimal]
+│ render stddev: (stddev)[decimal]
+│ render variance: (variance)[decimal]
+│ render bool_and: (bool_and)[bool]
+│ render bool_or: (bool_or)[bool]
+│ render corr: (corr)[float]
+│ render covar_pop: (covar_pop)[float]
+│ render covar_samp: (covar_samp)[float]
+│ render sqrdiff: (sqrdiff)[decimal]
+│ render regr_intercept: (regr_intercept)[float]
+│ render regr_r2: (regr_r2)[float]
+│ render regr_slope: (regr_slope)[float]
+│ render regr_sxx: (regr_sxx)[float]
+│ render regr_sxy: (regr_sxy)[float]
+│ render regr_syy: (regr_syy)[float]
+│ render regr_count: (count_rows)[int]
+│ render regr_avgx: (regr_avgx)[float]
+│ render regr_avgy: (regr_avgy)[float]
+│
+└── • group (scalar)
+    │ columns: (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, count_rows int, regr_avgx float, regr_avgy float)
+    │ estimated row count: 1
+    │ aggregate 0: min(column1)
+    │ aggregate 1: count(column3)
+    │ aggregate 2: max(column1)
+    │ aggregate 3: sum_int(column1)
+    │ aggregate 4: avg(column1)
+    │ aggregate 5: sum(column1)
+    │ aggregate 6: stddev(column1)
+    │ aggregate 7: variance(column1)
+    │ aggregate 8: bool_and(column11)
+    │ aggregate 9: bool_or(column11)
+    │ aggregate 10: xor_agg(column14)
+    │ aggregate 11: corr(column1, column1)
+    │ aggregate 12: covar_pop(column1, column1)
+    │ aggregate 13: covar_samp(column1, column1)
+    │ aggregate 14: sqrdiff(column1)
+    │ aggregate 15: regr_intercept(column1, column1)
+    │ aggregate 16: regr_r2(column1, column1)
+    │ aggregate 17: regr_slope(column1, column1)
+    │ aggregate 18: regr_sxx(column1, column1)
+    │ aggregate 19: regr_sxy(column1, column1)
+    │ aggregate 20: regr_syy(column1, column1)
+    │ aggregate 21: count_rows()
+    │ aggregate 22: regr_avgx(column1, column1)
+    │ aggregate 23: regr_avgy(column1, column1)
+    │
+    └── • values
+          columns: (column1 int, column3 unknown, column11 bool, column14 bytes)
+          size: 4 columns, 1 row
+          row 0, expr 0: (1)[int]
+          row 0, expr 1: (NULL)[unknown]
+          row 0, expr 2: (true)[bool]
+          row 0, expr 3: ('\x01')[bytes]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
-·          distribution         local                 ·                   ·
-·          vectorized           true                  ·                   ·
-group      ·                    ·                     (count int, k int)  ·
- │         estimated row count  1000 (missing stats)  ·                   ·
- │         aggregate 0          count_rows()          ·                   ·
- │         group by             k                     ·                   ·
- │         ordered              +k                    ·                   ·
- └── scan  ·                    ·                     (k int)             +k
-·          estimated row count  1000 (missing stats)  ·                   ·
-·          table                kv@primary            ·                   ·
-·          spans                FULL SCAN             ·                   ·
+distribution: local
+vectorized: true
+·
+• group
+│ columns: (count int, k int)
+│ estimated row count: 1,000 (missing stats)
+│ aggregate 0: count_rows()
+│ group by: k
+│ ordered: +k
+│
+└── • scan
+      columns: (k int)
+      ordering: +k
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
 # Selecting and grouping on a more complex expression works.
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-·               distribution         local                       ·                   ·
-·               vectorized           true                        ·                   ·
-group           ·                    ·                           (count int, r int)  ·
- │              estimated row count  1000 (missing stats)        ·                   ·
- │              aggregate 0          count_rows()                ·                   ·
- │              group by             column7                     ·                   ·
- └── render     ·                    ·                           (column7 int)       ·
-      │         estimated row count  1000 (missing stats)        ·                   ·
-      │         render 0             ((k)[int] + (v)[int])[int]  ·                   ·
-      └── scan  ·                    ·                           (k int, v int)      ·
-·               estimated row count  1000 (missing stats)        ·                   ·
-·               table                kv@primary                  ·                   ·
-·               spans                FULL SCAN                   ·                   ·
+distribution: local
+vectorized: true
+·
+• group
+│ columns: (count int, r int)
+│ estimated row count: 1,000 (missing stats)
+│ aggregate 0: count_rows()
+│ group by: column8
+│
+└── • render
+    │ columns: (column8 int)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column8: ((k)[int] + (v)[int])[int]
+    │
+    └── • scan
+          columns: (k int, v int)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
-·               distribution         local                                  ·                                          ·
-·               vectorized           true                                   ·                                          ·
-render          ·                    ·                                      (count int, r int)                         ·
- │              estimated row count  1000 (missing stats)                   ·                                          ·
- │              render 0             ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
- │              render 1             (count_rows)[int]                      ·                                          ·
- └── group      ·                    ·                                      (k int, count_rows int, any_not_null int)  ·
-      │         estimated row count  1000 (missing stats)                   ·                                          ·
-      │         aggregate 0          count_rows()                           ·                                          ·
-      │         aggregate 1          any_not_null(v)                        ·                                          ·
-      │         group by             k                                      ·                                          ·
-      │         ordered              +k                                     ·                                          ·
-      └── scan  ·                    ·                                      (k int, v int)                             +k
-·               estimated row count  1000 (missing stats)                   ·                                          ·
-·               table                kv@primary                             ·                                          ·
-·               spans                FULL SCAN                              ·                                          ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (count int, r int)
+│ estimated row count: 1,000 (missing stats)
+│ render r: ((k)[int] + (any_not_null)[int])[int]
+│ render count_rows: (count_rows)[int]
+│
+└── • group
+    │ columns: (k int, count_rows int, any_not_null int)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: count_rows()
+    │ aggregate 1: any_not_null(v)
+    │ group by: k
+    │ ordered: +k
+    │
+    └── • scan
+          columns: (k int, v int)
+          ordering: +k
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT count(k) FROM kv
 ----
-·               distribution         local                 ·            ·
-·               vectorized           true                  ·            ·
-group (scalar)  ·                    ·                     (count int)  ·
- │              estimated row count  1 (missing stats)     ·            ·
- │              aggregate 0          count_rows()          ·            ·
- └── scan       ·                    ·                     ()           ·
-·               estimated row count  1000 (missing stats)  ·            ·
-·               table                kv@primary            ·            ·
-·               spans                FULL SCAN             ·            ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
 ----
-·               distribution         local                 ·                                  ·
-·               vectorized           true                  ·                                  ·
-group (scalar)  ·                    ·                     (count int, sum decimal, max int)  ·
- │              estimated row count  1 (missing stats)     ·                                  ·
- │              aggregate 0          count_rows()          ·                                  ·
- │              aggregate 1          sum(k)                ·                                  ·
- │              aggregate 2          max(k)                ·                                  ·
- └── scan       ·                    ·                     (k int)                            ·
-·               estimated row count  1000 (missing stats)  ·                                  ·
-·               table                kv@primary            ·                                  ·
-·               spans                FULL SCAN             ·                                  ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count int, sum decimal, max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│ aggregate 1: sum(k)
+│ aggregate 2: max(k)
+│
+└── • scan
+      columns: (k int)
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
 ----
-·               distribution         local                 ·                                   ·
-·               vectorized           true                  ·                                   ·
-group (scalar)  ·                    ·                     (count, count, sum, sum, min, min)  ·
- │              estimated row count  1 (missing stats)     ·                                   ·
- │              aggregate 0          count(v)              ·                                   ·
- │              aggregate 1          count(DISTINCT v)     ·                                   ·
- │              aggregate 2          sum(v)                ·                                   ·
- │              aggregate 3          sum(DISTINCT v)       ·                                   ·
- │              aggregate 4          min(v)                ·                                   ·
- │              aggregate 5          min(v)                ·                                   ·
- └── scan       ·                    ·                     (v)                                 ·
-·               estimated row count  1000 (missing stats)  ·                                   ·
-·               table                kv@primary            ·                                   ·
-·               spans                FULL SCAN             ·                                   ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count, count, sum, sum, min, min)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count(v)
+│ aggregate 1: count(DISTINCT v)
+│ aggregate 2: sum(v)
+│ aggregate 3: sum(DISTINCT v)
+│ aggregate 4: min(v)
+│ aggregate 5: min(v)
+│
+└── • scan
+      columns: (v)
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-·                                  distribution         local                         ·             ·
-·                                  vectorized           true                          ·             ·
-group (scalar)                     ·                    ·                             (count)       ·
- │                                 estimated row count  1 (missing stats)             ·             ·
- │                                 aggregate 0          count(column11)               ·             ·
- └── distinct                      ·                    ·                             (column11)    ·
-      │                            estimated row count  1000 (missing stats)          ·             ·
-      │                            distinct on          column11                      ·             ·
-      └── render                   ·                    ·                             (column11)    ·
-           │                       estimated row count  1000000 (missing stats)       ·             ·
-           │                       render 0             ((k, v, w, s) AS k, v, w, s)  ·             ·
-           └── cross join (inner)  ·                    ·                             (k, v, w, s)  ·
-                │                  estimated row count  1000000 (missing stats)       ·             ·
-                ├── scan           ·                    ·                             (k, v, w, s)  ·
-                │                  estimated row count  1000 (missing stats)          ·             ·
-                │                  table                kv@primary                    ·             ·
-                │                  spans                FULL SCAN                     ·             ·
-                └── scan           ·                    ·                             ()            ·
-·                                  estimated row count  1000 (missing stats)          ·             ·
-·                                  table                kv@primary                    ·             ·
-·                                  spans                FULL SCAN                     ·             ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count(column13)
+│
+└── • distinct
+    │ columns: (column13)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: column13
+    │
+    └── • render
+        │ columns: (column13)
+        │ estimated row count: 1,000,000 (missing stats)
+        │ render column13: ((k, v, w, s) AS k, v, w, s)
+        │
+        └── • cross join (inner)
+            │ columns: (k, v, w, s)
+            │ estimated row count: 1,000,000 (missing stats)
+            │
+            ├── • scan
+            │     columns: (k, v, w, s)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: kv@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan
+                  columns: ()
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@primary
+                  spans: FULL SCAN
 
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
-]
 ----
-·                             distribution         local
-·                             vectorized           true
-project                       ·                    ·
- │                            estimated row count  1000 (missing stats)
- └── group                    ·                    ·
-      │                       estimated row count  1000 (missing stats)
-      │                       aggregate 0          min(k)
-      │                       group by             k
-      └── cross join (inner)  ·                    ·
-           │                  estimated row count  1000000 (missing stats)
-           ├── scan           ·                    ·
-           │                  estimated row count  1000 (missing stats)
-           │                  table                kv@primary
-           │                  spans                FULL SCAN
-           └── scan           ·                    ·
-·                             estimated row count  1000 (missing stats)
-·                             table                kv@primary
-·                             spans                FULL SCAN
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • group
+    │ columns: (k, min)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: min(k)
+    │ group by: k
+    │
+    └── • cross join (inner)
+        │ columns: (k, k)
+        │ estimated row count: 1,000,000 (missing stats)
+        │
+        ├── • scan
+        │     columns: (k)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: kv@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (k)
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
-]
 ----
-·                             distribution         local
-·                             vectorized           true
-project                       ·                    ·
- │                            estimated row count  1000 (missing stats)
- └── group                    ·                    ·
-      │                       estimated row count  1000 (missing stats)
-      │                       aggregate 0          min(k)
-      │                       group by             k
-      └── cross join (inner)  ·                    ·
-           │                  estimated row count  1000000 (missing stats)
-           ├── scan           ·                    ·
-           │                  estimated row count  1000 (missing stats)
-           │                  table                kv@primary
-           │                  spans                FULL SCAN
-           └── scan           ·                    ·
-·                             estimated row count  1000 (missing stats)
-·                             table                kv@primary
-·                             spans                FULL SCAN
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • group
+    │ columns: (k, min)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: min(k)
+    │ group by: k
+    │
+    └── • cross join (inner)
+        │ columns: (k, k)
+        │ estimated row count: 1,000,000 (missing stats)
+        │
+        ├── • scan
+        │     columns: (k)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: kv@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (k)
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
-]
 ----
-·                             distribution         local
-·                             vectorized           true
-project                       ·                    ·
- │                            estimated row count  1000 (missing stats)
- └── group                    ·                    ·
-      │                       estimated row count  1000 (missing stats)
-      │                       aggregate 0          min(k)
-      │                       group by             k
-      └── cross join (inner)  ·                    ·
-           │                  estimated row count  1000000 (missing stats)
-           ├── scan           ·                    ·
-           │                  estimated row count  1000 (missing stats)
-           │                  table                kv@primary
-           │                  spans                FULL SCAN
-           └── scan           ·                    ·
-·                             estimated row count  1000 (missing stats)
-·                             table                kv@primary
-·                             spans                FULL SCAN
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • group
+    │ columns: (k, min)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: min(k)
+    │ group by: k
+    │
+    └── • cross join (inner)
+        │ columns: (k, k)
+        │ estimated row count: 1,000,000 (missing stats)
+        │
+        ├── • scan
+        │     columns: (k)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: kv@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (k)
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
 # Show reuse of renders expression inside an expansion.
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
-]
 ----
-·                             distribution         local
-·                             vectorized           true
-project                       ·                    ·
- │                            estimated row count  1000 (missing stats)
- └── distinct                 ·                    ·
-      │                       estimated row count  1000 (missing stats)
-      │                       distinct on          v, w, s
-      └── cross join (inner)  ·                    ·
-           │                  estimated row count  1000000 (missing stats)
-           ├── scan           ·                    ·
-           │                  estimated row count  1000 (missing stats)
-           │                  table                kv@primary
-           │                  spans                FULL SCAN
-           └── scan           ·                    ·
-·                             estimated row count  1000 (missing stats)
-·                             table                kv@primary
-·                             spans                FULL SCAN
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • distinct
+    │ columns: (v, w, s)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: v, w, s
+    │
+    └── • cross join (inner)
+        │ columns: (v, w, s)
+        │ estimated row count: 1,000,000 (missing stats)
+        │
+        ├── • scan
+        │     columns: (v, w, s)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: kv@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: ()
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
 statement ok
 CREATE TABLE abc (
@@ -336,19 +492,60 @@ CREATE TABLE abc (
   d DECIMAL
 )
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(a) FROM abc
 ----
-·               distribution         local              ·           ·
-·               vectorized           true               ·           ·
-group (scalar)  ·                    ·                  (min char)  ·
- │              estimated row count  1 (missing stats)  ·           ·
- │              aggregate 0          any_not_null(a)    ·           ·
- └── scan       ·                    ·                  (a char)    ·
-·               estimated row count  1 (missing stats)  ·           ·
-·               table                abc@primary        ·           ·
-·               spans                LIMITED SCAN       ·           ·
-·               limit                1                  ·           ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min char)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(a)
+│
+└── • scan
+      columns: (a char)
+      estimated row count: 1 (missing stats)
+      table: abc@primary
+      spans: LIMITED SCAN
+      limit: 1
+
+query T
+EXPLAIN SELECT min(a), max(a) FROM abc
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: abc@primary
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: abc@primary
+              spans: LIMITED SCAN
+              limit: 1
 
 statement ok
 CREATE TABLE xyz (
@@ -365,119 +562,162 @@ CREATE TABLE xyz (
 statement ok
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz
 ----
-·               distribution         local              ·          ·
-·               vectorized           true               ·          ·
-group (scalar)  ·                    ·                  (min int)  ·
- │              estimated row count  1 (missing stats)  ·          ·
- │              aggregate 0          any_not_null(x)    ·          ·
- └── scan       ·                    ·                  (x int)    ·
-·               estimated row count  1 (missing stats)  ·          ·
-·               table                xyz@xy             ·          ·
-·               spans                LIMITED SCAN       ·          ·
-·               limit                1                  ·          ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(x)
+│
+└── • scan
+      columns: (x int)
+      estimated row count: 1 (missing stats)
+      table: xyz@xy
+      spans: LIMITED SCAN
+      limit: 1
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-·               distribution         local              ·          ·
-·               vectorized           true               ·          ·
-group (scalar)  ·                    ·                  (min int)  ·
- │              estimated row count  1 (missing stats)  ·          ·
- │              aggregate 0          any_not_null(x)    ·          ·
- └── scan       ·                    ·                  (x int)    ·
-·               estimated row count  1 (missing stats)  ·          ·
-·               table                xyz@xy             ·          ·
-·               spans                /0-/1 /4-/5 /7-/8  ·          ·
-·               limit                1                  ·          ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(x)
+│
+└── • scan
+      columns: (x int)
+      estimated row count: 1 (missing stats)
+      table: xyz@xy
+      spans: /0-/1 /4-/5 /7-/8
+      limit: 1
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
-·               distribution         local              ·          ·
-·               vectorized           true               ·          ·
-group (scalar)  ·                    ·                  (max int)  ·
- │              estimated row count  1 (missing stats)  ·          ·
- │              aggregate 0          any_not_null(x)    ·          ·
- └── revscan    ·                    ·                  (x int)    ·
-·               estimated row count  1 (missing stats)  ·          ·
-·               table                xyz@xy             ·          ·
-·               spans                LIMITED SCAN       ·          ·
-·               limit                1                  ·          ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(x)
+│
+└── • revscan
+      columns: (x int)
+      estimated row count: 1 (missing stats)
+      table: xyz@xy
+      spans: LIMITED SCAN
+      limit: 1
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-·               distribution         local              ·               ·
-·               vectorized           true               ·               ·
-group (scalar)  ·                    ·                  (min int)       ·
- │              estimated row count  1 (missing stats)  ·               ·
- │              aggregate 0          any_not_null(y)    ·               ·
- └── project    ·                    ·                  (y int)         ·
-      └── scan  ·                    ·                  (x int, y int)  ·
-·               estimated row count  1 (missing stats)  ·               ·
-·               table                xyz@xy             ·               ·
-·               spans                /1/!NULL-/2        ·               ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(y)
+│
+└── • project
+    │ columns: (y int)
+    │
+    └── • scan
+          columns: (x int, y int)
+          estimated row count: 1 (missing stats)
+          table: xyz@xy
+          spans: /1/!NULL-/2
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-·               distribution         local              ·               ·
-·               vectorized           true               ·               ·
-group (scalar)  ·                    ·                  (max int)       ·
- │              estimated row count  1 (missing stats)  ·               ·
- │              aggregate 0          any_not_null(y)    ·               ·
- └── project    ·                    ·                  (y int)         ·
-      └── scan  ·                    ·                  (x int, y int)  ·
-·               estimated row count  1 (missing stats)  ·               ·
-·               table                xyz@xy             ·               ·
-·               spans                /1/!NULL-/2        ·               ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(y)
+│
+└── • project
+    │ columns: (y int)
+    │
+    └── • scan
+          columns: (x int, y int)
+          estimated row count: 1 (missing stats)
+          table: xyz@xy
+          spans: /1/!NULL-/2
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7
 ----
-·               distribution         local                        ·                 ·
-·               vectorized           true                         ·                 ·
-group (scalar)  ·                    ·                            (min int)         ·
- │              estimated row count  1 (missing stats)            ·                 ·
- │              aggregate 0          any_not_null(y)              ·                 ·
- └── project    ·                    ·                            (y int)           ·
-      └── scan  ·                    ·                            (y int, z float)  ·
-·               estimated row count  1 (missing stats)            ·                 ·
-·               table                xyz@zyx                      ·                 ·
-·               spans                /7/!NULL-/7.000000000000001  ·                 ·
-·               limit                1                            ·                 ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(y)
+│
+└── • project
+    │ columns: (y int)
+    │
+    └── • scan
+          columns: (y int, z float)
+          estimated row count: 1 (missing stats)
+          table: xyz@zyx
+          spans: /7/!NULL-/7.000000000000001
+          limit: 1
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE z = 7
 ----
-·                  distribution         local                        ·                 ·
-·                  vectorized           true                         ·                 ·
-group (scalar)     ·                    ·                            (max int)         ·
- │                 estimated row count  1 (missing stats)            ·                 ·
- │                 aggregate 0          any_not_null(y)              ·                 ·
- └── project       ·                    ·                            (y int)           ·
-      └── revscan  ·                    ·                            (y int, z float)  ·
-·                  estimated row count  1 (missing stats)            ·                 ·
-·                  table                xyz@zyx                      ·                 ·
-·                  spans                /7/!NULL-/7.000000000000001  ·                 ·
-·                  limit                1                            ·                 ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(y)
+│
+└── • project
+    │ columns: (y int)
+    │
+    └── • revscan
+          columns: (y int, z float)
+          estimated row count: 1 (missing stats)
+          table: xyz@zyx
+          spans: /7/!NULL-/7.000000000000001
+          limit: 1
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-·               distribution         local              ·                        ·
-·               vectorized           true               ·                        ·
-group (scalar)  ·                    ·                  (min int)                ·
- │              estimated row count  1 (missing stats)  ·                        ·
- │              aggregate 0          min(x)             ·                        ·
- └── project    ·                    ·                  (x int)                  ·
-      └── scan  ·                    ·                  (x int, y int, z float)  ·
-·               estimated row count  1 (missing stats)  ·                        ·
-·               table                xyz@zyx            ·                        ·
-·               spans                /3/2-/3/3          ·                        ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(x)
+│
+└── • project
+    │ columns: (x int)
+    │
+    └── • scan
+          columns: (x int, y int, z float)
+          estimated row count: 1 (missing stats)
+          table: xyz@zyx
+          spans: /3/2-/3/3
+          limit: 1
 
 statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
@@ -490,19 +730,347 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-·               distribution         local              ·                        ·
-·               vectorized           true               ·                        ·
-group (scalar)  ·                    ·                  (max int)                ·
- │              estimated row count  1 (missing stats)  ·                        ·
- │              aggregate 0          max(x)             ·                        ·
- └── project    ·                    ·                  (x int)                  ·
-      └── scan  ·                    ·                  (x int, y int, z float)  ·
-·               estimated row count  1 (missing stats)  ·                        ·
-·               table                xyz@zyx            ·                        ·
-·               spans                /3/2-/3/3          ·                        ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(x)
+│
+└── • project
+    │ columns: (x int)
+    │
+    └── • revscan
+          columns: (x int, y int, z float)
+          estimated row count: 1 (missing stats)
+          table: xyz@zyx
+          spans: /3/2-/3/3
+          limit: 1
+
+# MULTIPLE MIN/MAX
+
+query T
+EXPLAIN SELECT min(x), max(z) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: xyz@zyx
+              spans: (/NULL - ]
+              limit: 1
+
+# The SUM disables ReplaceScalarMinMaxWithScalarSubqueries.
+query T
+EXPLAIN SELECT min(x), max(z), sum(x) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+
+# We don't yet support the optimization to convert multiple aggregates to
+# subqueries with limit 1 when there is a filter.
+query T
+EXPLAIN SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/0 - /0] [/4 - /4] [/7 - /7]
+
+query T
+EXPLAIN SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/1 - /1]
+
+# MULTIPLE MIN/MAX WITH FILTER
+
+query T
+EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@zyx
+│             spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • union all
+                │
+                ├── • union all
+                │   │
+                │   ├── • revscan
+                │   │     missing stats
+                │   │     table: xyz@zyx
+                │   │     spans: (/3.0/NULL - /3.0]
+                │   │     limit: 1
+                │   │
+                │   └── • revscan
+                │         missing stats
+                │         table: xyz@zyx
+                │         spans: (/6.0/NULL - /6.0]
+                │         limit: 1
+                │
+                └── • revscan
+                      missing stats
+                      table: xyz@zyx
+                      spans: (/8.0/NULL - /8.0]
+                      limit: 1
+
+# The COUNT disables ReplaceFilteredScalarMinMaxWithSubqueries.
+query T
+EXPLAIN SELECT min(z), max(y), count(x) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@zyx
+      spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+
+# Filter on derived table is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: y > 0
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+└── • subquery
+   │ id: @S2
+   │ original sql: <unknown>
+   │ exec mode: one row
+   │
+   └── • group (scalar)
+       │
+       └── • limit
+           │ count: 1
+           │
+           └── • filter
+               │ filter: y > 0
+               │
+               └── • scan
+                     missing stats
+                     table: xyz@xy
+                     spans: FULL SCAN
+
+# Scalar subquery in filter is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S2
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S3
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S4
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: (z, x) = @S3
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+├── • subquery
+│   │ id: @S5
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S6
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S7
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+└── • subquery
+    │ id: @S8
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • filter
+                │ filter: (z, x) = @S7
+                │
+                └── • scan
+                      missing stats
+                      table: xyz@primary
+                      spans: FULL SCAN
 
 # VARIANCE/STDDEV
 
@@ -524,18 +1092,22 @@ fetched: /xyz/primary/7 -> NULL
 fetched: /xyz/primary/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 ----
-·               distribution         local              ·                   ·
-·               vectorized           true               ·                   ·
-group (scalar)  ·                    ·                  (variance decimal)  ·
- │              estimated row count  1 (missing stats)  ·                   ·
- │              aggregate 0          variance(x)        ·                   ·
- └── scan       ·                    ·                  (x int)             ·
-·               estimated row count  1 (missing stats)  ·                   ·
-·               table                xyz@xy             ·                   ·
-·               spans                /1-/2              ·                   ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (variance decimal)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: variance(x)
+│
+└── • scan
+      columns: (x int)
+      estimated row count: 1 (missing stats)
+      table: xyz@xy
+      spans: /1-/2
 
 ## Tests for the single-row optimization.
 statement ok
@@ -596,84 +1168,117 @@ INSERT INTO ab VALUES
 #fetched: /ab/primary/5 -> NULL
 #output row: [5]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
-·               distribution         local                 ·                        ·
-·               vectorized           true                  ·                        ·
-sort            ·                    ·                     (v int, count int)       +count
- │              estimated row count  100 (missing stats)   ·                        ·
- │              order                +count_rows           ·                        ·
- └── group      ·                    ·                     (v int, count_rows int)  ·
-      │         estimated row count  100 (missing stats)   ·                        ·
-      │         aggregate 0          count_rows()          ·                        ·
-      │         group by             v                     ·                        ·
-      └── scan  ·                    ·                     (v int)                  ·
-·               estimated row count  1000 (missing stats)  ·                        ·
-·               table                kv@primary            ·                        ·
-·               spans                FULL SCAN             ·                        ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (v int, count int)
+│ ordering: +count
+│ estimated row count: 100 (missing stats)
+│ order: +count_rows
+│
+└── • group
+    │ columns: (v int, count_rows int)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: count_rows()
+    │ group by: v
+    │
+    └── • scan
+          columns: (v int)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
-·               distribution         local                 ·                        ·
-·               vectorized           true                  ·                        ·
-sort            ·                    ·                     (v int, count int)       +count
- │              estimated row count  100 (missing stats)   ·                        ·
- │              order                +count_rows           ·                        ·
- └── group      ·                    ·                     (v int, count_rows int)  ·
-      │         estimated row count  100 (missing stats)   ·                        ·
-      │         aggregate 0          count_rows()          ·                        ·
-      │         group by             v                     ·                        ·
-      └── scan  ·                    ·                     (v int)                  ·
-·               estimated row count  1000 (missing stats)  ·                        ·
-·               table                kv@primary            ·                        ·
-·               spans                FULL SCAN             ·                        ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (v int, count int)
+│ ordering: +count
+│ estimated row count: 100 (missing stats)
+│ order: +count_rows
+│
+└── • group
+    │ columns: (v int, count_rows int)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: count_rows()
+    │ group by: v
+    │
+    └── • scan
+          columns: (v int)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
 ----
-·                         distribution         local                 ·                                   ·
-·                         vectorized           true                  ·                                   ·
-project                   ·                    ·                     (v int, count int)                  ·
- └── sort                 ·                    ·                     (v int, count int, count_rows int)  +count_rows
-      │                   estimated row count  100 (missing stats)   ·                                   ·
-      │                   order                +count_rows           ·                                   ·
-      └── group           ·                    ·                     (v int, count int, count_rows int)  ·
-           │              estimated row count  100 (missing stats)   ·                                   ·
-           │              aggregate 0          count(column6)        ·                                   ·
-           │              aggregate 1          count_rows()          ·                                   ·
-           │              group by             v                     ·                                   ·
-           └── render     ·                    ·                     (column6 unknown, v int)            ·
-                │         estimated row count  1000 (missing stats)  ·                                   ·
-                │         render 0             (NULL)[unknown]       ·                                   ·
-                │         render 1             (v)[int]              ·                                   ·
-                └── scan  ·                    ·                     (v int)                             ·
-·                         estimated row count  1000 (missing stats)  ·                                   ·
-·                         table                kv@primary            ·                                   ·
-·                         spans                FULL SCAN             ·                                   ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v int, count int)
+│
+└── • sort
+    │ columns: (v int, count int, count_rows int)
+    │ ordering: +count_rows
+    │ estimated row count: 100 (missing stats)
+    │ order: +count_rows
+    │
+    └── • group
+        │ columns: (v int, count int, count_rows int)
+        │ estimated row count: 100 (missing stats)
+        │ aggregate 0: count(column7)
+        │ aggregate 1: count_rows()
+        │ group by: v
+        │
+        └── • render
+            │ columns: (column7 unknown, v int)
+            │ estimated row count: 1,000 (missing stats)
+            │ render column7: (NULL)[unknown]
+            │ render v: (v)[int]
+            │
+            └── • scan
+                  columns: (v int)
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@primary
+                  spans: FULL SCAN
 
 # Check that filters propagate through no-op aggregation.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE v > 10
 ----
-·                    distribution         local                 ·             ·
-·                    vectorized           true                  ·             ·
-group                ·                    ·                     (v, count)    ·
- │                   estimated row count  33 (missing stats)    ·             ·
- │                   aggregate 0          count(column6)        ·             ·
- │                   group by             v                     ·             ·
- └── render          ·                    ·                     (column6, v)  ·
-      │              estimated row count  333 (missing stats)   ·             ·
-      │              render 0             NULL                  ·             ·
-      │              render 1             v                     ·             ·
-      └── filter     ·                    ·                     (v)           ·
-           │         estimated row count  333 (missing stats)   ·             ·
-           │         filter               v > 10                ·             ·
-           └── scan  ·                    ·                     (v)           ·
-·                    estimated row count  1000 (missing stats)  ·             ·
-·                    table                kv@primary            ·             ·
-·                    spans                FULL SCAN             ·             ·
+distribution: local
+vectorized: true
+·
+• group
+│ columns: (v, count)
+│ estimated row count: 33 (missing stats)
+│ aggregate 0: count(column7)
+│ group by: v
+│
+└── • render
+    │ columns: (column7, v)
+    │ estimated row count: 333 (missing stats)
+    │ render column7: NULL
+    │ render v: v
+    │
+    └── • filter
+        │ columns: (v)
+        │ estimated row count: 333 (missing stats)
+        │ filter: v > 10
+        │
+        └── • scan
+              columns: (v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
 # Verify that FILTER works.
 
@@ -685,204 +1290,289 @@ CREATE TABLE filter_test (
 )
 
 # Check that filter expressions are only rendered once.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
-·                    distribution         local                                  ·                      ·
-·                    vectorized           true                                   ·                      ·
-project              ·                    ·                                      (count, max)           ·
- │                   estimated row count  100 (missing stats)                    ·                      ·
- └── group           ·                    ·                                      (v, count, max)        ·
-      │              estimated row count  100 (missing stats)                    ·                      ·
-      │              aggregate 0          count(column6) FILTER (WHERE column7)  ·                      ·
-      │              aggregate 1          max(column7) FILTER (WHERE column7)    ·                      ·
-      │              group by             v                                      ·                      ·
-      └── render     ·                    ·                                      (column6, column7, v)  ·
-           │         estimated row count  1000 (missing stats)                   ·                      ·
-           │         render 0             true                                   ·                      ·
-           │         render 1             k > 5                                  ·                      ·
-           │         render 2             v                                      ·                      ·
-           └── scan  ·                    ·                                      (k, v)                 ·
-·                    estimated row count  1000 (missing stats)                   ·                      ·
-·                    table                filter_test@primary                    ·                      ·
-·                    spans                FULL SCAN                              ·                      ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (count, max)
+│ estimated row count: 100 (missing stats)
+│
+└── • group
+    │ columns: (v, count, max)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: count(column7) FILTER (WHERE column8)
+    │ aggregate 1: max(column8) FILTER (WHERE column8)
+    │ group by: v
+    │
+    └── • render
+        │ columns: (column7, column8, v)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column7: true
+        │ render column8: k > 5
+        │ render v: v
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: filter_test@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-·                    distribution         local                                  ·                      ·
-·                    vectorized           true                                   ·                      ·
-project              ·                    ·                                      (count)                ·
- │                   estimated row count  100 (missing stats)                    ·                      ·
- └── group           ·                    ·                                      (v, count)             ·
-      │              estimated row count  100 (missing stats)                    ·                      ·
-      │              aggregate 0          count(column6) FILTER (WHERE column7)  ·                      ·
-      │              group by             v                                      ·                      ·
-      └── render     ·                    ·                                      (column6, column7, v)  ·
-           │         estimated row count  1000 (missing stats)                   ·                      ·
-           │         render 0             true                                   ·                      ·
-           │         render 1             k > 5                                  ·                      ·
-           │         render 2             v                                      ·                      ·
-           └── scan  ·                    ·                                      (k, v)                 ·
-·                    estimated row count  1000 (missing stats)                   ·                      ·
-·                    table                filter_test@primary                    ·                      ·
-·                    spans                FULL SCAN                              ·                      ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (count)
+│ estimated row count: 100 (missing stats)
+│
+└── • group
+    │ columns: (v, count)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: count(column7) FILTER (WHERE column8)
+    │ group by: v
+    │
+    └── • render
+        │ columns: (column7, column8, v)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column7: true
+        │ render column8: k > 5
+        │ render v: v
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: filter_test@primary
+              spans: FULL SCAN
 
 # Tests with * inside GROUP BY.
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY kv.*;
 ----
-·          distribution         local                 ·        ·
-·          vectorized           true                  ·        ·
-render     ·                    ·                     (a int)  ·
- │         estimated row count  1000 (missing stats)  ·        ·
- │         render 0             (1)[int]              ·        ·
- └── scan  ·                    ·                     ()       ·
-·          estimated row count  1000 (missing stats)  ·        ·
-·          table                kv@primary            ·        ·
-·          spans                FULL SCAN             ·        ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a int)
+│ estimated row count: 1,000 (missing stats)
+│ render a: (1)[int]
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-·                             distribution         local                             ·                     ·
-·                             vectorized           true                              ·                     ·
-project                       ·                    ·                                 (sum decimal)         ·
- │                            estimated row count  1000 (missing stats)              ·                     ·
- └── group                    ·                    ·                                 (k int, sum decimal)  ·
-      │                       estimated row count  1000 (missing stats)              ·                     ·
-      │                       aggregate 0          sum(d)                            ·                     ·
-      │                       group by             k                                 ·                     ·
-      └── cross join (inner)  ·                    ·                                 (k int, d decimal)    ·
-           │                  estimated row count  330000 (missing stats)            ·                     ·
-           │                  pred                 ((k)[int] >= (d)[decimal])[bool]  ·                     ·
-           ├── scan           ·                    ·                                 (k int)               ·
-           │                  estimated row count  1000 (missing stats)              ·                     ·
-           │                  table                kv@primary                        ·                     ·
-           │                  spans                FULL SCAN                         ·                     ·
-           └── scan           ·                    ·                                 (d decimal)           ·
-·                             estimated row count  1000 (missing stats)              ·                     ·
-·                             table                abc@primary                       ·                     ·
-·                             spans                FULL SCAN                         ·                     ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (sum decimal)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • group
+    │ columns: (k int, sum decimal)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: sum(d)
+    │ group by: k
+    │
+    └── • cross join (inner)
+        │ columns: (k int, d decimal)
+        │ estimated row count: 330,000 (missing stats)
+        │ pred: ((k)[int] >= (d)[decimal])[bool]
+        │
+        ├── • scan
+        │     columns: (k int)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: kv@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (d decimal)
+              estimated row count: 1,000 (missing stats)
+              table: abc@primary
+              spans: FULL SCAN
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
 statement ok
 CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test
 ----
-·               distribution         local              ·          ·
-·               vectorized           true               ·          ·
-group (scalar)  ·                    ·                  (min int)  ·
- │              estimated row count  1 (missing stats)  ·          ·
- │              aggregate 0          any_not_null(v)    ·          ·
- └── scan       ·                    ·                  (v int)    ·
-·               estimated row count  1 (missing stats)  ·          ·
-·               table                opt_test@v         ·          ·
-·               spans                /!NULL-            ·          ·
-·               limit                1                  ·          ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(v)
+│
+└── • scan
+      columns: (v int)
+      estimated row count: 1 (missing stats)
+      table: opt_test@v
+      spans: /!NULL-
+      limit: 1
 
 # Repeat test when there is an existing filter.
 # TODO(radu): the best plan for this would be to use index v; in this case the scan
 # will end early but that is not reflected by the cost.
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
-·                         distribution         local                         ·               ·
-·                         vectorized           true                          ·               ·
-group (scalar)            ·                    ·                             (min int)       ·
- │                        estimated row count  1 (missing stats)             ·               ·
- │                        aggregate 0          any_not_null(v)               ·               ·
- └── project              ·                    ·                             (v int)         ·
-      └── limit           ·                    ·                             (k int, v int)  ·
-           │              estimated row count  1 (missing stats)             ·               ·
-           │              count                (1)[int]                      ·               ·
-           └── filter     ·                    ·                             (k int, v int)  +v
-                │         estimated row count  333 (missing stats)           ·               ·
-                │         filter               ((k)[int] != (4)[int])[bool]  ·               ·
-                └── scan  ·                    ·                             (k int, v int)  +v
-·                         estimated row count  990 (missing stats)           ·               ·
-·                         table                opt_test@v                    ·               ·
-·                         spans                /!NULL-                       ·               ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(v)
+│
+└── • project
+    │ columns: (v int)
+    │
+    └── • limit
+        │ columns: (k int, v int)
+        │ estimated row count: 1 (missing stats)
+        │ count: (1)[int]
+        │
+        └── • filter
+            │ columns: (k int, v int)
+            │ ordering: +v
+            │ estimated row count: 333 (missing stats)
+            │ filter: ((k)[int] != (4)[int])[bool]
+            │
+            └── • scan
+                  columns: (k int, v int)
+                  ordering: +v
+                  estimated row count: 990 (missing stats)
+                  table: opt_test@v
+                  spans: /!NULL-
 
 # Check that the optimization doesn't work when the argument is non-trivial (we
 # can't in general guarantee an ordering on a synthesized column).
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test
 ----
-·               distribution         local                       ·              ·
-·               vectorized           true                        ·              ·
-group (scalar)  ·                    ·                           (min int)      ·
- │              estimated row count  1 (missing stats)           ·              ·
- │              aggregate 0          min(column4)                ·              ·
- └── render     ·                    ·                           (column4 int)  ·
-      │         estimated row count  1000 (missing stats)        ·              ·
-      │         render 0             ((v)[int] + (1)[int])[int]  ·              ·
-      └── scan  ·                    ·                           (v int)        ·
-·               estimated row count  1000 (missing stats)        ·              ·
-·               table                opt_test@primary            ·              ·
-·               spans                FULL SCAN                   ·              ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (min int)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(column5)
+│
+└── • top-k
+    │ columns: (column5 int)
+    │ ordering: +column5
+    │ estimated row count: 1 (missing stats)
+    │ order: +column5
+    │ k: 1
+    │
+    └── • render
+        │ columns: (column5 int)
+        │ estimated row count: 333 (missing stats)
+        │ render column5: ((v)[int] + (1)[int])[int]
+        │
+        └── • filter
+            │ columns: (v int)
+            │ estimated row count: 333 (missing stats)
+            │ filter: ((((v)[int] + (1)[int])[int]) IS NOT NULL)[bool]
+            │
+            └── • scan
+                  columns: (v int)
+                  estimated row count: 1,000 (missing stats)
+                  table: opt_test@primary
+                  spans: FULL SCAN
 
 # Verify that we don't use the optimization if there is a GROUP BY.
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 ----
-·               distribution         local                 ·                 ·
-·               vectorized           true                  ·                 ·
-project         ·                    ·                     (min int)         ·
- │              estimated row count  1000 (missing stats)  ·                 ·
- └── group      ·                    ·                     (k int, min int)  ·
-      │         estimated row count  1000 (missing stats)  ·                 ·
-      │         aggregate 0          min(v)                ·                 ·
-      │         group by             k                     ·                 ·
-      │         ordered              +k                    ·                 ·
-      └── scan  ·                    ·                     (k int, v int)    +k
-·               estimated row count  1000 (missing stats)  ·                 ·
-·               table                opt_test@primary      ·                 ·
-·               spans                FULL SCAN             ·                 ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min int)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • group
+    │ columns: (k int, min int)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: min(v)
+    │ group by: k
+    │ ordered: +k
+    │
+    └── • scan
+          columns: (k int, v int)
+          ordering: +k
+          estimated row count: 1,000 (missing stats)
+          table: opt_test@primary
+          spans: FULL SCAN
 
 statement ok
 CREATE TABLE xy(x STRING, y STRING);
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT (b, a) r FROM ab GROUP BY (b, a)
 ----
-·          distribution         local                                    ·                    ·
-·          vectorized           true                                     ·                    ·
-render     ·                    ·                                        (r tuple{int, int})  ·
- │         estimated row count  1000 (missing stats)                     ·                    ·
- │         render 0             (((b)[int], (a)[int]))[tuple{int, int}]  ·                    ·
- └── scan  ·                    ·                                        (a int, b int)       ·
-·          estimated row count  1000 (missing stats)                     ·                    ·
-·          table                ab@primary                               ·                    ·
-·          spans                FULL SCAN                                ·                    ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (r tuple{int, int})
+│ estimated row count: 1,000 (missing stats)
+│ render r: (((b)[int], (a)[int]))[tuple{int, int}]
+│
+└── • scan
+      columns: (a int, b int)
+      estimated row count: 1,000 (missing stats)
+      table: ab@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-·                             distribution         local                                               ·                                                ·
-·                             vectorized           true                                                ·                                                ·
-render                        ·                    ·                                                   (min string, r tuple{int, int})                  ·
- │                            estimated row count  100000 (missing stats)                              ·                                                ·
- │                            render 0             (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
- │                            render 1             (min)[string]                                       ·                                                ·
- └── group                    ·                    ·                                                   (a int, x string, min string, any_not_null int)  ·
-      │                       estimated row count  100000 (missing stats)                              ·                                                ·
-      │                       aggregate 0          min(y)                                              ·                                                ·
-      │                       aggregate 1          any_not_null(b)                                     ·                                                ·
-      │                       group by             a, x                                                ·                                                ·
-      └── cross join (inner)  ·                    ·                                                   (a int, b int, x string, y string)               ·
-           │                  estimated row count  1000000 (missing stats)                             ·                                                ·
-           ├── scan           ·                    ·                                                   (a int, b int)                                   ·
-           │                  estimated row count  1000 (missing stats)                                ·                                                ·
-           │                  table                ab@primary                                          ·                                                ·
-           │                  spans                FULL SCAN                                           ·                                                ·
-           └── scan           ·                    ·                                                   (x string, y string)                             ·
-·                             estimated row count  1000 (missing stats)                                ·                                                ·
-·                             table                xy@primary                                          ·                                                ·
-·                             spans                FULL SCAN                                           ·                                                ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (min string, r tuple{int, int})
+│ estimated row count: 100,000 (missing stats)
+│ render r: (((any_not_null)[int], (a)[int]))[tuple{int, int}]
+│ render min: (min)[string]
+│
+└── • group
+    │ columns: (a int, x string, min string, any_not_null int)
+    │ estimated row count: 100,000 (missing stats)
+    │ aggregate 0: min(y)
+    │ aggregate 1: any_not_null(b)
+    │ group by: a, x
+    │
+    └── • cross join (inner)
+        │ columns: (a int, b int, x string, y string)
+        │ estimated row count: 1,000,000 (missing stats)
+        │
+        ├── • scan
+        │     columns: (a int, b int)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: ab@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (x string, y string)
+              estimated row count: 1,000 (missing stats)
+              table: xy@primary
+              spans: FULL SCAN
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
@@ -999,171 +1689,241 @@ render                        ·                    ·                          
 #·               spans        ALL                ·                 ·
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
-·                         distribution         local                                      ·                         ·
-·                         vectorized           true                                       ·                         ·
-render                    ·                    ·                                          (a int)                   ·
- │                        estimated row count  333 (missing stats)                        ·                         ·
- │                        render 0             (1)[int]                                   ·                         ·
- └── distinct             ·                    ·                                          (column6 decimal, v int)  ·
-      │                   estimated row count  333 (missing stats)                        ·                         ·
-      │                   distinct on          column6, v                                 ·                         ·
-      └── filter          ·                    ·                                          (column6 decimal, v int)  ·
-           │              estimated row count  333 (missing stats)                        ·                         ·
-           │              filter               ((column6)[decimal] > (1)[decimal])[bool]  ·                         ·
-           └── render     ·                    ·                                          (column6 decimal, v int)  ·
-                │         estimated row count  1000 (missing stats)                       ·                         ·
-                │         render 0             ((w)[int]::DECIMAL)[decimal]               ·                         ·
-                │         render 1             (v)[int]                                   ·                         ·
-                └── scan  ·                    ·                                          (v int, w int)            ·
-·                         estimated row count  1000 (missing stats)                       ·                         ·
-·                         table                kv@primary                                 ·                         ·
-·                         spans                FULL SCAN                                  ·                         ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a int)
+│ estimated row count: 333 (missing stats)
+│ render a: (1)[int]
+│
+└── • distinct
+    │ columns: (column7 decimal, v int)
+    │ estimated row count: 333 (missing stats)
+    │ distinct on: column7, v
+    │
+    └── • filter
+        │ columns: (column7 decimal, v int)
+        │ estimated row count: 333 (missing stats)
+        │ filter: ((column7)[decimal] > (1)[decimal])[bool]
+        │
+        └── • render
+            │ columns: (column7 decimal, v int)
+            │ estimated row count: 1,000 (missing stats)
+            │ render column7: ((w)[int]::DECIMAL)[decimal]
+            │ render v: (v)[int]
+            │
+            └── • scan
+                  columns: (v int, w int)
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@primary
+                  spans: FULL SCAN
 
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
 
 # Check that GROUP BY picks up column ordinals.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
-·                    distribution         local                 ·               ·
-·                    vectorized           true                  ·               ·
-project              ·                    ·                     (m)             ·
- │                   estimated row count  100 (missing stats)   ·               ·
- └── group           ·                    ·                     (column6, min)  ·
-      │              estimated row count  100 (missing stats)   ·               ·
-      │              aggregate 0          min(a)                ·               ·
-      │              group by             column6               ·               ·
-      └── render     ·                    ·                     (column6, a)    ·
-           │         estimated row count  1000 (missing stats)  ·               ·
-           │         render 0             a                     ·               ·
-           │         render 1             a                     ·               ·
-           └── scan  ·                    ·                     (a)             ·
-·                    estimated row count  1000 (missing stats)  ·               ·
-·                    table                foo@primary           ·               ·
-·                    spans                FULL SCAN             ·               ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (m)
+│ estimated row count: 100 (missing stats)
+│
+└── • group
+    │ columns: (column7, min)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: min(a)
+    │ group by: column7
+    │
+    └── • render
+        │ columns: (column7, a)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column7: a
+        │ render a: a
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: foo@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
-·                    distribution         local                 ·               ·
-·                    vectorized           true                  ·               ·
-project              ·                    ·                     (m)             ·
- │                   estimated row count  100 (missing stats)   ·               ·
- └── group           ·                    ·                     (column6, min)  ·
-      │              estimated row count  100 (missing stats)   ·               ·
-      │              aggregate 0          min(a)                ·               ·
-      │              group by             column6               ·               ·
-      └── render     ·                    ·                     (column6, a)    ·
-           │         estimated row count  1000 (missing stats)  ·               ·
-           │         render 0             b                     ·               ·
-           │         render 1             a                     ·               ·
-           └── scan  ·                    ·                     (a, b)          ·
-·                    estimated row count  1000 (missing stats)  ·               ·
-·                    table                foo@primary           ·               ·
-·                    spans                FULL SCAN             ·               ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (m)
+│ estimated row count: 100 (missing stats)
+│
+└── • group
+    │ columns: (column7, min)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: min(a)
+    │ group by: column7
+    │
+    └── • render
+        │ columns: (column7, a)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column7: b
+        │ render a: a
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: foo@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)
 ----
-·               distribution         local                 ·            ·
-·               vectorized           true                  ·            ·
-group (scalar)  ·                    ·                     (array_agg)  ·
- │              estimated row count  1 (missing stats)     ·            ·
- │              aggregate 0          array_agg(v)          ·            ·
- └── sort       ·                    ·                     (v)          +v
-      │         estimated row count  1000 (missing stats)  ·            ·
-      │         order                +v                    ·            ·
-      └── scan  ·                    ·                     (v)          ·
-·               estimated row count  1000 (missing stats)  ·            ·
-·               table                kv@primary            ·            ·
-·               spans                FULL SCAN             ·            ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (array_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: array_agg(v)
+│
+└── • sort
+    │ columns: (v)
+    │ ordering: +v
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +v
+    │
+    └── • scan
+          columns: (v)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
 ----
-·               distribution         local                 ·       ·
-·               vectorized           true                  ·       ·
-project         ·                    ·                     (k)     ·
- └── sort       ·                    ·                     (k, s)  +s
-      │         estimated row count  1000 (missing stats)  ·       ·
-      │         order                +s                    ·       ·
-      └── scan  ·                    ·                     (k, s)  ·
-·               estimated row count  1000 (missing stats)  ·       ·
-·               table                kv@primary            ·       ·
-·               spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k)
+│
+└── • sort
+    │ columns: (k, s)
+    │ ordering: +s
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +s
+    │
+    └── • scan
+          columns: (k, s)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-·               distribution         local                 ·             ·
-·               vectorized           true                  ·             ·
-group (scalar)  ·                    ·                     (concat_agg)  ·
- │              estimated row count  1 (missing stats)     ·             ·
- │              aggregate 0          concat_agg(s)         ·             ·
- └── scan       ·                    ·                     (k, s)        +k
-·               estimated row count  1000 (missing stats)  ·             ·
-·               table                kv@primary            ·             ·
-·               spans                FULL SCAN             ·             ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (concat_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: concat_agg(s)
+│
+└── • scan
+      columns: (k, s)
+      ordering: +k
+      estimated row count: 1,000 (missing stats)
+      table: kv@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
-·               distribution         local                 ·            ·
-·               vectorized           true                  ·            ·
-group (scalar)  ·                    ·                     (array_agg)  ·
- │              estimated row count  1 (missing stats)     ·            ·
- │              aggregate 0          array_agg(k)          ·            ·
- └── sort       ·                    ·                     (k, s)       +s
-      │         estimated row count  1000 (missing stats)  ·            ·
-      │         order                +s                    ·            ·
-      └── scan  ·                    ·                     (k, s)       ·
-·               estimated row count  1000 (missing stats)  ·            ·
-·               table                kv@primary            ·            ·
-·               spans                FULL SCAN             ·            ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (array_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: array_agg(k)
+│
+└── • sort
+    │ columns: (k, s)
+    │ ordering: +s
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +s
+    │
+    └── • scan
+          columns: (k, s)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ----
-·               distribution         local                   ·                ·
-·               vectorized           true                    ·                ·
-group (scalar)  ·                    ·                       (string_agg)     ·
- │              estimated row count  1 (missing stats)       ·                ·
- │              aggregate 0          string_agg(s, column6)  ·                ·
- └── render     ·                    ·                       (column6, k, s)  +k
-      │         estimated row count  1000 (missing stats)    ·                ·
-      │         render 0             ','                     ·                ·
-      │         render 1             k                       ·                ·
-      │         render 2             s                       ·                ·
-      └── scan  ·                    ·                       (k, s)           +k
-·               estimated row count  1000 (missing stats)    ·                ·
-·               table                kv@primary              ·                ·
-·               spans                FULL SCAN               ·                ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (string_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: string_agg(s, column7)
+│
+└── • render
+    │ columns: (column7, k, s)
+    │ ordering: +k
+    │ estimated row count: 1,000 (missing stats)
+    │ render column7: ','
+    │ render k: k
+    │ render s: s
+    │
+    └── • scan
+          columns: (k, s)
+          ordering: +k
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
 # Verify that we project away all input columns for count(*).
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 ----
-·                            distribution         local                 ·        ·
-·                            vectorized           true                  ·        ·
-group (scalar)               ·                    ·                     (count)  ·
- │                           estimated row count  1 (missing stats)     ·        ·
- │                           aggregate 0          count_rows()          ·        ·
- └── project                 ·                    ·                     ()       ·
-      └── hash join (inner)  ·                    ·                     (y, v)   ·
-           │                 estimated row count  9801 (missing stats)  ·        ·
-           │                 equality             (y) = (v)             ·        ·
-           ├── scan          ·                    ·                     (y)      ·
-           │                 estimated row count  1000 (missing stats)  ·        ·
-           │                 table                xyz@xy                ·        ·
-           │                 spans                FULL SCAN             ·        ·
-           └── scan          ·                    ·                     (v)      ·
-·                            estimated row count  1000 (missing stats)  ·        ·
-·                            table                kv@primary            ·        ·
-·                            spans                FULL SCAN             ·        ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│
+└── • project
+    │ columns: ()
+    │
+    └── • hash join (inner)
+        │ columns: (y, v)
+        │ estimated row count: 9,801 (missing stats)
+        │ equality: (y) = (v)
+        │
+        ├── • scan
+        │     columns: (y)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: xyz@xy
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              columns: (v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@primary
+              spans: FULL SCAN
 
 
 # Regression test for #31882: make sure we don't incorrectly advertise an
@@ -1171,37 +1931,48 @@ group (scalar)               ·                    ·                     (count
 statement ok
 CREATE TABLE uvw (u INT, v INT, w INT, INDEX uvw(u, v, w))
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 ----
-·          distribution         local                 ·          ·
-·          vectorized           true                  ·          ·
-group      ·                    ·                     (u, v, s)  ·
- │         estimated row count  1000 (missing stats)  ·          ·
- │         aggregate 0          array_agg(w)          ·          ·
- │         group by             u, v                  ·          ·
- │         ordered              +u,+v                 ·          ·
- └── scan  ·                    ·                     (u, v, w)  +u,+v,+w
-·          estimated row count  1000 (missing stats)  ·          ·
-·          table                uvw@uvw               ·          ·
-·          spans                FULL SCAN             ·          ·
+distribution: local
+vectorized: true
+·
+• group
+│ columns: (u, v, s)
+│ estimated row count: 1,000 (missing stats)
+│ aggregate 0: array_agg(w)
+│ group by: u, v
+│ ordered: +u,+v
+│
+└── • scan
+      columns: (u, v, w)
+      ordering: +u,+v,+w
+      estimated row count: 1,000 (missing stats)
+      table: uvw@uvw
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ----
-·               distribution         local                   ·             ·
-·               vectorized           true                    ·             ·
-group (scalar)  ·                    ·                       (string_agg)  ·
- │              estimated row count  1 (missing stats)       ·             ·
- │              aggregate 0          string_agg(s, column6)  ·             ·
- └── render     ·                    ·                       (column6, s)  ·
-      │         estimated row count  1000 (missing stats)    ·             ·
-      │         render 0             ', '                    ·             ·
-      │         render 1             s                       ·             ·
-      └── scan  ·                    ·                       (s)           ·
-·               estimated row count  1000 (missing stats)    ·             ·
-·               table                kv@primary              ·             ·
-·               spans                FULL SCAN               ·             ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (string_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: string_agg(s, column7)
+│
+└── • render
+    │ columns: (column7, s)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column7: ', '
+    │ render s: s
+    │
+    └── • scan
+          columns: (s)
+          estimated row count: 1,000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
 statement ok
 CREATE TABLE string_agg_test (
@@ -1210,7 +1981,7 @@ CREATE TABLE string_agg_test (
   employee STRING
 )
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
     SELECT
         company_id, string_agg(employee, ',')
@@ -1221,26 +1992,35 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distribution         local                          ·                                ·
-·                    vectorized           true                           ·                                ·
-sort                 ·                    ·                              (company_id, string_agg)         +company_id
- │                   estimated row count  100 (missing stats)            ·                                ·
- │                   order                +company_id                    ·                                ·
- └── group           ·                    ·                              (company_id, string_agg)         ·
-      │              estimated row count  100 (missing stats)            ·                                ·
-      │              aggregate 0          string_agg(employee, column5)  ·                                ·
-      │              group by             company_id                     ·                                ·
-      └── render     ·                    ·                              (column5, company_id, employee)  ·
-           │         estimated row count  1000 (missing stats)           ·                                ·
-           │         render 0             ','                            ·                                ·
-           │         render 1             company_id                     ·                                ·
-           │         render 2             employee                       ·                                ·
-           └── scan  ·                    ·                              (company_id, employee)           ·
-·                    estimated row count  1000 (missing stats)           ·                                ·
-·                    table                string_agg_test@primary        ·                                ·
-·                    spans                FULL SCAN                      ·                                ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (company_id, string_agg)
+│ ordering: +company_id
+│ estimated row count: 100 (missing stats)
+│ order: +company_id
+│
+└── • group
+    │ columns: (company_id, string_agg)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: string_agg(employee, column6)
+    │ group by: company_id
+    │
+    └── • render
+        │ columns: (column6, company_id, employee)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column6: ','
+        │ render company_id: company_id
+        │ render employee: employee
+        │
+        └── • scan
+              columns: (company_id, employee)
+              estimated row count: 1,000 (missing stats)
+              table: string_agg_test@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
     SELECT
         company_id, string_agg(employee::BYTES, b',')
@@ -1251,26 +2031,35 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distribution         local                         ·                               ·
-·                    vectorized           true                          ·                               ·
-sort                 ·                    ·                             (company_id, string_agg)        +company_id
- │                   estimated row count  100 (missing stats)           ·                               ·
- │                   order                +company_id                   ·                               ·
- └── group           ·                    ·                             (company_id, string_agg)        ·
-      │              estimated row count  100 (missing stats)           ·                               ·
-      │              aggregate 0          string_agg(column5, column6)  ·                               ·
-      │              group by             company_id                    ·                               ·
-      └── render     ·                    ·                             (column5, column6, company_id)  ·
-           │         estimated row count  1000 (missing stats)          ·                               ·
-           │         render 0             employee::BYTES               ·                               ·
-           │         render 1             '\x2c'                        ·                               ·
-           │         render 2             company_id                    ·                               ·
-           └── scan  ·                    ·                             (company_id, employee)          ·
-·                    estimated row count  1000 (missing stats)          ·                               ·
-·                    table                string_agg_test@primary       ·                               ·
-·                    spans                FULL SCAN                     ·                               ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (company_id, string_agg)
+│ ordering: +company_id
+│ estimated row count: 100 (missing stats)
+│ order: +company_id
+│
+└── • group
+    │ columns: (company_id, string_agg)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: string_agg(column6, column7)
+    │ group by: company_id
+    │
+    └── • render
+        │ columns: (column6, column7, company_id)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column6: employee::BYTES
+        │ render column7: '\x2c'
+        │ render company_id: company_id
+        │
+        └── • scan
+              columns: (company_id, employee)
+              estimated row count: 1,000 (missing stats)
+              table: string_agg_test@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
     SELECT
         company_id, string_agg(employee, NULL)
@@ -1281,26 +2070,35 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distribution         local                          ·                                ·
-·                    vectorized           true                           ·                                ·
-sort                 ·                    ·                              (company_id, string_agg)         +company_id
- │                   estimated row count  100 (missing stats)            ·                                ·
- │                   order                +company_id                    ·                                ·
- └── group           ·                    ·                              (company_id, string_agg)         ·
-      │              estimated row count  100 (missing stats)            ·                                ·
-      │              aggregate 0          string_agg(employee, column5)  ·                                ·
-      │              group by             company_id                     ·                                ·
-      └── render     ·                    ·                              (column5, company_id, employee)  ·
-           │         estimated row count  1000 (missing stats)           ·                                ·
-           │         render 0             NULL                           ·                                ·
-           │         render 1             company_id                     ·                                ·
-           │         render 2             employee                       ·                                ·
-           └── scan  ·                    ·                              (company_id, employee)           ·
-·                    estimated row count  1000 (missing stats)           ·                                ·
-·                    table                string_agg_test@primary        ·                                ·
-·                    spans                FULL SCAN                      ·                                ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (company_id, string_agg)
+│ ordering: +company_id
+│ estimated row count: 100 (missing stats)
+│ order: +company_id
+│
+└── • group
+    │ columns: (company_id, string_agg)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: string_agg(employee, column6)
+    │ group by: company_id
+    │
+    └── • render
+        │ columns: (column6, company_id, employee)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column6: NULL
+        │ render company_id: company_id
+        │ render employee: employee
+        │
+        └── • scan
+              columns: (company_id, employee)
+              estimated row count: 1,000 (missing stats)
+              table: string_agg_test@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
     SELECT
         company_id, string_agg(employee::BYTES, NULL)
@@ -1311,21 +2109,30 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distribution         local                         ·                               ·
-·                    vectorized           true                          ·                               ·
-sort                 ·                    ·                             (company_id, string_agg)        +company_id
- │                   estimated row count  100 (missing stats)           ·                               ·
- │                   order                +company_id                   ·                               ·
- └── group           ·                    ·                             (company_id, string_agg)        ·
-      │              estimated row count  100 (missing stats)           ·                               ·
-      │              aggregate 0          string_agg(column5, column6)  ·                               ·
-      │              group by             company_id                    ·                               ·
-      └── render     ·                    ·                             (column5, column6, company_id)  ·
-           │         estimated row count  1000 (missing stats)          ·                               ·
-           │         render 0             employee::BYTES               ·                               ·
-           │         render 1             NULL                          ·                               ·
-           │         render 2             company_id                    ·                               ·
-           └── scan  ·                    ·                             (company_id, employee)          ·
-·                    estimated row count  1000 (missing stats)          ·                               ·
-·                    table                string_agg_test@primary       ·                               ·
-·                    spans                FULL SCAN                     ·                               ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (company_id, string_agg)
+│ ordering: +company_id
+│ estimated row count: 100 (missing stats)
+│ order: +company_id
+│
+└── • group
+    │ columns: (company_id, string_agg)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: string_agg(column6, column7)
+    │ group by: company_id
+    │
+    └── • render
+        │ columns: (column6, column7, company_id)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column6: employee::BYTES
+        │ render column7: NULL
+        │ render company_id: company_id
+        │
+        └── • scan
+              columns: (company_id, employee)
+              estimated row count: 1,000 (missing stats)
+              table: string_agg_test@primary
+              spans: FULL SCAN

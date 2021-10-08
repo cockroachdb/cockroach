@@ -1,0 +1,519 @@
+# Tests for inverted joins with multi-column inverted indexes.
+
+statement ok
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON
+)
+
+# Insert many types of JSON values.
+statement ok
+INSERT INTO j1 VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]'),
+  (34, '{"a": 1}'),
+  (35, '[1]'),
+  (36, '[2]'),
+  (37, '[[1]]'),
+  (38, '[[2]]'),
+  (39, '["a"]'),
+  (40, '{"a": [[]]}'),
+  (41, '[[1, 2]]'),
+  (42, '[[1], [2]]'),
+  (43, '[{"a": "b", "c": "d"}]'),
+  (44, '[{"a": "b"}, {"c": "d"}]')
+
+statement ok
+CREATE TABLE j2 (
+  i INT,
+  j JSON,
+  s STRING,
+  INVERTED INDEX ij_idx (i, j),
+  INVERTED INDEX isj_idx (i, s, j)
+)
+
+# Insert combinations of i, s, and j.
+statement ok
+INSERT INTO j2 (
+  SELECT i, j, s FROM j1
+  CROSS JOIN (VALUES (10), (20), (30), (NULL)) t1(i)
+  CROSS JOIN (VALUES ('foo'), ('bar'), ('baz'), (NULL)) t2(s)
+)
+
+# This query is checking that the results of an inverted join on ij_idx and a
+# cross join are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT j1.k, j2.rowid FROM j1, j2@ij_idx WHERE i IN (10, 20) AND j2.j @> j1.j) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND j2.j @> j1.j) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# This query is checking that the results of an inverted join on isj_idx and a
+# cross join are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT j1.k, j2.rowid FROM j1, j2@isj_idx WHERE i IN (10, 20) AND s IN ('foo', 'bar') AND j2.j @> j1.j) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND s IN ('foo', 'bar') AND j2.j @> j1.j) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# This query is checking that the results of an inverted join on ij_idx with an
+# additional filter and a cross join are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT j1.k, j2.rowid FROM j1 INNER INVERTED JOIN j2@ij_idx ON i IN (10, 20) AND j2.j @> j1.j AND j2.j @> '{"a": {}}') AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT j1.k, j2.rowid FROM j1, j2@primary WHERE i IN (10, 20) AND j2.j @> j1.j AND j2.j @> '{"a": {}}') AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# This query performs a left inverted join on ij_idx with additional filters.
+query ITITT
+SELECT j1.k, j1.j, j2.i, j2.s, j2.j
+FROM j1 LEFT INVERTED JOIN j2@ij_idx
+  ON i = 10 AND j2.j @> j1.j AND j2.j @> '{"a": {}}'
+WHERE k < 10
+ORDER BY j1.k, j2.i, j2.s, j2.j::STRING
+----
+1  {"a": "b"}              NULL  NULL  NULL
+2  [1, 2, 3, 4, "foo"]     NULL  NULL  NULL
+3  {"a": {"b": "c"}}       10    NULL  {"a": {"b": "c", "d": "e"}, "f": "g"}
+3  {"a": {"b": "c"}}       10    NULL  {"a": {"b": "c"}}
+3  {"a": {"b": "c"}}       10    bar   {"a": {"b": "c", "d": "e"}, "f": "g"}
+3  {"a": {"b": "c"}}       10    bar   {"a": {"b": "c"}}
+3  {"a": {"b": "c"}}       10    baz   {"a": {"b": "c", "d": "e"}, "f": "g"}
+3  {"a": {"b": "c"}}       10    baz   {"a": {"b": "c"}}
+3  {"a": {"b": "c"}}       10    foo   {"a": {"b": "c", "d": "e"}, "f": "g"}
+3  {"a": {"b": "c"}}       10    foo   {"a": {"b": "c"}}
+4  {"a": {"b": [1]}}       10    NULL  {"a": {"b": [1, [2]]}}
+4  {"a": {"b": [1]}}       10    NULL  {"a": {"b": [1]}}
+4  {"a": {"b": [1]}}       10    bar   {"a": {"b": [1, [2]]}}
+4  {"a": {"b": [1]}}       10    bar   {"a": {"b": [1]}}
+4  {"a": {"b": [1]}}       10    baz   {"a": {"b": [1, [2]]}}
+4  {"a": {"b": [1]}}       10    baz   {"a": {"b": [1]}}
+4  {"a": {"b": [1]}}       10    foo   {"a": {"b": [1, [2]]}}
+4  {"a": {"b": [1]}}       10    foo   {"a": {"b": [1]}}
+5  {"a": {"b": [1, [2]]}}  10    NULL  {"a": {"b": [1, [2]]}}
+5  {"a": {"b": [1, [2]]}}  10    bar   {"a": {"b": [1, [2]]}}
+5  {"a": {"b": [1, [2]]}}  10    baz   {"a": {"b": [1, [2]]}}
+5  {"a": {"b": [1, [2]]}}  10    foo   {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}     10    NULL  {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}     10    NULL  {"a": {"b": [[2]]}}
+6  {"a": {"b": [[2]]}}     10    bar   {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}     10    bar   {"a": {"b": [[2]]}}
+6  {"a": {"b": [[2]]}}     10    baz   {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}     10    baz   {"a": {"b": [[2]]}}
+6  {"a": {"b": [[2]]}}     10    foo   {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}     10    foo   {"a": {"b": [[2]]}}
+7  {"a": "b", "c": "d"}    NULL  NULL  NULL
+8  {"a": {"b": true}}      10    NULL  {"a": {"b": true}}
+8  {"a": {"b": true}}      10    bar   {"a": {"b": true}}
+8  {"a": {"b": true}}      10    baz   {"a": {"b": true}}
+8  {"a": {"b": true}}      10    foo   {"a": {"b": true}}
+9  {"a": {"b": false}}     10    NULL  {"a": {"b": false}}
+9  {"a": {"b": false}}     10    bar   {"a": {"b": false}}
+9  {"a": {"b": false}}     10    baz   {"a": {"b": false}}
+9  {"a": {"b": false}}     10    foo   {"a": {"b": false}}
+
+# This query performs a left inverted join on ij_idx with no matching rows on
+# the right.
+query ITITT
+SELECT j1.*, j2.*
+FROM j1 LEFT INVERTED JOIN j2@ij_idx
+  ON i = 10 AND j2.j @> j1.j AND j2.j = '"foo"'
+WHERE k = 1
+ORDER BY j1.k, j2.i
+----
+1  {"a": "b"}  NULL  NULL  NULL
+
+# This query performs a semi inverted join on ij_idx.
+query IT
+SELECT * FROM j1 WHERE EXISTS (
+  SELECT * FROM j2@ij_idx
+  WHERE j2.j @> j1.j AND j2.j @> '{"a": {}}' AND j2.i = 10
+)
+ORDER BY j1.k
+----
+3   {"a": {"b": "c"}}
+4   {"a": {"b": [1]}}
+5   {"a": {"b": [1, [2]]}}
+6   {"a": {"b": [[2]]}}
+8   {"a": {"b": true}}
+9   {"a": {"b": false}}
+17  {}
+28  {"a": {}}
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+# This query performs an anti inverted join on ij_idx.
+query IT
+SELECT * FROM j1 WHERE NOT EXISTS (
+  SELECT * FROM j2@ij_idx
+  WHERE j2.j @> j1.j AND j2.j @> '{"a": {}}' AND j2.i = 10
+)
+ORDER BY j1.k
+----
+1   {"a": "b"}
+2   [1, 2, 3, 4, "foo"]
+7   {"a": "b", "c": "d"}
+10  "a"
+11  null
+12  true
+13  false
+14  1
+15  1.23
+16  [{"a": {"b": [1, [2]]}}, "d"]
+18  []
+19  ["a", "a"]
+20  [{"a": "a"}, {"a": "a"}]
+21  [[[["a"]]], [[["a"]]]]
+22  [1, 2, 3, 1]
+23  {"a": 123.123}
+24  {"a": 123.123000}
+25  {"a": [{}]}
+26  [[], {}]
+27  [true, false, null, 1.23, "a"]
+29  NULL
+30  {"a": []}
+32  {"a": [1]}
+33  [1, "bar"]
+34  {"a": 1}
+35  [1]
+36  [2]
+37  [[1]]
+38  [[2]]
+39  ["a"]
+40  {"a": [[]]}
+41  [[1, 2]]
+42  [[1], [2]]
+43  [{"a": "b", "c": "d"}]
+44  [{"a": "b"}, {"c": "d"}]
+
+statement ok
+CREATE TABLE a1 (
+  k INT PRIMARY KEY,
+  a INT[]
+)
+
+statement ok
+INSERT INTO a1 VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{2}'),
+  (4, '{1, 2}'),
+  (5, '{1, 3}'),
+  (6, '{1, 2, 3, 4}'),
+  (7, ARRAY[NULL]::INT[]),
+  (8, NULL)
+
+statement ok
+CREATE TABLE a2 (
+  i INT,
+  a INT[],
+  INVERTED INDEX ia_idx (i, a)
+)
+
+# Insert combinations of i and a.
+statement ok
+INSERT INTO a2 (
+  SELECT i, a FROM a1
+  CROSS JOIN (VALUES (10), (20), (30), (NULL)) t1(i)
+)
+
+# This query is checking that the results of an inverted join on ia_idx and a
+# cross join are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT a1.k, a2.rowid FROM a1, a2@ia_idx WHERE i IN (10, 20) AND a2.a @> a1.a) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT a1.k, a2.rowid FROM a1, a2@primary WHERE i IN (10, 20) AND a2.a @> a1.a) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# This query is checking that the results of an inverted join on ia_idx with an
+# additional filter and a cross join are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT a1.k, a2.rowid FROM a1, a2@ia_idx WHERE i IN (10, 20) AND a2.a @> a1.a AND a1.a @> '{1}') AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT a1.k, a2.rowid FROM a1, a2@primary WHERE i IN (10, 20) AND a2.a @> a1.a AND a1.a @> '{1}') AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# This query performs a left inverted join with an additional filter.
+query ITIT
+SELECT a1.*, a2.* FROM a1@primary
+LEFT INVERTED JOIN a2@ia_idx
+ON a2.a @> a1.a AND a2.a @> '{1}' AND a2.i = 10
+ORDER BY a1.a, a2.a
+----
+8  NULL       NULL  NULL
+1  {}         10    {1}
+1  {}         10    {1,2}
+1  {}         10    {1,2,3,4}
+1  {}         10    {1,3}
+7  {NULL}     NULL  NULL
+2  {1}        10    {1}
+2  {1}        10    {1,2}
+2  {1}        10    {1,2,3,4}
+2  {1}        10    {1,3}
+4  {1,2}      10    {1,2}
+4  {1,2}      10    {1,2,3,4}
+6  {1,2,3,4}  10    {1,2,3,4}
+5  {1,3}      10    {1,2,3,4}
+5  {1,3}      10    {1,3}
+3  {2}        10    {1,2}
+3  {2}        10    {1,2,3,4}
+
+# This query performs a left inverted join on ij_idx with no matching rows on
+# the right.
+query ITIT
+SELECT a1.*, a2.* FROM a1@primary
+LEFT INVERTED JOIN a2@ia_idx
+ON a2.a @> a1.a AND a2.a = '{100}' AND a2.i = 10
+ORDER BY a1.a, a2.a
+----
+8  NULL       NULL  NULL
+1  {}         NULL  NULL
+7  {NULL}     NULL  NULL
+2  {1}        NULL  NULL
+4  {1,2}      NULL  NULL
+6  {1,2,3,4}  NULL  NULL
+5  {1,3}      NULL  NULL
+3  {2}        NULL  NULL
+
+# This query performs a semi inverted join.
+query IT
+SELECT a1.* FROM a1@primary WHERE EXISTS (
+  SELECT * FROM a2@ia_idx
+  WHERE a2.a @> a1.a AND a2.i = 10
+)
+ORDER BY a1.k
+----
+1  {}
+2  {1}
+3  {2}
+4  {1,2}
+5  {1,3}
+6  {1,2,3,4}
+
+# This query performs an anti inverted join.
+query IT
+SELECT a1.* FROM a1@primary WHERE NOT EXISTS (
+  SELECT * FROM a2@ia_idx
+  WHERE a2.a @> a1.a AND a2.i = 10
+)
+ORDER BY a1.k
+----
+7  {NULL}
+8  NULL
+
+statement ok
+CREATE TABLE g1 (
+  k INT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+INSERT INTO g1 VALUES
+  (1, ST_MakePolygon('LINESTRING(0 0, 0 15, 15 15, 15 0, 0 0)'::geometry)),
+  (2, ST_MakePolygon('LINESTRING(0 0, 0 2, 2 2, 2 0, 0 0)'::geometry))
+
+statement ok
+CREATE TABLE g2 (
+  i INT,
+  geom GEOMETRY,
+  INVERTED INDEX igeom_idx (i, geom)
+)
+
+# Insert combinations of i and geom.
+statement ok
+INSERT INTO g2 (
+  SELECT i, geom FROM g1
+  CROSS JOIN (VALUES (10), (20), (30), (NULL)) t1(i)
+)
+
+# This query is checking that the results of the previous two queries are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT g1.k, g2.rowid FROM g1, g2@igeom_idx WHERE i IN (10, 20) AND ST_Contains(g2.geom, g1.geom)) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT g1.k, g2.rowid FROM g1, g2@primary WHERE i IN (10, 20) AND ST_Contains(g2.geom, g1.geom)) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+statement ok
+CREATE TABLE ltable (
+  lk INT PRIMARY KEY,
+  geom1 GEOMETRY,
+  geom2 GEOMETRY
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)'),
+  (4, NULL, 'POINT(3.0 3.0)'),
+  (5, 'POINT(1.5 1.5)', NULL),
+  (6, NULL, NULL)
+
+statement ok
+CREATE TABLE rtable(
+  rk INT PRIMARY KEY,
+  i INT,
+  geom GEOMETRY,
+  INVERTED INDEX igeom_idx (geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 10, 'POINT(1.0 1.0)'),
+  (12, 10, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 10, 'POINT(3.0 3.0)'),
+  (14, 10, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 10, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 10, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))'),
+  (17, 20, 'POINT(1.0 1.0)'),
+  (18, 20, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (19, 20, 'POINT(3.0 3.0)'),
+  (20, 20, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (21, 20, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (22, 20, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query II
+SELECT lk, rk FROM ltable
+JOIN rtable@igeom_idx
+  ON i = 10 AND ST_Intersects(ltable.geom1, rtable.geom)
+ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable
+JOIN rtable@igeom_idx
+  ON i = 10 AND ST_DWithin(ltable.geom1, rtable.geom, 2)
+ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable
+JOIN rtable@igeom_idx
+  ON i = 10 AND (ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2))
+ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable
+JOIN rtable@igeom_idx
+  ON i = 10 AND (ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2))
+ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+# Regression test for #59615. Ensure that invalid inverted joins are not created
+# for left and anti joins.
+statement ok
+CREATE TABLE t59615_inv (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y JSON,
+  z INT,
+  INVERTED INDEX (x, y)
+)
+
+query TITI rowsort
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) LEFT JOIN t59615_inv t ON t.y @> u.y
+----
+"a"  NULL  NULL  NULL
+"b"  NULL  NULL  NULL
+
+query T rowsort
+SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615_inv t WHERE t.y @> u.y
+)
+----
+"a"
+"b"

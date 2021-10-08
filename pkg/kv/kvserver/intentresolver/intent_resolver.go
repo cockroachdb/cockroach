@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -55,18 +55,29 @@ const (
 	// many batches by the DistSender.
 	gcBatchSize = 1024
 
-	// intentResolverBatchSize is the maximum number of intents that will be
-	// resolved in a single batch. Batches that span many ranges (which is
-	// possible for the commit of a transaction that spans many ranges) will be
-	// split into many batches by the DistSender.
+	// intentResolverBatchSize is the maximum number of single-intent resolution
+	// requests that will be sent in a single batch. Batches that span many
+	// ranges (which is possible for the commit of a transaction that spans many
+	// ranges) will be split into many batches by the DistSender.
 	// TODO(ajwerner): justify this value
 	intentResolverBatchSize = 100
 
-	// cleanupIntentsTxnsPerBatch is the number of transactions whose
+	// intentResolverRangeBatchSize is the maximum number of ranged intent
+	// resolutions requests that will be sent in a single batch.  It is set
+	// lower that intentResolverBatchSize since each request can fan out to a
+	// large number of intents.
+	intentResolverRangeBatchSize = 10
+
+	// intentResolverRangeRequestSize is the maximum number of intents a single
+	// range request can resolve. When exceeded, the response will include a
+	// ResumeSpan and the batcher will send a new range request.
+	intentResolverRangeRequestSize = 200
+
+	// MaxTxnsPerIntentCleanupBatch is the number of transactions whose
 	// corresponding intents will be resolved at a time. Intents are batched
 	// by transaction to avoid timeouts while resolving intents and ensure that
 	// progress is made.
-	cleanupIntentsTxnsPerBatch = 100
+	MaxTxnsPerIntentCleanupBatch = 100
 
 	// defaultGCBatchIdle is the default duration which the gc request batcher
 	// will wait between requests for a range before sending it.
@@ -88,6 +99,10 @@ const (
 	// intentResolutionBatchIdle is similar to the above setting but is used when
 	// when no additional traffic hits the batch.
 	defaultIntentResolutionBatchIdle = 5 * time.Millisecond
+
+	// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
+	// during cleanupFinishedTxnIntents.
+	gcTxnRecordTimeout = 20 * time.Second
 )
 
 // Config contains the dependencies to construct an IntentResolver.
@@ -97,13 +112,19 @@ type Config struct {
 	Stopper              *stop.Stopper
 	AmbientCtx           log.AmbientContext
 	TestingKnobs         kvserverbase.IntentResolverTestingKnobs
-	RangeDescriptorCache kvbase.RangeDescriptorCache
+	RangeDescriptorCache RangeCache
 
 	TaskLimit                    int
 	MaxGCBatchWait               time.Duration
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
+}
+
+// RangeCache is a simplified interface to the rngcache.RangeCache.
+type RangeCache interface {
+	// Lookup looks up range information for the range containing key.
+	Lookup(ctx context.Context, key roachpb.RKey) (rangecache.CacheEntry, error)
 }
 
 // IntentResolver manages the process of pushing transactions and
@@ -118,7 +139,7 @@ type IntentResolver struct {
 	ambientCtx   log.AmbientContext
 	sem          *quotapool.IntPool // semaphore to limit async goroutines
 
-	rdc kvbase.RangeDescriptorCache
+	rdc RangeCache
 
 	gcBatcher      *requestbatcher.RequestBatcher
 	irBatcher      *requestbatcher.RequestBatcher
@@ -163,34 +184,10 @@ func setConfigDefaults(c *Config) {
 
 type nopRangeDescriptorCache struct{}
 
-type zeroCacheEntry struct{}
-
-func (z zeroCacheEntry) Desc() *roachpb.RangeDescriptor {
-	return &roachpb.RangeDescriptor{}
-}
-
-func (z zeroCacheEntry) DescSpeculative() bool {
-	return false
-}
-
-func (z zeroCacheEntry) Leaseholder() *roachpb.ReplicaDescriptor {
-	return nil
-}
-
-func (z zeroCacheEntry) Lease() *roachpb.Lease {
-	return nil
-}
-
-func (z zeroCacheEntry) LeaseSpeculative() bool {
-	return false
-}
-
-var _ kvbase.RangeCacheEntry = zeroCacheEntry{}
-
 func (nrdc nopRangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (kvbase.RangeCacheEntry, error) {
-	return zeroCacheEntry{}, nil
+) (rangecache.CacheEntry, error) {
+	return rangecache.CacheEntry{}, nil
 }
 
 // New creates an new IntentResolver.
@@ -222,8 +219,10 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	intentResolutionBatchSize := intentResolverBatchSize
+	intentResolutionRangeBatchSize := intentResolverRangeBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
+		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_ir_batcher",
@@ -234,12 +233,9 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
-		Name:            "intent_resolver_ir_range_batcher",
-		MaxMsgsPerBatch: intentResolutionBatchSize,
-		// NOTE: Allow each request sent in a batch to touch up to twice as
-		// many keys as messages in the batch to avoid pagination if only a
-		// few ResolveIntentRange requests touch multiple intents.
-		MaxKeysPerBatchReq: 2 * intentResolverBatchSize,
+		Name:               "intent_resolver_ir_range_batcher",
+		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
+		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
 		MaxWait:            c.MaxIntentResolutionBatchWait,
 		MaxIdle:            c.MaxIntentResolutionBatchIdle,
 		Stopper:            c.Stopper,
@@ -375,8 +371,10 @@ func (ir *IntentResolver) MaybePushTransactions(
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s).
+	pushTo := h.Timestamp.Next()
 	b := &kv.Batch{}
 	b.Header.Timestamp = ir.clock.Now()
+	b.Header.Timestamp.Forward(pushTo)
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&roachpb.PushTxnRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -384,7 +382,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 			},
 			PusherTxn: pusherTxn,
 			PusheeTxn: *pushTxn,
-			PushTo:    h.Timestamp.Next(),
+			PushTo:    pushTo,
 			PushType:  pushType,
 		})
 	}
@@ -393,6 +391,10 @@ func (ir *IntentResolver) MaybePushTransactions(
 	if err != nil {
 		return nil, b.MustPErr()
 	}
+
+	// TODO(nvanbenschoten): if we succeed because the transaction has already
+	// been pushed _past_ where we were pushing, we need to set the synthetic
+	// bit. This is part of #36431.
 
 	br := b.RawResponse()
 	pushedTxns := make(map[uuid.UUID]*roachpb.Transaction, len(br.Responses))
@@ -417,13 +419,15 @@ func (ir *IntentResolver) runAsyncTask(
 	if ir.testingKnobs.DisableAsyncIntentResolution {
 		return errors.New("intents not processed as async resolution is disabled")
 	}
-	err := ir.stopper.RunLimitedAsyncTask(
+	err := ir.stopper.RunAsyncTaskEx(
 		// If we've successfully launched a background task, dissociate
 		// this work from our caller's context and timeout.
 		ir.ambientCtx.AnnotateCtx(context.Background()),
-		"storage.IntentResolver: processing intents",
-		ir.sem,
-		false, /* wait */
+		stop.TaskOpts{
+			TaskName:   "storage.IntentResolver: processing intents",
+			Sem:        ir.sem,
+			WaitForSem: false,
+		},
 		taskFn,
 	)
 	if err != nil {
@@ -495,7 +499,7 @@ func (ir *IntentResolver) CleanupIntents(
 		var i int
 		for i = 0; i < len(unpushed); i++ {
 			if curTxn := &unpushed[i].Txn; curTxn.ID != prevTxnID {
-				if len(pushTxns) == cleanupIntentsTxnsPerBatch {
+				if len(pushTxns) >= MaxTxnsPerIntentCleanupBatch {
 					break
 				}
 				prevTxnID = curTxn.ID
@@ -538,16 +542,28 @@ func (ir *IntentResolver) CleanupIntents(
 	return resolved, nil
 }
 
-// CleanupTxnIntentsAsync asynchronously cleans up intents owned by
-// a transaction on completion.
+// CleanupTxnIntentsAsync asynchronously cleans up intents owned by a
+// transaction on completion. When all intents have been successfully resolved,
+// the txn record is GC'ed.
+//
+// WARNING: Since this GCs the txn record, it should only be called in response
+// to requests coming from the coordinator or the GC Queue. We don't want other
+// actors to GC a txn record, since that can cause ambiguities for the
+// coordinator: if it had STAGED the txn, it won't be able to tell the
+// difference between a txn that had been implicitly committed, recovered, and
+// GC'ed, and one that someone else aborted and GC'ed.
 func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	endTxns []result.EndTxnIntents,
 	allowSyncProcessing bool,
 ) error {
-	now := ir.clock.Now()
 	for i := range endTxns {
+		onComplete := func(err error) {
+			if err != nil {
+				ir.Metrics.FinalizedTxnCleanupFailed.Inc(1)
+			}
+		}
 		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			locked, release := ir.lockInFlightTxnCleanup(ctx, et.Txn.ID)
@@ -555,13 +571,15 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans)
-			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(
+				ctx, rangeID, et.Txn, et.Poison, onComplete,
+			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
 			}
 		}); err != nil {
+			ir.Metrics.FinalizedTxnCleanupFailed.Inc(int64(len(endTxns) - i))
 			return err
 		}
 	}
@@ -600,24 +618,25 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.LockUpdate,
 	now hlc.Timestamp,
 	onComplete func(pushed, succeeded bool),
 ) error {
-	return ir.stopper.RunLimitedAsyncTask(
+	return ir.stopper.RunAsyncTaskEx(
 		// If we've successfully launched a background task,
 		// dissociate this work from our caller's context and
 		// timeout.
 		ir.ambientCtx.AnnotateCtx(context.Background()),
-		"processing txn intents",
-		ir.sem,
-		// We really do not want to hang up the GC queue on this kind of
-		// processing, so it's better to just skip txns which we can't
-		// pass to the async processor (wait=false). Their intents will
-		// get cleaned up on demand, and we'll eventually get back to
-		// them. Not much harm in having old txn records lying around in
-		// the meantime.
-		false, /* wait */
+		stop.TaskOpts{
+			TaskName: "processing txn intents",
+			Sem:      ir.sem,
+			// We really do not want to hang up the GC queue on this kind of
+			// processing, so it's better to just skip txns which we can't
+			// pass to the async processor (wait=false). Their intents will
+			// get cleaned up on demand, and we'll eventually get back to
+			// them. Not much harm in having old txn records lying around in
+			// the meantime.
+			WaitForSem: false,
+		},
 		func(ctx context.Context) {
 			var pushed, succeeded bool
 			defer func() {
@@ -652,11 +671,11 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					log.VErrEventf(ctx, 2, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
 					return
 				}
-				// Get the pushed txn and update the intents slice.
-				txn = &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-				for i := range intents {
-					intents[i].SetTxn(txn)
-				}
+				// Update the txn with the result of the push, such that the intents we're about
+				// to resolve get a final status.
+				finalizedTxn := &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+				txn = txn.Clone()
+				txn.Update(finalizedTxn)
 			}
 			var onCleanupComplete func(error)
 			if onComplete != nil {
@@ -668,7 +687,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			// Set onComplete to nil to disable the deferred call as the call has now
 			// been delegated to the callback passed to cleanupFinishedTxnIntents.
 			onComplete = nil
-			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, now, false /* poison */, onCleanupComplete)
+			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, false /* poison */, onCleanupComplete)
 			if err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
@@ -726,17 +745,14 @@ func (ir *IntentResolver) gcTxnRecord(
 	return nil
 }
 
-// cleanupFinishedTxnIntents cleans up extant intents owned by a single
-// transaction and when all intents have been successfully resolved, the
-// transaction record is GC'ed asynchronously. onComplete will be called when
-// all processing has completed which is likely to be after this call returns
-// in the case of success.
+// cleanupFinishedTxnIntents cleans up a txn's extant intents and, when all
+// intents have been successfully resolved, the transaction record is GC'ed
+// asynchronously. onComplete will be called when all processing has completed
+// which is likely to be after this call returns in the case of success.
 func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.LockUpdate,
-	now hlc.Timestamp,
 	poison bool,
 	onComplete func(error),
 ) (err error) {
@@ -749,15 +765,23 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	}()
 	// Resolve intents.
 	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
-	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
+	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
-	// Run transaction record GC outside of ir.sem.
+	// Run transaction record GC outside of ir.sem. We need a new context, in case
+	// we're still connected to the client's context (which can happen when
+	// allowSyncProcessing is true). Otherwise, we may return to the caller before
+	// gcTxnRecord completes, which may cancel the context and abort the cleanup
+	// either due to a defer cancel() or client disconnection. We give it a timeout
+	// as well, to avoid goroutine leakage.
 	return ir.stopper.RunAsyncTask(
-		ctx,
+		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			err := ir.gcTxnRecord(ctx, rangeID, txn)
+			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
+				gcTxnRecordTimeout, func(ctx context.Context) error {
+					return ir.gcTxnRecord(ctx, rangeID, txn)
+				})
 			if onComplete != nil {
 				onComplete(err)
 			}
@@ -769,10 +793,18 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		})
 }
 
-// ResolveOptions is used during intent resolution. It specifies whether the
-// caller wants the call to block, and whether the ranges containing the intents
-// are to be poisoned.
+// ResolveOptions is used during intent resolution.
 type ResolveOptions struct {
+	// If set, the abort spans on the ranges containing the intents are to be
+	// poisoned. If the transaction that had laid down this intent is still
+	// running (so this resolving is performed by a pusher) and goes back to these
+	// ranges trying to read one of its old intents, the access will be trapped
+	// and the read will return an error, thus avoiding the read missing to see
+	// its own write.
+	//
+	// This field is ignored for intents that aren't resolved for an ABORTED txn;
+	// in other words, only intents from ABORTED transactions ever poison the
+	// abort spans.
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
@@ -809,10 +841,15 @@ func (ir *IntentResolver) ResolveIntent(
 // ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
-) *roachpb.Error {
+) (pErr *roachpb.Error) {
 	if len(intents) == 0 {
 		return nil
 	}
+	defer func() {
+		if pErr != nil {
+			ir.Metrics.IntentResolutionFailed.Inc(int64(len(intents)))
+		}
+	}()
 	// Avoid doing any work on behalf of expired contexts. See
 	// https://github.com/cockroachdb/cockroach/issues/15997.
 	if err := ctx.Err(); err != nil {
@@ -860,6 +897,8 @@ func (ir *IntentResolver) ResolveIntents(
 			_ = resp.Resp // ignore the response
 		case <-ctx.Done():
 			return roachpb.NewError(ctx.Err())
+		case <-ir.stopper.ShouldQuiesce():
+			return roachpb.NewErrorf("stopping")
 		}
 	}
 	return nil

@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const maxCount = 1000
+const maxCount = 100
 
 func testRingBuffer(t *testing.T, count int) {
 	var buffer Buffer
@@ -60,7 +60,10 @@ func testRingBuffer(t *testing.T, count int) {
 
 func TestRingBuffer(t *testing.T) {
 	for count := 1; count <= maxCount; count++ {
-		testRingBuffer(t, count)
+		t.Run("Parallel", func(t *testing.T) {
+			t.Parallel() // SAFE FOR TESTING
+			testRingBuffer(t, count)
+		})
 	}
 }
 

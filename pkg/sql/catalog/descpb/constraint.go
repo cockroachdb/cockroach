@@ -91,7 +91,7 @@ const (
 	ConstraintTypePK ConstraintType = "PRIMARY KEY"
 	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
 	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
-	// ConstraintTypeUnique identifies a FOREIGN constraint.
+	// ConstraintTypeUnique identifies a UNIQUE constraint.
 	ConstraintTypeUnique ConstraintType = "UNIQUE"
 	// ConstraintTypeCheck identifies a CHECK constraint.
 	ConstraintTypeCheck ConstraintType = "CHECK"
@@ -100,15 +100,18 @@ const (
 // ConstraintDetail describes a constraint.
 //
 // TODO(ajwerner): Lift this up a level of abstraction next to the
-// ImmutableTableDescriptor and have it store those for the ReferencedTable.
+// Immutable and have it store those for the ReferencedTable.
 type ConstraintDetail struct {
 	Kind        ConstraintType
 	Columns     []string
 	Details     string
 	Unvalidated bool
 
-	// Only populated for PK and Unique Constraints.
+	// Only populated for PK and Unique Constraints with an index.
 	Index *IndexDescriptor
+
+	// Only populated for Unique Constraints without an index.
+	UniqueWithoutIndexConstraint *UniqueWithoutIndexConstraint
 
 	// Only populated for FK Constraints.
 	FK              *ForeignKeyConstraint

@@ -248,7 +248,7 @@ var _ tree.WindowFunc = &firstValueWindow{}
 var _ tree.WindowFunc = &lastValueWindow{}
 var _ tree.WindowFunc = &nthValueWindow{}
 
-// aggregateWindowFunc aggregates over the the current row's window frame, using
+// aggregateWindowFunc aggregates over the current row's window frame, using
 // the internal tree.AggregateFunc to perform the aggregation.
 type aggregateWindowFunc struct {
 	agg     tree.AggregateFunc
@@ -342,9 +342,16 @@ type framableAggregateWindowFunc struct {
 func newFramableAggregateWindow(
 	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) tree.WindowFunc {
+	// jsonObjectAggregate is a special aggregate function because its
+	// implementation assumes that once Result is called, the returned
+	// object is immutable and calls to Add will result in a panic. To go
+	// around this limitation, we make sure that the function is reset for
+	// each row regardless of the window frame.
+	_, shouldReset := agg.(*jsonObjectAggregate)
 	return &framableAggregateWindowFunc{
 		agg:            &aggregateWindowFunc{agg: agg, peerRes: tree.DNull},
 		aggConstructor: aggConstructor,
+		shouldReset:    shouldReset,
 	}
 }
 
@@ -583,7 +590,9 @@ func newNtileWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = pgerror.Newf(
+// ErrInvalidArgumentForNtile is thrown when the ntile function is given an
+// argument less than or equal to zero.
+var ErrInvalidArgumentForNtile = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(
@@ -606,7 +615,7 @@ func (w *ntileWindow) Compute(
 		nbuckets := int(tree.MustBeDInt(arg))
 		if nbuckets <= 0 {
 			// per spec: If argument is less than or equal to 0, then an error is returned.
-			return nil, errInvalidArgumentForNtile
+			return nil, ErrInvalidArgumentForNtile
 		}
 
 		w.ntile = tree.NewDInt(1)
@@ -796,7 +805,9 @@ func newNthValueWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = pgerror.Newf(
+// ErrInvalidArgumentForNthValue should be thrown when the nth_value window
+// function is given a value of 'n' less than zero.
+var ErrInvalidArgumentForNthValue = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
@@ -813,7 +824,7 @@ func (nthValueWindow) Compute(
 
 	nth := int(tree.MustBeDInt(arg))
 	if nth <= 0 {
-		return nil, errInvalidArgumentForNthValue
+		return nil, ErrInvalidArgumentForNthValue
 	}
 
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)

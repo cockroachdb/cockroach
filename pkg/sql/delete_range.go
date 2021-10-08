@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -40,10 +40,10 @@ type deleteRangeNode struct {
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
-	desc *sqlbase.ImmutableTableDescriptor
+	desc catalog.TableDescriptor
 	// interleavedDesc are the table descriptors of any child interleaved tables
 	// the delete is operating on.
-	interleavedDesc []*sqlbase.ImmutableTableDescriptor
+	interleavedDesc []catalog.TableDescriptor
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
@@ -61,6 +61,7 @@ type deleteRangeNode struct {
 var _ planNode = &deleteRangeNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ batchedPlanNode = &deleteRangeNode{}
+var _ mutationPlanNode = &deleteRangeNode{}
 
 // BatchedNext implements the batchedPlanNode interface.
 func (d *deleteRangeNode) BatchedNext(params runParams) (bool, error) {
@@ -82,6 +83,10 @@ func (d *deleteRangeNode) FastPathResults() (int, bool) {
 	return d.rowCount, true
 }
 
+func (d *deleteRangeNode) rowsWritten() int64 {
+	return int64(d.rowCount)
+}
+
 // startExec implements the planNode interface.
 func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.cancelChecker.Check(); err != nil {
@@ -93,33 +98,36 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 
+	// Configure the fetcher, which is only used to decode the returned keys from
+	// the DeleteRange, and is never used to actually fetch kvs.
 	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
 	allTables[0] = row.FetcherTableArgs{
 		Desc:  d.desc,
-		Index: &d.desc.PrimaryIndex,
+		Index: d.desc.GetPrimaryIndex(),
 		Spans: d.spans,
 	}
 	for i, interleaved := range d.interleavedDesc {
 		allTables[i+1] = row.FetcherTableArgs{
 			Desc:  interleaved,
-			Index: &interleaved.PrimaryIndex,
+			Index: interleaved.GetPrimaryIndex(),
 			Spans: d.spans,
 		}
 	}
 	if err := d.fetcher.Init(
+		params.ctx,
 		params.ExecCfg().Codec,
 		false, /* reverse */
-		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
-		// strength here. Consider hooking this in to the same knob that will
-		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		0,     /* lockTimeout */
 		false, /* isCheck */
 		params.p.alloc,
+		nil, /* memMonitor */
 		allTables...,
 	); err != nil {
 		return err
 	}
+
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	spans := make([]roachpb.Span, len(d.spans))
@@ -131,10 +139,11 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// hits the key limit).
 		for len(spans) != 0 {
 			b := params.p.txn.NewBatch()
-			d.deleteSpans(params, b, spans)
 			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
+			b.Header.LockTimeout = params.SessionData().LockTimeout
+			d.deleteSpans(params, b, spans)
 			if err := params.p.txn.Run(ctx, b); err != nil {
-				return err
+				return row.ConvertBatchError(ctx, d.desc, b)
 			}
 
 			spans = spans[:0]
@@ -152,9 +161,10 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// the optimizer only enables autoCommit if the maximum possible number of
 		// keys to delete in this command are low, so we're made safe.
 		b := params.p.txn.NewBatch()
+		b.Header.LockTimeout = params.SessionData().LockTimeout
 		d.deleteSpans(params, b, spans)
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
-			return err
+			return row.ConvertBatchError(ctx, d.desc, b)
 		}
 		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err
@@ -165,7 +175,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(d.desc.ID, d.rowCount)
+	params.ExecCfg().StatsRefresher.NotifyMutation(d.desc, d.rowCount)
 
 	return nil
 }
@@ -219,7 +229,9 @@ func (d *deleteRangeNode) processResults(
 
 // Next implements the planNode interface.
 func (*deleteRangeNode) Next(params runParams) (bool, error) {
-	panic("invalid")
+	// TODO(radu): this shouldn't be used, but it gets called when a cascade uses
+	// delete-range. Investigate this.
+	return false, nil
 }
 
 // Values implements the planNode interface.

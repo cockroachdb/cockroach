@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvevent",
+    srcs = [
+        "alloc.go",
+        "blocking_buffer.go",
+        "chan_buffer.go",
+        "err_buffer.go",
+        "event.go",
+        "metrics.go",
+        "throttling_buffer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/cdcutils",
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/log/logcrash",
+        "//pkg/util/metric",
+        "//pkg/util/mon",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "kvevent_test",
+    srcs = [
+        "alloc_test.go",
+        "blocking_buffer_test.go",
+    ],
+    embed = [":kvevent"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings/cluster",
+        "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/types",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/quotapool",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -13,16 +13,12 @@ package catalog
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// Descriptor is an interface for retrieved catalog descriptors.
-type Descriptor = sqlbase.Descriptor
 
 // MutableDescriptor represents a descriptor undergoing in-memory mutations
 // as part of a schema change.
 type MutableDescriptor interface {
-	sqlbase.Descriptor
+	Descriptor
 	// MaybeIncrementVersion sets the version of the descriptor to
 	// OriginalVersion()+1.
 	// TODO (lucy): It's not a good idea to have callers handle incrementing the
@@ -37,20 +33,32 @@ type MutableDescriptor interface {
 	OriginalName() string
 	OriginalID() descpb.ID
 	OriginalVersion() descpb.DescriptorVersion
-	// Immutable returns an immutable copy of this descriptor.
-	Immutable() Descriptor
+	// ImmutableCopy returns an immutable copy of this descriptor.
+	ImmutableCopy() Descriptor
 	// IsNew returns whether the descriptor was created in this transaction.
 	IsNew() bool
+
+	// SetPublic sets the descriptor's state to public.
+	SetPublic()
+	// SetDropped sets the descriptor's state to dropped.
+	SetDropped()
+	// SetOffline sets the descriptor's state to offline, with the provided reason.
+	SetOffline(reason string)
+	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+	// RunPostDeserializationChanges.
+	HasPostDeserializationChanges() bool
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.
 type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
+	GetVirtualSchemaByID(id descpb.ID) (VirtualSchema, bool)
+	GetVirtualObjectByID(id descpb.ID) (VirtualObject, bool)
 }
 
 // VirtualSchema represents a collection of VirtualObjects.
 type VirtualSchema interface {
-	Desc() Descriptor
+	Desc() SchemaDescriptor
 	NumTables() int
 	VisitTables(func(object VirtualObject))
 	GetObjectByName(name string, flags tree.ObjectLookupFlags) (VirtualObject, error)
@@ -61,26 +69,30 @@ type VirtualObject interface {
 	Desc() Descriptor
 }
 
-// TableEntry is the value type of FkTableMetadata: An optional table
-// descriptor, populated when the table is public/leasable, and an IsAdding
-// flag.
-type TableEntry struct {
-	// Desc is the descriptor of the table. This can be nil if eg.
-	// the table is not public.
-	Desc *sqlbase.ImmutableTableDescriptor
-
-	// IsAdding indicates the descriptor is being created.
-	IsAdding bool
-}
-
 // ResolvedObjectPrefix represents the resolved components of an object name
 // prefix. It contains the parent database and schema.
 type ResolvedObjectPrefix struct {
+	// ExplicitDatabase and ExplicitSchema configure what is returned
+	// in the NamePrefix call.
+	ExplicitDatabase, ExplicitSchema bool
+
 	// Database is the parent database descriptor.
-	Database *sqlbase.ImmutableDatabaseDescriptor
+	Database DatabaseDescriptor
 	// Schema is the parent schema.
-	Schema sqlbase.ResolvedSchema
+	Schema SchemaDescriptor
 }
 
-// SchemaMeta implements the SchemaMeta interface.
-func (*ResolvedObjectPrefix) SchemaMeta() {}
+// NamePrefix returns the tree.ObjectNamePrefix with the appropriate names
+// and indications about which of those names were provided explicitly.
+func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
+	var n tree.ObjectNamePrefix
+	n.ExplicitCatalog = p.ExplicitDatabase
+	n.ExplicitSchema = p.ExplicitSchema
+	if p.Database != nil {
+		n.CatalogName = tree.Name(p.Database.GetName())
+	}
+	if p.Schema != nil {
+		n.SchemaName = tree.Name(p.Schema.GetName())
+	}
+	return n
+}

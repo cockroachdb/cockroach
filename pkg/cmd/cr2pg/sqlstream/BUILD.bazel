@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlstream",
+    srcs = ["stream.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cr2pg/sqlstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

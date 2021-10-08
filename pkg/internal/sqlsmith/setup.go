@@ -16,9 +16,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Setup generates a SQL query that can be executed to initialize a database
@@ -27,14 +26,25 @@ type Setup func(*rand.Rand) string
 
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
-	"empty": stringSetup(""),
+	"empty": wrapCommonSetup(stringSetup("")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed": stringSetup(seedTable),
+	"seed": wrapCommonSetup(stringSetup(seedTable)),
 	// seed-vec is like seed except only types supported by vectorized
 	// execution are used.
-	"seed-vec":    stringSetup(vecSeedTable),
-	"rand-tables": randTables,
+	"seed-vec":    wrapCommonSetup(stringSetup(vecSeedTable)),
+	"rand-tables": wrapCommonSetup(randTables),
+}
+
+// wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
+// specific setup passed in.
+func wrapCommonSetup(setupFn Setup) Setup {
+	return func(r *rand.Rand) string {
+		s := setupFn(r)
+		var sb strings.Builder
+		sb.WriteString(s)
+		return sb.String()
+	}
 }
 
 var setupNames = func() []string {
@@ -58,21 +68,26 @@ func stringSetup(s string) Setup {
 	}
 }
 
+// randTables is a Setup function that creates 1-5 random tables.
 func randTables(r *rand.Rand) string {
+	return randTablesN(r, r.Intn(5)+1)
+}
+
+// randTablesN is a Setup function that creates n random tables.
+func randTablesN(r *rand.Rand, n int) string {
 	var sb strings.Builder
 	// Since we use the stats mutator, disable auto stats generation.
 	sb.WriteString(`
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
-		SET experimental_enable_enums = true;
-		SET experimental_partial_indexes = true;
+		SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
 	`)
 
 	// Create the random tables.
-	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
-		mutations.ForeignKeyMutator,
-		mutations.StatisticsMutator,
-		mutations.PartialIndexMutator,
+	stmts := randgen.RandCreateTables(r, "table", n,
+		randgen.StatisticsMutator,
+		randgen.PartialIndexMutator,
+		randgen.ForeignKeyMutator,
 	)
 
 	for _, stmt := range stmts {
@@ -84,7 +99,7 @@ func randTables(r *rand.Rand) string {
 	numTypes := r.Intn(5) + 1
 	for i := 0; i < numTypes; i++ {
 		name := fmt.Sprintf("rand_typ_%d", i)
-		stmt := sqlbase.RandCreateType(r, name, letters)
+		stmt := randgen.RandCreateType(r, name, letters)
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}
@@ -96,7 +111,6 @@ func randTables(r *rand.Rand) string {
 
 const (
 	seedTable = `
-SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT

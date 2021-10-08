@@ -1,0 +1,137 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON,
+  FAMILY (k, j)
+)
+
+statement ok
+CREATE TABLE j2 (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  j JSON,
+  INVERTED INDEX ij_idx (i, j),
+  INVERTED INDEX isj_idx (i, s, j),
+  FAMILY (k, i, s, j)
+)
+
+statement ok
+INSERT INTO j1 VALUES
+  (1, '{"a": "b"}'),
+  (2, '{"x": "y"}'),
+  (3, '{"a": "b", "x": "y"}')
+
+query T
+EXPLAIN SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2
+ON i IN (10, 20) AND j2.j @> j1.j
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: j2@primary
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: j @> j
+│
+└── • inverted join
+    │ table: j2@ij_idx
+    │
+    └── • cross join
+        │
+        ├── • scan
+        │     missing stats
+        │     table: j1@primary
+        │     spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows
+
+query T
+EXPLAIN SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2@isj_idx
+ON i = 10 AND s IN ('foo', 'bar') AND j2.j @> j1.j
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: j2@primary
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: j @> j
+│
+└── • inverted join
+    │ table: j2@isj_idx
+    │
+    └── • cross join
+        │
+        ├── • render
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: j1@primary
+        │         spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows
+
+query T
+EXPLAIN SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2
+ON i IN (10, 20) AND j2.j <@ j1.j
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: j2@primary
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: j <@ j
+│
+└── • inverted join
+    │ table: j2@ij_idx
+    │
+    └── • cross join
+        │
+        ├── • scan
+        │     missing stats
+        │     table: j1@primary
+        │     spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows
+
+query T
+EXPLAIN SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2@isj_idx
+ON i = 10 AND s IN ('foo', 'bar') AND j2.j <@ j1.j
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: j2@primary
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: j <@ j
+│
+└── • inverted join
+    │ table: j2@isj_idx
+    │
+    └── • cross join
+        │
+        ├── • render
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: j1@primary
+        │         spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows

@@ -11,6 +11,7 @@
 package security_test
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -149,6 +150,8 @@ func TestGetCertificateUsersMapped(t *testing.T) {
 		{"bar,foo", "foo:blah", "bar,blah"},
 		// Both principals mapped.
 		{"foo,bar", "foo:bar,bar:foo", "bar,foo"},
+		// Verify desired string splits.
+		{"foo:has:colon", "foo:has:colon:bar", "bar"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -169,36 +172,44 @@ func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func() { _ = security.SetCertPrincipalMap(nil) }()
 
+	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+	blahUser := security.MakeSQLUsernameFromPreNormalizedString("blah")
+
 	testCases := []struct {
 		insecure           bool
 		tlsSpec            string
-		username           string
+		username           security.SQLUsername
 		principalMap       string
 		buildHookSuccess   bool
 		publicHookSuccess  bool
 		privateHookSuccess bool
 	}{
 		// Insecure mode, empty username.
-		{true, "", "", "", true, false, false},
+		{true, "", security.SQLUsername{}, "", true, false, false},
 		// Insecure mode, non-empty username.
-		{true, "", "foo", "", true, true, false},
+		{true, "", fooUser, "", true, true, false},
 		// Secure mode, no TLS state.
-		{false, "", "", "", false, false, false},
+		{false, "", security.SQLUsername{}, "", false, false, false},
 		// Secure mode, bad user.
-		{false, "foo", "node", "", true, false, false},
+		{false, "foo", security.NodeUserName(), "", true, false, false},
 		// Secure mode, node user.
-		{false, security.NodeUser, "node", "", true, true, true},
+		{false, security.NodeUser, security.NodeUserName(), "", true, true, true},
+		// Secure mode, node cert and unrelated user.
+		{false, security.NodeUser, fooUser, "", true, false, false},
 		// Secure mode, root user.
-		{false, security.RootUser, "node", "", true, false, false},
+		{false, security.RootUser, security.NodeUserName(), "", true, false, false},
 		// Secure mode, tenant cert, foo user.
-		{false, "(Tenants)foo", "foo", "", true, false, false},
+		{false, "(Tenants)foo", fooUser, "", true, false, false},
 		// Secure mode, multiple cert principals.
-		{false, "foo,bar", "foo", "", true, true, false},
-		{false, "foo,bar", "bar", "", true, true, false},
+		{false, "foo,bar", fooUser, "", true, true, false},
+		{false, "foo,bar", barUser, "", true, true, false},
 		// Secure mode, principal map.
-		{false, "foo,bar", "blah", "foo:blah", true, true, false},
-		{false, "foo,bar", "blah", "bar:blah", true, true, false},
+		{false, "foo,bar", blahUser, "foo:blah", true, true, false},
+		{false, "foo,bar", blahUser, "bar:blah", true, true, false},
 	}
+
+	ctx := context.Background()
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -213,11 +224,11 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				return
 			}
-			_, err = hook(tc.username, true /* clientConnection */)
+			_, err = hook(ctx, tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
 			}
-			_, err = hook(tc.username, false /* clientConnection */)
+			_, err = hook(ctx, tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
 			}

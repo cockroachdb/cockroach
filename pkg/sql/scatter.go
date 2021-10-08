@@ -34,7 +34,7 @@ type scatterNode struct {
 // Privileges: INSERT on table.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54255)
 	}
 
 	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
@@ -45,29 +45,30 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 	var span roachpb.Span
 	if n.From == nil {
 		// No FROM/TO specified; the span is the entire table/index.
-		span = tableDesc.IndexSpan(p.ExecCfg().Codec, index.ID)
+		span = tableDesc.IndexSpan(p.ExecCfg().Codec, index.GetID())
 	} else {
 		switch {
 		case len(n.From) == 0:
 			return nil, errors.Errorf("no columns in SCATTER FROM expression")
-		case len(n.From) > len(index.ColumnIDs):
+		case len(n.From) > index.NumKeyColumns():
 			return nil, errors.Errorf("too many columns in SCATTER FROM expression")
 		case len(n.To) == 0:
 			return nil, errors.Errorf("no columns in SCATTER TO expression")
-		case len(n.To) > len(index.ColumnIDs):
+		case len(n.To) > index.NumKeyColumns():
 			return nil, errors.Errorf("too many columns in SCATTER TO expression")
 		}
 
 		// Calculate the desired types for the select statement:
 		//  - column values; it is OK if the select statement returns fewer columns
 		//  (the relevant prefix is used).
-		desiredTypes := make([]*types.T, len(index.ColumnIDs))
-		for i, colID := range index.ColumnIDs {
-			c, err := tableDesc.FindColumnByID(colID)
+		desiredTypes := make([]*types.T, index.NumKeyColumns())
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colID := index.GetKeyColumnID(i)
+			c, err := tableDesc.FindColumnWithID(colID)
 			if err != nil {
 				return nil, err
 			}
-			desiredTypes[i] = c.Type
+			desiredTypes[i] = c.GetType()
 		}
 		fromVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.From {
@@ -143,17 +144,10 @@ func (n *scatterNode) startExec(params runParams) error {
 	scatterRes := res.(*roachpb.AdminScatterResponse)
 	n.run.rangeIdx = -1
 	n.run.ranges = make([]roachpb.Span, len(scatterRes.RangeInfos))
-	if len(scatterRes.RangeInfos) != 0 {
-		for i, rangeInfo := range scatterRes.RangeInfos {
-			n.run.ranges[i] = roachpb.Span{
-				Key:    rangeInfo.Desc.StartKey.AsRawKey(),
-				EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
-			}
-		}
-	} else {
-		// TODO(pbardea): This is a non-combined response from 20.1. Remove in 21.1.
-		for i, r := range scatterRes.DeprecatedRanges {
-			n.run.ranges[i] = r.Span
+	for i, rangeInfo := range scatterRes.RangeInfos {
+		n.run.ranges[i] = roachpb.Span{
+			Key:    rangeInfo.Desc.StartKey.AsRawKey(),
+			EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
 		}
 	}
 	return nil

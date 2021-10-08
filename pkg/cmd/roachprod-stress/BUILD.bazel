@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "roachprod-stress_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-stress",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "roachprod-stress",
+    embed = [":roachprod-stress_lib"],
+    visibility = ["//visibility:public"],
+)

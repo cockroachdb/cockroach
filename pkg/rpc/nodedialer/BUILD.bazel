@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nodedialer",
+    srcs = ["nodedialer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/rpc/nodedialer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvbase",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/util/grpcutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "nodedialer_test",
+    size = "small",
+    srcs = ["nodedialer_test.go"],
+    embed = [":nodedialer"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/rpc",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)

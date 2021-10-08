@@ -17,11 +17,12 @@ import (
 	"os"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,16 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -88,13 +87,13 @@ func TestConverterFlushesBatches(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	tests := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
 	const endBatchSize = -1
@@ -115,7 +114,9 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh)
+				semaCtx := tree.MakeSemaContext()
+				conv, err := makeInputConverter(ctx, &semaCtx, converterSpec, &evalCtx, kvCh,
+					nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
@@ -124,7 +125,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group.Go(func() error {
 					defer close(kvCh)
 					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
-						externalStorageFactory, security.RootUser)
+						externalStorageFactory, security.RootUserName())
 				})
 
 				lastBatch := 0
@@ -176,7 +177,7 @@ type errorReportingRowReceiver struct {
 var _ execinfra.RowReceiver = &errorReportingRowReceiver{}
 
 func (r *errorReportingRowReceiver) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if r.t.Failed() || (meta != nil && meta.Err != nil) {
 		if !r.t.Failed() {
@@ -189,14 +190,11 @@ func (r *errorReportingRowReceiver) Push(
 }
 
 func (r *errorReportingRowReceiver) ProducerDone() {}
-func (r *errorReportingRowReceiver) Types() []*types.T {
-	return nil
-}
 
 // A do nothing bulk adder implementation.
 type doNothingKeyAdder struct {
 	onKeyAdd func(key roachpb.Key)
-	onFlush  func()
+	onFlush  func(summary roachpb.BulkOpSummary)
 }
 
 var _ kvserverbase.BulkAdder = &doNothingKeyAdder{}
@@ -209,24 +207,25 @@ func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) erro
 }
 func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
-		a.onFlush()
+		a.onFlush(roachpb.BulkOpSummary{})
 	}
 	return nil
 }
 
-func (*doNothingKeyAdder) IsEmpty() bool                     { return true }
-func (*doNothingKeyAdder) CurrentBufferFill() float32        { return 0 }
-func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary { return roachpb.BulkOpSummary{} }
-func (*doNothingKeyAdder) Close(_ context.Context)           {}
-func (a *doNothingKeyAdder) SetOnFlush(f func())             { a.onFlush = f }
+func (*doNothingKeyAdder) IsEmpty() bool                                { return true }
+func (*doNothingKeyAdder) CurrentBufferFill() float32                   { return 0 }
+func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary            { return roachpb.BulkOpSummary{} }
+func (*doNothingKeyAdder) Close(_ context.Context)                      {}
+func (a *doNothingKeyAdder) SetOnFlush(f func(_ roachpb.BulkOpSummary)) { a.onFlush = f }
 
 var eofOffset int64 = math.MaxInt64
 
 func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -250,32 +249,32 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	}{
 		{
 			"csv-two-invalid",
-			newTestSpec(t, csvFormat(), "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
+			newTestSpec(ctx, t, csvFormat(), "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
 			[]int64{eofOffset, 0, eofOffset},
 		},
 		{
 			"csv-all-invalid",
-			newTestSpec(t, csvFormat(), "__invalid__", "../../&"),
+			newTestSpec(ctx, t, csvFormat(), "__invalid__", "../../&"),
 			[]int64{eofOffset, eofOffset},
 		},
 		{
 			"csv-all-valid",
-			newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+			newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
 			[]int64{0},
 		},
 		{
 			"mysql-one-invalid",
-			newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
+			newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
 			[]int64{0, eofOffset},
 		},
 		{
 			"pgdump-one-input",
-			newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+			newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 			[]int64{0},
 		},
 		{
 			"avro-one-invalid",
-			newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
+			newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
 			[]int64{eofOffset, 0},
 		},
 	}
@@ -299,14 +298,15 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(fmt.Sprintf("processes-files-once-%s", testCase.name), func(t *testing.T) {
 			spec := setInputOffsets(t, testCase.spec.getConverterSpec(), testCase.inputOffsets)
+			post := execinfrapb.PostProcessSpec{}
 
-			processor, err := newReadImportDataProcessor(flowCtx, 0, *spec, &errorReportingRowReceiver{t})
+			processor, err := newReadImportDataProcessor(flowCtx, 0, *spec, &post, &errorReportingRowReceiver{t})
 
 			if err != nil {
 				t.Fatalf("Could not create data processor: %v", err)
 			}
 
-			processor.Run(context.Background())
+			processor.Run(ctx)
 		})
 	}
 }
@@ -324,8 +324,9 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
 
 	pkBulkAdder := &doNothingKeyAdder{}
+	ctx := context.Background()
 
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -351,12 +352,12 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	// NB: We assume that the (external) test files are sorted and
 	// contain sufficient number of rows.
 	testSpecs := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
-		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
 	resumes := []int64{0, 10, 64, eofOffset}
@@ -415,7 +416,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, err := runImport(context.Background(), flowCtx, spec, progCh)
+				_, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 
 				if err != nil {
 					t.Fatal(err)
@@ -449,10 +450,11 @@ func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte)
 func TestImportHandlesDuplicateKVs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -472,12 +474,12 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	// In this test, we'll attempt to import different input formats.
 	// All imports produce a DuplicateKeyError, which we expect to be propagated.
 	testSpecs := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
-		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
 	for _, testCase := range testSpecs {
@@ -491,7 +493,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, err := runImport(context.Background(), flowCtx, spec, progCh)
+			_, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}
@@ -537,18 +539,16 @@ var _ jobs.Resumer = &cancellableImportResumer{}
 
 type cancellableImportResumer struct {
 	ctx              context.Context
-	jobIDCh          chan int64
-	jobID            int64
+	jobIDCh          chan jobspb.JobID
+	jobID            jobspb.JobID
 	onSuccessBarrier syncBarrier
 	wrapped          *importResumer
 }
 
-func (r *cancellableImportResumer) Resume(
-	_ context.Context, phs interface{}, resultsCh chan<- tree.Datums,
-) error {
-	r.jobID = *r.wrapped.job.ID()
+func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	r.jobID = r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
-	if err := r.wrapped.Resume(r.ctx, phs, resultsCh); err != nil {
+	if err := r.wrapped.Resume(r.ctx, execCtx); err != nil {
 		return err
 	}
 	if r.onSuccessBarrier != nil {
@@ -557,7 +557,7 @@ func (r *cancellableImportResumer) Resume(
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our Resume handler returned an
 	// error (after pausing the job), we need to short-circuits
@@ -569,9 +569,10 @@ func setImportReaderParallelism(parallelism int32) func() {
 	factory := rowexec.NewReadImportDataProcessor
 	rowexec.NewReadImportDataProcessor = func(
 		flowCtx *execinfra.FlowCtx, processorID int32,
-		spec execinfrapb.ReadImportDataSpec, output execinfra.RowReceiver) (execinfra.Processor, error) {
+		spec execinfrapb.ReadImportDataSpec, post *execinfrapb.PostProcessSpec,
+		output execinfra.RowReceiver) (execinfra.Processor, error) {
 		spec.ReaderParallelism = parallelism
-		return factory(flowCtx, processorID, spec, output)
+		return factory(flowCtx, processorID, spec, post, output)
 	}
 
 	return func() {
@@ -586,7 +587,7 @@ type jobState struct {
 	prog   jobspb.ImportProgress
 }
 
-func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
+func queryJob(db sqlutils.DBHandle, jobID jobspb.JobID) (js jobState) {
 	js = jobState{
 		err:    nil,
 		status: "",
@@ -619,7 +620,7 @@ func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
 
 // Repeatedly queries job status/progress until specified function returns true.
 func queryJobUntil(
-	t *testing.T, db sqlutils.DBHandle, jobID int64, isDone func(js jobState) bool,
+	t *testing.T, db sqlutils.DBHandle, jobID jobspb.JobID, isDone func(js jobState) bool,
 ) (js jobState) {
 	t.Helper()
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
@@ -641,12 +642,11 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
 				},
@@ -662,8 +662,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer sqlDB.Exec(t, `DROP TABLE t`)
 
 	jobCtx, cancelImport := context.WithCancel(ctx)
-	jobIDCh := make(chan int64)
-	var jobID int64 = -1
+	jobIDCh := make(chan jobspb.JobID)
+	var jobID jobspb.JobID = -1
 	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
@@ -672,7 +672,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 
 			resumer := raw.(*importResumer)
-			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.alwaysFlushJobProgress = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
@@ -716,7 +715,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Send cancellation and unblock breakpoint.
@@ -748,12 +747,11 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
 				},
@@ -768,10 +766,10 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
 	defer sqlDB.Exec(t, `DROP TABLE t`)
 
-	jobIDCh := make(chan int64)
+	jobIDCh := make(chan jobspb.JobID)
 	controllerBarrier, importBarrier := newSyncBarrier()
 
-	var jobID int64 = -1
+	var jobID jobspb.JobID = -1
 	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
@@ -780,7 +778,6 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
 				return nil
@@ -819,7 +816,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	proceedImport := controllerBarrier.Enter()
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -841,6 +838,29 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Verify that after resume we have not processed any additional rows.
 	assert.Zero(t, importSummary.Rows)
+}
+
+func TestImportWithPartialIndexesErrs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING, INDEX (data) WHERE id > 0)")
+	defer sqlDB.Exec(t, `DROP TABLE t`)
+
+	sqlDB.ExpectErr(t, "cannot import into table with partial indexes", `IMPORT INTO t (id, data) CSV DATA ('https://foo.bar')`)
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
@@ -867,12 +887,14 @@ func externalStorageFactory(
 	if err != nil {
 		return nil, err
 	}
-	return cloudimpl.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 		nil, blobs.TestBlobServiceClient(workdir), nil, nil)
 }
 
 // Helper to create and initialize testSpec.
-func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) testSpec {
+func newTestSpec(
+	ctx context.Context, t *testing.T, format roachpb.IOFileFormat, inputs ...string,
+) testSpec {
 	spec := testSpec{
 		format: format,
 		inputs: make(map[int32]string),
@@ -880,19 +902,19 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 
 	// Initialize table descriptor for import. We need valid descriptor to run
 	// converters, even though we don't actually import anything in this test.
-	var descr *sqlbase.ImmutableTableDescriptor
+	var descr *tabledesc.Mutable
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
-		descr = descForTable(t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 10, 20, NoFKs)
+		descr = descForTable(ctx, t,
+			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 200, NoFKs)
 	case
 		roachpb.IOFileFormat_Mysqldump,
 		roachpb.IOFileFormat_MysqlOutfile,
 		roachpb.IOFileFormat_PgDump,
 		roachpb.IOFileFormat_PgCopy,
 		roachpb.IOFileFormat_Avro:
-		descr = descForTable(t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 10, 20, NoFKs)
+		descr = descForTable(ctx, t,
+			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 200, NoFKs)
 	default:
 		t.Fatalf("Unsupported input format: %v", format)
 	}
@@ -907,12 +929,16 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 	}
 	assert.True(t, numCols > 0)
 
+	fullTableName := "simple"
+	if format.Format == roachpb.IOFileFormat_PgDump {
+		fullTableName = "public.simple"
+	}
 	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+		fullTableName: {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
 	}
 
 	for id, path := range inputs {
-		spec.inputs[int32(id)] = cloudimpl.MakeLocalStorageURI(path)
+		spec.inputs[int32(id)] = nodelocal.MakeLocalStorageURI(path)
 	}
 
 	return spec
@@ -922,7 +948,8 @@ func pgDumpFormat() roachpb.IOFileFormat {
 	return roachpb.IOFileFormat{
 		Format: roachpb.IOFileFormat_PgDump,
 		PgDump: roachpb.PgDumpOptions{
-			MaxRowSize: 64 * 1024,
+			MaxRowSize:        64 * 1024,
+			IgnoreUnsupported: true,
 		},
 	}
 }

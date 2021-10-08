@@ -24,7 +24,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// We are doing a distinct along all the projected columns.
 	var private memo.GroupingPrivate
 	for i := range inScope.cols {
-		if !inScope.cols[i].hidden {
+		if inScope.cols[i].visibility == visible {
 			private.GroupingCols.Add(inScope.cols[i].id)
 		}
 	}
@@ -54,8 +54,8 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 // operator rather than the DistinctOn operator (see the UpsertDistinctOn
 // operator comment for details on the differences). The errorOnDup parameter
 // controls whether multiple rows in the same distinct group trigger an error.
-// This can only take on a value in the EnsureDistinctOn and
-// EnsureUpsertDistinctOn cases.
+// If empty, no error is triggered. This can only take on a value in the
+// EnsureDistinctOn and EnsureUpsertDistinctOn cases.
 func (b *Builder) buildDistinctOn(
 	distinctOnCols opt.ColSet, inScope *scope, nullsAreDistinct bool, errorOnDup string,
 ) (outScope *scope) {
@@ -192,7 +192,13 @@ func (b *Builder) analyzeDistinctOnArgs(
 	inScope.context = exprKindDistinctOn
 
 	for i := range distinctOn {
-		b.analyzeExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope)
+		b.analyzeExtraArgument(
+			distinctOn[i],
+			inScope,
+			projectionsScope,
+			distinctOnScope,
+			true, /* nullsDefaultOrder */
+		)
 	}
 	return distinctOnScope
 }

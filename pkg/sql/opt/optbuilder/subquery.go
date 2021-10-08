@@ -165,7 +165,7 @@ func (s *subquery) TypeCheck(
 		labels := make([]string, len(s.cols))
 		for i := range s.cols {
 			contents[i] = s.cols[i].typ
-			labels[i] = string(s.cols[i].name)
+			labels[i] = string(s.cols[i].name.ReferenceName())
 		}
 		s.typ = types.MakeLabeledTuple(contents, labels)
 	}
@@ -287,7 +287,7 @@ func (b *Builder) buildSubqueryProjection(
 
 		texpr := tree.NewTypedTuple(typ, cols)
 		tup := b.factory.ConstructTuple(els, typ)
-		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
+		col := b.synthesizeColumn(outScope, scopeColName(""), texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})
 	}
 
@@ -353,15 +353,15 @@ func (b *Builder) buildMultiRowSubquery(
 	outScope = outScope.replace()
 
 	var cmp opt.Operator
-	switch c.Operator {
+	switch c.Operator.Symbol {
 	case tree.In, tree.NotIn:
 		// <var> = x
 		cmp = opt.EqOp
 
 	case tree.Any, tree.Some, tree.All:
 		// <var> <comp> x
-		cmp = opt.ComparisonOpMap[c.SubOperator]
-		if c.Operator == tree.All {
+		cmp = opt.ComparisonOpMap[c.SubOperator.Symbol]
+		if c.Operator.Symbol == tree.All {
 			// NOT(<var> <comp> x)
 			cmp = opt.NegateOpMap[cmp]
 		}
@@ -377,7 +377,7 @@ func (b *Builder) buildMultiRowSubquery(
 		Cmp:          cmp,
 		OriginalExpr: s.Subquery,
 	})
-	switch c.Operator {
+	switch c.Operator.Symbol {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)
 		out = b.factory.ConstructNot(out)

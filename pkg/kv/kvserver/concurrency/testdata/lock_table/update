@@ -29,14 +29,14 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 dequeue r=req1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -95,7 +95,7 @@ print
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
@@ -105,6 +105,33 @@ global: num=1
    distinguished req: 2
 local: num=0
 
+metrics
+----
+locks: 1
+locksheld: 1
+lockswithreservation: 0
+lockswithwaitqueues: 1
+waiters: 4
+waitingreaders: 2
+waitingwriters: 2
+topklocksbywaiters:
+- key:
+  - 97
+  held: true
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+- key: []
+  held: false
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+- key: []
+  held: false
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+
 # -------------------------------------------------------------
 # Update lock timestamp to 11,1 - nothing moves
 # -------------------------------------------------------------
@@ -113,7 +140,7 @@ update txn=txn1 ts=11,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000011,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
@@ -133,7 +160,7 @@ update txn=txn1 ts=13,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 13.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -154,7 +181,7 @@ dequeue r=req2
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 13.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -172,7 +199,7 @@ update txn=txn1 ts=10,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 13.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -189,7 +216,7 @@ update txn=txn1 ts=15,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 15.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -208,7 +235,7 @@ update txn=txn1 ts=17,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000017,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 17.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -227,7 +254,7 @@ dequeue r=req4
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000017,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 17.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -242,7 +269,7 @@ update txn=txn1 ts=19,1 epoch=0 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000019,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 19.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -260,7 +287,7 @@ update txn=txn1 ts=19,1 epoch=1 span=a
 ----
 global: num=1
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000014,1, seq: 0
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 14.000000000,1, seq: 0
    queued writers:
     active: true req: 5, txn: none
    distinguished req: 5
@@ -317,7 +344,7 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1]
 local: num=0
 
 new-txn txn=txn1 ts=10 epoch=1 seq=5
@@ -330,7 +357,7 @@ acquire r=req2 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 5]
 local: num=0
 
 new-txn txn=txn1 ts=10 epoch=1 seq=7
@@ -343,7 +370,7 @@ acquire r=req3 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 5, 7]
 local: num=0
 
 new-txn txn=txn1 ts=10 epoch=1 seq=10
@@ -356,7 +383,7 @@ acquire r=req4 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
 local: num=0
 
 # No seqnum change since lock is not held at seqnum 3, 8, 9.
@@ -365,7 +392,7 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
 local: num=0
 
 # No change since update is using older epoch.
@@ -374,21 +401,21 @@ update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,5-7
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
 local: num=0
 
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,5-7
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1, 10]
 local: num=0
 
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=9-11
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [1]
 local: num=0
 
 # No seqnum change since update is using older epoch. But since the update is using
@@ -398,7 +425,7 @@ update txn=txn1 ts=15 epoch=0 span=a ignored-seqs=1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,0, info: unrepl epoch: 1, seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 15.000000000,0, info: unrepl epoch: 1, seqs: [1]
 local: num=0
 
 # No change, since seqnum 3 is not held. Note that the ts is not updated.
@@ -407,7 +434,7 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,0, info: unrepl epoch: 1, seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 15.000000000,0, info: unrepl epoch: 1, seqs: [1]
 local: num=0
 
 # Timestamp is updated again.
@@ -415,7 +442,7 @@ update txn=txn1 ts=16 epoch=1 span=a
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000016,0, info: unrepl epoch: 1, seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 16.000000000,0, info: unrepl epoch: 1, seqs: [1]
 local: num=0
 
 # Seqnum 1 is also ignored, so the lock is released. Note that it does not

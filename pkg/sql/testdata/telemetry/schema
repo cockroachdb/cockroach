@@ -44,8 +44,18 @@ feature-usage
 CREATE TABLE y (a SERIAL2)
 ----
 sql.schema.create_table
-sql.schema.new_column_type.int2
+sql.schema.new_column.qualification.default_expr
+sql.schema.new_column_type.int8
 sql.schema.serial.rowid.int2
+
+feature-usage
+ALTER TABLE y ADD COLUMN new_id int REFERENCES t(a)
+----
+sql.schema.alter_table
+sql.schema.alter_table.add_column
+sql.schema.alter_table.add_column.references
+sql.schema.alter_table.add_constraint
+sql.schema.new_column_type.int8
 
 schema
 ----
@@ -64,7 +74,8 @@ table:_
 table:_
  └── columns
       ├── _:int default: _
-      └── _:int default: _
+      ├── _:int default: _
+      └── _:int
 
 feature-allowlist
 sql.schema.create_unlogged_table
@@ -74,3 +85,12 @@ feature-usage
 CREATE UNLOGGED TABLE unlogged_tbl(col int PRIMARY KEY)
 ----
 sql.schema.create_unlogged_table
+
+feature-allowlist
+sql.schema.create_or_replace_view
+----
+
+feature-usage
+CREATE OR REPLACE VIEW cor_view AS SELECT 1
+----
+sql.schema.create_or_replace_view

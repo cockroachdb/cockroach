@@ -10,18 +10,16 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type isNullProjBase struct {
-	OneInputNode
+	colexecop.OneInputHelper
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -35,18 +33,18 @@ type isNullProjBase struct {
 // (we either have IS NULL or IS NOT NULL with tuple type as the input vector).
 func NewIsNullProjOp(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input colexecop.Operator,
 	colIdx, outputIdx int,
 	negate bool,
 	isTupleNull bool,
-) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
+) colexecop.Operator {
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		colIdx:       colIdx,
-		outputIdx:    outputIdx,
-		negate:       negate,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		allocator:      allocator,
+		colIdx:         colIdx,
+		outputIdx:      outputIdx,
+		negate:         negate,
 	}
 	if isTupleNull {
 		return &isTupleNullProjOp{isNullProjBase: base}
@@ -63,14 +61,10 @@ type isNullProjOp struct {
 	isNullProjBase
 }
 
-var _ colexecbase.Operator = &isNullProjOp{}
+var _ colexecop.Operator = &isNullProjOp{}
 
-func (o *isNullProjOp) Init() {
-	o.input.Init()
-}
-
-func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *isNullProjOp) Next() coldata.Batch {
+	batch := o.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -127,14 +121,10 @@ type isTupleNullProjOp struct {
 	isNullProjBase
 }
 
-var _ colexecbase.Operator = &isTupleNullProjOp{}
+var _ colexecop.Operator = &isTupleNullProjOp{}
 
-func (o *isTupleNullProjOp) Init() {
-	o.input.Init()
-}
-
-func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *isTupleNullProjOp) Next() coldata.Batch {
+	batch := o.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -156,7 +146,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -166,7 +156,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -178,7 +168,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -188,7 +178,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -198,7 +188,7 @@ func (o *isTupleNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type isNullSelBase struct {
-	OneInputNode
+	colexecop.OneInputHelper
 	colIdx int
 	negate bool
 }
@@ -209,12 +199,12 @@ type isNullSelBase struct {
 // - isTupleNull indicates whether special "is tuple null" version is needed
 // (we either have IS NULL or IS NOT NULL with tuple type as the input vector).
 func NewIsNullSelOp(
-	input colexecbase.Operator, colIdx int, negate bool, isTupleNull bool,
-) colexecbase.Operator {
+	input colexecop.Operator, colIdx int, negate bool, isTupleNull bool,
+) colexecop.Operator {
 	base := isNullSelBase{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
-		negate:       negate,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		colIdx:         colIdx,
+		negate:         negate,
 	}
 	if isTupleNull {
 		return &isTupleNullSelOp{isNullSelBase: base}
@@ -229,15 +219,11 @@ type isNullSelOp struct {
 	isNullSelBase
 }
 
-var _ colexecbase.Operator = &isNullSelOp{}
+var _ colexecop.Operator = &isNullSelOp{}
 
-func (o *isNullSelOp) Init() {
-	o.input.Init()
-}
-
-func (o *isNullSelOp) Next(ctx context.Context) coldata.Batch {
+func (o *isNullSelOp) Next() coldata.Batch {
 	for {
-		batch := o.input.Next(ctx)
+		batch := o.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return batch
@@ -292,15 +278,11 @@ type isTupleNullSelOp struct {
 	isNullSelBase
 }
 
-var _ colexecbase.Operator = &isTupleNullSelOp{}
+var _ colexecop.Operator = &isTupleNullSelOp{}
 
-func (o *isTupleNullSelOp) Init() {
-	o.input.Init()
-}
-
-func (o *isTupleNullSelOp) Next(ctx context.Context) coldata.Batch {
+func (o *isTupleNullSelOp) Next() coldata.Batch {
 	for {
-		batch := o.input.Next(ctx)
+		batch := o.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return batch
@@ -316,7 +298,7 @@ func (o *isTupleNullSelOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				selectTuple := nulls.NullAt(i) != o.negate
 				if !selectTuple {
-					selectTuple = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
 					sel[idx] = i
@@ -330,7 +312,7 @@ func (o *isTupleNullSelOp) Next(ctx context.Context) coldata.Batch {
 			for i := range sel {
 				selectTuple := nulls.NullAt(i) != o.negate
 				if !selectTuple {
-					selectTuple = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
 					sel[idx] = i

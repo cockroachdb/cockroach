@@ -39,6 +39,15 @@ var distanceTestCases = []struct {
 		"LINESTRING (1 1, 1 1)",
 	},
 	{
+		"Same 3D POINTs",
+		"POINT(1.0 2.0 3.0)",
+		"POINT(1.0 2.0 3.0)",
+		0,
+		0,
+		"LINESTRING (1 2, 1 2)",
+		"LINESTRING (1 2, 1 2)",
+	},
+	{
 		"Different POINTs",
 		"POINT(1.0 1.0)",
 		"POINT(2.0 1.0)",
@@ -46,6 +55,15 @@ var distanceTestCases = []struct {
 		1,
 		"LINESTRING(1.0 1.0, 2.0 1.0)",
 		"LINESTRING (1 1, 2 1)",
+	},
+	{
+		"Different 3D POINTs",
+		"POINT(0.0 1.0 2.0)",
+		"POINT(0.0 3.0 5.0)",
+		2,
+		2,
+		"LINESTRING (0 1, 0 3)",
+		"LINESTRING (0 1, 0 3)",
 	},
 	{
 		"POINT on LINESTRING",
@@ -457,13 +475,26 @@ func TestDWithin(t *testing.T) {
 				tc.expectedMinDistance * 2,
 			} {
 				t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-					dwithin, err := DWithin(a, b, val)
+					dwithin, err := DWithin(a, b, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dwithin)
 
-					dwithin, err = DWithin(a, b, val)
+					dwithin, err = DWithin(b, a, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dwithin)
+				})
+				t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+					exclusiveExpected := expected
+					if val == tc.expectedMinDistance {
+						exclusiveExpected = false
+					}
+					dwithin, err := DWithin(a, b, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dwithin)
+
+					dwithin, err = DWithin(b, a, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dwithin)
 				})
 			}
 
@@ -474,11 +505,20 @@ func TestDWithin(t *testing.T) {
 			} {
 				if val > 0 {
 					t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-						dwithin, err := DWithin(a, b, val)
+						dwithin, err := DWithin(a, b, val, geo.FnInclusive)
 						require.NoError(t, err)
 						require.False(t, dwithin)
 
-						dwithin, err = DWithin(a, b, val)
+						dwithin, err = DWithin(b, a, val, geo.FnInclusive)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+					})
+					t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+						dwithin, err := DWithin(a, b, val, geo.FnExclusive)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+
+						dwithin, err = DWithin(b, a, val, geo.FnExclusive)
 						require.NoError(t, err)
 						require.False(t, dwithin)
 					})
@@ -494,7 +534,7 @@ func TestDWithin(t *testing.T) {
 				require.NoError(t, err)
 				b, err := geo.ParseGeometry(tc.b)
 				require.NoError(t, err)
-				dwithin, err := DWithin(a, b, 0)
+				dwithin, err := DWithin(a, b, 0, geo.FnInclusive)
 				require.NoError(t, err)
 				require.False(t, dwithin)
 			})
@@ -507,7 +547,7 @@ func TestDWithin(t *testing.T) {
 	})
 
 	t.Run("errors if distance < 0", func(t *testing.T) {
-		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01)
+		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01, geo.FnInclusive)
 		require.Error(t, err)
 	})
 }
@@ -533,13 +573,26 @@ func TestDFullyWithin(t *testing.T) {
 				tc.expectedMaxDistance * 2,
 			} {
 				t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-					dfullywithin, err := DFullyWithin(a, b, val)
+					dfullywithin, err := DFullyWithin(a, b, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dfullywithin)
 
-					dfullywithin, err = DFullyWithin(a, b, val)
+					dfullywithin, err = DFullyWithin(b, a, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dfullywithin)
+				})
+				t.Run(fmt.Sprintf("dfullywithinexclusive:%f", val), func(t *testing.T) {
+					exclusiveExpected := expected
+					if val == tc.expectedMaxDistance {
+						exclusiveExpected = false
+					}
+					dfullywithin, err := DFullyWithin(a, b, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dfullywithin)
+
+					dfullywithin, err = DFullyWithin(b, a, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dfullywithin)
 				})
 			}
 
@@ -550,11 +603,20 @@ func TestDFullyWithin(t *testing.T) {
 			} {
 				if val > 0 {
 					t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-						dfullywithin, err := DFullyWithin(a, b, val)
+						dfullywithin, err := DFullyWithin(a, b, val, geo.FnInclusive)
 						require.NoError(t, err)
 						require.False(t, dfullywithin)
 
-						dfullywithin, err = DFullyWithin(a, b, val)
+						dfullywithin, err = DFullyWithin(b, a, val, geo.FnInclusive)
+						require.NoError(t, err)
+						require.False(t, dfullywithin)
+					})
+					t.Run(fmt.Sprintf("dfullywithinexclusive:%f", val), func(t *testing.T) {
+						dfullywithin, err := DFullyWithin(a, b, val, geo.FnExclusive)
+						require.NoError(t, err)
+						require.False(t, dfullywithin)
+
+						dfullywithin, err = DFullyWithin(b, a, val, geo.FnExclusive)
 						require.NoError(t, err)
 						require.False(t, dfullywithin)
 					})
@@ -569,7 +631,7 @@ func TestDFullyWithin(t *testing.T) {
 	})
 
 	t.Run("errors if distance < 0", func(t *testing.T) {
-		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01)
+		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01, geo.FnInclusive)
 		require.Error(t, err)
 	})
 }
@@ -609,10 +671,9 @@ func TestLongestLineString(t *testing.T) {
 				require.NoError(t, err)
 				b, err := geo.ParseGeometry(tc.b)
 				require.NoError(t, err)
-				longestLine, err := LongestLineString(a, b)
+				_, err = LongestLineString(a, b)
 				require.Error(t, err)
 				require.True(t, geo.IsEmptyGeometryError(err))
-				require.Nil(t, longestLine)
 			})
 		}
 	})
@@ -654,6 +715,331 @@ func TestShortestLineString(t *testing.T) {
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := ShortestLineString(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestFrechetDistance(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", pf(7.615773105863909)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v %v", tc.a, tc.b), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := FrechetDistance(a, b)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := FrechetDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestFrechetDistanceDensify(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a           string
+		b           string
+		densifyFrac float64
+		expected    *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", 0.5, nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", -1, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", -0.1, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.0, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.2, pf(6.627216610312356)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.4, pf(6.666666666666667)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.6, pf(6.670832032063167)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.8, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1.0, pf(7.615773105863909)},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densifyFrac), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := FrechetDistanceDensify(a, b, tc.densifyFrac)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := FrechetDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
+		requireMismatchingSRIDError(t, err)
+	})
+
+	errorTestCases := []struct {
+		a           string
+		b           string
+		densifyFrac float64
+	}{
+		// Very small densifyFrac causes a SIGFPE in GEOS due to division-by-zero.
+		// We explicitly disallow <1e-6 in the code, and test that both of these error.
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-7},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-19},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-20},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-100},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1e-19},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1e-20},
+	}
+
+	t.Run("errors on invalid densify fraction", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			tc := tc
+			t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densifyFrac), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+
+				_, err = FrechetDistanceDensify(a, b, tc.densifyFrac)
+				require.Error(t, err)
+			})
+		}
+	})
+}
+
+func TestHausdorffDistance(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", pf(5.656854249492381)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v %v", tc.a, tc.b), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := HausdorffDistance(a, b)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := HausdorffDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestHausdorffDistanceDensify(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		densify  float64
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING EMPTY", "LINESTRING (10 10, 10 150, 130 10)", 0.5, nil},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.2, pf(66)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.4, pf(56.66666666666667)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.6, pf(70)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.8, pf(14.142135623730951)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1.0, pf(14.142135623730951)},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := HausdorffDistanceDensify(a, b, tc.densify)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	errorTestCases := []struct {
+		a       string
+		b       string
+		densify float64
+	}{
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -1},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -0.1},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.0},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.0000001},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1.1},
+	}
+
+	t.Run("errors on invalid densify fraction", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			tc := tc
+			t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+
+				_, err = HausdorffDistanceDensify(a, b, tc.densify)
+				require.Error(t, err)
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := HausdorffDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestClosestPoint(t *testing.T) {
+
+	testCases := []struct {
+		name     string
+		geomA    string
+		geomB    string
+		expected string
+	}{
+		{"Closest point between a POINT and LINESTRING",
+			"POINT(100 100)",
+			"LINESTRING(20 80, 98 190, 110 180, 50 75 )",
+			"POINT(100 100)",
+		},
+		{"Closest point between a LINESTRING and POINT",
+			"LINESTRING(20 80, 98 190, 110 180, 50 75 )",
+			"POINT(100 100)",
+			"POINT(73.0769230769231 115.384615384615)",
+		},
+		{"Closest point between 2 POLYGONS",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POLYGON((15 50, 2 4, 5 6, 12 10, 15 50))",
+			"POINT(20 40)",
+		},
+		{"Closest point between overlapping POLYGONS",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POINT(175 150)",
+		},
+		{"Closest point between partially-overlapping POLYGONS",
+			"POLYGON((10 10, 14 14, 20 14, 20 10, 10 10))",
+			"POLYGON((12 12, 16 12, 16 8, 12 8, 12 12))",
+			"POINT(12 12)",
+		},
+		{"Closest point between MULTILINESTRING and POLYGON",
+			"MULTILINESTRING((0 0, 1 1, 2 2),(3 3, 4 4, 5 5))",
+			"POLYGON((10 10, 11 11, 14 11, 14 10, 10 10))",
+			"POINT(5 5)",
+		},
+		{"Closest point between MULTILINESTRING and MULTIPOINT",
+			"MULTILINESTRING((0 0, 1 1, 2 2),(3 3, 4 4, 5 5))",
+			"MULTIPOINT((2 1),(10 10))",
+			"POINT(1.5 1.5)",
+		},
+		{"Closest point between MULTIPOLYGON and MULTIPOINT",
+			"MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))",
+			"MULTIPOINT((20 10),(10 10))",
+			"POINT(4 4)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gA, err := geo.ParseGeometry(tc.geomA)
+			require.NoError(t, err)
+			gB, err := geo.ParseGeometry(tc.geomB)
+			require.NoError(t, err)
+
+			expected, err := geo.ParseGeometry(tc.expected)
+			require.NoError(t, err)
+			ret, err := ClosestPoint(gA, gB)
+			require.NoError(t, err)
+
+			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
+		})
+	}
+
+	testCasesEmpty := []struct {
+		name  string
+		geomA string
+		geomB string
+	}{
+		{"Closest point when both geometries are empty",
+			"LINESTRING EMPTY",
+			"LINESTRING EMPTY",
+		},
+		{"Closest point when first geometry is empty",
+			"LINESTRING EMPTY",
+			"POINT(100 100)",
+		},
+		{"Closest point when second geometry is empty",
+			"POINT(100 100)",
+			"LINESTRING EMPTY",
+		},
+	}
+
+	t.Run("errors for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range testCasesEmpty {
+			t.Run(tc.name, func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.geomA)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.geomB)
+				require.NoError(t, err)
+				_, err = ClosestPoint(a, b)
+				require.Error(t, err)
+				require.True(t, geo.IsEmptyGeometryError(err))
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := ClosestPoint(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
 }

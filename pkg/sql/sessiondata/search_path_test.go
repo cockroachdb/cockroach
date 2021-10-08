@@ -223,3 +223,53 @@ func TestWithTemporarySchema(t *testing.T) {
 	sp = sp.UpdatePaths([]string{"x", "pg_temp"})
 	assert.True(t, sp.GetTemporarySchemaName() == testTempSchemaName)
 }
+
+func TestSearchPathSpecialChar(t *testing.T) {
+	testCases := []struct {
+		searchPath               []string
+		expectedSearchPathString string
+	}{
+		{
+			searchPath:               []string{`$user`, `public`, `postgis`, `geography`},
+			expectedSearchPathString: `"$user", public, postgis, "geography"`,
+		},
+		{
+			searchPath:               []string{`dirt`, `test`, `$user`, `public`, `prod`},
+			expectedSearchPathString: `dirt, test, "$user", public, prod`,
+		},
+		{
+			searchPath:               []string{`desc`, `$user`, `$user`, `foo.bar`, `foo.$bar`},
+			expectedSearchPathString: `"desc", "$user", "$user", "foo.bar", "foo.$bar"`,
+		},
+		{
+			searchPath:               []string{`bar`, `user`, `limit`, `foo`},
+			expectedSearchPathString: `bar, "user", "limit", foo`,
+		},
+		{
+			searchPath:               []string{`bar`, `baz`, `foo`, `foo`},
+			expectedSearchPathString: `bar, baz, foo, foo`,
+		},
+		{
+			searchPath:               []string{`$user`, `session_user`, `treat`, `some`},
+			expectedSearchPathString: `"$user", "session_user", "treat", "some"`,
+		},
+		{
+			searchPath:               []string{`$user`},
+			expectedSearchPathString: `"$user"`,
+		},
+		{
+			searchPath:               []string{`bar`},
+			expectedSearchPathString: `bar`,
+		},
+		{
+			searchPath:               []string{`$variadic`, `work`},
+			expectedSearchPathString: `"$variadic", "work"`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(strings.Join(testCase.searchPath, ", "), func(t *testing.T) {
+			sp := MakeSearchPath(testCase.searchPath)
+			assert.True(t, sp.SQLIdentifiers() == testCase.expectedSearchPathString)
+		})
+	}
+}

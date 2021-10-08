@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func TestShouldTruncate(t *testing.T) {
@@ -682,17 +681,17 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	r.completeSnapshotLogTruncationConstraint(ctx, id1, now)
 	// The index should show up when its deadline isn't hit.
 	assertMin(index1, now)
-	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
-	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
 	// Once we're over deadline, the index returned so far disappears.
-	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod+1))
+	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod+1))
 	assertMin(index2, time.Time{})
-	assertMin(index2, now.Add(10*raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index2, now.Add(10*RaftLogQueuePendingSnapshotGracePeriod))
 
 	r.completeSnapshotLogTruncationConstraint(ctx, id2, now)
 	assertMin(index2, now)
-	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod))
-	assertMin(0, now.Add(2*raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
+	assertMin(0, now.Add(2*RaftLogQueuePendingSnapshotGracePeriod))
 
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, map[uuid.UUID]snapTruncationInfo(nil))
 }
@@ -861,9 +860,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	cache := storage.NewRocksDBCache(1 << 20)
-	defer cache.Release()
-	eng, err := storage.NewRocksDB(storage.RocksDBConfig{StorageConfig: base.StorageConfig{Dir: dir}}, cache)
+	eng, err := storage.Open(ctx,
+		storage.Filesystem(dir),
+		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,11 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,7 +38,7 @@ type bulkRowWriter struct {
 	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
-	tableDesc      sqlbase.ImmutableTableDescriptor
+	tableDesc      catalog.TableDescriptor
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
 	output         execinfra.RowReceiver
@@ -58,7 +59,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      sqlbase.MakeImmutableTableDescriptor(spec.Table),
+		tableDesc:      spec.BuildTableDescriptor(),
 		spec:           spec,
 		input:          input,
 		output:         output,
@@ -73,24 +74,23 @@ func newBulkRowWriterProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (sp *bulkRowWriter) Start(ctx context.Context) context.Context {
-	sp.input.Start(ctx)
+func (sp *bulkRowWriter) Start(ctx context.Context) {
 	ctx = sp.StartInternal(ctx, "bulkRowWriter")
+	sp.input.Start(ctx)
 	err := sp.work(ctx)
 	sp.MoveToDraining(err)
-	return ctx
 }
 
 // Next is part of the RowSource interface.
-func (sp *bulkRowWriter) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (sp *bulkRowWriter) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// If there wasn't an error while processing, output the summary.
 	if sp.ProcessorBase.State == execinfra.StateRunning {
 		countsBytes, marshalErr := protoutil.Marshal(&sp.summary)
 		sp.MoveToDraining(marshalErr)
 		if marshalErr == nil {
 			// Output the summary.
-			return sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+			return rowenc.EncDatumRow{
+				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 			}, nil
 		}
 	}
@@ -101,12 +101,15 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
-	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh)
+	semaCtx := tree.MakeSemaContext()
+	conv, err := row.NewDatumRowConverter(
+		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
+		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(),
+	)
 	if err != nil {
 		return err
 	}
-	if conv.EvalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData() == nil {
 		panic("uninitialized session data")
 	}
 
@@ -126,7 +129,7 @@ func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, &sp.tableDesc, typed.Key, v)
+	return row.NewUniquenessConstraintViolationError(ctx, sp.tableDesc, typed.Key, v)
 }
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
@@ -177,7 +180,7 @@ func (sp *bulkRowWriter) convertLoop(
 	defer close(kvCh)
 
 	done := false
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	typs := sp.input.OutputTypes()
 
 	for {
@@ -234,10 +237,4 @@ func (sp *bulkRowWriter) convertLoop(
 	}
 
 	return nil
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (sp *bulkRowWriter) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	sp.InternalClose()
 }

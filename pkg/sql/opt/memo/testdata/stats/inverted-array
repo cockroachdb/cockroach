@@ -1,0 +1,282 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT[],
+  INVERTED INDEX a_idx (a)
+)
+----
+
+# Histogram boundaries are for JSON values `{}`, `{1}`, `{2}`, `{3}`. The
+# row_count is lower than the sum of the histogram buckets num_eq's because some
+# rows can have multiple inverted index entries, for example `{1, 2}`. There
+# are:
+#
+#   - 1000 rows total
+#   - 10 empty arrays
+#   - 990 arrays encoded into 1010 index entries
+#
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 3,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x43"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x89"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x8a"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x8b"
+      }
+    ]
+  }
+]'
+----
+
+# Containment of an empty array requires a scan over all array entries.
+opt
+SELECT * FROM t@a_idx WHERE a @> '{}'
+----
+index-join t
+ ├── columns: k:1(int!null) a:2(int[]!null)
+ ├── immutable
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans: ["", ""]
+      ├── stats: [rows=1020]
+      ├── key: (1)
+      └── scan t@a_idx
+           ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+           ├── inverted constraint: /5/1
+           │    └── spans: ["", ""]
+           ├── flags: force-index=a_idx
+           ├── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
+           │   histogram(5)=  0    10    0   990    0    10    0    10
+           │                <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
+           ├── key: (1)
+           └── fd: (1)-->(5)
+
+# An inverted index scan is preferred for a more selective filter.
+opt
+SELECT * FROM t WHERE a @> '{2}'
+----
+index-join t
+ ├── columns: k:1(int!null) a:2(int[]!null)
+ ├── immutable
+ ├── stats: [rows=111.111111]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@a_idx
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /5/1
+      │    └── spans: ["\x8a", "\x8a"]
+      ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+      │   histogram(5)=  0    10    0    0
+      │                <--- '\x8a' --- '\x8b'
+      └── key: (1)
+
+# A disjunction requires scanning all entries that match either the left or the
+# right.
+opt
+SELECT * FROM t WHERE a @> '{2}' OR a @> '{3}'
+----
+index-join t
+ ├── columns: k:1(int!null) a:2(int[]!null)
+ ├── immutable
+ ├── stats: [rows=333.333333, distinct(2)=3, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans: ["\x8a", "\x8c")
+      ├── stats: [rows=20]
+      ├── key: (1)
+      └── scan t@a_idx
+           ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+           ├── inverted constraint: /5/1
+           │    └── spans: ["\x8a", "\x8c")
+           ├── stats: [rows=20, distinct(1)=19.6078431, null(1)=0, distinct(5)=2, null(5)=0]
+           │   histogram(5)=  0    10    0    10
+           │                <--- '\x8a' --- '\x8b'
+           ├── key: (1)
+           └── fd: (1)-->(5)
+
+# The inverted index is used when checking if an array column is contained by
+# an empty array. An additional filter is required.
+opt
+SELECT * FROM t@a_idx WHERE a <@ '{}'
+----
+select
+ ├── columns: k:1(int!null) a:2(int[])
+ ├── immutable
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) a:2(int[])
+ │    ├── stats: [rows=10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@a_idx
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["C", "C"]
+ │         ├── flags: force-index=a_idx
+ │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=  0    10    0    0
+ │         │                <--- '\x43' --- '\x44'
+ │         └── key: (1)
+ └── filters
+      └── a:2 <@ ARRAY[] [type=bool, outer=(2), immutable]
+
+# The inverted index is used when checking if an array column is contained by a
+# constant. An additional filter is required.
+opt
+SELECT * FROM t WHERE a <@ '{2}'
+----
+select
+ ├── columns: k:1(int!null) a:2(int[])
+ ├── immutable
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) a:2(int[])
+ │    ├── stats: [rows=20]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x8a", "\x8a"]
+ │         ├── stats: [rows=20]
+ │         ├── key: (1)
+ │         └── scan t@a_idx
+ │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x8a", "\x8a"]
+ │              ├── stats: [rows=20, distinct(1)=19.6078431, null(1)=0, distinct(5)=2, null(5)=0]
+ │              │   histogram(5)=  0    10    0    10    0    0
+ │              │                <--- '\x43' --- '\x8a' --- '\x8b'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      └── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
+
+# A disjunction requires scanning all entries that match either the left or the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE a <@ '{2}' OR a <@ '{3}'
+----
+select
+ ├── columns: k:1(int!null) a:2(int[])
+ ├── immutable
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) a:2(int[])
+ │    ├── stats: [rows=30]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x8a", "\x8c")
+ │         ├── stats: [rows=30]
+ │         ├── key: (1)
+ │         └── scan t@a_idx
+ │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x8a", "\x8c")
+ │              ├── stats: [rows=30, distinct(1)=29.4117647, null(1)=0, distinct(5)=3, null(5)=0]
+ │              │   histogram(5)=  0    10    0    10    0    10
+ │              │                <--- '\x43' --- '\x8a' --- '\x8b'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      └── (a:2 <@ ARRAY[2]) OR (a:2 <@ ARRAY[3]) [type=bool, outer=(2), immutable]
+
+
+# A conjunction requires scanning all entries that match both the left and
+# the right. An additional filter is required.
+opt
+SELECT * FROM t WHERE a <@ '{2}' AND a <@ '{3}'
+----
+select
+ ├── columns: k:1(int!null) a:2(int[])
+ ├── immutable
+ ├── stats: [rows=111.111111]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) a:2(int[])
+ │    ├── stats: [rows=30]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: ["C", "C"]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans: ["\x8a", "\x8a"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["\x8b", "\x8b"]
+ │         ├── stats: [rows=30]
+ │         ├── key: (1)
+ │         └── scan t@a_idx
+ │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x8a", "\x8c")
+ │              ├── stats: [rows=30, distinct(1)=29.4117647, null(1)=0, distinct(5)=3, null(5)=0]
+ │              │   histogram(5)=  0    10    0    10    0    10
+ │              │                <--- '\x43' --- '\x8a' --- '\x8b'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      ├── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
+      └── a:2 <@ ARRAY[3] [type=bool, outer=(2), immutable]

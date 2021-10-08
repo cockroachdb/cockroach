@@ -1,0 +1,188 @@
+# Load the components that lets us use cmake/make in third party deps.
+load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
+load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
+
+# Define the build target for libjemalloc.
+configure_make(
+    name = "libjemalloc",
+    autoconf = True,
+    configure_env_vars = select({
+        "//build/toolchains:dev": {"AR": ""},
+        "//conditions:default": {},
+    }),
+    configure_in_place = True,
+    configure_options = [
+        "--enable-prof",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
+        "@io_bazel_rules_go//go/platform:darwin": ["--host=x86_64-apple-darwin19"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
+        "//conditions:default": [],
+    }),
+    lib_source = "@jemalloc//:all",
+    make_commands = [
+        "make build_lib_static",
+        "mkdir -p libjemalloc/lib",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": ["cp lib/jemalloc.lib libjemalloc/lib"],
+        "//conditions:default": ["cp lib/libjemalloc.a libjemalloc/lib"],
+    }) + [
+        "cp -r include libjemalloc",
+    ],
+    out_static_libs = select({
+        "@io_bazel_rules_go//go/platform:windows": ["jemalloc.lib"],
+        "//conditions:default": ["libjemalloc.a"],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# Define the build target for libproj.
+cmake(
+    name = "libproj",
+    cache_entries = select({
+        # TODO(ricky): The repetition here is dumb, but I don't know a cleaner
+        # way to do it?
+        # https://github.com/bazelbuild/bazel/issues/12457 would help.
+        "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//conditions:default": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+        },
+    }),
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = ["-GUnix Makefiles"],
+    lib_source = "@proj//:all",
+    out_static_libs = ["libproj.a"],
+    visibility = ["//visibility:public"],
+)
+
+# Define the targets for libgeos.
+cmake(
+    name = "libgeos",
+    cache_entries = select({
+        "@io_bazel_rules_go//go/platform:windows": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Windows",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Darwin",
+        },
+        "//conditions:default": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+        },
+    }),
+    cmake_options = ["-GUnix Makefiles"],
+    lib_source = "@geos//:all",
+    make_commands = [
+        "mkdir -p libgeos/lib",
+        "make --no-print-directory geos_c",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "cp -L lib/libgeos.dylib libgeos/lib",
+            "cp -L lib/libgeos_c.dylib libgeos/lib",
+            # TODO(#bazel): install_name_tool is also required here for release.
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            # NOTE: Windows ends up in bin/ on the BUILD_TMPDIR.
+            "cp -L bin/libgeos.dll libgeos/lib",
+            "cp -L bin/libgeos_c.dll libgeos/lib",
+        ],
+        "//conditions:default": [
+            "cp -L lib/libgeos.so libgeos/lib",
+            "cp -L lib/libgeos_c.so libgeos/lib",
+            # TODO(#bazel): patchelf is also required here for release.
+        ],
+    }),
+    out_shared_libs = select({
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "libgeos_c.dylib",
+            "libgeos.dylib",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "libgeos_c.dll",
+            "libgeos.dll",
+        ],
+        "//conditions:default": [
+            "libgeos_c.so",
+            "libgeos.so",
+        ],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# Define the build target for kerberos.
+configure_make(
+    name = "libkrb5",
+    autoreconf = True,
+    autoreconf_directory = "src",
+    configure_command = "src/configure",
+    configure_in_place = True,
+    configure_options = [
+        "--enable-static",
+        "--disable-shared",
+    ],
+    data = [":autom4te"],
+    env = {
+        "AUTOM4TE": "$(execpath :autom4te)",
+    },
+    lib_source = "@krb5//:all",
+    make_commands = [
+        "make",
+        "mkdir -p libkrb5/lib",
+        "cp lib/libcom_err.a libkrb5/lib",
+        "cp lib/libgssapi_krb5.a libkrb5/lib",
+        "cp lib/libkrb5.a libkrb5/lib",
+        "cp lib/libkrb5support.a libkrb5/lib",
+        "cp lib/libk5crypto.a libkrb5/lib",
+        "mkdir -p libkrb5/include/gssapi",
+        "cp include/gssapi/gssapi.h libkrb5/include/gssapi",
+    ],
+    out_static_libs = [
+        "libgssapi_krb5.a",
+        "libkrb5.a",
+        "libkrb5support.a",
+        "libk5crypto.a",
+        "libcom_err.a",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# This is extremely stupid and unnecessary, but in certain cases to depend on
+# the output of a `cmake` target, we need to launder through a filegroup:
+# https://github.com/bazelbuild/rules_foreign_cc/issues/619#issuecomment-844473637
+# This is apparently a bug. In the meantime, people can depend on the :*_files
+# targets rather than :libgeos where it matters.
+filegroup(
+    name = "libgeos_files",
+    srcs = [":libgeos"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libproj_files",
+    srcs = [":libproj"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libedit_files",
+    srcs = ["@com_github_knz_go_libedit//unix:edit"],
+    visibility = ["//visibility:public"],
+)

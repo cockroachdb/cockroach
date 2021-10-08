@@ -6,42 +6,46 @@ build
 CANCEL JOBS SELECT 1
 ----
 control-jobs (CANCEL)
- └── project
-      ├── columns: "?column?":1!null
-      ├── values
-      │    └── ()
-      └── projections
-           └── 1 [as="?column?":1]
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── CAST(NULL AS STRING)
 
 build
 RESUME JOBS VALUES (1), (2), (3)
 ----
 control-jobs (RESUME)
- └── values
-      ├── columns: column1:1!null
-      ├── (1,)
-      ├── (2,)
-      └── (3,)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOBS SELECT a FROM ab ORDER BY b
 ----
 control-jobs (PAUSE)
- └── sort
-      ├── columns: a:1  [hidden: b:2]
-      ├── ordering: +2
-      └── project
-           ├── columns: a:1 b:2
-           └── scan ab
-                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ ├── sort
+ │    ├── columns: a:1  [hidden: b:2]
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: a:1 b:2
+ │         └── scan ab
+ │              └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOB 1
 ----
 control-jobs (PAUSE)
- └── values
-      ├── columns: column1:1!null
-      └── (1,)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── CAST(NULL AS STRING)
 
 build
 PAUSE JOBS SELECT 1.1
@@ -80,7 +84,7 @@ cancel-sessions
       └── project
            ├── columns: a:1 b:2
            └── scan ab
-                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 build
 CANCEL SESSION 1
@@ -119,7 +123,7 @@ cancel-queries
       └── project
            ├── columns: a:1 b:2
            └── scan ab
-                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 build
 CANCEL QUERY 1
@@ -135,24 +139,24 @@ build
 EXPORT INTO CSV 'nodelocal://0/foo' FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:5 rows:6 bytes:7
+ ├── columns: filename:6 rows:7 bytes:8
  ├── format: CSV
  ├── project
  │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── 'nodelocal://0/foo'
 
 build
 EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:5 rows:6 bytes:7
+ ├── columns: filename:6 rows:7 bytes:8
  ├── format: CSV
  ├── project
  │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  ├── 'nodelocal://0/foo'
  └── k-v-options
       ├── k-v-options-item foo
@@ -164,13 +168,25 @@ build
 EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo' = $1 FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:5 rows:6 bytes:7
+ ├── columns: filename:6 rows:7 bytes:8
  ├── format: CSV
  ├── project
  │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  ├── 'nodelocal://0/foo'
  └── k-v-options
       └── k-v-options-item foo
            └── $1
+
+build
+CREATE STATISTICS foo FROM ab
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab
+
+build
+ANALYZE ab
+----
+create-statistics
+ └── CREATE STATISTICS "" FROM ab WITH OPTIONS AS OF SYSTEM TIME '-0.001ms'

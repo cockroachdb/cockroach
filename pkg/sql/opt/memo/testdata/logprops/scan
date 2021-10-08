@@ -16,10 +16,10 @@ project
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
       ├── key: (1)
-      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-      ├── prune: (1-5)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── prune: (1-6)
       └── interesting orderings: (+1) (-3,+4,+1)
 
 build
@@ -29,10 +29,10 @@ project
  ├── columns: x:1(int) z:2(int!null)
  ├── prune: (1,2)
  └── scan b
-      ├── columns: x:1(int) z:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      ├── columns: x:1(int) z:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       ├── key: (3)
-      ├── fd: (3)-->(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (3)-->(1,2,4,5)
+      ├── prune: (1-5)
       └── interesting orderings: (+3)
 
 # Select subset of columns.
@@ -56,8 +56,7 @@ scan a
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1,3)
- ├── prune: (3)
- └── interesting orderings: (+1) (-3)
+ └── prune: (3)
 
 # Test partial index scan not null columns.
 exec-ddl
@@ -76,7 +75,7 @@ index-join a
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
-      └── interesting orderings: (+1) (+2,+1)
+      └── interesting orderings: (+2,+1)
 
 exec-ddl
 DROP INDEX i
@@ -103,21 +102,21 @@ project
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
       ├── prune: (3)
-      ├── interesting orderings: (+1) (-3) (+2,+1)
+      ├── interesting orderings: (+1 opt(2)) (-3 opt(2))
       └── select
            ├── columns: x:1(int!null) y:2(int!null)
            ├── cardinality: [0 - 4]
            ├── key: (1)
            ├── fd: ()-->(2)
            ├── prune: (1)
-           ├── interesting orderings: (+1) (+2,+1)
+           ├── interesting orderings: (+1 opt(2))
            ├── scan a@i,partial
            │    ├── columns: x:1(int!null) y:2(int)
            │    ├── cardinality: [0 - 4]
            │    ├── key: (1)
            │    ├── fd: (1)-->(2)
            │    ├── prune: (1,2)
-           │    └── interesting orderings: (+1) (+2,+1)
+           │    └── interesting orderings: (+2,+1)
            └── filters
                 └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
                      ├── variable: y:2 [type=int]
@@ -181,11 +180,11 @@ opt
 SELECT 1 FROM t WHERE a > 1 AND a < 2
 ----
 values
- ├── columns: "?column?":6(int!null)
+ ├── columns: "?column?":7(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
- ├── fd: ()-->(6)
- └── prune: (6)
+ ├── fd: ()-->(7)
+ └── prune: (7)
 
 opt
 SELECT * FROM t@bc WHERE b IN ('a', 'b') AND c IN (1, 2) AND a IN (2, 3)
@@ -208,7 +207,7 @@ index-join t
       ├── key: (1,2)
       ├── fd: (1,2)-->(3)
       ├── prune: (1-3)
-      └── interesting orderings: (+1,+2) (+2,+3,+1) (-1,+2)
+      └── interesting orderings: (+2,+3,+1)
 
 opt
 SELECT * FROM a WHERE x IN (1, 2, 4, 6, 7, 9)
@@ -258,7 +257,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(2,3), (2)~~>(1)
  ├── prune: (1)
- ├── interesting orderings: (+1) (+2,+1)
+ ├── interesting orderings: (+1 opt(2,3))
  ├── scan t42731
  │    ├── columns: id:1(int!null) unique_value:2(int) notnull_value:3(int!null)
  │    ├── key: (1)
@@ -285,12 +284,12 @@ project
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
       ├── locking: for-update
       ├── volatile
       ├── key: (1)
-      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-      ├── prune: (1-5)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── prune: (1-6)
       └── interesting orderings: (+1) (-3,+4,+1)
 
 exec-ddl
@@ -312,14 +311,148 @@ project
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1-3)
- ├── interesting orderings: (+1) (+3,+2,+1)
+ ├── interesting orderings: (+1 opt(3)) (+2,+1 opt(3))
  └── scan kab
-      ├── columns: k:1(int!null) a:2(int!null) b:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      ├── columns: k:1(int!null) a:2(int!null) b:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       ├── check constraint expressions
       │    └── eq [type=bool, outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
       │         ├── variable: b:3 [type=int]
       │         └── const: 0 [type=int]
       ├── key: (1)
-      ├── fd: ()-->(3), (1)-->(2,4)
-      ├── prune: (1-4)
-      └── interesting orderings: (+1) (+3,+2,+1)
+      ├── fd: ()-->(3), (1)-->(2,4,5)
+      ├── prune: (1-5)
+      └── interesting orderings: (+1 opt(3)) (+2,+1 opt(3))
+
+# Test partial index scan functional dependencies.
+
+exec-ddl
+CREATE TABLE c (
+    k INT PRIMARY KEY,
+    x INT NOT NULL,
+    y INT,
+    s STRING,
+    UNIQUE (x) WHERE s = 'foo',
+    UNIQUE (y) WHERE s = 'bar'
+)
+----
+
+# Do not build table function dependency keys from partial index columns.
+build
+SELECT k FROM c
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan c
+      ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      ├── partial index predicates
+      │    ├── secondary: filters
+      │    │    └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      │    │         ├── variable: s:4 [type=string]
+      │    │         └── const: 'foo' [type=string]
+      │    └── secondary: filters
+      │         └── eq [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+      │              ├── variable: s:4 [type=string]
+      │              └── const: 'bar' [type=string]
+      ├── key: (1)
+      ├── fd: (1)-->(2-6)
+      ├── prune: (1-6)
+      └── interesting orderings: (+1) (+2) (+3,+1)
+
+# Add a strict key for partial index scan functional dependencies. (x)-->(k)
+# should be in the fds.
+opt
+SELECT * FROM c WHERE s = 'foo'
+----
+index-join c
+ ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string!null)
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── prune: (1-3)
+ ├── interesting orderings: (+1 opt(4)) (+2 opt(4)) (+3,+1 opt(4))
+ └── scan c@secondary,partial
+      ├── columns: k:1(int!null) x:2(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(1)
+      ├── prune: (1,2)
+      └── interesting orderings: (+2)
+
+# Add a lax key for partial index scan functional dependencies when the key can
+# be null. (y)~~>(k) should be in the fds.
+opt
+SELECT * FROM c WHERE s = 'bar'
+----
+index-join c
+ ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string!null)
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── prune: (1-3)
+ ├── interesting orderings: (+1 opt(4)) (+2 opt(4)) (+3,+1 opt(4))
+ └── scan c@secondary,partial
+      ├── columns: k:1(int!null) y:3(int)
+      ├── key: (1)
+      ├── fd: (1)-->(3), (3)~~>(1)
+      ├── prune: (1,3)
+      └── interesting orderings: (+3,+1)
+
+# Test FDs for computed columns.
+# We add equivalencies s=c_s and d=c_d, a strict dependency i->c_i_expr, and
+# no dependency d->c_d_expr since the expression d::string is composite-
+# sensitive.
+exec-ddl
+CREATE TABLE computed (
+  i INT,
+  s STRING,
+  d DECIMAL,
+  c_i_expr STRING AS (CASE WHEN i < 0 THEN 'foo' ELSE 'bar' END) STORED,
+  c_s STRING AS (s) VIRTUAL,
+  c_d DECIMAL AS (d) STORED,
+  c_d_expr STRING AS (d::string) STORED,
+  PRIMARY KEY (c_i_expr, i),
+  UNIQUE (c_s, s),
+  UNIQUE (c_d_expr, d)
+)
+----
+
+build
+SELECT * FROM computed
+----
+project
+ ├── columns: i:1(int!null) s:2(string) d:3(decimal) c_i_expr:4(string!null) c_s:5(string) c_d:6(decimal) c_d_expr:7(string)
+ ├── key: (1)
+ ├── fd: (1,4)-->(2,3,5-7), (3,7)~~>(1,2,4-6), (1)-->(4), (3)==(6), (6)==(3), (2)~~>(1,3-7), (2)==(5), (5)==(2)
+ ├── prune: (1-7)
+ ├── interesting orderings: (+4,+1) (+7,+(3|6),+4,+1)
+ └── project
+      ├── columns: c_s:5(string) i:1(int!null) s:2(string) d:3(decimal) c_i_expr:4(string!null) c_d:6(decimal) c_d_expr:7(string) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      ├── key: (1)
+      ├── fd: (1,4)-->(2,3,6-9), (3,7)~~>(1,2,4,6,8,9), (1)-->(4), (3)==(6), (6)==(3), (2)~~>(1,3,4,6-9), (2)==(5), (5)==(2)
+      ├── prune: (1-9)
+      ├── interesting orderings: (+4,+1) (+7,+(3|6),+4,+1)
+      ├── scan computed
+      │    ├── columns: i:1(int!null) s:2(string) d:3(decimal) c_i_expr:4(string!null) c_d:6(decimal) c_d_expr:7(string) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── computed column expressions
+      │    │    ├── c_i_expr:4
+      │    │    │    └── case [type=string]
+      │    │    │         ├── true [type=bool]
+      │    │    │         ├── when [type=string]
+      │    │    │         │    ├── lt [type=bool]
+      │    │    │         │    │    ├── variable: i:1 [type=int]
+      │    │    │         │    │    └── const: 0 [type=int]
+      │    │    │         │    └── const: 'foo' [type=string]
+      │    │    │         └── const: 'bar' [type=string]
+      │    │    ├── c_s:5
+      │    │    │    └── variable: s:2 [type=string]
+      │    │    ├── c_d:6
+      │    │    │    └── variable: d:3 [type=decimal]
+      │    │    └── c_d_expr:7
+      │    │         └── cast: STRING [type=string]
+      │    │              └── variable: d:3 [type=decimal]
+      │    ├── key: (1)
+      │    ├── fd: (1,4)-->(2,3,6-9), (3,7)~~>(1,2,4,6,8,9), (1)-->(4), (3)==(6), (6)==(3), (2)~~>(1,3,4,6-9)
+      │    ├── prune: (1-4,6-9)
+      │    └── interesting orderings: (+4,+1) (+7,+(3|6),+4,+1)
+      └── projections
+           └── variable: s:2 [as=c_s:5, type=string, outer=(2)]

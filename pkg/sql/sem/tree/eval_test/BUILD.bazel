@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "eval_test_test",
+    size = "small",
+    srcs = [
+        "eval_test.go",
+        "main_test.go",
+    ],
+    data = ["//pkg/sql/sem/tree:testdata"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/col/coldata",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecargs",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/parser",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

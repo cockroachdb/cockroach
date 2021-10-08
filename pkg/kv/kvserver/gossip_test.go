@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -99,7 +99,7 @@ func TestGossipFirstRange(t *testing.T) {
 	firstRangeKey := keys.MinKey
 	for i := 1; i <= 2; i++ {
 		var err error
-		if desc, err = tc.AddReplicas(firstRangeKey, tc.Target(i)); err != nil {
+		if desc, err = tc.AddVoters(firstRangeKey, tc.Target(i)); err != nil {
 			t.Fatal(err)
 		}
 		waitForGossip(desc)
@@ -113,7 +113,7 @@ func TestGossipFirstRange(t *testing.T) {
 	waitForGossip(desc)
 
 	// Remove a non-lease holder replica.
-	desc, err := tc.RemoveReplicas(firstRangeKey, tc.Target(0))
+	desc, err := tc.RemoveVoters(firstRangeKey, tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestGossipFirstRange(t *testing.T) {
 
 	// // Remove the lease holder replica.
 	// leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
-	// desc, err = tc.RemoveReplicas(firstRangeKey, leaseHolder)
+	// desc, err = tc.RemoveVoters(firstRangeKey, leaseHolder)
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
@@ -144,9 +144,6 @@ func TestGossipFirstRange(t *testing.T) {
 func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// Skipping as part of test-infra-team flaky test cleanup.
-	skip.WithIssue(t, 50024)
 
 	// As of Nov 2018 it takes 3.6s.
 	skip.UnderShort(t)
@@ -182,9 +179,9 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
-	tc.AddServer(t, newServerArgs)
+	tc.AddAndStartServer(t, newServerArgs)
 
-	tc.WaitForStores(t, tc.Server(1).GossipI().(*gossip.Gossip))
+	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
@@ -219,13 +216,13 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txB := db.NewTxn(ctx, "b")
 
 	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db1000 := sqlbase.NewInitialDatabaseDescriptor(1000, "1000", security.AdminRole)
+	db1000 := dbdesc.NewInitial(1000, "1000", security.AdminRoleName())
 	require.NoError(t, txA.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(1000),
 		db1000.DescriptorProto()))
 
 	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db2000 := sqlbase.NewInitialDatabaseDescriptor(2000, "2000", security.AdminRole)
+	db2000 := dbdesc.NewInitial(2000, "2000", security.AdminRoleName())
 	require.NoError(t, txB.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(2000),
 		db2000.DescriptorProto()))

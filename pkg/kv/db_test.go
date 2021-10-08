@@ -14,13 +14,22 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
@@ -62,6 +71,17 @@ func checkRows(t *testing.T, expected map[string][]byte, rows []kv.KeyValue) {
 	}
 }
 
+func checkKeys(t *testing.T, expected []string, keys []roachpb.Key) {
+	for i, key := range keys {
+		if !bytes.Equal([]byte(expected[i]), key) {
+			t.Errorf("expected %d: %s, got %s",
+				i,
+				key,
+				expected[i])
+		}
+	}
+}
+
 func checkLen(t *testing.T, expected, count int) {
 	if expected != count {
 		t.Errorf("expected length to be %d, got %d", expected, count)
@@ -75,6 +95,19 @@ func TestDB_Get(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	result, err := db.Get(context.Background(), "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte(""), result.ValueBytes())
+}
+
+func TestDB_GetForUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	result, err := db.GetForUpdate(context.Background(), "aa")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +178,64 @@ func TestDB_CPut(t *testing.T) {
 	checkResult(t, []byte("4"), result.ValueBytes())
 }
 
+func TestDB_CPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db := setup(t)
+	defer s.Stopper().Stop(ctx)
+
+	if err := db.PutInline(ctx, "aa", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CPutInline(ctx, "aa", "2", kvclientutils.StrToCPutExistingValue("1")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "aa", "3", kvclientutils.StrToCPutExistingValue("1")); err == nil {
+		t.Fatal("expected error from conditional put")
+	}
+	result, err = db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "bb", "4", kvclientutils.StrToCPutExistingValue("1")); err == nil {
+		t.Fatal("expected error from conditional put")
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte(""), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "bb", "4", nil); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("4"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "aa", nil, kvclientutils.StrToCPutExistingValue("2")); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Value != nil {
+		t.Fatalf("expected deleted value, got %x", result.ValueBytes())
+	}
+}
+
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -212,6 +303,15 @@ func TestBatch(t *testing.T) {
 		"bb": []byte("2"),
 	}
 	checkResults(t, expected, b.Results)
+
+	b2 := &kv.Batch{}
+	b2.Put(42, "the answer")
+	if err := db.Run(context.Background(), b2); !testutils.IsError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from running bad put")
+	}
+	if err := b2.MustPErr(); !testutils.IsPError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from MustPErr")
+	}
 }
 
 func TestDB_Scan(t *testing.T) {
@@ -392,6 +492,59 @@ func TestDB_Del(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_DelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	b := &kv.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("ac", "3")
+	b.Put("ad", "4")
+	if err := db.Run(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	deletedKeys, err := db.DelRange(context.Background(), "aa", "ac", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedKeys := []string{"aa", "ab"}
+	checkKeys(t, expectedKeys, deletedKeys)
+	checkLen(t, len(expectedKeys), len(deletedKeys))
+
+	rows, err := db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"ac": []byte("3"),
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+
+	deletedKeys, err = db.DelRange(context.Background(), "aa", "ad", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletedKeys != nil {
+		t.Errorf("expected deletedKeys to be nil when returnKeys set to false, got %v", deletedKeys)
+	}
+
+	rows, err = db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected = map[string][]byte{
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -436,4 +589,113 @@ func TestDB_Put_insecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkResult(t, []byte("1"), result.ValueBytes())
+}
+
+func TestDB_QueryResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	// Perform a write to ensure that the range sets a non-zero closed timestamp.
+	err := db.Put(context.Background(), "a", "val")
+	require.NoError(t, err)
+
+	// One node cluster, so "nearest" should not make a difference. Test both.
+	testutils.RunTrueAndFalse(t, "nearest", func(t *testing.T, nearest bool) {
+		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", nearest)
+		require.NoError(t, err)
+		require.NotEmpty(t, resTS)
+	})
+}
+
+// Test that all operations on a decommissioned node will return a
+// permission denied error rather than hanging indefinitely due to
+// internal retries.
+func TestDBDecommissionedOperations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	require.Len(t, scratchRange.InternalReplicas, 1)
+	require.Equal(t, tc.Server(0).NodeID(), scratchRange.InternalReplicas[0].NodeID)
+
+	// Decommission server 1.
+	srv := tc.Server(0)
+	decomSrv := tc.Server(1)
+	for _, status := range []livenesspb.MembershipStatus{
+		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
+	} {
+		require.NoError(t, srv.Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
+	}
+
+	// Run a few different operations, which should all eventually error with
+	// PermissionDenied. We don't need full coverage of methods, since they use
+	// the same sender infrastructure, but should use a few variations to hit
+	// different sender code paths (e.g. with and without txns).
+	db := decomSrv.DB()
+	key := roachpb.Key([]byte("a"))
+	keyEnd := roachpb.Key([]byte("x"))
+	value := []byte{1, 2, 3}
+
+	testcases := []struct {
+		name string
+		op   func() error
+	}{
+		{"Del", func() error {
+			return db.Del(ctx, key)
+		}},
+		{"DelRange", func() error {
+			_, err := db.DelRange(ctx, key, keyEnd, false)
+			return err
+		}},
+		{"Get", func() error {
+			_, err := db.Get(ctx, key)
+			return err
+		}},
+		{"GetForUpdate", func() error {
+			_, err := db.GetForUpdate(ctx, key)
+			return err
+		}},
+		{"Put", func() error {
+			return db.Put(ctx, key, value)
+		}},
+		{"Scan", func() error {
+			_, err := db.Scan(ctx, key, keyEnd, 0)
+			return err
+		}},
+		{"TxnGet", func() error {
+			_, err := db.NewTxn(ctx, "").Get(ctx, key)
+			return err
+		}},
+		{"TxnPut", func() error {
+			return db.NewTxn(ctx, "").Put(ctx, key, value)
+		}},
+		{"AdminTransferLease", func() error {
+			return db.AdminTransferLease(ctx, scratchKey, srv.GetFirstStoreID())
+		}},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			require.Eventually(t, func() bool {
+				err = tc.op()
+				s, ok := status.FromError(errors.UnwrapAll(err))
+				if s == nil || !ok {
+					return false
+				}
+				require.Equal(t, codes.PermissionDenied, s.Code())
+				return true
+			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %v", err)
+		})
+	}
 }

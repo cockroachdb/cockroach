@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ssh",
+    srcs = [
+        "io.go",
+        "shell.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "ssh_test",
+    srcs = ["io_test.go"],
+    embed = [":ssh"],
+)

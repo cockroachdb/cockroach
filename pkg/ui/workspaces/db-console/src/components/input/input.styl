@@ -1,0 +1,70 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-input
+  height $line-height--larger
+  border-radius 3px
+  border solid 1px $colors--neutral-4
+  background-color $colors--white
+  padding 0 $spacing-smaller
+  outline none
+
+  &:focus
+    border solid 1px $colors--primary-blue-3
+
+  &:hover
+    border solid 1px $colors--neutral-5
+
+  &__wrapper
+    display flex
+    flex-direction column
+    margin-bottom $spacing-small
+    position relative
+    .crl-button__show-password
+      position absolute
+      right 0
+      top 28px
+      &:focus
+        border none
+
+  &__label
+    font-family $font-family--base
+    font-weight $font-weight--bold
+    font-size $font-size--small
+    line-height $line-height--small
+    letter-spacing $letter-spacing--compact
+    color $colors--neutral-7
+    margin-bottom 8px
+
+  &__text
+    &--invalid
+      border solid 1px $colors--functional-red-3
+      background-color $colors--functional-red-1
+      &:focus
+        border solid 1px $colors--functional-red-3
+    &--validation-container
+      position absolute
+      width 100%
+      left 0
+      bottom 2px
+      .crl-text-input__error-message
+        font-size 10px
+    &--error-message
+      color $colors--functional-red-3
+      position absolute
+  &__password
+    font-family sans-serif
+    &[type="text"]
+      font-family $font-family--base
+    &::-webkit-credentials-auto-fill-button
+      position absolute
+      right 45px

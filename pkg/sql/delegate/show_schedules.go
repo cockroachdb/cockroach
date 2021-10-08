@@ -27,9 +27,10 @@ func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement
 
 	columnExprs := []string{
 		"schedule_id as id",
-		"schedule_name as name",
-		"(CASE WHEN next_run IS NULL THEN 'PAUSED' ELSE 'ACTIVE' END) AS status",
+		"schedule_name as label",
+		"(CASE WHEN next_run IS NULL THEN 'PAUSED' ELSE 'ACTIVE' END) AS schedule_status",
 		"next_run",
+		"crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleState', schedule_state)->>'status' as state",
 		"(CASE WHEN schedule_expr IS NULL THEN 'NEVER' ELSE schedule_expr END) as recurrence",
 		fmt.Sprintf(`(
 SELECT count(*) FROM system.jobs
@@ -53,7 +54,10 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 		whereExprs = append(whereExprs, fmt.Sprintf(
 			"executor_type = '%s'", tree.ScheduledBackupExecutor.InternalName()))
 		columnExprs = append(columnExprs, fmt.Sprintf(
-			"%s->>'backupStatement' AS command", commandColumn))
+			"%s->>'backup_statement' AS command", commandColumn))
+	case tree.ScheduledSQLStatsCompactionExecutor:
+		whereExprs = append(whereExprs, fmt.Sprintf(
+			"executor_type = '%s'", tree.ScheduledSQLStatsCompactionExecutor.InternalName()))
 	default:
 		// Strip out '@type' tag from the ExecutionArgs.args, and display what's left.
 		columnExprs = append(columnExprs, fmt.Sprintf("%s #-'{@type}' AS command", commandColumn))
@@ -68,7 +72,6 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 	if len(whereExprs) > 0 {
 		whereClause = fmt.Sprintf("WHERE (%s)", strings.Join(whereExprs, " AND "))
 	}
-
 	return parse(fmt.Sprintf(
 		"SELECT %s FROM system.scheduled_jobs %s",
 		strings.Join(columnExprs, ","),

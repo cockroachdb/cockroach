@@ -16,25 +16,34 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/redact"
 )
 
+// errNoInboundStreamConnection is the error propagated through the flow when
+// the timeout to setup the flow is exceeded.
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
+
+// IsNoInboundStreamConnectionError returns true if err's Cause is an
+// errNoInboundStreamConnection.
+func IsNoInboundStreamConnectionError(err error) bool {
+	return errors.Is(err, errNoInboundStreamConnection)
+}
 
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
-var SettingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
+var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // expectedConnectionTime is the expected time taken by a flow to connect to its
@@ -122,10 +131,7 @@ type FlowRegistry struct {
 }
 
 // NewFlowRegistry creates a new FlowRegistry.
-//
-// instID is the ID of the current node. Used for debugging; pass 0 if you don't
-// care.
-func NewFlowRegistry(instID base.SQLInstanceID) *FlowRegistry {
+func NewFlowRegistry() *FlowRegistry {
 	fr := &FlowRegistry{flows: make(map[execinfrapb.FlowID]*flowEntry)}
 	fr.flowDone = sync.NewCond(fr)
 	return fr
@@ -243,9 +249,9 @@ func (fr *FlowRegistry) RegisterFlow(
 			fr.Unlock()
 			if len(timedOutReceivers) != 0 {
 				// The span in the context might be finished by the time this runs. In
-				// principle, we could ForkCtxSpan() beforehand, but we don't want to
+				// principle, we could ForkSpan() beforehand, but we don't want to
 				// create the extra span every time.
-				timeoutCtx := opentracing.ContextWithSpan(ctx, nil)
+				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
 				log.Errorf(
 					timeoutCtx,
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
@@ -362,7 +368,9 @@ func (fr *FlowRegistry) waitForFlowLocked(
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (fr *FlowRegistry) Drain(
-	flowDrainWait time.Duration, minFlowDrainWait time.Duration, reporter func(int, string),
+	flowDrainWait time.Duration,
+	minFlowDrainWait time.Duration,
+	reporter func(int, redact.SafeString),
 ) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
@@ -548,7 +556,7 @@ func (fr *FlowRegistry) finishInboundStreamLocked(
 	streamEntry := flowEntry.inboundStreams[sid]
 
 	if !streamEntry.connected && !streamEntry.canceled {
-		panic("finising inbound stream that didn't connect or time out")
+		panic("finishing inbound stream that didn't connect or time out")
 	}
 	if streamEntry.finished {
 		panic("double finish")

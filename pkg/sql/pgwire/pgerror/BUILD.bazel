@@ -1,0 +1,71 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgerror",
+    srcs = [
+        "constraint_name.go",
+        "errors.go",
+        "flatten.go",
+        "internal_errors.go",
+        "pgcode.go",
+        "severity.go",
+        "with_candidate_code.go",
+        "wrap.go",
+    ],
+    embed = [":pgerror_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/docs",
+        "//pkg/sql/pgwire/pgcode",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "pgerror_test",
+    size = "small",
+    srcs = [
+        "constraint_name_test.go",
+        "errors_test.go",
+        "flatten_test.go",
+        "internal_errors_test.go",
+        "main_test.go",
+        "pgcode_test.go",
+        "severity_test.go",
+        "wrap_test.go",
+    ],
+    embed = [":pgerror"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//testutils",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "pgerror_proto",
+    srcs = ["errors.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "pgerror_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
+    proto = ":pgerror_proto",
+    visibility = ["//visibility:public"],
+)

@@ -13,7 +13,6 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -30,10 +29,7 @@ func init() {
 }
 
 func declareKeysRecomputeStats(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// We don't declare any user key in the range. This is OK since all we're doing is computing a
 	// stats delta, and applying this delta commutes with other operations on the same key space.
@@ -49,7 +45,7 @@ func declareKeysRecomputeStats(
 	//
 	// Note that we're also accessing the range stats key, but we don't declare it for the same
 	// reasons as above.
-	rdKey := keys.RangeDescriptorKey(desc.StartKey)
+	rdKey := keys.RangeDescriptorKey(rs.GetStartKey())
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
 }
@@ -57,7 +53,7 @@ func declareKeysRecomputeStats(
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
 // returning the MVCCStats delta obtained in the process.
 func RecomputeStats(
-	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	desc := cArgs.EvalCtx.Desc()
 	args := cArgs.Args.(*roachpb.RecomputeStatsRequest)
@@ -68,27 +64,16 @@ func RecomputeStats(
 
 	args = nil // avoid accidental use below
 
-	// Open a snapshot from which we will read everything (including the
-	// MVCCStats). This is necessary because a batch does not provide us
-	// with a consistent view of the data -- reading from the batch, we
-	// could see skew between the stats recomputation and the MVCCStats
-	// we read from the range state if concurrent writes are inflight[1].
-	//
-	// Note that in doing so, we also circumvent the assertions (present in both
-	// the EvalContext and the batch in some builds) which check that all reads
-	// were previously declared. See the comment in `declareKeysRecomputeStats`
-	// for details on this.
-	//
-	// [1]: see engine.TestBatchReadLaterWrite.
-	snap := cArgs.EvalCtx.Engine().NewSnapshot()
-	defer snap.Close()
+	// Disable the assertions which check that all reads were previously declared.
+	// See the comment in `declareKeysRecomputeStats` for details on this.
+	reader = spanset.DisableReaderAssertions(reader)
 
-	actualMS, err := rditer.ComputeStatsForRange(desc, snap, cArgs.Header.Timestamp.WallTime)
+	actualMS, err := rditer.ComputeStatsForRange(desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, snap)
+	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, reader)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -102,12 +87,6 @@ func RecomputeStats(
 		// stats for timeseries ranges (which go cold and the approximate stats are
 		// wildly overcounting) and this is paced by the consistency checker, but it
 		// means some extra engine churn.
-		if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-			// We are running with the older version of MVCCStats.ContainsEstimates
-			// which was a boolean, so we should keep it in {0,1} and not reset it
-			// to avoid racing with another command that sets it to true.
-			delta.ContainsEstimates = currentStats.ContainsEstimates
-		}
 		cArgs.Stats.Add(delta)
 	}
 

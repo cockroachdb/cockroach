@@ -1,0 +1,21 @@
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
+ops
+DROP TYPE defaultdb.typ
+----
+Stage 0
+  *scop.MarkDescriptorAsDropped
+    TableID: 52
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
+Stage 1
+  *scop.DrainDescriptorName
+    TableID: 52
+  *scop.DrainDescriptorName
+    TableID: 53
+
+deps
+DROP TYPE defaultdb.typ
+----

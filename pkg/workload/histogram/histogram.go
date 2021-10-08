@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// TODO(tbg): rename this package to "workloadmetrics" or something like that.
+
 package histogram
 
 import (
@@ -15,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -22,9 +25,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
+	// PrometheusNamespace is the value that should be used for the
+	// Namespace field whenever a workload-related prometheus metric
+	// is defined.
+	PrometheusNamespace = "workload"
+	// MockWorkloadName is to be used in the event that a Registry is required
+	// outside of a workload.
+	MockWorkloadName = "mock"
+
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
 )
@@ -32,21 +45,34 @@ const (
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
 type NamedHistogram struct {
-	name string
-	mu   struct {
+	name                string
+	prometheusHistogram prometheus.Histogram
+	mu                  struct {
 		syncutil.Mutex
 		current *hdrhistogram.Histogram
 	}
 }
 
-func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
-	w := &NamedHistogram{name: name}
-	w.mu.current = reg.newHistogram()
-	return w
+// newNamedHistogramLocked creates a new instance of a NamedHistogram for the
+// given name and adds it to the list of histograms tracked under this name. It
+// also creates a prometheus histogram, but it is shared across all
+// NamedHistograms for the same name (i.e. it is created when the respective
+// name is first seen). This is because the sharding within a name is a perf
+// optimization that doesn't apply to the prometheus histogram (plus everything
+// gets more complex once we have to merge multiple prom histograms together
+// for exposure via Gatherer()). See *Histograms for details.
+func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
+	hist := &NamedHistogram{
+		name:                name,
+		prometheusHistogram: w.getPrometheusHistogramLocked(name),
+	}
+	hist.mu.current = w.newHistogram()
+	return hist
 }
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
@@ -82,9 +108,15 @@ func (w *NamedHistogram) tick(
 // named histograms. It allows for "tick"ing them periodically to reset the
 // counts and also supports aggregations.
 type Registry struct {
-	mu struct {
+	workloadName string // name of the workload reporting to this registry
+	promReg      *prometheus.Registry
+	mu           struct {
 		syncutil.Mutex
+		// maps histogram name to []{histogram created through handle 1, histogram created through handle 2, ...}
 		registered map[string][]*NamedHistogram
+		// maps histogram name to a single prometheus histogram shared by all
+		// handles. These will be registered with promReg.
+		prometheusHistograms map[string]prometheus.Histogram
 	}
 
 	start         time.Time
@@ -93,14 +125,19 @@ type Registry struct {
 	histogramPool *sync.Pool
 }
 
-// NewRegistry returns an initialized Registry. maxLat is the maximum time that
-// queries are expected to take to execute which is needed to initialize the
-// pool of histograms.
-func NewRegistry(maxLat time.Duration) *Registry {
+// NewRegistry returns an initialized Registry.
+// maxLat is the maximum time that queries are expected to take to execute
+// which is needed to initialize the pool of histograms.
+// newPrometheusHistogramFunc specifies how to generate a new
+// prometheus.Histogram with a given name. Use MockNewPrometheusHistogram
+// if prometheus logging is undesired.
+func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 	r := &Registry{
-		start:      timeutil.Now(),
-		cumulative: make(map[string]*hdrhistogram.Histogram),
-		prevTick:   make(map[string]time.Time),
+		workloadName: workloadName,
+		start:        timeutil.Now(),
+		cumulative:   make(map[string]*hdrhistogram.Histogram),
+		prevTick:     make(map[string]time.Time),
+		promReg:      prometheus.NewRegistry(),
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -108,7 +145,18 @@ func NewRegistry(maxLat time.Duration) *Registry {
 		},
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
+	r.mu.prometheusHistograms = make(map[string]prometheus.Histogram)
 	return r
+}
+
+// Registerer returns a prometheus.Registerer.
+func (w *Registry) Registerer() prometheus.Registerer {
+	return w.promReg
+}
+
+// Gatherer returns a prometheus.Gatherer.
+func (w *Registry) Gatherer() prometheus.Gatherer {
+	return w.promReg
 }
 
 func (w *Registry) newHistogram() *hdrhistogram.Histogram {
@@ -116,16 +164,49 @@ func (w *Registry) newHistogram() *hdrhistogram.Histogram {
 	return h
 }
 
+var invalidPrometheusMetricRe = regexp.MustCompile(`[^a-zA-Z0-9:_]`)
+
+func cleanPrometheusName(name string) string {
+	return invalidPrometheusMetricRe.ReplaceAllString(name, "_")
+}
+
+func makePrometheusLatencyHistogramBuckets() []float64 {
+	// This covers 0.5ms to 12 minutes at good resolution, using 150 buckets.
+	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
+}
+
+func (w *Registry) getPrometheusHistogramLocked(name string) prometheus.Histogram {
+	ph, ok := w.mu.prometheusHistograms[name]
+
+	if !ok {
+		// Metric names must be sanitized or NewHistogram will panic.
+		promName := cleanPrometheusName(name) + "_duration_seconds"
+		ph = promauto.With(w.promReg).NewHistogram(prometheus.HistogramOpts{
+			Namespace: PrometheusNamespace,
+			Subsystem: cleanPrometheusName(w.workloadName),
+			Name:      promName,
+			Buckets:   makePrometheusLatencyHistogramBuckets(),
+		})
+		w.mu.prometheusHistograms[name] = ph
+	}
+
+	return ph
+}
+
 // GetHandle returns a thread-local handle for creating and registering
-// NamedHistograms.
+// NamedHistograms. A handle should be created for each long-lived goroutine
+// for best performance, see the comment on Histograms.
 func (w *Registry) GetHandle() *Histograms {
-	hists := &Histograms{reg: w}
+	hists := &Histograms{
+		reg: w,
+	}
 	hists.mu.hists = make(map[string]*NamedHistogram)
 	return hists
 }
 
 // Tick aggregates all registered histograms, grouped by name. It is expected to
-// be called periodically from one goroutine.
+// be called periodically from one goroutine. The closure must not leak references
+// to the histograms contained in the Tick as their backing memory is pooled.
 func (w *Registry) Tick(fn func(Tick)) {
 	merged := make(map[string]*hdrhistogram.Histogram)
 	var names []string
@@ -179,7 +260,18 @@ func (w *Registry) Tick(fn func(Tick)) {
 }
 
 // Histograms is a thread-local handle for creating and registering
-// NamedHistograms.
+// NamedHistograms. A Histograms handle reduces mutex contention
+// in the common case of many worker goroutines reporting under the
+// same histogram name. It does so by collecting observations locally
+// (and thus avoiding contention that would arise from all workers
+// observing into the same histogram). When the parent Registry's Tick
+// method is called, all Histograms handles for the same name will be
+// visited and the observations merged.
+//
+// Note that there is also a cumulative shared prometheus histogram (exposed
+// under Registry.Gatherer) but since its implementation already optimizes for
+// concurrent access, a single instance per name is shared across all handles on
+// a Registry.
 type Histograms struct {
 	reg *Registry
 	mu  struct {
@@ -201,17 +293,15 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	w.mu.RUnlock()
 
 	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.reg.mu.Lock()
+	defer w.reg.mu.Unlock()
+
 	hist, ok = w.mu.hists[name]
 	if !ok {
-		hist = newNamedHistogram(w.reg, name)
+		hist = w.reg.newNamedHistogramLocked(name)
 		w.mu.hists[name] = hist
-	}
-	w.mu.Unlock()
-
-	if !ok {
-		w.reg.mu.Lock()
 		w.reg.mu.registered[name] = append(w.reg.mu.registered[name], hist)
-		w.reg.mu.Unlock()
 	}
 
 	return hist

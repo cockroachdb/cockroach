@@ -1,0 +1,2 @@
+create_replication_stream_stmt ::=
+	'CREATE' 'REPLICATION' 'STREAM' 'FOR' targets opt_changefeed_sink opt_with_replication_options

@@ -57,6 +57,7 @@ const (
 func CheckPushResult(
 	ctx context.Context,
 	db *kv.DB,
+	tr *tracing.Tracer,
 	txn roachpb.Transaction,
 	expResolution ExpectedTxnResolution,
 	pushExpectation PushExpectation,
@@ -75,7 +76,7 @@ func CheckPushResult(
 	ba := roachpb.BatchRequest{}
 	ba.Add(&pushReq)
 
-	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test trace")
+	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test trace")
 	defer cancel()
 
 	resp, pErr := db.NonTransactionalSender().Send(recCtx, ba)

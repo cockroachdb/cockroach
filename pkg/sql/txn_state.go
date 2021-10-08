@@ -20,15 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // txnState contains state associated with an ongoing SQL txn; it constitutes
@@ -53,6 +51,10 @@ type txnState struct {
 
 		// txnStart records the time that txn started.
 		txnStart time.Time
+
+		// stmtCount keeps track of the number of statements that the transaction
+		// has executed.
+		stmtCount int
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -60,11 +62,12 @@ type txnState struct {
 
 	// Ctx is the context for everything running in this SQL txn.
 	// This is only set while the session's state is not stateNoTxn.
+	//
+	// It also embeds the tracing span associated with the SQL txn. These are
+	// often root spans, as SQL txns are frequently the level at which we do
+	// tracing. This context is hijacked when session tracing is enabled.
 	Ctx context.Context
 
-	// sp is the span corresponding to the SQL txn. These are often root spans, as
-	// SQL txns are frequently the level at which we do tracing.
-	sp opentracing.Span
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
 	// took more than this.
@@ -104,6 +107,10 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// testingForceRealTracingSpans is a test-only knob that forces the use of
+	// real (i.e. not no-op) tracing spans for every statement.
+	testingForceRealTracingSpans bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -129,10 +136,12 @@ const (
 // sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
 // historicalTimestamp: If non-nil indicates that the transaction is historical
 //   and should be fixed to this timestamp.
-// priority: The transaction's priority.
+// priority: The transaction's priority. Pass roachpb.UnspecifiedUserPriority if the txn arg is
+//   not nil.
 // readOnly: The read-only character of the new txn.
 // txn: If not nil, this txn will be used instead of creating a new txn. If so,
-//      all the other arguments need to correspond to the attributes of this txn.
+//   all the other arguments need to correspond to the attributes of this txn
+//   (unless otherwise specified).
 // tranCtx: A bag of extra execution context.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
@@ -151,66 +160,52 @@ func (ts *txnState) resetForNewSQLTxn(
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
-	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
-	// into a larger discussion about how to drain SQL and rollback open txns.
-	var sp opentracing.Span
 	opName := sqlTxnName
-
-	// Create a span for the new txn. The span is always Recordable to support the
-	// use of session tracing, which may start recording on it.
-	// TODO(andrei): We should use tracing.EnsureChildSpan() as that's much more
-	// efficient that StartSpan (and also it'd be simpler), but that interface
-	// doesn't current support the Recordable option.
-	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
-		// Create a child span for this SQL txn.
-		sp = parentSp.Tracer().StartSpan(
-			opName,
-			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
-			tracing.LogTagsFromCtx(connCtx),
-		)
-	} else {
-		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
-			opName, logtags.FromContext(connCtx), tracing.RecordableSpan)
-	}
-
-	if txnType == implicitTxn {
-		sp.SetTag("implicit", "true")
-	}
-
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
+
+	var txnCtx context.Context
+	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
+	if alreadyRecording || ts.testingForceRealTracingSpans || duration > 0 {
+		// WithForceRealSpan is used to support the use of session tracing,
+		// which will start recording on this span. Similarly, it enables the
+		// tracing of the txns that exceed the duration threshold.
+		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
+	} else {
+		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
+	}
+	if txnType == implicitTxn {
+		sp.SetTag("implicit", attribute.StringValue("true"))
+	}
+
 	if !alreadyRecording && (duration > 0) {
-		tracing.StartRecording(sp, tracing.SnowballRecording)
+		sp.SetVerbose(true)
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
 
-	// Put the new span in the context.
-	txnCtx := opentracing.ContextWithSpan(connCtx, sp)
-
-	if !tracing.IsRecordable(sp) {
-		log.Fatalf(connCtx, "non-recordable transaction span of type: %T", sp)
-	}
-
-	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 	ts.mu.Lock()
+	ts.mu.stmtCount = 0
 	if txn == nil {
 		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
 		ts.mu.txn.SetDebugName(opName)
+		if err := ts.setPriorityLocked(priority); err != nil {
+			panic(err)
+		}
 	} else {
+		if priority != roachpb.UnspecifiedUserPriority {
+			panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
+		}
 		ts.mu.txn = txn
 	}
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
-		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
-	}
-	if err := ts.setPriority(priority); err != nil {
-		panic(err)
+		if err := ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp); err != nil {
+			panic(err)
+		}
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
@@ -226,26 +221,16 @@ func (ts *txnState) finishSQLTxn() {
 		ts.cancel()
 		ts.cancel = nil
 	}
-	if ts.sp == nil {
-		panic("No span in context? Was resetForNewSQLTxn() called previously?")
+	sp := tracing.SpanFromContext(ts.Ctx)
+	if sp == nil {
+		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
 	}
 
 	if ts.recordingThreshold > 0 {
-		if r := tracing.GetRecording(ts.sp); r != nil {
-			if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
-				dump := r.String()
-				if len(dump) > 0 {
-					log.Infof(ts.Ctx, "SQL txn took %s, exceeding tracing threshold of %s:\n%s",
-						elapsed, ts.recordingThreshold, dump)
-				}
-			}
-		} else {
-			log.Warning(ts.Ctx, "Missing trace when sampled was enabled.")
-		}
+		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
-	ts.sp.Finish()
-	ts.sp = nil
+	sp.Finish()
 	ts.Ctx = nil
 	ts.mu.Lock()
 	ts.mu.txn = nil
@@ -268,21 +253,28 @@ func (ts *txnState) finishExternalTxn() {
 		ts.cancel()
 		ts.cancel = nil
 	}
-	if ts.sp != nil {
-		ts.sp.Finish()
+
+	if ts.Ctx != nil {
+		if sp := tracing.SpanFromContext(ts.Ctx); sp != nil {
+			sp.Finish()
+		}
 	}
-	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.Lock()
 	ts.mu.txn = nil
 	ts.mu.Unlock()
 }
 
-func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimestamp hlc.Timestamp) {
+func (ts *txnState) setHistoricalTimestamp(
+	ctx context.Context, historicalTimestamp hlc.Timestamp,
+) error {
 	ts.mu.Lock()
-	ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp)
-	ts.mu.Unlock()
+	defer ts.mu.Unlock()
+	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
+		return err
+	}
 	ts.isHistorical = true
+	return nil
 }
 
 // getReadTimestamp returns the transaction's current read timestamp.
@@ -294,9 +286,12 @@ func (ts *txnState) getReadTimestamp() hlc.Timestamp {
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	ts.mu.Lock()
-	err := ts.mu.txn.SetUserPriority(userPriority)
-	ts.mu.Unlock()
-	if err != nil {
+	defer ts.mu.Unlock()
+	return ts.setPriorityLocked(userPriority)
+}
+
+func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
+	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
 	ts.priority = userPriority
@@ -407,11 +402,12 @@ type transitionCtx struct {
 	connMon *mon.BytesMonitor
 	// The Tracer used to create root spans for new txns if the parent ctx doesn't
 	// have a span.
-	tracer opentracing.Tracer
+	tracer *tracing.Tracer
 	// sessionTracing provides access to the session's tracing interface. The
 	// state machine needs to see if session tracing is enabled.
-	sessionTracing *SessionTracing
-	settings       *cluster.Settings
+	sessionTracing   *SessionTracing
+	settings         *cluster.Settings
+	execTestingKnobs ExecutorTestingKnobs
 }
 
 var noRewind = rewindCapability{}

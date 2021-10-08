@@ -18,10 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -72,7 +73,7 @@ func GenerateSubzoneSpans(
 	st *cluster.Settings,
 	clusterID uuid.UUID,
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	subzones []zonepb.Subzone,
 	hasNewSubzones bool,
 ) ([]zonepb.SubzoneSpan, error) {
@@ -85,7 +86,16 @@ func GenerateSubzoneSpans(
 		}
 	}
 
-	a := &sqlbase.DatumAlloc{}
+	// We already completely avoid creating subzone spans for dropped indexes.
+	// Whether this was intentional is a different story, but it turns out to be
+	// pretty sane. Dropped elements may refer to dropped types and we aren't
+	// necessarily in a position to deal with those dropped types. Add a special
+	// case to avoid generating any subzone spans in the face of being dropped.
+	if tableDesc.Dropped() {
+		return nil, nil
+	}
+
+	a := &rowenc.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
 	subzoneIndexByPartition := make(map[string]int32)
@@ -99,21 +109,23 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
-		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
+	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
+		AddMutations: true,
+	}, func(idx catalog.Index) error {
+		_, indexSubzoneExists := subzoneIndexByIndexID[idx.GetID()]
 		if indexSubzoneExists {
-			idxSpan := tableDesc.IndexSpan(codec, idxDesc.ID)
+			idxSpan := tableDesc.IndexSpan(codec, idx.GetID())
 			// Each index starts with a unique prefix, so (from a precedence
 			// perspective) it's safe to append them all together.
 			indexCovering = append(indexCovering, covering.Range{
 				Start: idxSpan.Key, End: idxSpan.EndKey,
-				Payload: zonepb.Subzone{IndexID: uint32(idxDesc.ID)},
+				Payload: zonepb.Subzone{IndexID: uint32(idx.GetID())},
 			})
 		}
 
 		var emptyPrefix []tree.Datum
 		indexPartitionCoverings, err := indexCoveringsForPartitioning(
-			a, codec, tableDesc, idxDesc, &idxDesc.Partitioning, subzoneIndexByPartition, emptyPrefix)
+			a, codec, tableDesc, idx, idx.GetPartitioning(), subzoneIndexByPartition, emptyPrefix)
 		if err != nil {
 			return err
 		}
@@ -170,22 +182,22 @@ func GenerateSubzoneSpans(
 // highest precedence first and the interval.Range payloads are each a
 // `zonepb.Subzone` with the PartitionName set.
 func indexCoveringsForPartitioning(
-	a *sqlbase.DatumAlloc,
+	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
-	partDesc *descpb.PartitioningDescriptor,
+	tableDesc catalog.TableDescriptor,
+	idx catalog.Index,
+	part catalog.Partitioning,
 	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
 ) ([]covering.Covering, error) {
-	if partDesc.NumColumns == 0 {
+	if part.NumColumns() == 0 {
 		return nil, nil
 	}
 
 	var coverings []covering.Covering
 	var descendentCoverings []covering.Covering
 
-	if len(partDesc.List) > 0 {
+	if part.NumLists() > 0 {
 		// The returned spans are required to be ordered with highest precedence
 		// first. The span for (1, DEFAULT) overlaps with (1, 2) and needs to be
 		// returned at a lower precedence. Luckily, because of the partitioning
@@ -193,28 +205,32 @@ func indexCoveringsForPartitioning(
 		// with the same number of DEFAULTs are non-overlapping. So, bucket the
 		// `interval.Range`s by the number of non-DEFAULT columns and return
 		// them ordered from least # of DEFAULTs to most.
-		listCoverings := make([]covering.Covering, int(partDesc.NumColumns)+1)
-		for _, p := range partDesc.List {
-			for _, valueEncBuf := range p.Values {
-				t, keyPrefix, err := sqlbase.DecodePartitionTuple(
-					a, codec, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
+		listCoverings := make([]covering.Covering, part.NumColumns()+1)
+		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+			for _, valueEncBuf := range values {
+				t, keyPrefix, err := rowenc.DecodePartitionTuple(
+					a, codec, tableDesc, idx, part, valueEncBuf, prefixDatums)
 				if err != nil {
-					return nil, err
+					return err
 				}
-				if _, ok := relevantPartitions[p.Name]; ok {
+				if _, ok := relevantPartitions[name]; ok {
 					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], covering.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
-						Payload: zonepb.Subzone{PartitionName: p.Name},
+						Payload: zonepb.Subzone{PartitionName: name},
 					})
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
-					a, codec, tableDesc, idxDesc, &p.Subpartitioning, relevantPartitions, newPrefixDatums)
+					a, codec, tableDesc, idx, subPartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				descendentCoverings = append(descendentCoverings, subpartitionCoverings...)
 			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 		for i := range listCoverings {
 			if covering := listCoverings[len(listCoverings)-i-1]; len(covering) > 0 {
@@ -223,27 +239,31 @@ func indexCoveringsForPartitioning(
 		}
 	}
 
-	if len(partDesc.Range) > 0 {
-		for _, p := range partDesc.Range {
-			if _, ok := relevantPartitions[p.Name]; !ok {
-				continue
+	if part.NumRanges() > 0 {
+		err := part.ForEachRange(func(name string, from, to []byte) error {
+			if _, ok := relevantPartitions[name]; !ok {
+				return nil
 			}
-			_, fromKey, err := sqlbase.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, p.FromInclusive, prefixDatums)
+			_, fromKey, err := rowenc.DecodePartitionTuple(
+				a, codec, tableDesc, idx, part, from, prefixDatums)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			_, toKey, err := sqlbase.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, p.ToExclusive, prefixDatums)
+			_, toKey, err := rowenc.DecodePartitionTuple(
+				a, codec, tableDesc, idx, part, to, prefixDatums)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			if _, ok := relevantPartitions[p.Name]; ok {
+			if _, ok := relevantPartitions[name]; ok {
 				coverings = append(coverings, covering.Covering{{
 					Start: fromKey, End: toKey,
-					Payload: zonepb.Subzone{PartitionName: p.Name},
+					Payload: zonepb.Subzone{PartitionName: name},
 				}})
 			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
 

@@ -389,6 +389,30 @@ func TestFuncDeps_MakeMax1Row(t *testing.T) {
 	abcde.MakeMax1Row(opt.ColSet{})
 	verifyFD(t, abcde, "key()")
 	testColsAreStrictKey(t, abcde, c(), true)
+
+	// Retain equivalencies.
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(3, 4)
+	abcde.MakeMax1Row(c(1, 2, 3))
+	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	testColsAreStrictKey(t, abcde, c(), true)
+
+	// Retain partial equivalencies. (1)==(2) is extracted from (1)==(2,4).
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(1, 4)
+	abcde.MakeMax1Row(c(1, 2, 3))
+	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	testColsAreStrictKey(t, abcde, c(), true)
+
+	// No columns with equivalencies.
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(3, 4)
+	abcde.MakeMax1Row(opt.ColSet{})
+	verifyFD(t, abcde, "key()")
+	testColsAreStrictKey(t, abcde, c(), true)
 }
 
 func TestFuncDeps_MakeNotNull(t *testing.T) {
@@ -736,6 +760,18 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	// Verify that lax keys convert to strong keys.
 	abcde.MakeNotNull(c(2, 3, 4, 5))
 	verifyFD(t, abcde, "key(3,4); (2)-->(3-5), (3,4)-->(2,5)")
+
+	// Regression test for #56358: ProjectCols was creating FD relations with
+	// overlapping from/to sets.
+	fd := &props.FuncDepSet{}
+	fd.AddConstants(c(2, 3))
+	fd.AddSynthesizedCol(c(4), 1)
+	fd.AddStrictKey(c(1), c(1, 2, 3, 4))
+	fd.AddEquivalency(2, 3)
+	verifyFD(t, fd, "key(1); ()-->(2,3), (4)-->(1), (1)-->(2-4), (2)==(3), (3)==(2)")
+	// Now project away column 3, and make sure we don't end up with (1)->(1,4).
+	fd.ProjectCols(c(1, 2, 4))
+	verifyFD(t, fd, "key(1); ()-->(2), (4)-->(1), (1)-->(4)")
 }
 
 func TestFuncDeps_AddFrom(t *testing.T) {
@@ -1186,6 +1222,28 @@ func TestFuncDeps_MakeFullOuter(t *testing.T) {
 	mnpq.MakeMax1Row(mnpq.ColSet())
 	outer = mk(abcde, mnpq, c())
 	verifyFD(t, outer, "")
+}
+
+func TestFuncDeps_RemapFrom(t *testing.T) {
+	var res props.FuncDepSet
+	abcde := makeAbcdeFD(t)
+	mnpq := makeMnpqFD(t)
+
+	from := opt.ColList{1, 2, 3, 4, 5, 10, 11, 12, 13}
+	to := make(opt.ColList, len(from))
+	for i := range from {
+		to[i] = from[i] * 10
+	}
+	res.RemapFrom(abcde, from, to)
+	verifyFD(t, &res, "key(10); (10)-->(20,30,40,50), (20,30)~~>(10,40,50)")
+	res.RemapFrom(mnpq, from, to)
+	verifyFD(t, &res, "key(100,110); (100,110)-->(120,130)")
+
+	// Test where not all columns in the FD are present in the mapping.
+	from = opt.ColList{1, 3, 4, 5}
+	to = opt.ColList{10, 30, 40, 50}
+	res.RemapFrom(abcde, from, to)
+	verifyFD(t, &res, "key(10); (10)-->(30,40,50)")
 }
 
 // Construct base table FD from figure 3.3, page 114:

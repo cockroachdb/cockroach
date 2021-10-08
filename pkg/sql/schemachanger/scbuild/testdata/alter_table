@@ -1,0 +1,420 @@
+create-table
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT
+----
+- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+  state: ABSENT
+  details:
+    column:
+      id: 2
+      name: j
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 52
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
+----
+- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+  state: ABSENT
+  details:
+    column:
+      defaultExpr: 123:::INT8
+      id: 2
+      name: j
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 52
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
+ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
+----
+- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+  state: ABSENT
+  details:
+    column:
+      defaultExpr: 123:::INT8
+      id: 2
+      name: j
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
+  state: ABSENT
+  details:
+    column:
+      defaultExpr: 456:::INT8
+      id: 3
+      name: k
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      - 3
+      storeColumnNames:
+      - j
+      - k
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 52
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
+----
+- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
+  state: ABSENT
+  details:
+    column:
+      computeExpr: i + 1:::INT8
+      id: 2
+      name: a
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 52
+
+create-table
+CREATE TABLE defaultdb.bar (j INT);
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT;
+ALTER TABLE defaultdb.bar ADD COLUMN b INT;
+----
+- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
+  state: ABSENT
+  details:
+    column:
+      id: 2
+      name: a
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
+- ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
+  state: ABSENT
+  details:
+    column:
+      id: 3
+      name: b
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 53
+- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 53, ElementName: "new_primary_key", IndexID: 2}
+  state: ABSENT
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 2
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keyColumnNames:
+      - rowid
+      name: new_primary_key
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 1
+      - 3
+      storeColumnNames:
+      - j
+      - b
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 1
+    tableId: 53
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      encodingType: 1
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keyColumnNames:
+      - rowid
+      name: primary
+      partitioning: {}
+      sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
+      unique: true
+      version: 4
+    otherPrimaryIndexId: 2
+    tableId: 53

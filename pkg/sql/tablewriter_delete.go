@@ -15,10 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -29,7 +32,7 @@ type tableDeleter struct {
 	tableWriterBase
 
 	rd    row.Deleter
-	alloc *sqlbase.DatumAlloc
+	alloc *rowenc.DatumAlloc
 }
 
 var _ tableWriter = &tableDeleter{}
@@ -41,8 +44,10 @@ func (*tableDeleter) desc() string { return "deleter" }
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
-	td.tableWriterBase.init(txn, td.tableDesc())
+func (td *tableDeleter) init(
+	_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+) error {
+	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
 	return nil
 }
 
@@ -86,7 +91,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().ID))
+		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().GetID()))
 		// Delete rows and indexes starting with the table's prefix.
 		resume = roachpb.Span{
 			Key:    tablePrefix,
@@ -114,19 +119,21 @@ func (td *tableDeleter) deleteAllRowsScan(
 	}
 
 	var valNeededForCol util.FastIntSet
-	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol.Add(idx)
+	for i := range td.rd.FetchCols {
+		col := td.rd.FetchCols[i].GetID()
+		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           &td.tableDesc().PrimaryIndex,
+		Index:           td.tableDesc().GetPrimaryIndex(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		td.rd.Helper.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
@@ -134,13 +141,18 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		td.lockTimeout,
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor for the slow case of truncate.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(
+		ctx, td.txn, roachpb.Spans{resume}, rowinfra.DefaultBatchBytesLimit, rowinfra.NoRowLimit, traceKV, td.forceProductionBatchSizes,
+	); err != nil {
 		return resume, err
 	}
 
@@ -182,7 +194,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if idx.IsInterleaved() {
 		if log.V(2) {
@@ -194,10 +206,10 @@ func (td *tableDeleter) deleteIndex(
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		resume = td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.ID)
+		resume = td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
 	}
 
 	if traceKV {
@@ -214,15 +226,18 @@ func (td *tableDeleter) deleteIndexFast(
 	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
-func (td *tableDeleter) clearIndex(ctx context.Context, idx *descpb.IndexDescriptor) error {
+func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error {
 	if idx.IsInterleaved() {
-		return errors.Errorf("unexpected interleaved index %d", idx.ID)
+		return errors.Errorf("unexpected interleaved index %d", idx.GetID())
 	}
 
-	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.ID)
+	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
+
+	// TODO(sumeer): this is bypassing admission control, since it is not using
+	// the currently instrumented shared code paths.
 	b := &kv.Batch{}
 	b.AddRawRequest(&roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -234,26 +249,28 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx *descpb.IndexDescrip
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.tableDesc().PrimaryIndexSpan(td.rd.Helper.Codec)
 	}
 
 	var valNeededForCol util.FastIntSet
-	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol.Add(idx)
+	for i := range td.rd.FetchCols {
+		col := td.rd.FetchCols[i].GetID()
+		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           &td.tableDesc().PrimaryIndex,
+		Index:           td.tableDesc().GetPrimaryIndex(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		td.rd.Helper.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
@@ -261,13 +278,18 @@ func (td *tableDeleter) deleteIndexScan(
 		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		td.lockTimeout,
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(
+		ctx, td.txn, roachpb.Spans{resume}, rowinfra.DefaultBatchBytesLimit, rowinfra.NoRowLimit, traceKV, td.forceProductionBatchSizes,
+	); err != nil {
 		return resume, err
 	}
 
@@ -292,6 +314,6 @@ func (td *tableDeleter) deleteIndexScan(
 	return resume, td.finalize(ctx)
 }
 
-func (td *tableDeleter) tableDesc() *sqlbase.ImmutableTableDescriptor {
+func (td *tableDeleter) tableDesc() catalog.TableDescriptor {
 	return td.rd.Helper.TableDesc
 }

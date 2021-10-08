@@ -186,22 +186,6 @@ func MakeTableStatAddedKey(tableID uint32) string {
 	return MakeKey(KeyTableStatAddedPrefix, strconv.FormatUint(uint64(tableID), 10 /* base */))
 }
 
-// TableIDFromTableStatAddedKey attempts to extract the table ID from the
-// provided key.
-// The key should have been constructed by MakeTableStatAddedKey.
-// Returns an error if the key is not of the correct type or is not parsable.
-func TableIDFromTableStatAddedKey(key string) (uint32, error) {
-	trimmedKey, err := removePrefixFromKey(key, KeyTableStatAddedPrefix)
-	if err != nil {
-		return 0, err
-	}
-	tableID, err := strconv.ParseUint(trimmedKey, 10 /* base */, 32 /* bitSize */)
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed parsing table ID from key %q", key)
-	}
-	return uint32(tableID), nil
-}
-
 // removePrefixFromKey removes the key prefix and separator and returns what's
 // left. Returns an error if the key doesn't have this prefix.
 func removePrefixFromKey(key, prefix string) (string, error) {

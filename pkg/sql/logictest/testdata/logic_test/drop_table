@@ -4,11 +4,11 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
-query TTTI
+query TTTTIT
 SHOW TABLES FROM test
 ----
-public  a  table  0
-public  b  table  0
+public  a  table  root  0  NULL
+public  b  table  root  0  NULL
 
 statement ok
 INSERT INTO a VALUES (3),(7),(2)
@@ -28,15 +28,17 @@ DROP TABLE a
 # TODO (lucy): Update this if/when we decide to change how these jobs queued by
 # the startup migration are handled.
 query TT
-SELECT job_type, status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges')
+SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root' AND (job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'))
 ----
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
 
-query TTTI
+query TTTTIT
 SHOW TABLES FROM test
 ----
-public  b  table  0
+public  b  table  root  0  NULL
 
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a
@@ -56,3 +58,44 @@ CREATE TABLE a (id INT PRIMARY KEY)
 query I
 SELECT * FROM a
 ----
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA s
+
+user root
+
+statement ok
+CREATE TABLE s.t()
+
+user testuser
+
+# Being the owner of schema s should allow testuser to drop table s.t.
+statement ok
+DROP TABLE s.t
+
+# Verify that a table can successfully be dropped after performing
+# a schema change to the table in the same transaction.
+# See https://github.com/cockroachdb/cockroach/issues/56235.
+subtest drop_after_schema_change_in_txn
+statement ok
+CREATE TABLE to_drop();
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE to_drop ADD COLUMN foo int;
+
+statement ok
+DROP TABLE to_drop;
+
+statement ok
+COMMIT;
+
+statement error pgcode 42P01 relation "to_drop" does not exist
+DROP TABLE to_drop;

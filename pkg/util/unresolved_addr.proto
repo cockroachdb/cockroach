@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 // UnresolvedAddr is an unresolved version of net.Addr.
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   optional string network_field = 1 [(gogoproto.nullable) = false];
   optional string address_field = 2 [(gogoproto.nullable) = false];

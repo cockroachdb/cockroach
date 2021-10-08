@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,6 +56,21 @@ func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.St
 
 var errNoTxn = errors.New("must provide a non-nil transaction")
 
+func (p *storage) UpdateTimestamp(
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
+) error {
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
+	if err != nil {
+		return errors.Wrapf(err, "failed to update record %v", id)
+	}
+	if len(row) == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
 func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
 	if err := validateRecordForProtect(r); err != nil {
 		return err
@@ -77,8 +92,8 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		meta = []byte{}
 	}
 	s := makeSettings(p.settings)
-	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
@@ -87,18 +102,32 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
-	row := rows[0]
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+	if !ok {
+		return errors.Newf("failed to write record %v", r.ID)
+	}
+	row := it.Cur()
+	if err := it.Close(); err != nil {
+		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
-		if curNumSpans+int64(len(r.Spans)) > s.maxSpans {
-			return errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans",
-				curNumSpans, len(r.Spans), s.maxSpans)
+		if s.maxSpans > 0 && curNumSpans+int64(len(r.Spans)) > s.maxSpans {
+			return errors.WithHint(
+				errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans", curNumSpans,
+					len(r.Spans), s.maxSpans),
+				"SET CLUSTER SETTING kv.protectedts.max_spans to a higher value")
 		}
 		curBytes := int64(*row[2].(*tree.DInt))
 		recordBytes := int64(len(encodedSpans) + len(r.Meta) + len(r.MetaType))
-		if curBytes+recordBytes > s.maxBytes {
-			return errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes",
-				curBytes, recordBytes, s.maxBytes)
+		if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
+			return errors.WithHint(
+				errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
+					s.maxBytes),
+				"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
 		}
 		return protectedts.ErrExists
 	}
@@ -110,7 +139,7 @@ func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*pt
 		return nil, errNoTxn
 	}
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getRecordQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
@@ -129,13 +158,13 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+	numRows, err := p.ex.ExecEx(ctx, "protectedts-MarkVerified", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
-	if len(rows) == 0 {
+	if numRows == 0 {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -145,13 +174,13 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+	numRows, err := p.ex.ExecEx(ctx, "protectedts-Release", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
-	if len(rows) == 0 {
+	if numRows == 0 {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -162,10 +191,13 @@ func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, 
 		return ptpb.Metadata{}, errNoTxn
 	}
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getMetadataQuery)
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
+	}
+	if row == nil {
+		return ptpb.Metadata{}, errors.New("failed to read metadata")
 	}
 	return ptpb.Metadata{
 		Version:    uint64(*row[0].(*tree.DInt)),
@@ -194,20 +226,23 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
-	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	records := make([]ptpb.Record, len(rows))
-	for i, row := range rows {
-		if err := rowToRecord(ctx, row, &records[i]); err != nil {
+	var ok bool
+	var records []ptpb.Record
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var record ptpb.Record
+		if err := rowToRecord(ctx, it.Cur(), &record); err != nil {
 			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
+		records = append(records, record)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read records")
 	}
 	return records, nil
 }
@@ -262,7 +297,7 @@ var (
 )
 
 func validateRecordForProtect(r *ptpb.Record) error {
-	if r.Timestamp == (hlc.Timestamp{}) {
+	if r.Timestamp.IsEmpty() {
 		return errZeroTimestamp
 	}
 	if r.ID == uuid.Nil {

@@ -1,0 +1,130 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.contentionpb;
+option go_package = "contentionpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// IndexContentionEvents describes all of the available contention information
+// about a single index.
+message IndexContentionEvents {
+  option (gogoproto.goproto_stringer) = false;
+
+  // TableID is the ID of the table experiencing contention.
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+
+  // IndexID is the ID of the index experiencing contention.
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+
+  // NumContentionEvents is the number of contention events that have happened
+  // on the index.
+  uint64 num_contention_events = 3;
+
+  // CumulativeContentionTime is the total duration that transactions touching
+  // the index have spent contended.
+  google.protobuf.Duration cumulative_contention_time = 4 [
+                                                (gogoproto.nullable) = false,
+                                                (gogoproto.stdduration) = true];
+
+  // Events are all contention events on the index that we kept track of. Note
+  // that some events could have been forgotten since we're keeping a limited
+  // LRU cache of them.
+  //
+  // The events are ordered by the key.
+  repeated SingleKeyContention events = 5 [(gogoproto.nullable) = false];
+}
+
+// SingleTxnContention describes a single transaction that contended with the
+// key.
+message SingleTxnContention {
+  option (gogoproto.goproto_stringer) = false;
+
+  // TxnID is the contending transaction.
+  bytes txn_id = 2 [(gogoproto.nullable) = false,
+                     (gogoproto.customname) = "TxnID",
+                     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // Count is the number of times the corresponding transaction was
+  // encountered.
+  uint64 count = 3;
+}
+
+// SingleKeyContention describes all of the available contention information for
+// a single key.
+message SingleKeyContention {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Key is the key that other transactions conflicted on.
+  bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // Txns are all contending transactions that we kept track of. Note that some
+  // transactions could have been forgotten since we're keeping a limited LRU
+  // cache of them.
+  //
+  // The transactions are ordered by the number of times they were encountered
+  // in DESC order (i.e. most frequent first).
+  repeated SingleTxnContention txns = 2 [(gogoproto.nullable) = false];
+}
+
+// SingleNonSQLKeyContention describes all of the available contention
+// information for a single non-SQL key.
+message SingleNonSQLKeyContention {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Key is the key that other transactions conflicted on.
+  bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // NumContentionEvents is the number of contention events that have happened
+  // on the key.
+  uint64 num_contention_events = 2;
+
+  // CumulativeContentionTime is the total duration that transactions touching
+  // the key have spent contended.
+  google.protobuf.Duration cumulative_contention_time = 3 [
+                                                (gogoproto.nullable) = false,
+                                                (gogoproto.stdduration) = true];
+
+  // Txns are all contending transactions that we kept track of. Note that some
+  // transactions could have been forgotten since we're keeping a limited LRU
+  // cache of them.
+  //
+  // The transactions are ordered by the number of times they were encountered
+  // in DESC order (i.e. most frequent first).
+  repeated SingleTxnContention txns = 4 [(gogoproto.nullable) = false];
+}
+
+// SerializedRegistry is the serialized representation of contention.Registry.
+message SerializedRegistry {
+  // IndexContentionEvents contains all of the available contention information
+  // on the SQL keys. The following orderings are maintained:
+  // - on the highest level, all IndexContentionEvents objects are ordered
+  //   according to their importance
+  // - on the middle level, all SingleKeyContention objects are ordered by their
+  //   keys
+  // - on the lowest level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
+  repeated IndexContentionEvents index_contention_events = 1 [(gogoproto.nullable) = false];
+
+  // NonSQLKeysContention contains all of the available contention information
+  // on the non-SQL keys. The following orderings are maintained:
+  // - on the top level, all SingleNonSQLKeyContention objects are ordered
+  //   by their keys
+  // - on the bottom level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
+  repeated SingleNonSQLKeyContention non_sql_keys_contention = 2 [(gogoproto.nullable) = false,
+                                                                  (gogoproto.customname) = "NonSQLKeysContention"];
+}

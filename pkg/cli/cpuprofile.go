@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -34,7 +35,7 @@ var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
 	128<<20, // 128MiB
 )
 
-const cpuProfTimeFormat = "2006-01-02T15_04_05.999"
+const cpuProfTimeFormat = "2006-01-02T15_04_05.000"
 const cpuProfFileNamePrefix = "cpuprof."
 
 type cpuProfiler struct{}
@@ -64,6 +65,20 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	if cpuProfileInterval <= 0 {
 		return
 	}
+
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		// This is possible when running with only in-memory stores;
+		// in that case the start-up code sets the output directory
+		// to the current directory (.). If running the process
+		// from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		log.Warningf(ctx, "cannot create CPU profile dump dir -- CPU profiles will be disabled: %v", err)
+		return
+	}
+
 	if min := time.Second; cpuProfileInterval < min {
 		log.Infof(ctx, "fixing excessively short cpu profiling interval: %s -> %s",
 			cpuProfileInterval, min)
@@ -76,7 +91,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	// TODO(knz,tbg): The caller of initCPUProfile() also defines a stopper;
 	// arguably this code would be better served by stopper.RunAsyncTask().
 	go func() {
-		defer log.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
+		defer logcrash.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
 
 		ctx := context.Background()
 

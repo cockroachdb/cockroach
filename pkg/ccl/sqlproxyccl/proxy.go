@@ -9,11 +9,10 @@
 package sqlproxyccl
 
 import (
-	"crypto/tls"
-	"encoding/binary"
 	"io"
 	"net"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -22,124 +21,63 @@ const pgAcceptSSLRequest = 'S'
 // See https://www.postgresql.org/docs/9.1/protocol-message-formats.html.
 var pgSSLRequest = []int32{8, 80877103}
 
-// Options are the options to the Proxy method.
-type Options struct {
-	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
-	OutgoingTLSConfig *tls.Config // config used for proxy -> backend connection
-
-	// TODO(tbg): this is unimplemented and exists only to check which clients
-	// allow use of SNI. Should always return ("", nil).
-	OutgoingAddrFromSNI    func(serverName string) (addr string, clientErr error)
-	OutgoingAddrFromParams func(map[string]string) (addr string, clientErr error)
-
-	// If set, consulted to decorate an error message to be sent to the client.
-	// The error passed to this method will contain no internal information.
-	OnSendErrToClient func(code ErrorCode, msg string) string
+// sendErrToClientAndUpdateMetrics simply combines the update of the metrics and
+// the transmission of the err back to the client.
+func updateMetricsAndSendErrToClient(err error, conn net.Conn, metrics *metrics) {
+	metrics.updateForError(err)
+	SendErrToClient(conn, err)
 }
 
-// Proxy takes an incoming client connection and relays it to a backend SQL
-// server.
-func Proxy(conn net.Conn, opts Options) error {
-	sendErrToClient := func(conn net.Conn, code ErrorCode, msg string) {
-		if opts.OnSendErrToClient != nil {
-			msg = opts.OnSendErrToClient(code, msg)
+// SendErrToClient will encode and pass back to the SQL client an error message.
+// It can be called by the implementors of proxyHandler to give more
+// information to the end user in case of a problem.
+var SendErrToClient = func(conn net.Conn, err error) {
+	if err == nil || conn == nil {
+		return
+	}
+	codeErr := (*codeError)(nil)
+	if errors.As(err, &codeErr) {
+		var msg string
+		switch codeErr.code {
+		// These are send as is.
+		case codeExpiredClientConnection,
+			codeBackendDown,
+			codeParamsRoutingFailed,
+			codeClientDisconnected,
+			codeBackendDisconnected,
+			codeAuthFailed,
+			codeProxyRefusedConnection,
+			codeIdleDisconnect:
+			msg = codeErr.Error()
+		// The rest - the message sent back is sanitized.
+		case codeUnexpectedInsecureStartupMessage:
+			msg = "server requires encryption"
+		}
+
+		var pgCode string
+		if codeErr.code == codeIdleDisconnect {
+			pgCode = "57P01" // admin shutdown
+		} else {
+			pgCode = "08004" // rejected connection
 		}
 		_, _ = conn.Write((&pgproto3.ErrorResponse{
 			Severity: "FATAL",
-			Code:     "08004", // rejected connection
+			Code:     pgCode,
 			Message:  msg,
 		}).Encode(nil))
+	} else {
+		// Return a generic "internal server error" message.
+		_, _ = conn.Write((&pgproto3.ErrorResponse{
+			Severity: "FATAL",
+			Code:     "08004", // rejected connection
+			Message:  "internal server error",
+		}).Encode(nil))
 	}
+}
 
-	{
-		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
-		if err != nil {
-			return newErrorf(CodeClientReadFailed, "while receiving startup message")
-		}
-		switch m.(type) {
-		case *pgproto3.SSLRequest:
-		case *pgproto3.CancelRequest:
-			// Ignore CancelRequest explicitly. We don't need to do this but it makes
-			// testing easier by avoiding a call to sendErrToClient on this path
-			// (which would confuse assertCtx).
-			return nil
-		default:
-			code := CodeUnexpectedInsecureStartupMessage
-			sendErrToClient(conn, code, "server requires encryption")
-			return newErrorf(code, "unsupported startup message: %T", m)
-		}
-
-		_, err = conn.Write([]byte{pgAcceptSSLRequest})
-		if err != nil {
-			return newErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
-		}
-
-		cfg := opts.IncomingTLSConfig.Clone()
-		var sniServerName string
-		cfg.GetConfigForClient = func(h *tls.ClientHelloInfo) (*tls.Config, error) {
-			sniServerName = h.ServerName
-			return nil, nil
-		}
-		if opts.OutgoingAddrFromSNI != nil {
-			addr, clientErr := opts.OutgoingAddrFromSNI(sniServerName)
-			if clientErr != nil {
-				code := CodeSNIRoutingFailed
-				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
-				return newErrorf(code, "rejected by OutgoingAddrFromSNI")
-			}
-			if addr != "" {
-				return newErrorf(CodeSNIRoutingFailed, "OutgoingAddrFromSNI is unimplemented")
-			}
-		}
-		conn = tls.Server(conn, cfg)
-	}
-
-	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
-	if err != nil {
-		return newErrorf(CodeClientReadFailed, "receiving post-TLS startup message: %v", err)
-	}
-	msg, ok := m.(*pgproto3.StartupMessage)
-	if !ok {
-		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
-	}
-
-	outgoingAddr, clientErr := opts.OutgoingAddrFromParams(msg.Parameters)
-	if clientErr != nil {
-		code := CodeParamsRoutingFailed
-		sendErrToClient(conn, code, clientErr.Error())
-		return newErrorf(code, "rejected by OutgoingAddrFromParams: %v", clientErr)
-	}
-
-	crdbConn, err := net.Dial("tcp", outgoingAddr)
-	if err != nil {
-		code := CodeBackendDown
-		sendErrToClient(conn, code, "unable to reach backend SQL server")
-		return newErrorf(code, "dialing backend server: %v", err)
-	}
-
-	// Send SSLRequest.
-	if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
-		return newErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
-	}
-
-	response := make([]byte, 1)
-	if _, err = io.ReadFull(crdbConn, response); err != nil {
-		return newErrorf(CodeBackendDown, "reading response to SSLRequest")
-	}
-
-	if response[0] != pgAcceptSSLRequest {
-		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
-	}
-
-	outCfg := opts.OutgoingTLSConfig.Clone()
-	outCfg.ServerName = outgoingAddr
-	crdbConn = tls.Client(crdbConn, outCfg)
-
-	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
-		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v", outgoingAddr, err)
-	}
-
-	// These channels are buffered because we'll only consume one of them.
+// ConnectionCopy does a bi-directional copy between the backend and frontend
+// connections. It terminates when one of connections terminate.
+func ConnectionCopy(crdbConn, conn net.Conn) error {
 	errOutgoing := make(chan error, 1)
 	errIncoming := make(chan error, 1)
 
@@ -155,19 +93,25 @@ func Proxy(conn net.Conn, opts Options) error {
 	select {
 	// NB: when using pgx, we see a nil errIncoming first on clean connection
 	// termination. Using psql I see a nil errOutgoing first. I think the PG
-	// protocol stipulates sending a message to the server at which point
-	// the server closes the connection (errIncoming), but presumably the
-	// client gets to close the connection once it's sent that message,
-	// meaning either case is possible.
+	// protocol stipulates sending a message to the server at which point the
+	// server closes the connection (errIncoming), but presumably the client
+	// gets to close the connection once it's sent that message, meaning either
+	// case is possible.
 	case err := <-errIncoming:
-		if err != nil {
-			return newErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
+		if err == nil {
+			return nil
+		} else if codeErr := (*codeError)(nil); errors.As(err, &codeErr) &&
+			codeErr.code == codeExpiredClientConnection {
+			return codeErr
+		} else if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
+			return newErrorf(codeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
+		} else {
+			return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
 		}
-		return nil
 	case err := <-errOutgoing:
 		// The incoming connection got closed.
 		if err != nil {
-			return newErrorf(CodeClientDisconnected, "copying from target server to client: %v", err)
+			return newErrorf(codeClientDisconnected, "copying from target server to client: %v", err)
 		}
 		return nil
 	}

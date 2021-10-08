@@ -39,13 +39,15 @@ func TestUserName(t *testing.T) {
 		{"a-BC-d", "a-bc-d", "", pgcode.Code{}},
 		{"A.Bcd", "a.bcd", "", pgcode.Code{}},
 		{"WWW.BIGSITE.NET", "www.bigsite.net", "", pgcode.Code{}},
-		{"", "", `username "" invalid`, pgcode.InvalidName},
-		{"-ABC", "", `username "-abc" invalid`, pgcode.InvalidName},
-		{".ABC", "", `username ".abc" invalid`, pgcode.InvalidName},
-		{"*.wildcard", "", `username "\*.wildcard" invalid`, pgcode.InvalidName},
-		{"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof", "", `username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" is too long`, pgcode.NameTooLong},
+		{"", "", `"": username is empty`, pgcode.InvalidName},
+		{"-ABC", "-abc", `"-abc": username is invalid`, pgcode.InvalidName},
+		{".ABC", ".abc", `".abc": username is invalid`, pgcode.InvalidName},
+		{"*.wildcard", "*.wildcard", `"\*.wildcard": username is invalid`, pgcode.InvalidName},
+		{"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof",
+			"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof",
+			`"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof": username is too long`, pgcode.NameTooLong},
 		{"M", "m", "", pgcode.Code{}},
-		{".", "", `username "." invalid`, pgcode.InvalidName},
+		{".", ".", `".": username is invalid`, pgcode.InvalidName},
 	}
 
 	for _, tc := range testCases {
@@ -60,8 +62,8 @@ func TestUserName(t *testing.T) {
 				continue
 			}
 		}
-		if normalized != tc.normalized {
-			t.Errorf("%q: expected %q, got %q", tc.username, tc.normalized, normalized)
+		if normalized.Normalized() != tc.normalized {
+			t.Errorf("%q: expected %q, got %q", tc.username, tc.normalized, normalized.Normalized())
 		}
 	}
 }

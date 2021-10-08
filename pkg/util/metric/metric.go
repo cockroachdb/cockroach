@@ -454,12 +454,43 @@ func (g *Gauge) GetMetadata() Metadata {
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
-	metrics.GaugeFloat64
+	bits *uint64
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
-	return &GaugeFloat64{metadata, metrics.NewGaugeFloat64()}
+	return &GaugeFloat64{metadata, new(uint64)}
+}
+
+// Snapshot returns a read-only copy of the gauge.
+func (g *GaugeFloat64) Snapshot() metrics.GaugeFloat64 {
+	return metrics.GaugeFloat64Snapshot(g.Value())
+}
+
+// Update updates the gauge's value.
+func (g *GaugeFloat64) Update(v float64) {
+	atomic.StoreUint64(g.bits, math.Float64bits(v))
+}
+
+// Value returns the gauge's current value.
+func (g *GaugeFloat64) Value() float64 {
+	return math.Float64frombits(atomic.LoadUint64(g.bits))
+}
+
+// Inc increments the gauge's value.
+func (g *GaugeFloat64) Inc(delta float64) {
+	for {
+		oldBits := atomic.LoadUint64(g.bits)
+		newBits := math.Float64bits(math.Float64frombits(oldBits) + delta)
+		if atomic.CompareAndSwapUint64(g.bits, oldBits, newBits) {
+			return
+		}
+	}
+}
+
+// Dec decrements the gauge's value.
+func (g *GaugeFloat64) Dec(delta float64) {
+	g.Inc(-delta)
 }
 
 // GetType returns the prometheus type enum for this metric.

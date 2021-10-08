@@ -127,7 +127,7 @@ func (sh *StatsHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) conte
 func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) {
 	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(string)
 	if !ok {
-		log.Warningf(ctx, "unable to record stats (%+v); remote addr not found in context", rpcStats)
+		log.Health.Warningf(ctx, "unable to record stats (%+v); remote addr not found in context", rpcStats)
 		return
 	}
 	// There is a race here, but it's meaningless in practice. Worst

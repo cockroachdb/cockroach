@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -54,20 +53,20 @@ func TestTransportMoveToFront(t *testing.T) {
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
 
 	// Advance the client index and move replica 3 back to front.
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 	gt.MoveToFront(rd3)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-	if gt.clientIndex != 0 {
-		t.Fatalf("expected client index 0; got %d", gt.clientIndex)
+	if gt.nextReplicaIdx != 0 {
+		t.Fatalf("expected client index 0; got %d", gt.nextReplicaIdx)
 	}
 
 	// Advance the client index again and verify replica 3 can
 	// be moved to front for a second retry.
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 	gt.MoveToFront(rd3)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-	if gt.clientIndex != 0 {
-		t.Fatalf("expected client index 0; got %d", gt.clientIndex)
+	if gt.nextReplicaIdx != 0 {
+		t.Fatalf("expected client index 0; got %d", gt.nextReplicaIdx)
 	}
 
 	// Move replica 2 to the front.
@@ -75,30 +74,30 @@ func TestTransportMoveToFront(t *testing.T) {
 	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
 
 	// Advance client index and move rd1 front; should be no change.
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 	gt.MoveToFront(rd1)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
 
 	// Advance client index and and move rd1 to front. Should move
 	// client index back for a retry.
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 	gt.MoveToFront(rd1)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
-	if gt.clientIndex != 1 {
-		t.Fatalf("expected client index 1; got %d", gt.clientIndex)
+	if gt.nextReplicaIdx != 1 {
+		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
 	}
 
 	// Advance client index once more; verify second retry.
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 	gt.MoveToFront(rd2)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd2, rd3})
-	if gt.clientIndex != 1 {
-		t.Fatalf("expected client index 1; got %d", gt.clientIndex)
+	if gt.nextReplicaIdx != 1 {
+		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
 	}
 }
 
 // TestSpanImport tests that the gRPC transport ingests trace information that
-// came from gRPC responses (through the "snowball tracing" mechanism).
+// came from gRPC responses (via tracingpb.RecordedSpan on the batch responses).
 func TestSpanImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -114,10 +113,11 @@ func TestSpanImport(t *testing.T) {
 	expectedErr := "my expected error"
 	server.pErr = roachpb.NewErrorf(expectedErr /* nolint:fmtsafe */)
 
-	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
+	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(
+		ctx, tracing.NewTracer(), "test")
 	defer cancel()
 
-	server.tr = opentracing.SpanFromContext(recCtx).Tracer().(*tracing.Tracer)
+	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 
 	br, err := gt.sendBatch(recCtx, roachpb.NodeID(1), &server, roachpb.BatchRequest{})
 	if err != nil {
@@ -141,19 +141,25 @@ type mockInternalClient struct {
 
 var _ roachpb.InternalClient = &mockInternalClient{}
 
+func (*mockInternalClient) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest, ...grpc.CallOption,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
 // Batch is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartRootSpan("mock", nil /* logTags */, tracing.RecordableSpan)
+	sp := m.tr.StartSpan("mock", tracing.WithForceRealSpan())
 	defer sp.Finish()
-	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	sp.SetVerbose(true)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
-	if rec := tracing.GetRecording(sp); rec != nil {
+	if rec := sp.GetRecording(); rec != nil {
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
 	return br, nil
@@ -178,4 +184,28 @@ func (m *mockInternalClient) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
 	return nil, fmt.Errorf("unsupported GossipSubscripion call")
+}
+
+func (m *mockInternalClient) Join(
+	context.Context, *roachpb.JoinNodeRequest, ...grpc.CallOption,
+) (*roachpb.JoinNodeResponse, error) {
+	return nil, fmt.Errorf("unsupported Join call")
+}
+
+func (m *mockInternalClient) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest, _ ...grpc.CallOption,
+) (*roachpb.TokenBucketResponse, error) {
+	return nil, fmt.Errorf("unsupported TokenBucket call")
+}
+
+func (m *mockInternalClient) GetSpanConfigs(
+	_ context.Context, _ *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
+}
+
+func (m *mockInternalClient) UpdateSpanConfigs(
+	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
 }

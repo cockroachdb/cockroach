@@ -19,12 +19,11 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // SessionID represents an opaque identifier for a session. This ID should be
@@ -37,6 +36,15 @@ type SessionID string
 type Provider interface {
 	Start(ctx context.Context)
 	Metrics() metric.Struct
+	Liveness
+
+	// CachedReader returns a reader which only consults its local cache and
+	// does not perform any RPCs in the IsAlive call.
+	CachedReader() Reader
+}
+
+// Liveness exposes Reader and Instance interfaces.
+type Liveness interface {
 	Reader
 	Instance
 }
@@ -45,6 +53,9 @@ type Provider interface {
 func (s SessionID) String() string {
 	return hex.EncodeToString(encoding.UnsafeConvertStringToBytes(string(s)))
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (s SessionID) SafeValue() {}
 
 // UnsafeBytes returns a byte slice representation of the ID. It is unsafe to
 // modify this byte slice. This method is exposed to ease storing the session
@@ -55,7 +66,7 @@ func (s SessionID) UnsafeBytes() []byte {
 
 // Instance represents a SQL tenant server instance and is responsible for
 // maintaining at most once session for this instance and heart beating the
-// current live one if it exists and otherwise creating a new  live one.
+// current live one if it exists and otherwise creating a new live one.
 type Instance interface {
 	Session(context.Context) (Session, error)
 }
@@ -69,10 +80,9 @@ type Session interface {
 	// Transactions run by this Instance which ensure that they commit before
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
-	//
-	// See discussion in Open Questions in
-	// http://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200615_sql_liveness.md
 	Expiration() hlc.Timestamp
+	// RegisterCallbackForSessionExpiry registers a callback to be executed when the session expires.
+	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }
 
 // Reader abstracts over the state of session records.
@@ -82,22 +92,18 @@ type Reader interface {
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
 
-// WaitForActive waits for the sqlliveness subsystem's migration to have been
-// performed.
-func WaitForActive(ctx context.Context, settings *cluster.Settings) {
-	// Use the default retry options which will retry forever with sane backoff.
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		if IsActive(ctx, settings) {
-			return
-		}
-	}
+// TestingKnobs contains test knobs for sqlliveness system behavior.
+type TestingKnobs struct {
+	// SessionOverride is used to override the returned session.
+	// If it returns nil, nil the underlying instance will be used.
+	SessionOverride func(ctx context.Context) (Session, error)
 }
 
-// IsActive returns whether the sqlliveness subsystem's migration to has been
-// performed.
-func IsActive(ctx context.Context, settings *cluster.Settings) bool {
-	return settings.Version.IsActive(
-		ctx,
-		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-	)
-}
+var _ base.ModuleTestingKnobs = &TestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// NotStartedError can be returned from calls to the sqlliveness subsystem
+// prior to its being started.
+var NotStartedError = errors.Errorf("sqlliveness subsystem has not yet been started")

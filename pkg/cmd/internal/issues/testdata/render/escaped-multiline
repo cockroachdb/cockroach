@@ -1,0 +1,18 @@
+render
+----
+----
+The most important properties of all this are that
+
+- it does not get in the way of things
+- it&#39;s easy to use and easy to read
+
+Furthermore, it should respect markdown paragraphs and `inline` code,
+as well as
+
+```
+code blocks
+```
+
+ well.
+----
+----

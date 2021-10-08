@@ -145,10 +145,66 @@ func TestCastsFromUnknown(t *testing.T) {
 			// These type families are exceptions.
 
 		default:
-			cast := lookupCast(types.UnknownFamily, fam)
+			cast := lookupCast(types.UnknownFamily, fam, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
 			if cast == nil {
 				t.Errorf("cast from Unknown to %s does not exist", fam)
 			}
+		}
+	}
+}
+
+func TestTupleCastVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		from, to []*types.T
+		exp      string
+	}{
+		{
+			from: nil,
+			to:   nil,
+			exp:  "leak-proof",
+		},
+		{
+			from: nil,
+			to:   []*types.T{types.Int},
+			exp:  "error",
+		},
+		{
+			from: []*types.T{types.Int},
+			to:   []*types.T{types.Int},
+			exp:  "immutable",
+		},
+		{
+			from: []*types.T{types.Int, types.Int},
+			to:   []*types.T{types.Any},
+			exp:  "stable",
+		},
+		{
+			from: []*types.T{types.TimestampTZ},
+			to:   []*types.T{types.Date},
+			exp:  "stable",
+		},
+		{
+			from: []*types.T{types.Int, types.TimestampTZ},
+			to:   []*types.T{types.Int, types.Date},
+			exp:  "stable",
+		},
+	}
+
+	for _, tc := range testCases {
+		from := *types.EmptyTuple
+		from.InternalType.TupleContents = tc.from
+		to := *types.EmptyTuple
+		to.InternalType.TupleContents = tc.to
+		v, ok := LookupCastVolatility(&from, &to, nil /* sessionData */)
+		res := "error"
+		if ok {
+			res = v.String()
+		}
+		if res != tc.exp {
+			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
 }

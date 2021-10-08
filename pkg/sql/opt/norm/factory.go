@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -67,9 +68,7 @@ type Factory struct {
 	mem *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
-	// used by the normalization rules. It wraps an unnamed xfunc.CustomFuncs,
-	// so it provides a clean interface for calling functions from both the norm
-	// and xfunc packages using the same prefix.
+	// used by the normalization rules.
 	funcs CustomFuncs
 
 	// matchedRule is the callback function that is invoked each time a normalize
@@ -88,7 +87,22 @@ type Factory struct {
 
 	// See FoldingControl.
 	foldingControl FoldingControl
+
+	// constructorStackDepth tracks the call stack depth of factory constructor
+	// methods. It is incremented when a constructor function is called, and
+	// decremented when a constructor function returns.
+	constructorStackDepth int
 }
+
+// maxConstructorStackDepth is the maximum allowed depth of a constructor call
+// stack. Optgen generates factory code that refers to this constant.
+//
+// If constructorStackDepth exceeds this limit, a rule cycle likely exists that
+// will cause a stack overflow. To avoid a stack overflow, no further
+// normalization rules are applied when this limit is reached, and the
+// onMaxConstructorStackDepthExceeded method is called. This can result in an
+// expression that is not fully optimized.
+const maxConstructorStackDepth = 10000
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
@@ -97,16 +111,21 @@ type Factory struct {
 // changed using FoldingControl().AllowStableFolds().
 func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
-	if f.mem == nil {
-		f.mem = &memo.Memo{}
+	mem := f.mem
+	if mem == nil {
+		mem = &memo.Memo{}
 	}
-	f.mem.Init(evalCtx)
+	mem.Init(evalCtx)
 
-	f.evalCtx = evalCtx
-	f.catalog = catalog
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*f = Factory{
+		mem:     mem,
+		evalCtx: evalCtx,
+		catalog: catalog,
+	}
+
 	f.funcs.Init(f)
-	f.matchedRule = nil
-	f.appliedRule = nil
 	f.foldingControl.DisallowStableFolds()
 }
 
@@ -126,11 +145,11 @@ func (f *Factory) FoldingControl() *FoldingControl {
 // placeholders are assigned. If there are no placeholders, there is no need
 // for column statistics, since the memo is already fully optimized.
 func (f *Factory) DetachMemo() *memo.Memo {
-	f.mem.ClearColStats(f.mem.RootExpr())
-	detach := f.mem
+	m := f.mem
 	f.mem = nil
+	m.Detach()
 	f.Init(f.evalCtx, nil /* catalog */)
-	return detach
+	return m
 }
 
 // DisableOptimizations disables all transformation rules. The unaltered input
@@ -170,6 +189,11 @@ func (f *Factory) Metadata() *opt.Metadata {
 // CustomFuncs returns the set of custom functions used by normalization rules.
 func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
+}
+
+// EvalContext returns the *tree.EvalContext of the factory.
+func (f *Factory) EvalContext() *tree.EvalContext {
+	return f.evalCtx
 }
 
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
@@ -212,14 +236,27 @@ func (f *Factory) CopyAndReplace(
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy all metadata to the target memo so that referenced tables and columns
-	// can keep the same ids they had in the "from" memo.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata())
+	// Copy the next scalar rank to the target memo so that new scalar
+	// expressions built with the new memo will not share scalar ranks with
+	// existing expressions.
+	f.mem.CopyNextRankFrom(from.Memo())
+
+	// Copy all metadata to the target memo so that referenced tables and
+	// columns can keep the same ids they had in the "from" memo. Scalar
+	// expressions in the metadata cannot have placeholders, so we simply copy
+	// the expressions without replacement.
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
 	to := f.invokeReplace(from, replace).(memo.RelExpr)
 	f.Memo().SetRoot(to, fromProps)
+}
+
+// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// It does not attempt to replace placeholders with values.
+func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
@@ -260,6 +297,33 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	return nil
 }
 
+// CheckConstructorStackDepth panics in test builds if the constructor stack
+// depth is not zero. The stack depth should be 0 after a top-level constructor
+// function returns. It is used to verify that the stack depth is correctly
+// decremented for each constructor function.
+func (f *Factory) CheckConstructorStackDepth() {
+	if util.CrdbTestBuild && f.constructorStackDepth != 0 {
+		panic(errors.AssertionFailedf(
+			"expected constructor stack depth %v to be 0",
+			f.constructorStackDepth,
+		))
+	}
+}
+
+// onMaxConstructorStackDepthExceeded is called when constructorStackDepth
+// exceeds maxConstructorStackDepth. In test builds it panics. In release builds
+// it reports an error to Sentry to alert of a likely normalization rule cycle.
+func (f *Factory) onMaxConstructorStackDepthExceeded() {
+	err := errors.AssertionFailedf(
+		"optimizer factory constructor call stack exceeded max depth of %v",
+		maxConstructorStackDepth,
+	)
+	if util.CrdbTestBuild {
+		panic(err)
+	}
+	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
+}
+
 // onConstructRelational is called as a final step by each factory method that
 // constructs a relational expression, so that any custom manual pattern
 // matching/replacement code can be run.
@@ -292,42 +356,6 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 // replacement code can be run.
 func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 	return scalar
-}
-
-// NormalizePartialIndexPredicate performs specific normalization functions to
-// normalize a partial index predicate. The goal is to mimic the normalizations
-// performed on filters with Selects as closely as possible. If a partial index
-// predicate and query filter are normalized differently, proving implication
-// can be difficult or impossible.
-func (f *Factory) NormalizePartialIndexPredicate(pred memo.FiltersExpr) memo.FiltersExpr {
-	// Run SimplifyFilters so that adjacent top-level AND expressions are
-	// flattened into individual FiltersItems, like they would be during
-	// normalization of a SELECT query. See the SimplifySelectFilters
-	// normalization rule.
-	//
-	// NOTE: We currently do not recursively simplify the filters like
-	// SimplifySelectFilters rule does. This could cause a false-negative when
-	// partialidx.Implicator tries to prove that a filter implies a partial
-	// index predicate. This trade-off avoids complexity until we find a
-	// real-world example that motivates the recursive normalization.
-	if !f.CustomFuncs().IsFilterFalse(pred) {
-		pred = f.CustomFuncs().SimplifyFilters(pred)
-	}
-
-	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
-	// constrain a single variable are combined into a RangeExpr. See the
-	// ConsolidateSelectFilters normalization rule.
-	if f.CustomFuncs().CanConsolidateFilters(pred) {
-		pred = f.CustomFuncs().ConsolidateFilters(pred)
-	}
-
-	// Run InlineConstVar so that constant variables are inlined. See the
-	// InlineConstVar normalization rule.
-	if f.CustomFuncs().CanInlineConstVar(pred) {
-		pred = f.CustomFuncs().InlineConstVar(pred)
-	}
-
-	return pred
 }
 
 // ----------------------------------------------------------------------

@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "partialidx",
+    srcs = ["implicator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/sem/tree",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "partialidx_test",
+    size = "small",
+    srcs = ["implicator_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":partialidx",
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/exec/execbuilder",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/testutils",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

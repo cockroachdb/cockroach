@@ -1,0 +1,10 @@
+alter_table_stmt ::=
+	alter_onetable_stmt
+	| alter_split_stmt
+	| alter_unsplit_stmt
+	| alter_scatter_stmt
+	| alter_zone_table_stmt
+	| alter_rename_table_stmt
+	| alter_table_set_schema_stmt
+	| alter_table_locality_stmt
+	| alter_table_owner_stmt

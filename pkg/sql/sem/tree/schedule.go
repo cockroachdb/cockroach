@@ -16,15 +16,21 @@ type FullBackupClause struct {
 	Recurrence Expr
 }
 
+// ScheduleLabelSpec describes the labeling specification for a scheduled job.
+type ScheduleLabelSpec struct {
+	IfNotExists bool
+	Label       Expr
+}
+
 // ScheduledBackup represents scheduled backup job.
 type ScheduledBackup struct {
-	ScheduleName    Expr
-	Recurrence      Expr
-	FullBackup      *FullBackupClause /* nil implies choose default */
-	Targets         *TargetList       /* nil implies tree.AllDescriptors coverage */
-	To              StringOrPlaceholderOptList
-	BackupOptions   BackupOptions
-	ScheduleOptions KVOptions
+	ScheduleLabelSpec ScheduleLabelSpec
+	Recurrence        Expr
+	FullBackup        *FullBackupClause /* nil implies choose default */
+	Targets           *TargetList       /* nil implies tree.AllDescriptors coverage */
+	To                StringOrPlaceholderOptList
+	BackupOptions     BackupOptions
+	ScheduleOptions   KVOptions
 }
 
 var _ Statement = &ScheduledBackup{}
@@ -33,15 +39,18 @@ var _ Statement = &ScheduledBackup{}
 func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE SCHEDULE")
 
-	if node.ScheduleName != nil {
+	if node.ScheduleLabelSpec.IfNotExists {
+		ctx.WriteString(" IF NOT EXISTS")
+	}
+	if node.ScheduleLabelSpec.Label != nil {
 		ctx.WriteString(" ")
-		node.ScheduleName.Format(ctx)
+		ctx.FormatNode(node.ScheduleLabelSpec.Label)
 	}
 
 	ctx.WriteString(" FOR BACKUP")
 	if node.Targets != nil {
 		ctx.WriteString(" ")
-		node.Targets.Format(ctx)
+		ctx.FormatNode(node.Targets)
 	}
 
 	ctx.WriteString(" INTO ")
@@ -49,28 +58,36 @@ func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 
 	if !node.BackupOptions.IsDefault() {
 		ctx.WriteString(" WITH ")
-		node.BackupOptions.Format(ctx)
+		ctx.FormatNode(&node.BackupOptions)
 	}
 
 	ctx.WriteString(" RECURRING ")
 	if node.Recurrence == nil {
 		ctx.WriteString("NEVER")
 	} else {
-		node.Recurrence.Format(ctx)
+		ctx.FormatNode(node.Recurrence)
 	}
 
 	if node.FullBackup != nil {
 
 		if node.FullBackup.Recurrence != nil {
 			ctx.WriteString(" FULL BACKUP ")
-			node.FullBackup.Recurrence.Format(ctx)
+			ctx.FormatNode(node.FullBackup.Recurrence)
 		} else if node.FullBackup.AlwaysFull {
 			ctx.WriteString(" FULL BACKUP ALWAYS")
 		}
 	}
 
 	if node.ScheduleOptions != nil {
-		ctx.WriteString(" WITH EXPERIMENTAL SCHEDULE OPTIONS ")
-		node.ScheduleOptions.Format(ctx)
+		ctx.WriteString(" WITH SCHEDULE OPTIONS ")
+		ctx.FormatNode(&node.ScheduleOptions)
 	}
+}
+
+// Coverage return the coverage (all vs requested).
+func (node ScheduledBackup) Coverage() DescriptorCoverage {
+	if node.Targets == nil {
+		return AllDescriptors
+	}
+	return RequestedDescriptors
 }

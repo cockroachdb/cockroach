@@ -1,0 +1,55 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-dropdown
+  display flex
+  flex-direction column
+
+.crl-dropdown__overlay
+  position relative
+  flex-grow 0
+
+
+.crl-dropdown__menu
+  position absolute
+  display none
+  &--open
+    display block
+    z-index 4
+  &--placement-right
+    right 0
+
+.crl-dropdown__container
+  position static
+  border-radius 4px;
+  box-shadow 0 0 4px 0 rgba(154, 161, 171, 0.33);
+  border solid 0.5px $colors--neutral-2
+  background-color $colors--white
+  min-width 150px
+  padding $spacing-xx-small 0
+  cursor pointer
+
+.crl-dropdown__item
+  height $line-height--large
+  padding $spacing-xx-small $spacing-small
+  white-space nowrap
+  overflow hidden
+  text-overflow ellipsis
+  &:hover
+    color $colors--white
+    background-color: $colors--primary-blue-3
+  &--disabled
+    color $colors--neutral-4
+    &:hover
+      color $colors--neutral-4
+      background-color: $colors--white
+      cursor default

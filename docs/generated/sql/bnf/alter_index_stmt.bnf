@@ -1,0 +1,7 @@
+alter_index_stmt ::=
+	alter_oneindex_stmt
+	| alter_split_index_stmt
+	| alter_unsplit_index_stmt
+	| alter_scatter_index_stmt
+	| alter_rename_index_stmt
+	| alter_zone_index_stmt

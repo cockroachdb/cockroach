@@ -19,108 +19,54 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
-// Owner is a valid entry for the Owners field of a roachtest. They should be
-// teams, not individuals.
-type Owner string
-
-// The allowable values of Owner.
-const (
-	OwnerAppDev       Owner = `appdev`
-	OwnerBulkIO       Owner = `bulkio`
-	OwnerCDC          Owner = `cdc`
-	OwnerKV           Owner = `kv`
-	OwnerPartitioning Owner = `partitioning`
-	OwnerSQLExec      Owner = `sql-exec`
-	OwnerSQLSchema    Owner = `sql-schema`
-	OwnerStorage      Owner = `storage`
-)
-
-// OwnerMetadata contains information about a roachtest owning team, such as
-// team slack room, and github project.
-type OwnerMetadata struct {
-	SlackRoom    string
-	ContactEmail string
-	// TriageColumnID is the column id of the project column the team uses to
-	// triage issues. Unfortunately, there appears to be no way to retrieve this
-	// programmatically from the API.
-	//
-	// To find the triage column for a project, run the following curl command:
-	// curl -u yourusername:githubaccesstoken -H "Accept: application/vnd.githubinertia-preview+json" \
-	// https://api.github.com/repos/cockroachdb/cockroach/projects
-	//
-	// Then, for the project you care about, curl its columns URL, which looks
-	// like this:
-	// https://api.github.com/projects/3842382/columns
-	//
-	// Find the triage column you want, and pick its ID field.
-	TriageColumnID int
+func ownerToAlias(o registry.Owner) team.Alias {
+	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
 }
 
-// roachtestOwners maps an owner in code (as specified on a roachtest spec) to
-// metadata used for github issue posting/slack rooms, etc.
-var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerAppDev: {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`,
-		TriageColumnID: 7259065,
-	},
-	OwnerBulkIO: {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`,
-		TriageColumnID: 3097123,
-	},
-	OwnerCDC: {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`,
-		TriageColumnID: 3570120,
-	},
-	OwnerKV: {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`,
-		TriageColumnID: 3550674,
-	},
-	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`,
-		// Partitioning issues get sent to the KV triage column for now.
-		TriageColumnID: 3550674,
-	},
-	OwnerSQLExec: {SlackRoom: `sql-execution-team`, ContactEmail: `alfonso@cockroachlabs.com`,
-		TriageColumnID: 6837155,
-	},
-	OwnerSQLSchema: {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`,
-		TriageColumnID: 8946818,
-	},
-	OwnerStorage: {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`,
-		TriageColumnID: 6668367,
-	},
-	// Only for use in roachtest package unittests.
-	`unittest`: {},
-}
-
-const defaultTag = "default"
-
-type testRegistry struct {
-	m map[string]*testSpec
+type testRegistryImpl struct {
+	m            map[string]*registry.TestSpec
+	cloud        string
+	instanceType string // optional
+	zones        string
+	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
-// makeTestRegistry constructs a testRegistry and configures it with opts.
-func makeTestRegistry() (testRegistry, error) {
-	r := testRegistry{
-		m: make(map[string]*testSpec),
+// makeTestRegistry constructs a testRegistryImpl and configures it with opts.
+func makeTestRegistry(
+	cloud string, instanceType string, zones string, preferSSD bool,
+) (testRegistryImpl, error) {
+	r := testRegistryImpl{
+		cloud:        cloud,
+		instanceType: instanceType,
+		zones:        zones,
+		preferSSD:    preferSSD,
+		m:            make(map[string]*registry.TestSpec),
 	}
 	v := buildTag
 	if v == "" {
 		var err error
 		v, err = loadBuildVersion()
 		if err != nil {
-			return testRegistry{}, err
+			return testRegistryImpl{}, err
 		}
 	}
 	if err := r.setBuildVersion(v); err != nil {
-		return testRegistry{}, err
+		return testRegistryImpl{}, err
 	}
 	return r, nil
 }
 
 // Add adds a test to the registry.
-func (r *testRegistry) Add(spec testSpec) {
+func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
@@ -132,8 +78,30 @@ func (r *testRegistry) Add(spec testSpec) {
 	r.m[spec.Name] = &spec
 }
 
+// MakeClusterSpec makes a cluster spec. It should be used over `spec.MakeClusterSpec`
+// because this method also adds options baked into the registry.
+func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
+	// NB: we need to make sure that `opts` is appended at the end, so that it
+	// overrides the SSD and zones settings from the registry.
+	var finalOpts []spec.Option
+	if r.preferSSD {
+		finalOpts = append(finalOpts, spec.PreferSSD())
+	}
+	if r.zones != "" {
+		finalOpts = append(finalOpts, spec.Zones(r.zones))
+	}
+	finalOpts = append(finalOpts, opts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
+}
+
+const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
+
 // prepareSpec validates a spec and does minor massaging of its fields.
-func (r *testRegistry) prepareSpec(spec *testSpec) error {
+func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
+	if matched, err := regexp.MatchString(testNameRE, spec.Name); err != nil || !matched {
+		return fmt.Errorf("%s: Name must match this regexp: %s", spec.Name, testNameRE)
+	}
+
 	if spec.Run == nil {
 		return fmt.Errorf("%s: must specify Run", spec.Name)
 	}
@@ -142,32 +110,20 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 		return fmt.Errorf("%s: must specify a ClusterReusePolicy", spec.Name)
 	}
 
-	if spec.MinVersion != "" {
-		v, err := version.Parse(spec.MinVersion)
-		if err != nil {
-			return fmt.Errorf("%s: unable to parse min-version: %s", spec.Name, err)
-		}
-		if v.PreRelease() != "" {
-			// Specifying a prerelease version as a MinVersion is too confusing
-			// to be useful. The comparison is not straightforward.
-			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", v)
-		}
-		// We append "-0" to the min-version spec so that we capture all
-		// prereleases of the specified version. Otherwise, "v2.1.0" would compare
-		// greater than "v2.1.0-alpha.x".
-		spec.minVersion = version.MustParse(spec.MinVersion + "-0")
-	}
-
 	// All tests must have an owner so the release team knows who signs off on
 	// failures and so the github issue poster knows who to assign it to.
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	if _, ok := roachtestOwners[spec.Owner]; !ok {
+	teams, err := team.DefaultLoadTeams()
+	if err != nil {
+		return err
+	}
+	if _, ok := teams[ownerToAlias(spec.Owner)]; !ok {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {
-		spec.Tags = []string{defaultTag}
+		spec.Tags = []string{registry.DefaultTag}
 	}
 	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
 
@@ -177,17 +133,13 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
-func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []testSpec {
-	var tests []testSpec
+func (r testRegistryImpl) GetTests(
+	ctx context.Context, filter *registry.TestFilter,
+) []registry.TestSpec {
+	var tests []registry.TestSpec
 	for _, t := range r.m {
-		if !t.matchOrSkip(filter) {
+		if !t.MatchOrSkip(filter) {
 			continue
-		}
-		if t.Skip == "" && t.minVersion != nil {
-			if !r.buildVersion.AtLeast(t.minVersion) {
-				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
-					r.buildVersion, t.minVersion)
-			}
 		}
 		tests = append(tests, *t)
 	}
@@ -198,14 +150,14 @@ func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []testSp
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistry) List(ctx context.Context, filters []string) []testSpec {
-	filter := newFilter(filters)
+func (r testRegistryImpl) List(ctx context.Context, filters []string) []registry.TestSpec {
+	filter := registry.NewTestFilter(filters)
 	tests := r.GetTests(ctx, filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }
 
-func (r *testRegistry) setBuildVersion(buildTag string) error {
+func (r *testRegistryImpl) setBuildVersion(buildTag string) error {
 	v, err := version.Parse(buildTag)
 	if err != nil {
 		return err
@@ -224,51 +176,4 @@ func loadBuildVersion() (string, error) {
 			err, out)
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// testFilter holds the name and tag filters for filtering tests.
-type testFilter struct {
-	name *regexp.Regexp
-	tag  *regexp.Regexp
-	// rawTag is the string representation of the regexps in tag
-	rawTag []string
-}
-
-func newFilter(filter []string) *testFilter {
-	var name []string
-	var tag []string
-	var rawTag []string
-	for _, v := range filter {
-		if strings.HasPrefix(v, "tag:") {
-			tag = append(tag, strings.TrimPrefix(v, "tag:"))
-			rawTag = append(rawTag, v)
-		} else {
-			name = append(name, v)
-		}
-	}
-
-	if len(tag) == 0 {
-		tag = []string{defaultTag}
-		rawTag = []string{"tag:" + defaultTag}
-	}
-
-	makeRE := func(strs []string) *regexp.Regexp {
-		switch len(strs) {
-		case 0:
-			return regexp.MustCompile(`.`)
-		case 1:
-			return regexp.MustCompile(strs[0])
-		default:
-			for i := range strs {
-				strs[i] = "(" + strs[i] + ")"
-			}
-			return regexp.MustCompile(strings.Join(strs, "|"))
-		}
-	}
-
-	return &testFilter{
-		name:   makeRE(name),
-		tag:    makeRE(tag),
-		rawTag: rawTag,
-	}
 }

@@ -12,7 +12,9 @@ package optbuilder
 
 import (
 	"context"
+	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -88,7 +90,15 @@ type Builder struct {
 	evalCtx    *tree.EvalContext
 	catalog    cat.Catalog
 	scopeAlloc []scope
-	cteStack   [][]cteSource
+
+	// ctes stores CTEs which may need to be built at the top-level.
+	ctes cteSources
+
+	// cteRefMap stores information about CTE-to-CTE references.
+	//
+	// For each WithID, the map stores a list of CTEs that refer to that WithID.
+	// Together, they form a directed acyclic graph.
+	cteRefMap map[opt.WithID]cteSources
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
@@ -116,6 +126,7 @@ type Builder struct {
 	// trackViewDeps would be false inside that inner view).
 	trackViewDeps bool
 	viewDeps      opt.ViewDeps
+	viewTypeDeps  opt.ViewTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
@@ -193,16 +204,9 @@ func (b *Builder) Build() (err error) {
 		return err
 	}
 
-	b.pushWithFrame()
-
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */, b.allocScope())
-
-	b.popWithFrame(outScope)
-	if len(b.cteStack) > 0 {
-		panic(errors.AssertionFailedf("dangling CTE stack frames"))
-	}
+	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */)
 
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
@@ -217,16 +221,22 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 }
 
 // buildStmtAtRoot builds a statement, beginning a new conceptual query
-// "context".
-func (b *Builder) buildStmtAtRoot(
-	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
-) (outScope *scope) {
-	defer func(prevAtRoot bool) {
-		inScope.atRoot = prevAtRoot
-	}(inScope.atRoot)
+// "context". This is used at the top-level of every statement, and inside
+// EXPLAIN, CREATE VIEW, CREATE TABLE AS.
+func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) (outScope *scope) {
+	// A "root" statement cannot refer to anything from an enclosing query, so we
+	// always start with an empty scope.
+	inScope := b.allocScope()
 	inScope.atRoot = true
 
-	return b.buildStmt(stmt, desiredTypes, inScope)
+	// Save any CTEs above the boundary.
+	prevCTEs := b.ctes
+	b.ctes = nil
+	outScope = b.buildStmt(stmt, desiredTypes, inScope)
+	// Build With operators for any CTEs hoisted to the top level.
+	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
+	b.ctes = prevCTEs
+	return outScope
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -291,6 +301,10 @@ func (b *Builder) buildStmt(
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
+	case *tree.ExplainAnalyze:
+		// This statement should have been handled by the executor.
+		panic(pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE can only be used as a top-level statement"))
+
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
 
@@ -315,12 +329,25 @@ func (b *Builder) buildStmt(
 	case *tree.CancelSessions:
 		return b.buildCancelSessions(stmt, inScope)
 
+	case *tree.CreateStats:
+		return b.buildCreateStatistics(stmt, inScope)
+
+	case *tree.Analyze:
+		// ANALYZE is syntactic sugar for CREATE STATISTICS. We add AS OF SYSTEM
+		// TIME '-0.001ms' to trigger use of inconsistent scans. This prevents
+		// GC TTL errors during ANALYZE. See the sql.stats.max_timestamp_age
+		// setting.
+		return b.buildCreateStatistics(&tree.CreateStats{
+			Table: stmt.Table,
+			Options: tree.CreateStatsOptions{
+				AsOf: tree.AsOfClause{
+					Expr: tree.NewStrVal("-0.001ms"),
+				},
+			},
+		}, inScope)
+
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
-
-	case *tree.ExplainAnalyzeDebug:
-		// This statement should have been handled by the executor.
-		panic(errors.Errorf("%s can only be used as a top-level statement", stmt.StatementTag()))
 
 	default:
 		// See if this statement can be rewritten to another statement using the
@@ -386,12 +413,38 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 				if err != nil {
 					panic(err)
 				}
-				tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-				ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+
+				var ds cat.DataSource
+				// Regclass can contain an ID or a string.
+				// Ex. nextval('s'::regclass) and nextval(59::regclass) are both valid.
+				id, err := strconv.Atoi(regclass.String())
+				if err == nil {
+					ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, cat.Flags{}, cat.StableID(id))
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
+					ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+				}
 
 				b.viewDeps = append(b.viewDeps, opt.ViewDep{
 					DataSource: ds,
 				})
+			}
+		}
+	}
+}
+
+func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
+	if b.trackViewDeps {
+		if texpr.ResolvedType().UserDefined() {
+			children, err := typedesc.GetTypeDescriptorClosure(texpr.ResolvedType())
+			if err != nil {
+				panic(err)
+			}
+			for id := range children {
+				b.viewTypeDeps.Add(int(id))
 			}
 		}
 	}

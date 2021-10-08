@@ -60,6 +60,8 @@ type Smither struct {
 	rnd              *rand.Rand
 	db               *gosql.DB
 	lock             syncutil.RWMutex
+	dbName           string
+	schemas          []*schemaRef
 	tables           []*tableRef
 	columns          map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
 	indexes          map[tree.TableName]map[tree.Name]*tree.CreateIndex
@@ -128,6 +130,10 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	s.enableBulkIO()
+	row := s.db.QueryRow("SELECT current_database()")
+	if err := row.Scan(&s.dbName); err != nil {
+		return nil, err
+	}
 	return s, s.ReloadSchemas()
 }
 
@@ -255,12 +261,14 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 // OnlyNoDropDDLs causes the Smither to only emit DDLs, but won't ever drop
 // a table.
 var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
-	s.stmtWeights = append([]statementWeight{
+	s.stmtWeights = append(append([]statementWeight{
 		{1, makeBegin},
 		{2, makeRollback},
 		{6, makeCommit},
 	},
 		altersExistingTable...,
+	),
+		altersExistingTypes...,
 	)
 })
 
@@ -282,6 +290,16 @@ func DisableCRDBFns() SmitherOption {
 // SimpleDatums causes the Smither to emit simpler constant datums.
 var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
+})
+
+// MutationsOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10%
+// DELETE statements.
+var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
+	s.stmtWeights = []statementWeight{
+		{8, makeInsert},
+		{1, makeUpdate},
+		{1, makeDelete},
+	}
 })
 
 // IgnoreFNs causes the Smither to ignore functions that match the regex.
@@ -360,8 +378,23 @@ var PostgresMode = multiOption(
 	// Some func impls differ from postgres, so skip them here.
 	// #41709
 	IgnoreFNs("^sha"),
+	IgnoreFNs("^isnan"),
+	IgnoreFNs("^crc32c"),
+	IgnoreFNs("^fnv32a"),
+	IgnoreFNs("^experimental_"),
+	IgnoreFNs("^json_set"),
+	IgnoreFNs("^concat_agg"),
+	IgnoreFNs("^to_english"),
+	IgnoreFNs("^substr$"),
 	// We use e'XX' instead of E'XX' for hex strings, so ignore these.
 	IgnoreFNs("^quote"),
 	// We have some differences here with empty string and "default"; skip until fixed.
 	IgnoreFNs("^pg_collation_for"),
+	// Postgres does not have the `.*_escape` functions.
+	IgnoreFNs("_escape$"),
+	// Some spatial functions are CockroachDB-specific.
+	IgnoreFNs("st_.*withinexclusive$"),
+	IgnoreFNs("^postgis_.*build_date"),
+	IgnoreFNs("^postgis_.*version"),
+	IgnoreFNs("^postgis_.*scripts"),
 )

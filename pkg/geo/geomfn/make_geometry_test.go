@@ -238,11 +238,14 @@ func TestMakePolygon(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			outer, err := geo.MustParseGeometry(tc.outer).CloneWithSRID(tc.outerSRID)
+			outer := geo.MustParseGeometry(tc.outer)
+			var err error
+			outer, err = outer.CloneWithSRID(tc.outerSRID)
 			require.NoError(t, err)
-			interior := make([]*geo.Geometry, 0, len(tc.interior))
+			interior := make([]geo.Geometry, 0, len(tc.interior))
 			for i, g := range tc.interior {
-				interiorRing, err := geo.MustParseGeometry(g).CloneWithSRID(tc.interiorSRIDs[i])
+				interiorRing := geo.MustParseGeometry(g)
+				interiorRing, err = interiorRing.CloneWithSRID(tc.interiorSRIDs[i])
 				require.NoError(t, err)
 				interior = append(interior, interiorRing)
 			}
@@ -252,10 +255,50 @@ func TestMakePolygon(t *testing.T) {
 				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
-				expected, err := geo.MustParseGeometry(tc.expected).CloneWithSRID(tc.expectedSRID)
+				expected := geo.MustParseGeometry(tc.expected)
+				expected, err := expected.CloneWithSRID(tc.expectedSRID)
 				require.NoError(t, err)
 				assert.Equal(t, expected, polygon)
 			}
+		})
+	}
+}
+
+func TestMakePolygonWithSRID(t *testing.T) {
+	testCases := []struct {
+		name     string
+		g        string
+		srid     int
+		expected string
+	}{
+		{
+			"Single input variant - 2D",
+			"LINESTRING(75 29,77 29,77 29, 75 29)",
+			int(geopb.DefaultGeometrySRID),
+			"SRID=0;POLYGON((75 29,77 29,77 29,75 29))",
+		},
+		{
+			"Single input variant - 2D with SRID",
+			"LINESTRING(75 29,77 29,77 29, 75 29)",
+			4326,
+			"SRID=4326;POLYGON((75 29,77 29,77 29,75 29))",
+		},
+		{
+			"Single input variant - 2D square with SRID",
+			"LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)",
+			4000,
+			"SRID=4000;POLYGON((40 80, 80 80, 80 40, 40 40, 40 80))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := geo.MustParseGeometry(tc.g)
+			polygon, err := MakePolygonWithSRID(g, tc.srid)
+			require.NoError(t, err)
+			expected := geo.MustParseGeometry(tc.expected)
+			require.Equal(t, expected, polygon)
+			require.EqualValues(t, tc.srid, polygon.SRID())
 		})
 	}
 }

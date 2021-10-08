@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "passesutil",
+    srcs = ["passes_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/ast/astutil",
+    ],
+)
+
+go_test(
+    name = "passesutil_test",
+    size = "small",
+    srcs = ["passes_util_test.go"],
+    data = [
+        "//pkg/testutils/lint/passes/forbiddenmethod:testdata",
+        "//pkg/testutils/lint/passes/unconvert:testdata",
+        "@go_sdk//:files",
+    ],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/testutils/lint/passes/forbiddenmethod",
+        "//pkg/testutils/lint/passes/unconvert",
+        "//pkg/testutils/skip",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)

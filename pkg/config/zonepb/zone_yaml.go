@@ -202,8 +202,11 @@ type marshalableZoneConfig struct {
 	RangeMinBytes                *int64            `json:"range_min_bytes" yaml:"range_min_bytes"`
 	RangeMaxBytes                *int64            `json:"range_max_bytes" yaml:"range_max_bytes"`
 	GC                           *GCPolicy         `json:"gc"`
+	GlobalReads                  *bool             `json:"global_reads" yaml:"global_reads"`
 	NumReplicas                  *int32            `json:"num_replicas" yaml:"num_replicas"`
+	NumVoters                    *int32            `json:"num_voters" yaml:"num_voters"`
 	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
+	VoterConstraints             ConstraintsList   `json:"voter_constraints" yaml:"voter_constraints,flow"`
 	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
 	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
 	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
@@ -222,10 +225,21 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 		tempGC := *c.GC
 		m.GC = &tempGC
 	}
+	if c.GlobalReads != nil {
+		m.GlobalReads = proto.Bool(*c.GlobalReads)
+	}
 	if c.NumReplicas != nil && *c.NumReplicas != 0 {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
 	}
 	m.Constraints = ConstraintsList{c.Constraints, c.InheritedConstraints}
+	if c.NumVoters != nil && *c.NumVoters != 0 {
+		m.NumVoters = proto.Int32(*c.NumVoters)
+	}
+	// NB: In order to preserve round-trippability, we're directly using
+	// `NullVoterConstraintsIsEmpty` as opposed to calling
+	// `c.InheritedVoterConstraints()`. This is copacetic as long as the value is
+	// unmarshalled correctly in zoneConfigFromMarshalable().
+	m.VoterConstraints = ConstraintsList{c.VoterConstraints, !c.NullVoterConstraintsIsEmpty}
 	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
@@ -250,11 +264,19 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 		tempGC := *m.GC
 		c.GC = &tempGC
 	}
+	if m.GlobalReads != nil {
+		c.GlobalReads = proto.Bool(*m.GlobalReads)
+	}
 	if m.NumReplicas != nil {
 		c.NumReplicas = proto.Int32(*m.NumReplicas)
 	}
 	c.Constraints = m.Constraints.Constraints
 	c.InheritedConstraints = m.Constraints.Inherited
+	if m.NumVoters != nil {
+		c.NumVoters = proto.Int32(*m.NumVoters)
+	}
+	c.VoterConstraints = m.VoterConstraints.Constraints
+	c.NullVoterConstraintsIsEmpty = !m.VoterConstraints.Inherited
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
 	}

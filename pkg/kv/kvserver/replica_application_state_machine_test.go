@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // TestReplicaStateMachineChangeReplicas tests the behavior of applying a
@@ -60,7 +60,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				if deprecated {
 					trigger = roachpb.ChangeReplicasTrigger{
-						DeprecatedChangeType: roachpb.ADD_REPLICA,
+						DeprecatedChangeType: roachpb.ADD_VOTER,
 						DeprecatedReplica:    addedReplDesc,
 						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{
 							replDesc,
@@ -77,7 +77,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				confChange = raftpb.ConfChange{
 					Type:   raftpb.ConfChangeAddNode,
-					NodeID: uint64(addedReplDesc.NodeID),
+					NodeID: uint64(addedReplDesc.ReplicaID),
 				}
 			} else {
 				// Remove ourselves from the Range.
@@ -86,7 +86,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				if deprecated {
 					trigger = roachpb.ChangeReplicasTrigger{
-						DeprecatedChangeType:      roachpb.REMOVE_REPLICA,
+						DeprecatedChangeType:      roachpb.REMOVE_VOTER,
 						DeprecatedReplica:         removedReplDesc,
 						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{},
 						DeprecatedNextReplicaID:   replDesc.ReplicaID + 1,
@@ -100,7 +100,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				confChange = raftpb.ConfChange{
 					Type:   raftpb.ConfChangeRemoveNode,
-					NodeID: uint64(removedReplDesc.NodeID),
+					NodeID: uint64(removedReplDesc.ReplicaID),
 				}
 			}
 
@@ -123,7 +123,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 							State:          &kvserverpb.ReplicaState{Desc: &newDesc},
 							ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
-							Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
+							WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
 						},
 					},
 					confChange: &decodedConfChange{

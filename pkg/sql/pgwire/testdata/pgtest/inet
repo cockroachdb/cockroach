@@ -1,7 +1,7 @@
 # Empty INET param.
 send
 Parse {"Query": "SELECT $1::INET"}
-Bind {"ParameterFormatCodes": [1], "Parameters": [[]]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"text":""}]}
 Sync
 ----
 
@@ -15,7 +15,7 @@ ReadyForQuery
 
 # IPv4family
 send
-Bind {"ParameterFormatCodes": [1], "Parameters": [[2, 0, 0, 0, 0, 0]]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"020000000000"}]}
 Sync
 ----
 
@@ -28,7 +28,7 @@ ReadyForQuery
 
 # IPv6family
 send
-Bind {"ParameterFormatCodes": [1], "Parameters": [[3, 0, 0, 0, 0, 0]]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"030000000000"}]}
 Sync
 ----
 
@@ -41,7 +41,7 @@ ReadyForQuery
 
 # Unknown family
 send
-Bind {"ParameterFormatCodes": [1], "Parameters": [[6, 0, 0, 0, 0, 0]]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"060000000000"}]}
 Sync
 ----
 

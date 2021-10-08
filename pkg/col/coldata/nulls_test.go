@@ -15,8 +15,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
+
+// noNulls is a nulls vector with no value set to null.
+var noNulls Nulls
 
 // nulls3 is a nulls vector with every third value set to null.
 var nulls3 Nulls
@@ -28,9 +32,19 @@ var nulls5 Nulls
 var nulls10 Nulls
 
 // pos is a collection of interesting boundary indices to use in tests.
-var pos = []int{0, 1, 63, 64, 65, BatchSize() - 1, BatchSize()}
+var pos []int
 
 func init() {
+	pos = []int{0, 1, BatchSize() - 1, BatchSize()}
+	for _, possiblePos := range []int{63, 64, 65} {
+		if BatchSize() >= possiblePos {
+			pos = append(pos, possiblePos)
+		}
+	}
+}
+
+func init() {
+	noNulls = NewNulls(BatchSize())
 	nulls3 = NewNulls(BatchSize())
 	nulls5 = NewNulls(BatchSize())
 	nulls10 = NewNulls(BatchSize() * 2)
@@ -86,87 +100,6 @@ func TestUnsetNullRange(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestSwapNulls(t *testing.T) {
-	n := NewNulls(BatchSize())
-	swapPos := []int{0, 1, 63, 64, 65, BatchSize() - 1}
-	idxInSwapPos := func(idx int) bool {
-		for _, p := range swapPos {
-			if p == idx {
-				return true
-			}
-		}
-		return false
-	}
-
-	t.Run("TestSwapNullWithNull", func(t *testing.T) {
-		// Test that swapping null with null doesn't change anything.
-		for _, p := range swapPos {
-			n.SetNull(p)
-		}
-		for _, i := range swapPos {
-			for _, j := range swapPos {
-				n.swap(i, j)
-				for k := 0; k < BatchSize(); k++ {
-					require.Equal(t, idxInSwapPos(k), n.NullAt(k),
-						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, n.NullAt(k), idxInSwapPos(k))
-				}
-			}
-		}
-	})
-
-	t.Run("TestSwapNullWithNotNull", func(t *testing.T) {
-		// Test that swapping null with not null changes things appropriately.
-		n.UnsetNulls()
-		swaps := map[int]int{
-			0:  BatchSize() - 1,
-			1:  62,
-			2:  3,
-			63: 65,
-			68: 120,
-		}
-		idxInSwaps := func(idx int) bool {
-			for k, v := range swaps {
-				if idx == k || idx == v {
-					return true
-				}
-			}
-			return false
-		}
-		for _, j := range swaps {
-			n.SetNull(j)
-		}
-		for i, j := range swaps {
-			n.swap(i, j)
-			require.Truef(t, n.NullAt(i), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, n.NullAt(i), i)
-			require.Truef(t, !n.NullAt(j), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, !n.NullAt(j), j)
-			for k := 0; k < BatchSize(); k++ {
-				if idxInSwaps(k) {
-					continue
-				}
-				require.Falsef(t, n.NullAt(k),
-					"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected false", i, j, k, n.NullAt(k))
-			}
-		}
-	})
-
-	t.Run("TestSwapNullWithNull", func(t *testing.T) {
-		// Test that swapping not null with not null doesn't do anything.
-		n.SetNulls()
-		for _, p := range swapPos {
-			n.UnsetNull(p)
-		}
-		for _, i := range swapPos {
-			for _, j := range swapPos {
-				n.swap(i, j)
-				for k := 0; k < BatchSize(); k++ {
-					require.Equal(t, idxInSwapPos(k), !n.NullAt(k),
-						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, !n.NullAt(k), idxInSwapPos(k))
-				}
-			}
-		}
-	})
 }
 
 func TestNullsTruncate(t *testing.T) {
@@ -249,7 +182,7 @@ func TestNullsSet(t *testing.T) {
 							name := fmt.Sprintf("destStartIdx=%d,srcStartIdx=%d,toAppend=%d", destStartIdx,
 								srcStartIdx, toAppend)
 							t.Run(name, func(t *testing.T) {
-								n := nulls3.Copy()
+								n := nulls3.makeCopy()
 								args.Src.SetNulls(srcNulls)
 								args.DestIdx = destStartIdx
 								args.SrcStartIdx = srcStartIdx
@@ -295,16 +228,30 @@ func TestSlice(t *testing.T) {
 }
 
 func TestNullsOr(t *testing.T) {
-	length1, length2 := 300, 400
-	n1 := nulls3.Slice(0, length1)
-	n2 := nulls5.Slice(0, length2)
+	rng, _ := randutil.NewPseudoRand()
+	randomNulls := NewNulls(BatchSize())
+	for i := 0; i < BatchSize(); i++ {
+		if rng.Float64() < 0.5 {
+			randomNulls.SetNull(i)
+		}
+	}
+	nullsToChooseFrom := []Nulls{noNulls, nulls3, nulls5, nulls10, randomNulls}
+
+	length1, length2 := 1+rng.Intn(BatchSize()), 1+rng.Intn(BatchSize())
+	n1Choice, n2Choice := rng.Intn(len(nullsToChooseFrom)), rng.Intn(len(nullsToChooseFrom))
+	n1 := nullsToChooseFrom[n1Choice].Slice(0, length1)
+	n2 := nullsToChooseFrom[n2Choice].Slice(0, length2)
 	or := n1.Or(&n2)
-	require.True(t, or.maybeHasNulls)
-	for i := 0; i < length2; i++ {
+	require.Equal(t, or.maybeHasNulls, n1.maybeHasNulls || n2.maybeHasNulls)
+	maxLength := length1
+	if length2 > length1 {
+		maxLength = length2
+	}
+	for i := 0; i < maxLength; i++ {
 		if i < length1 && n1.NullAt(i) || i < length2 && n2.NullAt(i) {
-			require.True(t, or.NullAt(i), "or.NullAt(%d) should be true", i)
+			require.True(t, or.NullAt(i), "or.NullAt(%d) should be true\nn1 %v\nn2 %v\n or %v", i, n1.nulls, n2.nulls, or.nulls)
 		} else {
-			require.False(t, or.NullAt(i), "or.NullAt(%d) should be false", i)
+			require.False(t, or.NullAt(i), "or.NullAt(%d) should be false\nn1 %v\nn2 %v\n or %v", i, n1.nulls, n2.nulls, or.nulls)
 		}
 	}
 }

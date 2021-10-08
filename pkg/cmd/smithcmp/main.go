@@ -33,9 +33,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq/oid"
@@ -66,9 +65,9 @@ type options struct {
 	}
 }
 
-var sqlMutators = []sqlbase.Mutator{mutations.ColumnFamilyMutator}
+var sqlMutators = []randgen.Mutator{randgen.ColumnFamilyMutator}
 
-func enableMutations(shouldEnable bool, mutations []sqlbase.Mutator) []sqlbase.Mutator {
+func enableMutations(shouldEnable bool, mutations []randgen.Mutator) []randgen.Mutator {
 	if shouldEnable {
 		return mutations
 	}
@@ -76,6 +75,7 @@ func enableMutations(shouldEnable bool, mutations []sqlbase.Mutator) []sqlbase.M
 }
 
 func main() {
+	ctx := context.Background()
 	args := os.Args[1:]
 	if len(args) != 1 {
 		usage()
@@ -105,10 +105,10 @@ func main() {
 		var err error
 		mutators := enableMutations(opts.Databases[name].AllowMutations, sqlMutators)
 		if opts.Postgres {
-			mutators = append(mutators, mutations.PostgresMutator)
+			mutators = append(mutators, randgen.PostgresMutator)
 		}
 		conns[name], err = cmpconn.NewConnWithMutators(
-			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
+			ctx, db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
 		if err != nil {
 			log.Fatalf("%s (%s): %+v", name, db.Addr, err)
 		}
@@ -143,12 +143,12 @@ func main() {
 	} else {
 		stmts = make([]statement, len(opts.SQL))
 		for i, stmt := range opts.SQL {
-			ps, err := conns[opts.Smither].PGX().Prepare("", stmt)
+			ps, err := conns[opts.Smither].PGX().Prepare(ctx, "", stmt)
 			if err != nil {
 				log.Fatalf("bad SQL statement on %s: %v\nSQL:\n%s", opts.Smither, stmt, err)
 			}
 			var placeholders []*types.T
-			for _, param := range ps.ParameterOIDs {
+			for _, param := range ps.ParamOIDs {
 				typ, ok := types.OidToType[oid.Oid(param)]
 				if !ok {
 					log.Fatalf("unknown oid: %v", param)
@@ -163,11 +163,11 @@ func main() {
 	}
 
 	var prep, exec string
-	ctx := context.Background()
 	done := time.After(timeout)
-	for i := 0; true; i++ {
+	for i, ignoredErrCount := 0, 0; true; i++ {
 		select {
 		case <-done:
+			fmt.Printf("executed query count: %d\nignored error count: %d\n", i, ignoredErrCount)
 			return
 		default:
 		}
@@ -186,7 +186,7 @@ func main() {
 				} else {
 					sb.WriteString(" (")
 				}
-				d := sqlbase.RandDatum(rng, typ, true)
+				d := randgen.RandDatum(rng, typ, true)
 				fmt.Println(i, typ, d, tree.Serialize(d))
 				sb.WriteString(tree.Serialize(d))
 			}
@@ -198,11 +198,13 @@ func main() {
 			fmt.Println(exec)
 		}
 		if compare {
-			if err := cmpconn.CompareConns(
+			if ignoredErr, err := cmpconn.CompareConns(
 				ctx, stmtTimeout, conns, prep, exec, true, /* ignoreSQLErrors */
 			); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
+			} else if ignoredErr {
+				ignoredErrCount++
 			}
 		} else {
 			for _, conn := range conns {
@@ -216,12 +218,12 @@ func main() {
 		for name, conn := range conns {
 			start := timeutil.Now()
 			fmt.Printf("pinging %s...", name)
-			if err := conn.Ping(); err != nil {
+			if err := conn.Ping(ctx); err != nil {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n%s;\n", name, err, prep, exec)
 				// Try to reconnect.
 				db := opts.Databases[name]
 				newConn, err := cmpconn.NewConnWithMutators(
-					db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators),
+					ctx, db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators),
 					db.InitSQL, opts.InitSQL,
 				)
 				if err != nil {

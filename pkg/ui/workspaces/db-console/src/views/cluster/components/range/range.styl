@@ -1,0 +1,244 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+.Range
+  width: 100%
+  display: flex
+
+.click-zone 
+  position: absolute
+  top 0
+  left 0
+  right 0
+  bottom 0
+  z-index 100
+
+.trigger-container
+  width 100%
+  height 100%
+  position fixed
+  left 0
+  top 0
+  z-index 98
+  background-color transparent
+
+.trigger-wrapper
+  z-index 99
+  width 100%
+
+.range-selector
+  position absolute
+  top: 45px
+  background-color white
+  box-shadow 0 0 4px 0 rgba(154, 161, 171, 0.33)
+  border solid 0.5px $colors--neutral-2
+  border-radius 4px
+  display flex
+  flex-direction row
+  align-items flex-start
+  cursor default
+  z-index 99
+  &.__options
+    width 423px
+    padding 12px 9px
+  &>div
+    display flex
+    flex-direction column
+  ._title
+    color $body-color
+    font-family $font-family--bold
+    font-size 12px
+    margin-bottom 7.5px
+    letter-spacing 0.1px
+  ._time-button
+    text-align left
+    padding 0
+    margin 0
+    &:hover
+      .__option-label
+        color $colors--primary-blue-3
+    .__option-label
+      color $colors--neutral-7
+      font-family $font-family--base
+      font-size 14px
+      line-height 22px
+      letter-spacing 0.1px
+      text-transform none
+      margin-left 13px
+      vertical-align middle
+    &.active
+      .__option-label
+        font-family $font-family--base
+        color $colors--primary-blue-3
+
+.trigger
+  &.Select
+    display flex
+    justify-content space-between
+  .Select-value-label
+    margin-right 10px
+    font-family $font-family--base
+    font-weight 600
+    font-size 14px
+    line-height 24px
+    color $colors--neutral-7
+    text-transform initial
+    &__sufix
+      color $colors--secondary-text
+  ._label-time
+    font-size: 13.5px
+    font-family $font-family--bold
+
+.ant-calendar-today-btn
+  color $link-color
+._quick-view
+  width 100%
+._start
+  width 248px
+._end
+  width 248px
+
+.ant-calendar-picker
+  margin-bottom 20px
+
+.ant-calendar-picker, .ant-time-picker
+  width 100%
+
+.ant-time-picker-panel
+  .ant-time-picker-panel-select-option-selected
+    background $colors--neutral-2
+
+.range-calendar
+  width 248px
+  border-radius 4px
+  border solid 1px $colors--neutral-3
+  margin-bottom 20px
+  .calendar-today-btn
+    width 100%
+    height 40px
+    border-top solid 1px $colors--neutral-3
+    display flex
+    justify-content center
+    align-items center
+  .calendar-month-picker
+    display flex
+    justify-content space-between
+    align-items center
+    height 40px
+    span
+      font-family $font-family--bold
+      color $colors--neutral-7
+      font-size 14px
+      letter-spacing 0.1px
+      line-height 1.57
+    button
+      color $colors--neutral-5
+      width: auto
+      padding 0 15px
+      margin 0 10px
+      &:hover
+        color $colors--primary-blue-3
+  table
+    height auto
+    display flex
+    flex-direction column
+    tr
+      display flex
+      justify-content space-between
+    th, td
+      width 32px
+      height 24px
+      display flex
+      justify-content center
+      align-items center
+  .ant-fullcalendar-calendar-body
+    padding 8px 16px
+    .ant-fullcalendar-column-header
+      font-family $font-family--bold
+      font-size 12px
+      line-height 2
+      letter-spacing 0.1px
+    .ant-fullcalendar-tbody
+      .ant-fullcalendar-cell
+        .ant-fullcalendar-value
+          width 24px
+          height 24px
+          display flex
+          justify-content center
+          align-items center
+          padding 1.5px 4.95px
+          font-family $font-family--base
+          font-size 12px
+          line-height 1.83
+          letter-spacing 0.1px
+          padding 0
+          color $colors--neutral-7
+          &:hover
+            background $background-color
+        &.ant-fullcalendar-selected-day
+          .ant-fullcalendar-value
+            background $colors--primary-blue-1
+            color $colors--primary-blue-3
+            &:hover
+              background #e0efff
+              color $colors--primary-blue-3
+        &.ant-fullcalendar-disabled-cell
+          background $background-color
+          color $colors--neutral-5
+          .ant-fullcalendar-value
+            background $background-color
+            color $colors--neutral-5
+            &:hover
+              background $background-color
+              color $colors--neutral-5
+        &.ant-fullcalendar-today
+          &:hover
+            background transparent
+          .ant-fullcalendar-value
+            width 24px
+            height 24px
+            box-shadow none
+            border 1px solid $colors--primary-blue-3
+            color $colors--primary-blue-3
+            &:hover
+              font-family $font-family--bold
+              background $colors--primary-blue-1
+          &.ant-fullcalendar-selected-day
+            .ant-fullcalendar-value
+              background $colors--primary-blue-1
+              &:hover
+                background #e0efff
+          &.ant-fullcalendar-disabled-cell
+            &:hover
+              background $background-color
+            .ant-fullcalendar-value
+                font-family $font-family--bold
+                color $colors--neutral-5
+                background $background-color
+                border 1px solid $colors--neutral-5
+                &:hover
+                  background $background-color
+
+.range__range-title
+  display flex
+  justify-content center
+  align-items center
+  background $colors--neutral-3
+  width 34px
+  text-align center
+  border-radius 3px
+  color $colors--neutral-7
+  font-size 12px
+  line-height 24px
+  letter-spacing 0.1px
+  font-family $font-family--bold

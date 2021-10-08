@@ -188,6 +188,8 @@ type providerOpts struct {
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
+	// use preemptible insances
+	preemptible bool
 }
 
 // projectsVal is the implementation for the --gce-projects flag. It populates
@@ -273,8 +275,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
-		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210603",
+		"Image to use to create the vm, "+
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -288,6 +291,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
+	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -384,7 +388,6 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		"--scopes", "default,storage-rw",
 		"--image", p.opts.Image,
 		"--image-project", "ubuntu-os-cloud",
-		"--boot-disk-size", "10",
 		"--boot-disk-type", "pd-ssd",
 	}
 
@@ -393,6 +396,17 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 	if p.opts.ServiceAccount != "" {
 		args = append(args, "--service-account", p.opts.ServiceAccount)
+	}
+
+	if p.opts.preemptible {
+		// Make sure the lifetime is no longer than 24h
+		if opts.Lifetime > time.Hour*24 {
+			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
+		}
+		args = append(args, "--preemptible")
+		// Preemptible instances require the following arguments set explicitly
+		args = append(args, "--maintenance-policy=terminate")
+		args = append(args, "--no-restart-on-failure")
 	}
 
 	extraMountOpts := ""
@@ -404,7 +418,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		// come in different sizes.
 		// See: https://cloud.google.com/compute/docs/disks/
 		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
-		if n2MachineTypes.MatchString(p.opts.MachineType) && p.opts.SSDCount < 2 {
+		if n2MachineTypes.MatchString(p.opts.MachineType) && p.opts.SSDCount == 1 {
 			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
 			p.opts.SSDCount = 2
 		}
@@ -421,10 +435,13 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			"auto-delete=yes",
 		}
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
+		// Enable DISCARD commands for persistent disks, as is advised in:
+		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
+		extraMountOpts = "discard"
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -440,7 +457,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
-
+	args = append(args, fmt.Sprintf("--boot-disk-size=%dGB", opts.OsVolumeSize))
 	var g errgroup.Group
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
@@ -490,6 +507,49 @@ func (p *Provider) Delete(vms vm.List) error {
 			args := []string{
 				"compute", "instances", "delete",
 				"--delete-disks", "all",
+			}
+
+			args = append(args, "--project", project)
+			args = append(args, "--zone", zone)
+			args = append(args, names...)
+
+			g.Go(func() error {
+				cmd := exec.CommandContext(ctx, "gcloud", args...)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				}
+				return nil
+			})
+		}
+	}
+
+	return g.Wait()
+}
+
+// Reset implements the vm.Provider interface.
+func (p *Provider) Reset(vms vm.List) error {
+	// Map from project to map of zone to list of machines in that project/zone.
+	projectZoneMap := make(map[string]map[string][]string)
+	for _, v := range vms {
+		if v.Provider != ProviderName {
+			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
+		}
+		if projectZoneMap[v.Project] == nil {
+			projectZoneMap[v.Project] = make(map[string][]string)
+		}
+
+		projectZoneMap[v.Project][v.Zone] = append(projectZoneMap[v.Project][v.Zone], v.Name)
+	}
+
+	var g errgroup.Group
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	for project, zoneMap := range projectZoneMap {
+		for zone, names := range zoneMap {
+			args := []string{
+				"compute", "instances", "reset",
 			}
 
 			args = append(args, "--project", project)

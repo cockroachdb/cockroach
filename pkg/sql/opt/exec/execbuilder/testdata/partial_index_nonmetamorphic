@@ -1,0 +1,911 @@
+# LogicTest: local !metamorphic
+
+statement ok
+CREATE TABLE t (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    FAMILY (a, b, c),
+    CHECK (b > 0),
+    INDEX b_full (b),
+    INDEX b_partial (b) WHERE b > 10,
+    INDEX c_partial (c) WHERE a > b AND c IN ('foo', 'foobar')
+)
+
+statement ok
+CREATE TABLE u (
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    FAMILY (k, u, v),
+    INDEX (u) WHERE v > 10
+)
+
+# ---------------------------------------------------------
+# SELECT
+# ---------------------------------------------------------
+
+query T kvtrace
+SELECT a FROM t WHERE a > b AND c = 'foo'
+----
+Scan /Table/53/4/"foo"{-/PrefixEnd}
+
+query T kvtrace
+SELECT a FROM t@c_partial WHERE a > b AND c = 'foo'
+----
+Scan /Table/53/4/"foo"{-/PrefixEnd}
+
+statement error index "c_partial" is a partial index that does not contain all the rows needed to execute this query
+SELECT a FROM t@c_partial WHERE a > b AND c = 'bar'
+
+# ---------------------------------------------------------
+# INSERT
+# ---------------------------------------------------------
+
+# Inserted row matches no partial index.
+query T kvtrace
+INSERT INTO t VALUES (5, 4, 'bar')
+----
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/5/0 -> /BYTES/
+
+# Inserted row matches the first partial index.
+query T kvtrace
+INSERT INTO t VALUES (6, 11, 'bar')
+----
+CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+InitPut /Table/53/2/11/6/0 -> /BYTES/
+InitPut /Table/53/3/11/6/0 -> /BYTES/
+
+# Inserted row matches both partial indexes.
+query T kvtrace
+INSERT INTO t VALUES (12, 11, 'foo')
+----
+CPut /Table/53/1/12/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
+InitPut /Table/53/2/11/12/0 -> /BYTES/
+InitPut /Table/53/3/11/12/0 -> /BYTES/
+InitPut /Table/53/4/"foo"/12/0 -> /BYTES/
+
+# Inserted row does not match partial index with predicate column that is not
+# indexed.
+query T kvtrace
+INSERT INTO u VALUES (1, 2, 3)
+----
+CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
+
+# Inserted row matches partial index with predicate column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (2, 3, 11)
+----
+CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
+InitPut /Table/54/2/3/2/0 -> /BYTES/
+
+# ---------------------------------------------------------
+# DELETE
+# ---------------------------------------------------------
+
+# Deleted row matches no partial index.
+query T kvtrace
+DELETE FROM t WHERE a = 5
+----
+Scan /Table/53/1/5/0
+Del /Table/53/2/4/5/0
+Del /Table/53/1/5/0
+
+# Deleted row matches the first partial index.
+query T kvtrace
+DELETE FROM t WHERE a = 6
+----
+Scan /Table/53/1/6/0
+Del /Table/53/2/11/6/0
+Del /Table/53/3/11/6/0
+Del /Table/53/1/6/0
+
+# Deleted row matches both partial indexes.
+query T kvtrace
+DELETE FROM t WHERE a = 12
+----
+Scan /Table/53/1/12/0
+Del /Table/53/2/11/12/0
+Del /Table/53/3/11/12/0
+Del /Table/53/4/"foo"/12/0
+Del /Table/53/1/12/0
+
+# Deleted row does not match partial index with predicate column that is not
+# indexed.
+query T kvtrace
+DELETE FROM u WHERE k = 1
+----
+Scan /Table/54/1/1/0
+Del /Table/54/1/1/0
+
+# Deleted row matches partial index with predicate column that is not
+# indexed.
+query T kvtrace
+DELETE FROM u WHERE k = 2
+----
+Scan /Table/54/1/2/0
+Del /Table/54/2/3/2/0
+Del /Table/54/1/2/0
+
+# ---------------------------------------------------------
+# UPDATE
+# ---------------------------------------------------------
+
+# Clear the tables.
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM u
+
+# Insert a row that matches no partial index.
+statement ok
+INSERT INTO t VALUES(5, 4, 'bar')
+
+# Insert a row that matches the first partial index.
+statement ok
+INSERT INTO t VALUES(6, 11, 'bar')
+
+# Insert a row that matches both partial indexes.
+statement ok
+INSERT INTO t VALUES(13, 11, 'foo')
+
+# Update a row that matches no partial indexes before or after the update.
+query T kvtrace
+UPDATE t SET c = 'baz' WHERE a = 5
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/baz
+
+# Update a row that matches no partial indexes before the update, but does match
+# after the update.
+query T kvtrace
+UPDATE t SET b = 11 WHERE a = 5
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
+Del /Table/53/2/4/5/0
+CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
+
+# Update a row that matches the first partial index before and after the update
+# and the index entry does not change.
+query T kvtrace
+UPDATE t SET c = 'baz' WHERE a = 6
+----
+Scan /Table/53/1/6/0
+Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
+
+# Update a row that matches the first partial index before and after the update
+# and the index entry changes.
+query T kvtrace
+UPDATE t SET b = 12 WHERE a = 6
+----
+Scan /Table/53/1/6/0
+Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
+Del /Table/53/2/11/6/0
+CPut /Table/53/2/12/6/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/11/6/0
+CPut /Table/53/3/12/6/0 -> /BYTES/ (expecting does not exist)
+
+# Update a row that matches the first partial index before the update, but does
+# not match after the update.
+query T kvtrace
+UPDATE t SET b = 9 WHERE a = 6
+----
+Scan /Table/53/1/6/0
+Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/9/1:3:Bytes/baz
+Del /Table/53/2/12/6/0
+CPut /Table/53/2/9/6/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/12/6/0
+
+# Update a row that matches both partial indexes before the update, the first
+# partial index entry needs to be updated, and the second needs to be deleted.
+query T kvtrace
+UPDATE t SET c = 'baz', b = 12 WHERE a = 13
+----
+Scan /Table/53/1/13/0
+Put /Table/53/1/13/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
+Del /Table/53/2/11/13/0
+CPut /Table/53/2/12/13/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/11/13/0
+CPut /Table/53/3/12/13/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/4/"foo"/13/0
+
+# Reversing the previous update should reverse the partial index changes.
+query T kvtrace
+UPDATE t SET c = 'foo', b = 11 WHERE a = 13
+----
+Scan /Table/53/1/13/0
+Put /Table/53/1/13/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
+Del /Table/53/2/12/13/0
+CPut /Table/53/2/11/13/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/12/13/0
+CPut /Table/53/3/11/13/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/53/4/"foo"/13/0 -> /BYTES/ (expecting does not exist)
+
+# Update a row to match a partial index that does not index the column
+# referenced in predicate.
+statement ok
+INSERT INTO u VALUES (1, 2, 3)
+
+query T kvtrace
+UPDATE u SET v = 11 WHERE k = 1
+----
+Scan /Table/54/1/1/0
+Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/11
+CPut /Table/54/2/2/1/0 -> /BYTES/ (expecting does not exist)
+
+# Update a row to no longer match a partial index that does not index the column
+# referenced in predicate.
+query T kvtrace
+UPDATE u SET v = 3 WHERE k = 1
+----
+Scan /Table/54/1/1/0
+Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
+Del /Table/54/2/2/1/0
+
+# ---------------------------------------------------------
+# UPDATE primary key
+# ---------------------------------------------------------
+
+# Insert a row that matches the first partial index.
+statement ok
+INSERT INTO t VALUES(20, 11, 'bar')
+
+# Update the primary key of a row that matches the first partial index but not
+# the second.
+query T kvtrace
+UPDATE t SET a = 21 WHERE a = 20
+----
+Scan /Table/53/1/20/0
+Del /Table/53/2/11/20/0
+Del /Table/53/3/11/20/0
+Del /Table/53/1/20/0
+CPut /Table/53/1/21/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+InitPut /Table/53/2/11/21/0 -> /BYTES/
+InitPut /Table/53/3/11/21/0 -> /BYTES/
+
+# Update the primary key of a row that currently matches the first partial
+# index. Also update the row so that the row no longer matches the first partial
+# index, but now matches the second.
+query T kvtrace
+UPDATE t SET a = 22, b = 9, c = 'foo' WHERE a = 21
+----
+Scan /Table/53/1/21/0
+Del /Table/53/2/11/21/0
+Del /Table/53/3/11/21/0
+Del /Table/53/1/21/0
+CPut /Table/53/1/22/0 -> /TUPLE/2:2:Int/9/1:3:Bytes/foo
+InitPut /Table/53/2/9/22/0 -> /BYTES/
+InitPut /Table/53/4/"foo"/22/0 -> /BYTES/
+
+# ---------------------------------------------------------
+# INSERT ON CONFLICT DO NOTHING
+# ---------------------------------------------------------
+
+# Clear the tables.
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM u
+
+# Insert a row that matches no partial index.
+query T kvtrace
+INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/5/0
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/5/0 -> /BYTES/
+
+# Insert a conflicting row that matches no partial index.
+query T kvtrace
+INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/5/0
+
+# Insert a row that matches the first partial index.
+query T kvtrace
+INSERT INTO t VALUES (6, 11, 'bar') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/6/0
+CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+InitPut /Table/53/2/11/6/0 -> /BYTES/
+InitPut /Table/53/3/11/6/0 -> /BYTES/
+
+# Insert a conflicting row that matches the first partial index.
+query T kvtrace
+INSERT INTO t VALUES (6, 11, 'bar') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/6/0
+
+# Insert a row that matches both partial indexes.
+query T kvtrace
+INSERT INTO t VALUES (12, 11, 'foo') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/12/0
+CPut /Table/53/1/12/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
+InitPut /Table/53/2/11/12/0 -> /BYTES/
+InitPut /Table/53/3/11/12/0 -> /BYTES/
+InitPut /Table/53/4/"foo"/12/0 -> /BYTES/
+
+# Insert a conflicting row that matches both partial indexes.
+query T kvtrace
+INSERT INTO t VALUES (12, 11, 'foo') ON CONFLICT DO NOTHING
+----
+Scan /Table/53/1/12/0
+
+# Insert a non-conflicting row that does not match the partial index with
+# predicate column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (1, 2, 3) ON CONFLICT DO NOTHING
+----
+Scan /Table/54/1/1/0
+CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
+
+# Insert a conflicting row that does not match the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (1, 4, 6) ON CONFLICT DO NOTHING
+----
+Scan /Table/54/1/1/0
+
+# Insert a non-conflicting row that matches the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (2, 3, 11) ON CONFLICT DO NOTHING
+----
+Scan /Table/54/1/2/0
+CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
+InitPut /Table/54/2/3/2/0 -> /BYTES/
+
+# Insert a conflicting row that matches the partial index with predicate column
+# that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (2, 3, 11) ON CONFLICT DO NOTHING
+----
+Scan /Table/54/1/2/0
+
+# ---------------------------------------------------------
+# INSERT ON CONFLICT DO UPDATE
+# ---------------------------------------------------------
+
+# Clear the tables.
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM u
+
+# Insert a non-conflicting row that matches no partial indexes.
+query T kvtrace
+INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT (a) DO UPDATE SET b = 3
+----
+Scan /Table/53/1/5/0
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/5/0 -> /BYTES/
+
+# Insert a conflicting row that matches no partial indexes before or after
+# the update.
+query T kvtrace
+INSERT INTO t VALUES (5, 3, 'foo') ON CONFLICT (a) DO UPDATE SET b = 3
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
+Del /Table/53/2/4/5/0
+CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
+
+# Insert a conflicting row that does not match the first partial index
+# before the update, but does match after the update.
+query T kvtrace
+INSERT INTO t VALUES (5, 7, 'foo') ON CONFLICT (a) DO UPDATE SET b = 11
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+Del /Table/53/2/3/5/0
+CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
+
+# Insert a conflicting row that currently matches the first partial index before
+# the update. Update the row so that the row no longer matches the first partial
+# index but now matches the second.
+query T kvtrace
+INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 4, c = 'foo'
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
+Del /Table/53/2/11/5/0
+CPut /Table/53/2/4/5/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/11/5/0
+CPut /Table/53/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
+
+# Insert a conflicting row that that matches the second partial index before and
+# after the update and the index entry does not change.
+query T kvtrace
+INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 3
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
+Del /Table/53/2/4/5/0
+CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
+
+# Insert a conflicting row that that matches the second partial index before and
+# after the update and the index entry changes.
+query T kvtrace
+INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET c = 'foobar'
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foobar
+Del /Table/53/4/"foo"/5/0
+CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
+
+# Insert a non-conflicting row that matches the first partial index.
+query T kvtrace
+INSERT INTO t VALUES (6, 11, 'baz') ON CONFLICT (a) DO UPDATE SET b = 3
+----
+Scan /Table/53/1/6/0
+CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
+InitPut /Table/53/2/11/6/0 -> /BYTES/
+InitPut /Table/53/3/11/6/0 -> /BYTES/
+
+# Insert a non-conflicting row that does not match the partial index with
+# predicate column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (1, 2, 3) ON CONFLICT (k) DO UPDATE SET u = 5
+----
+Scan /Table/54/1/1/0
+CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
+
+# Insert a conflicting row that does not match the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (1, 4, 6) ON CONFLICT (k) DO UPDATE SET v = 8
+----
+Scan /Table/54/1/1/0
+Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/8
+
+# Insert a non-conflicting row that matches the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (2, 3, 11) ON CONFLICT (k) DO UPDATE SET u = 5
+----
+Scan /Table/54/1/2/0
+CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
+InitPut /Table/54/2/3/2/0 -> /BYTES/
+
+# Insert a conflicting row that matches the partial index with predicate column
+# that is not indexed.
+query T kvtrace
+INSERT INTO u VALUES (2, 3, 11) ON CONFLICT (k) DO UPDATE SET u = 4, v = 12
+----
+Scan /Table/54/1/2/0
+Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
+Del /Table/54/2/3/2/0
+CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
+
+# ---------------------------------------------------------
+# INSERT ON CONFLICT DO UPDATE primary key
+# ---------------------------------------------------------
+
+# Clear the tables.
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM u
+
+# Insert a non-conflicting row that matches no partial indexes.
+query T kvtrace
+INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT (a) DO UPDATE SET a = 5
+----
+Scan /Table/53/1/5/0
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/5/0 -> /BYTES/
+
+# Insert a conflicting row that matches no partial indexes before or after
+# the update.
+query T kvtrace
+INSERT INTO t VALUES (5, 3, 'baz') ON CONFLICT (a) DO UPDATE SET a = 6
+----
+Scan /Table/53/1/5/0
+Del /Table/53/2/4/5/0
+Del /Table/53/1/5/0
+CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/6/0 -> /BYTES/
+
+# Insert a conflicting row that currently does not match the second partial
+# index before the update, but does match after the update.
+query T kvtrace
+INSERT INTO t VALUES (6, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 7, c = 'foo'
+----
+Scan /Table/53/1/6/0
+Del /Table/53/2/4/6/0
+Del /Table/53/1/6/0
+CPut /Table/53/1/7/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
+InitPut /Table/53/2/4/7/0 -> /BYTES/
+InitPut /Table/53/4/"foo"/7/0 -> /BYTES/
+
+# Insert a conflicting row that currently matches the second partial index
+# before the update. Update the row so that the row no longer matches the second
+# partial index but now matches the first.
+query T kvtrace
+INSERT INTO t VALUES (7, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 8, b = 11
+----
+Scan /Table/53/1/7/0
+Del /Table/53/2/4/7/0
+Del /Table/53/4/"foo"/7/0
+Del /Table/53/1/7/0
+CPut /Table/53/1/8/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
+InitPut /Table/53/2/11/8/0 -> /BYTES/
+InitPut /Table/53/3/11/8/0 -> /BYTES/
+
+# Insert a conflicting row that that matches the first partial index before and
+# after the update and the index entry changes.
+query T kvtrace
+INSERT INTO t VALUES (8, 4, 'bar') ON CONFLICT (a) DO UPDATE SET a = 9, c = 'foobar'
+----
+Scan /Table/53/1/8/0
+Del /Table/53/2/11/8/0
+Del /Table/53/3/11/8/0
+Del /Table/53/1/8/0
+CPut /Table/53/1/9/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foobar
+InitPut /Table/53/2/11/9/0 -> /BYTES/
+InitPut /Table/53/3/11/9/0 -> /BYTES/
+
+# ---------------------------------------------------------
+# UPSERT
+# ---------------------------------------------------------
+
+# Clear the tables.
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM u
+
+# Upsert a non-conflicting row that matches no partial indexes.
+query T kvtrace
+UPSERT INTO t VALUES (5, 4, 'bar')
+----
+Scan /Table/53/1/5/0
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+InitPut /Table/53/2/4/5/0 -> /BYTES/
+
+# Upsert a conflicting row that matches no partial indexes before or after
+# the update.
+query T kvtrace
+UPSERT INTO t VALUES (5, 3, 'bar')
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
+Del /Table/53/2/4/5/0
+CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
+
+# Upsert a conflicting row that does not match the first partial index before
+# the update, but does match after the update.
+query T kvtrace
+UPSERT INTO t VALUES (5, 11, 'bar')
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+Del /Table/53/2/3/5/0
+CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
+
+# Upsert a conflicting row that currently matches the first partial index before
+# the update. Update the row so that the row no longer matches the first partial
+# index but now matches the second.
+query T kvtrace
+UPSERT INTO t VALUES (5, 3, 'foo')
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
+Del /Table/53/2/11/5/0
+CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
+Del /Table/53/3/11/5/0
+CPut /Table/53/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
+
+# Upsert a conflicting row that that matches the second partial index before and
+# after the update and the index entry does not change.
+query T kvtrace
+UPSERT INTO t VALUES (5, 4, 'foo')
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
+Del /Table/53/2/3/5/0
+CPut /Table/53/2/4/5/0 -> /BYTES/ (expecting does not exist)
+
+# Upsert a conflicting row that that matches the second partial index before and
+# after the update and the index entry changes.
+query T kvtrace
+UPSERT INTO t VALUES (5, 4, 'foobar')
+----
+Scan /Table/53/1/5/0
+Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foobar
+Del /Table/53/4/"foo"/5/0
+CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
+
+# Upsert a non-conflicting row that matches the first partial index.
+query T kvtrace
+UPSERT INTO t VALUES (9, 11, 'baz')
+----
+Scan /Table/53/1/9/0
+CPut /Table/53/1/9/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
+InitPut /Table/53/2/11/9/0 -> /BYTES/
+InitPut /Table/53/3/11/9/0 -> /BYTES/
+
+# Upsert a non-conflicting row that does not match the partial index with
+# predicate column that is not indexed.
+query T kvtrace
+UPSERT INTO u VALUES (1, 2, 3)
+----
+Scan /Table/54/1/1/0
+CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
+
+# Upsert a conflicting row that does not match the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+UPSERT INTO u VALUES (1, 4, 6)
+----
+Scan /Table/54/1/1/0
+Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/6
+
+# Upsert a non-conflicting row that matches the partial index with predicate
+# column that is not indexed.
+query T kvtrace
+UPSERT INTO u VALUES (2, 3, 11)
+----
+Scan /Table/54/1/2/0
+CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
+InitPut /Table/54/2/3/2/0 -> /BYTES/
+
+# Upsert a conflicting row that matches the partial index with predicate column
+# that is not indexed.
+query T kvtrace
+UPSERT INTO u VALUES (2, 4, 12)
+----
+Scan /Table/54/1/2/0
+Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
+Del /Table/54/2/3/2/0
+CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
+
+# Tests for partial inverted indexes.
+
+statement ok
+CREATE TABLE inv (
+    a INT PRIMARY KEY,
+    b JSON,
+    c STRING,
+    INVERTED INDEX i (b) WHERE c IN ('foo', 'bar'),
+    FAMILY (a, b, c)
+)
+
+# ---------------------------------------------------------
+# SELECT
+# ---------------------------------------------------------
+
+query T kvtrace
+SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+Scan /Table/55/2/"x"/"y"{-/PrefixEnd}
+
+query T kvtrace
+SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
+----
+Scan /Table/55/2/"x"/"y"{-/PrefixEnd}
+
+statement error index "i" is a partial inverted index and cannot be used for this query
+SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'baz'
+
+# ---------------------------------------------------------
+# INSERT partial inverted index
+# ---------------------------------------------------------
+
+query T kvtrace
+INSERT INTO inv VALUES (1, '{"x": "y", "num": 1}', 'foo')
+----
+CPut /Table/55/1/1/0 -> /TUPLE/
+InitPut /Table/55/2/"num"/1/1/0 -> /BYTES/
+InitPut /Table/55/2/"x"/"y"/1/0 -> /BYTES/
+
+query T kvtrace
+INSERT INTO inv VALUES (2, '{"x": "y", "num": 2}', 'baz')
+----
+CPut /Table/55/1/2/0 -> /TUPLE/
+
+# ---------------------------------------------------------
+# DELETE partial inverted index
+# ---------------------------------------------------------
+
+query T kvtrace
+DELETE FROM inv WHERE a = 1
+----
+Scan /Table/55/1/1/0
+Del /Table/55/2/"num"/1/1/0
+Del /Table/55/2/"x"/"y"/1/0
+Del /Table/55/1/1/0
+
+query T kvtrace
+DELETE FROM inv WHERE a = 2
+----
+Scan /Table/55/1/2/0
+Del /Table/55/1/2/0
+
+# ---------------------------------------------------------
+# UPDATE partial inverted index
+# ---------------------------------------------------------
+
+statement ok
+INSERT INTO inv VALUES (1, '{"x": "y", "num": 1}', 'foo');
+INSERT INTO inv VALUES (2, '{"x": "y", "num": 2}', 'baz');
+
+# Update a non-JSON column so that the row remains in the partial index.
+query T kvtrace
+UPDATE inv SET c = 'bar' WHERE a = 1
+----
+Scan /Table/55/1/1/0
+Put /Table/55/1/1/0 -> /TUPLE/
+
+# Update the JSON of a row in the partial index.
+query T kvtrace
+UPDATE inv SET b = '{"x": "y", "num": 3}' WHERE a = 1
+----
+Scan /Table/55/1/1/0
+Put /Table/55/1/1/0 -> /TUPLE/
+Del /Table/55/2/"num"/1/1/0
+InitPut /Table/55/2/"num"/3/1/0 -> /BYTES/
+
+# Update a non-JSON column so that the row is removed from the partial index.
+query T kvtrace
+UPDATE inv SET c = 'fud' WHERE a = 1
+----
+Scan /Table/55/1/1/0
+Put /Table/55/1/1/0 -> /TUPLE/
+Del /Table/55/2/"num"/3/1/0
+Del /Table/55/2/"x"/"y"/1/0
+
+# Update a non-JSON column so that the row remains not in the partial index.
+query T kvtrace
+UPDATE inv SET c = 'boo' WHERE a = 2
+----
+Scan /Table/55/1/2/0
+Put /Table/55/1/2/0 -> /TUPLE/
+
+# Update the JSON of a row not in the partial index.
+query T kvtrace
+UPDATE inv SET b = '{"x": "y", "num": 4}' WHERE a = 2
+----
+Scan /Table/55/1/2/0
+Put /Table/55/1/2/0 -> /TUPLE/
+
+# Update a non-JSON column so that the row is added to the partial index.
+query T kvtrace
+UPDATE inv SET c = 'bar' WHERE a = 2
+----
+Scan /Table/55/1/2/0
+Put /Table/55/1/2/0 -> /TUPLE/
+InitPut /Table/55/2/"num"/4/2/0 -> /BYTES/
+InitPut /Table/55/2/"x"/"y"/2/0 -> /BYTES/
+
+# Update the primary key of a row in the partial index.
+query T kvtrace
+UPDATE inv SET a = 4 WHERE a = 2
+----
+Scan /Table/55/1/2/0
+Del /Table/55/2/"num"/4/2/0
+Del /Table/55/2/"x"/"y"/2/0
+Del /Table/55/1/2/0
+CPut /Table/55/1/4/0 -> /TUPLE/
+InitPut /Table/55/2/"num"/4/4/0 -> /BYTES/
+InitPut /Table/55/2/"x"/"y"/4/0 -> /BYTES/
+
+# Update the primary key of a row not in the partial index.
+query T kvtrace
+UPDATE inv SET a = 3 WHERE a = 1
+----
+Scan /Table/55/1/1/0
+Del /Table/55/1/1/0
+CPut /Table/55/1/3/0 -> /TUPLE/
+
+# Update to multiple rows (one in and one not in the partial index) so that both
+# are in the partial index.
+statement ok
+INSERT INTO inv VALUES (10, '{"a": "b"}', 'foo'), (11, '{"a": "b"}', 'baz')
+
+query T kvtrace
+UPDATE inv SET c = 'foo' WHERE a IN (10, 11)
+----
+Scan /Table/55/1/1{0-1/#}
+Put /Table/55/1/10/0 -> /TUPLE/
+Put /Table/55/1/11/0 -> /TUPLE/
+InitPut /Table/55/2/"a"/"b"/11/0 -> /BYTES/
+
+# Update to multiple rows (one in and one not in the partial index) so that both
+# are not in the partial index.
+statement ok
+INSERT INTO inv VALUES (12, '{"a": "b"}', 'foo'), (13, '{"a": "b"}', 'baz')
+
+query T kvtrace
+UPDATE inv SET c = 'fud' WHERE a IN (12, 13)
+----
+Scan /Table/55/1/1{2-3/#}
+Put /Table/55/1/12/0 -> /TUPLE/
+Del /Table/55/2/"a"/"b"/12/0
+Put /Table/55/1/13/0 -> /TUPLE/
+
+# ---------------------------------------------------------
+# UPSERT partial inverted index
+# ---------------------------------------------------------
+
+# Upsert a conflicting row with the same JSON as the existing row in the partial
+# index so that it remains in the partial index.
+query T kvtrace
+UPSERT INTO inv VALUES (4, '{"x": "y", "num": 4}', 'foo')
+----
+Scan /Table/55/1/4/0
+Put /Table/55/1/4/0 -> /TUPLE/
+
+# Upsert a conflicting row with different JSON from the existing row in the
+# partial index.
+query T kvtrace
+UPSERT INTO inv VALUES (4, '{"x": "y", "num": 6}', 'foo')
+----
+Scan /Table/55/1/4/0
+Put /Table/55/1/4/0 -> /TUPLE/
+Del /Table/55/2/"num"/4/4/0
+InitPut /Table/55/2/"num"/6/4/0 -> /BYTES/
+
+# Upsert a conflicting row so that it is removed from the partial index.
+query T kvtrace
+UPSERT INTO inv VALUES (4, '{"x": "y", "num": 6}', 'fud')
+----
+Scan /Table/55/1/4/0
+Put /Table/55/1/4/0 -> /TUPLE/
+Del /Table/55/2/"num"/6/4/0
+Del /Table/55/2/"x"/"y"/4/0
+
+# Upsert a non-conflicting row that is added to the partial index.
+query T kvtrace
+UPSERT INTO inv VALUES (5, '{"x": "y", "num": 7}', 'bar')
+----
+Scan /Table/55/1/5/0
+CPut /Table/55/1/5/0 -> /TUPLE/
+InitPut /Table/55/2/"num"/7/5/0 -> /BYTES/
+InitPut /Table/55/2/"x"/"y"/5/0 -> /BYTES/
+
+# Upsert a non-conflicting row that is not added to the partial index.
+query T kvtrace
+UPSERT INTO inv VALUES (6, '{"x": "y", "num": 8}', 'baz')
+----
+Scan /Table/55/1/6/0
+CPut /Table/55/1/6/0 -> /TUPLE/
+
+# Regression test for #57085. Cascading DELETEs should not issue DEL operations
+# for partial indexes of a child table when the deleted row was not in the
+# partial index.
+statement ok
+CREATE TABLE t57085_p (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p ON DELETE CASCADE,
+    b BOOL,
+    INDEX idx (p) WHERE b,
+    FAMILY (c, p, b)
+);
+
+statement ok
+INSERT INTO t57085_p VALUES (1), (2);
+INSERT INTO t57085_c VALUES (10, 1, true), (20, 1, false), (30, 2, true);
+
+query T kvtrace
+DELETE FROM t57085_p WHERE p = 1;
+----
+DelRange /Table/56/1/1 - /Table/56/1/1/#
+Scan /Table/57/{1-2}
+Del /Table/57/2/1/10/0
+Del /Table/57/1/10/0
+Del /Table/57/1/20/0
