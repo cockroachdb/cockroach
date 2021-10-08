@@ -18,6 +18,11 @@ import (
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
+// Now returns the current UTC time.
+func Now() time.Time {
+	return time.Now().UTC()
+}
+
 // Since returns the time elapsed since t.
 // It is shorthand for Now().Sub(t).
 func Since(t time.Time) time.Duration {

@@ -724,8 +724,6 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!**/embedded.go",
-			":!util/timeutil/now_unix.go",
-			":!util/timeutil/now_windows.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
 			":!util/tracing/span.go",
