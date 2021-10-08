@@ -62,7 +62,7 @@ func TestTracerRecording(t *testing.T) {
 	noop2.Finish()
 	noop1.Finish()
 
-	s1 := tr.StartSpan("a", WithForceRealSpan())
+	s1 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	if s1.IsNoop() {
 		t.Error("WithForceRealSpan (but not recording) Span should not be noop")
 	}
@@ -352,7 +352,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	carrier := metadataCarrier{MD: metadata.MD{}}
 	require.True(t, spanInclusionFuncForClient(sp1))
 	tr1.InjectMetaInto(sp1.Meta(), carrier)
-	require.Equal(t, 2, carrier.Len(), "%+v", carrier) // trace id and span id
+	require.Equal(t, 3, carrier.Len(), "%+v", carrier) // trace id, span id, recording mode
 
 	tr2 := NewTracer()
 	meta, err := tr2.ExtractMetaFrom(carrier)
@@ -680,7 +680,9 @@ span: a
 func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
 	ctx := context.Background()
 	tr := NewTracerWithOpt(ctx, WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
-	s1 := tr.StartSpan("parent")
+	// s1 must be recording because, otherwise, the child spans are not linked to
+	// it.
+	s1 := tr.StartSpan("parent", WithRecording(RecordingStructured))
 	s2 := tr.StartSpan("child1", WithParentAndAutoCollection(s1))
 	s3 := tr.StartSpan("child2", WithParentAndAutoCollection(s1))
 	require.Equal(t, []*crdbSpan{s1.i.crdb}, tr.activeSpansRegistry.testingAll())
