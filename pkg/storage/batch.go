@@ -48,77 +48,9 @@ const (
 const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
-	headerSize       int = 12
-	countPos             = 8
-	initialBatchSize     = 1 << 10 // 1 KB
+	headerSize int = 12
+	countPos   int = 8
 )
-
-// RocksDBBatchBuilder is used to construct the RocksDB batch representation.
-// From the RocksDB code, the representation of a batch is:
-//
-//   WriteBatch::rep_ :=
-//      sequence: fixed64
-//      count: fixed32
-//      data: record[count]
-//   record :=
-//      kTypeValue varstring varstring
-//      kTypeDeletion varstring
-//      [...] (see BatchType)
-//   varstring :=
-//      len: varint32
-//      data: uint8[len]
-//
-// The RocksDBBatchBuilder code currently only supports kTypeValue
-// (BatchTypeValue), kTypeDeletion (BatchTypeDeletion), kTypeMerge
-// (BatchTypeMerge), and kTypeSingleDeletion (BatchTypeSingleDeletion)
-// operations. Before a batch is written to the RocksDB write-ahead-log,
-// the sequence number is 0. The "fixed32" format is little endian.
-//
-// The keys encoded into the batch are MVCC keys: a string key with a timestamp
-// suffix. MVCC keys are encoded as:
-//
-//   <key>[<wall_time>[<logical>[<synthetic>]]]<#timestamp-bytes>
-//
-// The <wall_time>, <logical>, and <synthetic> portions of the key are encoded
-// as 64-bit, 32-bit, and 8-bit big-endian integers, respectively. A custom
-// RocksDB comparator is used to maintain the desired ordering as these keys do
-// not sort lexicographically correctly.
-//
-// TODO(bilal): This struct exists mostly as a historic artifact. Transition the
-// remaining few test uses of this struct over to pebble.Batch, and remove it
-// entirely.
-type RocksDBBatchBuilder struct {
-	batch pebble.Batch
-}
-
-// Finish returns the constructed batch representation. After calling Finish,
-// the builder may be used to construct another batch, but the returned []byte
-// is only valid until the next builder method is called.
-func (b *RocksDBBatchBuilder) Finish() []byte {
-	repr := b.batch.Repr()
-	b.batch.Reset()
-
-	return repr
-}
-
-// Len returns the number of bytes currently in the under construction repr.
-func (b *RocksDBBatchBuilder) Len() int {
-	return len(b.batch.Repr())
-}
-
-var _ = (*RocksDBBatchBuilder).Len
-
-// Put sets the given key to the value provided.
-//
-// It is safe to modify the contents of the arguments after Put returns.
-func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
-	keyLen := key.Len()
-	deferredOp := b.batch.SetDeferred(keyLen, len(value))
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
-	copy(deferredOp.Value, value)
-	// NB: the batch is not indexed, obviating the need to call
-	// deferredOp.Finish.
-}
 
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation.
 func EncodeKey(key MVCCKey) []byte {
