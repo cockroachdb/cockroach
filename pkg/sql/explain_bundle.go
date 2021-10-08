@@ -507,6 +507,8 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		return sessiondatapb.VectorizeExecMode(n).String()
 	}
 
+	// TODO(rytaft): Keeping this list up to date is a challenge. Consider just
+	// printing all session settings.
 	relevantSettings := []struct {
 		sessionSetting string
 		clusterSetting settings.WritableSetting
@@ -517,6 +519,11 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
+		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
+		{sessionSetting: "intervalstyle_enabled", clusterSetting: intervalStyleEnabled, convFunc: boolToOnOff},
+		{sessionSetting: "datestyle_enabled", clusterSetting: dateStyleEnabled, convFunc: boolToOnOff},
+		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
+		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
