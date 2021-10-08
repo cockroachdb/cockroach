@@ -911,7 +911,7 @@ ifneq ($(removed-files-to-remove),)
 endif
 
 test-targets := \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	testlogic testbaselogic testccllogic testoptlogic
@@ -921,7 +921,7 @@ go-targets-ccl := \
 	bin/workload \
 	go-install \
 	bench benchshort \
-	check test testshort testslow testrace testraceslow testbuild \
+	check test testshort testslow testrace testraceslow testdeadlock testbuild \
 	stress stressrace \
 	roachprod-stress roachprod-stressrace \
 	generate \
@@ -1044,6 +1044,8 @@ testbuild:
 
 testshort: override TESTFLAGS += -short
 
+testdeadlock: TAGS += deadlock
+
 testrace: ## Run tests with the Go race detector enabled.
 testrace stressrace roachprod-stressrace: override GOFLAGS += -race
 testrace stressrace roachprod-stressrace: export GORACE := halt_on_error=1
@@ -1063,9 +1065,9 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
+.PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort:
+check test testshort testrace testdeadlock bench benchshort:
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
