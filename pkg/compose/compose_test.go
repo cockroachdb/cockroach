@@ -11,6 +11,7 @@
 // "make test" would normally test this file, but it should only be tested
 // during nightlies or when invoked by "make compose".
 
+//go:build compose
 // +build compose
 
 // Package compose contains nightly tests that need docker-compose.
