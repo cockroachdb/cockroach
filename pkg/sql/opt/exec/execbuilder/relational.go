@@ -658,6 +658,16 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	}
 
 	isUnfiltered := scan.IsUnfiltered(md)
+	if scan.Flags.NoFullScan {
+		// Normally a full scan of a partial index would be allowed with the
+		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
+		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
+		// disallow the full index scan.
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(md)) {
+			return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
+		}
+	}
+
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
 	if !tab.IsVirtualTable() && isUnfiltered {
