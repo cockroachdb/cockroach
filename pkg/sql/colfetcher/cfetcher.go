@@ -712,6 +712,11 @@ func (rf *cFetcher) StartScan(
 	if err != nil {
 		return err
 	}
+	// Make sure to close the previous fetcher if there is one since StartScan
+	// can be used multiple times.
+	if rf.fetcher != nil {
+		rf.fetcher.Close(ctx)
+	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
 	rf.machine.limitHint = int(limitHint)
