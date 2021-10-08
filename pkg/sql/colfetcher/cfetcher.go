@@ -1159,6 +1159,9 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateEmitLastBatch:
+			// Close the fetcher eagerly so that its memory could be GCed.
+			rf.fetcher.Close(ctx)
+			rf.fetcher = nil
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
 			return rf.machine.batch, nil
