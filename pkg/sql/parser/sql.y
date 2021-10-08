@@ -811,7 +811,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
-%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
 %token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -9767,6 +9767,11 @@ index_flags_param:
     $$.val = &tree.IndexFlags{NoZigzagJoin: true}
   }
 |
+  NO_FULL_SCAN
+  {
+    $$.val = &tree.IndexFlags{NoFullScan: true}
+  }
+|
   IGNORE_FOREIGN_KEYS
   {
     /* SKIP DOC */
@@ -9847,6 +9852,7 @@ opt_index_flags:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //   '{' NO_ZIGZAG_JOIN [, ...] '}'
+//   '{' NO_FULL_SCAN [, ...] '}'
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
 //   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
@@ -13300,6 +13306,7 @@ unreserved_keyword:
 | NORMAL
 | NO_INDEX_JOIN
 | NO_ZIGZAG_JOIN
+| NO_FULL_SCAN
 | NOCREATEDB
 | NOCREATELOGIN
 | NOCANCELQUERY
