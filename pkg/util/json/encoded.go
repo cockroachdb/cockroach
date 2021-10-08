@@ -571,6 +571,18 @@ func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
 	return decoded.AsDecimal()
 }
 
+func (j *jsonEncoded) AsBool() (bool, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsBool()
+	}
+
+	decoded, err := j.decode()
+	if err != nil {
+		return false, false
+	}
+	return decoded.AsBool()
+}
+
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
 	if other == nil {
 		return -1, nil

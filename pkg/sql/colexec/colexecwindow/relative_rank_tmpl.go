@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,43 +43,35 @@ import (
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRelativeRankOperator(
-	unlimitedAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	input colexecop.Operator,
-	inputTypes []*types.T,
+	args *WindowArgs,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
-	outputColIdx int,
-	partitionColIdx int,
-	peersColIdx int,
-	diskAcc *mon.BoundAccount,
 ) (colexecop.Operator, error) {
 	if len(orderingCols) == 0 {
 		constValue := float64(0)
 		if windowFn == execinfrapb.WindowerSpec_CUME_DIST {
 			constValue = 1
 		}
-		return colexecbase.NewConstOp(unlimitedAllocator, input, types.Float, constValue, outputColIdx)
+		return colexecbase.NewConstOp(
+			args.MainAllocator, args.Input, types.Float, constValue, args.OutputColIdx)
 	}
 	rrInitFields := relativeRankInitFields{
 		rankInitFields: rankInitFields{
-			OneInputNode:    colexecop.NewOneInputNode(input),
-			allocator:       unlimitedAllocator,
-			outputColIdx:    outputColIdx,
-			partitionColIdx: partitionColIdx,
-			peersColIdx:     peersColIdx,
+			OneInputNode:    colexecop.NewOneInputNode(args.Input),
+			allocator:       args.MainAllocator,
+			outputColIdx:    args.OutputColIdx,
+			partitionColIdx: args.PartitionColIdx,
+			peersColIdx:     args.PeersColIdx,
 		},
-		memoryLimit:  memoryLimit,
-		diskQueueCfg: diskQueueCfg,
-		fdSemaphore:  fdSemaphore,
-		inputTypes:   inputTypes,
-		diskAcc:      diskAcc,
+		memoryLimit:  args.MemoryLimit,
+		diskQueueCfg: args.QueueCfg,
+		fdSemaphore:  args.FdSemaphore,
+		inputTypes:   args.InputTypes,
+		diskAcc:      args.DiskAcc,
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_PERCENT_RANK:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &percentRankWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil
@@ -89,7 +80,7 @@ func NewRelativeRankOperator(
 			relativeRankInitFields: rrInitFields,
 		}, nil
 	case execinfrapb.WindowerSpec_CUME_DIST:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &cumeDistWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil
@@ -318,7 +309,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// {{if .IsPercentRank}}
 	// All rank functions start counting from 1. Before we assign the rank to a
@@ -403,24 +393,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			// the input before we can proceed.
 			// {{end}}
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       batch.ColVec(colIdx),
-								Sel:       sel,
-								SrcEndIdx: n,
-							},
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			// {{if or (.HasPartition) (.IsCumeDist)}}
+			sel := batch.Selection()
+			// {{end}}
 
 			// Then, we need to update the sizes of the partitions.
 			// {{if .HasPartition}}
@@ -499,11 +477,9 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
 					vec.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       r.scratch.ColVec(colIdx),
-								SrcEndIdx: n,
-							},
+						coldata.SliceArgs{
+							Src:       r.scratch.ColVec(colIdx),
+							SrcEndIdx: n,
 						},
 					)
 				}
@@ -598,7 +574,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -611,21 +587,23 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *_RELATIVE_RANK_STRINGOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	// {{if .HasPartition}}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}
 	// {{if .IsCumeDist}}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}

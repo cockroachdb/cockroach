@@ -67,7 +67,7 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 		)
 		{
 			settings := cluster.MakeTestingClusterSettings()
-			stats.AutomaticStatisticsClusterMode.Override(&settings.SV, false)
+			stats.AutomaticStatisticsClusterMode.Override(ctx, &settings.SV, false)
 			scKnobs := &sql.SchemaChangerTestingKnobs{}
 			blockFunc := func(jobID jobspb.JobID) error {
 				select {

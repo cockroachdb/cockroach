@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseDate(t *testing.T) {
@@ -70,7 +72,7 @@ func TestParseDate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.s, func(t *testing.T) {
-			d, depOnCtx, err := ParseDate(time.Time{}, ParseModeYMD, tc.s)
+			d, depOnCtx, err := ParseDate(time.Time{}, DateStyle{Order: Order_YMD}, tc.s)
 			if tc.err != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.err) {
 					t.Fatalf("got %v, expected %v", err, tc.err)
@@ -160,4 +162,38 @@ func TestMakeDateFromTime(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseDateStyle(t *testing.T) {
+	for _, tc := range []struct {
+		initial   DateStyle
+		parse     string
+		expected  DateStyle
+		sqlString string
+	}{
+		{DefaultDateStyle(), "mdy", DateStyle{Style: Style_ISO, Order: Order_MDY}, "ISO, MDY"},
+		{DefaultDateStyle(), "dmy", DateStyle{Style: Style_ISO, Order: Order_DMY}, "ISO, DMY"},
+		{DefaultDateStyle(), "ymd", DateStyle{Style: Style_ISO, Order: Order_YMD}, "ISO, YMD"},
+
+		{DefaultDateStyle(), "iso", DateStyle{Style: Style_ISO, Order: Order_MDY}, "ISO, MDY"},
+		{DefaultDateStyle(), "german", DateStyle{Style: Style_GERMAN, Order: Order_MDY}, "German, MDY"},
+		{DefaultDateStyle(), "sQl ", DateStyle{Style: Style_SQL, Order: Order_MDY}, "SQL, MDY"},
+		{DefaultDateStyle(), "postgres", DateStyle{Style: Style_POSTGRES, Order: Order_MDY}, "Postgres, MDY"},
+
+		{DefaultDateStyle(), "german, DMY", DateStyle{Style: Style_GERMAN, Order: Order_DMY}, "German, DMY"},
+		{DefaultDateStyle(), "ymd,sql", DateStyle{Style: Style_SQL, Order: Order_YMD}, "SQL, YMD"},
+		{DateStyle{Style: Style_GERMAN, Order: Order_DMY}, "sql,ymd,postgres", DateStyle{Style: Style_POSTGRES, Order: Order_YMD}, "Postgres, YMD"},
+	} {
+		t.Run(fmt.Sprintf("%s/%s", tc.initial.String(), tc.parse), func(t *testing.T) {
+			p, err := ParseDateStyle(tc.parse, tc.initial)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, p)
+			require.Equal(t, tc.sqlString, p.SQLString())
+		})
+	}
+
+	t.Run("error", func(t *testing.T) {
+		_, err := ParseDateStyle("bad", DefaultDateStyle())
+		require.Error(t, err)
+	})
 }

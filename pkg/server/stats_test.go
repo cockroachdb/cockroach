@@ -13,10 +13,9 @@ package server
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,14 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,13 +40,24 @@ func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test fails if the central reporting server from CRL
-	// breaks. It should be improved to customize the reporting URL and
-	// mock the registration collector with an in-memory server.
-	skip.WithIssue(t, 63851)
-
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		},
+	}
+
+	r := diagutils.NewServer()
+	defer r.Close()
+
+	url := r.URL()
+	params.Knobs.Server = &TestingKnobs{
+		DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
+			OverrideReportingURL: &url,
+		},
+	}
+
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -59,8 +71,8 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
-	sqlServer.ResetSQLStats(ctx)
-	sqlServer.ResetReportedStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
 	// are unnaffected by the calls to report diagnostics.
@@ -74,7 +86,9 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 	// Ensure that our SQL statement data was not affected by the telemetry report.
-	stats := sqlServer.GetScrubbedStmtStats()
+	stats, err := sqlServer.GetScrubbedStmtStats(ctx)
+	require.NoError(t, err)
+
 	foundStat := false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES ($1)" {
@@ -96,24 +110,37 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	params.Settings = cluster.MakeClusterSettings()
-	// Set the SQL stat refresh rate very low so that SQL stats are continuously
-	// flushed into the telemetry reporting stats pool.
-	sql.SQLStatReset.Override(&params.Settings.SV, 10*time.Millisecond)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
+
+	tcs := []struct {
+		stmt        string
+		fingerprint string
+	}{
+		{
+			stmt:        "SELECT 1",
+			fingerprint: "SELECT _",
+		},
+		{
+			stmt:        "SELECT 1, 1",
+			fingerprint: "SELECT _, _",
+		},
+		{
+			stmt:        "SELECT 1, 1, 1",
+			fingerprint: "SELECT _, _, _",
+		},
+	}
+
 	// Run some queries against the database.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT PRIMARY KEY);
-INSERT INTO t.test VALUES (1);
-INSERT INTO t.test VALUES (2);
-`); err != nil {
-		t.Fatal(err)
+	for _, tc := range tcs {
+		sqlConn.Exec(t, tc.stmt)
 	}
 
 	statusServer := s.(*TestServer).status
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 	testutils.SucceedsSoon(t, func() error {
 		// Get the diagnostic info.
 		res, err := statusServer.Diagnostics(ctx, &serverpb.DiagnosticsRequest{NodeId: "local"})
@@ -121,25 +148,27 @@ INSERT INTO t.test VALUES (2);
 			t.Fatal(err)
 		}
 
-		found := false
+		foundFingerprintCnt := 0
 		for _, stat := range res.SqlStats {
 			// These stats are scrubbed, so look for our scrubbed statement.
-			if strings.HasPrefix(stat.Key.Query, "INSERT INTO _ VALUES (_)") {
-				found = true
+			for _, tc := range tcs {
+				if tc.fingerprint == stat.Key.Query {
+					foundFingerprintCnt++
+					break
+				}
 			}
 		}
 
-		if !found {
-			return errors.New("expected to find query stats, but didn't")
-		}
+		require.Equal(t, len(tcs), foundFingerprintCnt, "expected to find query stats, but didn't")
 
 		// We should also not find the stat in the SQL stats pool, since the SQL
 		// stats are getting flushed.
-		stats := sqlServer.GetScrubbedStmtStats()
+		stats, err := sqlServer.GetScrubbedStmtStats(ctx)
+		require.NoError(t, err)
+
 		for _, stat := range stats {
-			// These stats are scrubbed, so look for our scrubbed statement.
-			if strings.HasPrefix(stat.Key.Query, "INSERT INTO _ VALUES (_)") {
-				t.Error("expected to not find stat, but did")
+			for _, tc := range tcs {
+				require.NotEqual(t, tc.fingerprint, stat.Key.Query, "expected to not found %s in stats, bud did", stat.Key.Query)
 			}
 		}
 		return nil
@@ -157,8 +186,8 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
-	sqlServer.ResetSQLStats(ctx)
-	sqlServer.ResetReportedStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Execute some queries against the sqlDB to build up some stats.
 	if _, err := sqlDB.Exec(`
@@ -172,7 +201,9 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Collect stats from the SQL server and ensure our queries are present.
-	stats := sqlServer.GetScrubbedStmtStats()
+	stats, err := sqlServer.GetScrubbedStmtStats(ctx)
+	require.NoError(t, err)
+
 	foundStat := false
 	var sqlStatData roachpb.StatementStatistics
 
@@ -190,10 +221,12 @@ func TestSQLStatCollection(t *testing.T) {
 
 	// Reset the SQL statistics, which will dump stats into the
 	// reported statistics pool.
-	sqlServer.ResetSQLStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Query the reported statistics.
-	stats = sqlServer.GetScrubbedReportingStats()
+	stats, err = sqlServer.GetScrubbedReportingStats(ctx)
+	require.NoError(t, err)
+
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
@@ -218,7 +251,9 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Find and record the stats for our second query.
-	stats = sqlServer.GetScrubbedStmtStats()
+	stats, err = sqlServer.GetScrubbedStmtStats(ctx)
+	require.NoError(t, err)
+
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
@@ -232,10 +267,12 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Flush the SQL stats again.
-	sqlServer.ResetSQLStats(ctx)
+	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Find our statement stat from the reported stats pool.
-	stats = sqlServer.GetScrubbedReportingStats()
+	stats, err = sqlServer.GetScrubbedReportingStats(ctx)
+	require.NoError(t, err)
+
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
@@ -274,52 +311,67 @@ func TestClusterResetSQLStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Insecure: true,
-		},
-	})
-	defer testCluster.Stopper().Stop(ctx)
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
 
-	gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
-	status := gatewayServer.status
+	for _, flushed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
+			testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+				ServerArgs: params,
+			})
+			defer testCluster.Stopper().Stop(ctx)
 
-	sqlDB := serverutils.OpenDBConn(
-		t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
-		gatewayServer.Stopper())
+			gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
+			status := gatewayServer.status
 
-	populateStats(t, sqlDB)
+			sqlDB := serverutils.OpenDBConn(
+				t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
+				gatewayServer.Stopper())
 
-	statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
-	require.NoError(t, err)
-
-	if statsCount := len(statsPreReset.Statements); statsCount == 0 {
-		t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
-	}
-
-	_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{})
-	require.NoError(t, err)
-
-	statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
-	require.NoError(t, err)
-
-	if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
-		t.Fatal("expected to find stats last reset value changed, but didn't")
-	}
-
-	for _, txn := range statsPostReset.Transactions {
-		for _, previousTxn := range statsPreReset.Transactions {
-			if reflect.DeepEqual(txn, previousTxn) {
-				t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+			populateStats(t, sqlDB)
+			if flushed {
+				gatewayServer.SQLServer().(*sql.Server).
+					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 			}
-		}
-	}
 
-	for _, stmt := range statsPostReset.Statements {
-		for _, previousStmt := range statsPreReset.Statements {
-			if reflect.DeepEqual(stmt, previousStmt) {
-				t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			if statsCount := len(statsPreReset.Statements); statsCount == 0 {
+				t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
 			}
-		}
+
+			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
+				ResetPersistedStats: true,
+			})
+			require.NoError(t, err)
+
+			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: true,
+			})
+			require.NoError(t, err)
+
+			if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+				t.Fatal("expected to find stats last reset value changed, but didn't")
+			}
+
+			for _, txn := range statsPostReset.Transactions {
+				for _, previousTxn := range statsPreReset.Transactions {
+					if reflect.DeepEqual(txn, previousTxn) {
+						t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+					}
+				}
+			}
+
+			for _, stmt := range statsPostReset.Statements {
+				for _, previousStmt := range statsPreReset.Statements {
+					if reflect.DeepEqual(stmt, previousStmt) {
+						t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+					}
+				}
+			}
+		})
 	}
 }

@@ -31,6 +31,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	cld "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
@@ -74,6 +75,7 @@ The above commands will create a "local" 3 node cluster, start a cockroach
 cluster on these nodes, run a sql command on the 2nd node, stop, wipe and
 destroy the cluster.
 `,
+	Version: "details:\n" + build.GetInfo().Long(),
 }
 
 var (
@@ -87,8 +89,8 @@ var (
 	listDetails       bool
 	listJSON          bool
 	listMine          bool
-	clusterType       = "cockroach"
 	secure            = false
+	extraSSHOptions   = ""
 	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -96,6 +98,7 @@ var (
 	nodeArgs          []string
 	tag               string
 	external          = false
+	certsDir          string
 	adminurlOpen      = false
 	adminurlPath      = ""
 	adminurlIPs       = false
@@ -158,22 +161,15 @@ Available clusters:
 		return nil, err
 	}
 
-	switch clusterType {
-	case "cockroach":
-		c.Impl = install.Cockroach{}
-		if numRacks > 0 {
-			for i := range c.Localities {
-				rack := fmt.Sprintf("rack=%d", i%numRacks)
-				if c.Localities[i] != "" {
-					rack = "," + rack
-				}
-				c.Localities[i] += rack
+	c.Impl = install.Cockroach{}
+	if numRacks > 0 {
+		for i := range c.Localities {
+			rack := fmt.Sprintf("rack=%d", i%numRacks)
+			if c.Localities[i] != "" {
+				rack = "," + rack
 			}
+			c.Localities[i] += rack
 		}
-	case "cassandra":
-		c.Impl = install.Cassandra{}
-	default:
-		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
 	}
 
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
@@ -188,7 +184,8 @@ Available clusters:
 	}
 	c.Nodes = nodes
 	c.Secure = secure
-	c.Env = strings.Join(nodeEnv, " ")
+	c.CertsDir = certsDir
+	c.Env = nodeEnv
 	c.Args = nodeArgs
 	if tag != "" {
 		c.Tag = "/" + tag
@@ -343,6 +340,10 @@ Cloud Clusters
   the cloud provider's documentation for details on the machine types
   available.
 
+  The underlying filesystem can be provided using the --filesystem flag.
+  Use --filesystem=zfs, for zfs, and --filesystem=ext4, for ext4. The default
+  file system is ext4. The filesystem flag only works on gce currently.
+
 Local Clusters
 
   A local cluster stores the per-node data in ${HOME}/local on the machine
@@ -393,6 +394,16 @@ Local Clusters
 
 			// If the local cluster is being created, force the local Provider to be used
 			createVMOpts.VMProviders = []string{local.ProviderName}
+		}
+
+		if createVMOpts.SSDOpts.FileSystem == vm.Zfs {
+			for _, provider := range createVMOpts.VMProviders {
+				if provider != gce.ProviderName {
+					return fmt.Errorf(
+						"creating a node with --filesystem=zfs is currently only supported on gce",
+					)
+				}
+			}
 		}
 
 		fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
@@ -912,8 +923,8 @@ func syncCloud(quiet bool) (*cld.Cloud, error) {
 
 var gcCmd = &cobra.Command{
 	Use:   "gc",
-	Short: "GC expired clusters\n",
-	Long: `Garbage collect expired clusters.
+	Short: "GC expired clusters and unused AWS keypairs\n",
+	Long: `Garbage collect expired clusters and unused SSH keypairs in AWS.
 
 Destroys expired clusters, sending email if properly configured. Usually run
 hourly by a cronjob so it is not necessary to run manually.
@@ -921,10 +932,12 @@ hourly by a cronjob so it is not necessary to run manually.
 	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
+		if err == nil {
+			// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
+			err = cld.GCClusters(cloud, dryrun)
 		}
-		return cld.GCClusters(cloud, dryrun)
+		otherErr := cld.GCAWSKeyPairs(dryrun)
+		return errors.CombineErrors(err, otherErr)
 	}),
 }
 
@@ -1222,12 +1235,12 @@ the 'zfs rollback' command:
 
 		var fsCmd string
 		switch fs := args[1]; fs {
-		case "zfs":
-			if err := install.Install(c, []string{"zfs"}); err != nil {
+		case vm.Zfs:
+			if err := install.Install(c, []string{vm.Zfs}); err != nil {
 				return err
 			}
 			fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
-		case "ext4":
+		case vm.Ext4:
 			fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 		default:
 			return fmt.Errorf("unknown filesystem %q", fs)
@@ -1267,7 +1280,7 @@ var runCmd = &cobra.Command{
 		// Use "ssh" if an interactive session was requested (i.e. there is no
 		// remote command to run).
 		if len(args) == 1 {
-			return c.SSH(nil, args[1:])
+			return c.SSH(strings.Split(extraSSHOptions, " "), args[1:])
 		}
 
 		cmd := strings.TrimSpace(strings.Join(args[1:], " "))
@@ -1332,6 +1345,61 @@ var installCmd = &cobra.Command{
 	}),
 }
 
+var downloadCmd = &cobra.Command{
+	Use:   "download <cluster> <url> <sha256> [DESTINATION]",
+	Short: "download 3rd party tools",
+	Long:  "Downloads 3rd party tools, using a GCS cache if possible.",
+	Args:  cobra.RangeArgs(3, 4),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0])
+		if err != nil {
+			return err
+		}
+		src, sha := args[1], args[2]
+		var dest string
+		if len(args) == 4 {
+			dest = args[3]
+		}
+		return install.Download(c, src, sha, dest)
+	}),
+}
+
+var stageURLCmd = &cobra.Command{
+	Use:   "stageurl <application> [<sha/version>]",
+	Short: "print URL to cockroach binaries",
+	Long: `Prints URL for release and edge binaries.
+
+Currently available application options are:
+  cockroach - Cockroach Unofficial. Can provide an optional SHA, otherwise
+              latest build version is used.
+  workload  - Cockroach workload application.
+  release   - Official CockroachDB Release. Must provide a specific release
+              version.
+`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		applicationName := args[0]
+		versionArg := ""
+		if len(args) == 2 {
+			versionArg = args[1]
+		}
+
+		os := runtime.GOOS
+		if stageOS != "" {
+			os = stageOS
+		}
+
+		urls, err := install.URLsForApplication(applicationName, versionArg, os)
+		if err != nil {
+			return err
+		}
+		for _, u := range urls {
+			fmt.Println(u)
+		}
+		return nil
+	}),
+}
+
 var stageCmd = &cobra.Command{
 	Use:   "stage <cluster> <application> [<sha/version>]",
 	Short: "stage cockroach binaries",
@@ -1367,17 +1435,6 @@ Some examples of usage:
 		} else if c.IsLocal() {
 			os = runtime.GOOS
 		}
-		var debugArch, releaseArch, libExt string
-		switch os {
-		case "linux":
-			debugArch, releaseArch, libExt = "linux-gnu-amd64", "linux-amd64", ".so"
-		case "darwin":
-			debugArch, releaseArch, libExt = "darwin-amd64", "darwin-10.9-amd64", ".dylib"
-		case "windows":
-			debugArch, releaseArch, libExt = "windows-amd64", "windows-6.2-amd64", ".dll"
-		default:
-			return errors.Errorf("cannot stage binary on %s", os)
-		}
 
 		dir := "."
 		if stageDir != "" {
@@ -1389,40 +1446,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		switch applicationName {
-		case "cockroach":
-			sha, err := install.StageRemoteBinary(
-				c, applicationName, "cockroach/cockroach", versionArg, debugArch, dir,
-			)
-			if err != nil {
-				return err
-			}
-			// NOTE: libraries may not be present in older versions.
-			// Use the sha for the binary to download the same remote library.
-			for _, library := range []string{"libgeos", "libgeos_c"} {
-				if err := install.StageOptionalRemoteLibrary(
-					c,
-					library,
-					fmt.Sprintf("cockroach/lib/%s", library),
-					sha,
-					debugArch,
-					libExt,
-					dir,
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		case "workload":
-			_, err := install.StageRemoteBinary(
-				c, applicationName, "cockroach/workload", versionArg, "" /* arch */, dir,
-			)
-			return err
-		case "release":
-			return install.StageCockroachRelease(c, versionArg, releaseArch, dir)
-		default:
-			return fmt.Errorf("unknown application %s", applicationName)
-		}
+		return install.StageApplication(c, applicationName, versionArg, os, dir)
 	}),
 }
 
@@ -1773,6 +1797,16 @@ var ipCmd = &cobra.Command{
 	}),
 }
 
+var versionCmd = &cobra.Command{
+	Use:   `version`,
+	Short: `print version information`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		info := build.GetInfo()
+		fmt.Println(info.Long())
+		return nil
+	},
+}
+
 func main() {
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
@@ -1801,6 +1835,8 @@ func main() {
 		putCmd,
 		getCmd,
 		stageCmd,
+		stageURLCmd,
+		downloadCmd,
 		sqlCmd,
 		ipCmd,
 		pgurlCmd,
@@ -1808,6 +1844,7 @@ func main() {
 		logsCmd,
 		pprofCmd,
 		cachedHostsCmd,
+		versionCmd,
 	)
 	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
 	{
@@ -1859,12 +1896,18 @@ func main() {
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
 		"local-ssd", true, "Use local SSD")
+	createCmd.Flags().StringVar(&createVMOpts.SSDOpts.FileSystem,
+		"filesystem", vm.Ext4, "The underlying file system(ext4/zfs). ext4 is used by default.")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
 		"local-ssd-no-ext4-barrier", true,
 		`Mount the local SSD with the "-o nobarrier" flag. `+
 			`Ignored if --local-ssd=false is specified.`)
 	createCmd.Flags().IntVarP(&numNodes,
 		"nodes", "n", 4, "Total number of nodes, distributed across all clouds")
+
+	createCmd.Flags().IntVarP(&createVMOpts.OsVolumeSize,
+		"os-volume-size", "", 10, "OS disk volume size in GB")
+
 	createCmd.Flags().StringSliceVarP(&createVMOpts.VMProviders,
 		"clouds", "c", []string{gce.ProviderName},
 		fmt.Sprintf("The cloud provider(s) to use when creating new vm instances: %s", vm.AllProviderNames()))
@@ -1910,6 +1953,8 @@ func main() {
 
 	pgurlCmd.Flags().BoolVar(
 		&external, "external", false, "return pgurls for external connections")
+	pgurlCmd.Flags().StringVar(
+		&certsDir, "certs-dir", "./certs", "cert dir to use for secure connections")
 
 	pprofCmd.Flags().DurationVar(
 		&pprofOptions.duration, "duration", 30*time.Second, "Duration of profile to capture")
@@ -1925,6 +1970,8 @@ func main() {
 
 	runCmd.Flags().BoolVar(
 		&secure, "secure", false, "use a secure cluster")
+	runCmd.Flags().StringVarP(
+		&extraSSHOptions, "ssh-options", "O", "", "extra args to pass to ssh")
 
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
@@ -1952,6 +1999,8 @@ func main() {
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
 	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
+
+	stageURLCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
 
 	logsCmd.Flags().StringVar(
 		&logsFilter, "filter", "", "re to filter log messages")
@@ -1995,8 +2044,6 @@ func main() {
 				&nodeArgs, "args", "a", nil, "node arguments")
 			cmd.Flags().StringArrayVarP(
 				&nodeEnv, "env", "e", nodeEnv, "node environment variables")
-			cmd.Flags().StringVarP(
-				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 			cmd.Flags().BoolVar(
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
 			cmd.Flags().BoolVar(

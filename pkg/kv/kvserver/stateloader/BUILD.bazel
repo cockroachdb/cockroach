@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/encoding",
@@ -29,7 +29,7 @@ go_test(
     srcs = ["initial_test.go"],
     embed = [":stateloader"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/leaktest",

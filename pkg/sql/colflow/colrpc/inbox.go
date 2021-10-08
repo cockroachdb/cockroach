@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -98,6 +99,9 @@ type Inbox struct {
 	// only the Next/DrainMeta goroutine may access it.
 	stream flowStreamServer
 
+	admissionQ    *admission.WorkQueue
+	admissionInfo admission.WorkInfo
+
 	// statsAtomics are the execution statistics that need to be atomically
 	// accessed. This is necessary since Get*() methods can be called from
 	// different goroutine than Next().
@@ -149,6 +153,24 @@ func NewInbox(
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	return i, nil
+}
+
+// NewInboxWithAdmissionControl creates a new Inbox that does admission
+// control on responses received from DistSQL.
+func NewInboxWithAdmissionControl(
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	admissionQ *admission.WorkQueue,
+	admissionInfo admission.WorkInfo,
+) (*Inbox, error) {
+	i, err := NewInbox(allocator, typs, streamID)
+	if err != nil {
+		return nil, err
+	}
+	i.admissionQ = admissionQ
+	i.admissionInfo = admissionInfo
+	return i, err
 }
 
 // close closes the inbox, ensuring that any call to RunWithStream will return
@@ -301,7 +323,7 @@ func (i *Inbox) Next() coldata.Batch {
 			}
 			// Note that here err can be stream's context cancellation.
 			// Regardless of the cause we want to propagate such an error as
-			// expected on in all cases so that the caller could decide on how
+			// expected one in all cases so that the caller could decide on how
 			// to handle it.
 			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
 			i.errCh <- err
@@ -328,19 +350,39 @@ func (i *Inbox) Next() coldata.Batch {
 			// Protect against Deserialization panics by skipping empty messages.
 			continue
 		}
-		atomic.AddInt64(&i.statsAtomics.bytesRead, int64(len(m.Data.RawBytes)))
+		numSerializedBytes := int64(len(m.Data.RawBytes))
+		atomic.AddInt64(&i.statsAtomics.bytesRead, numSerializedBytes)
+		// Update the allocator since we're holding onto the serialized bytes
+		// for now.
+		i.allocator.AdjustMemoryUsage(numSerializedBytes)
+		// Do admission control after memory accounting for the serialized bytes
+		// and before deserialization.
+		if i.admissionQ != nil {
+			if _, err := i.admissionQ.Admit(i.Ctx, i.admissionInfo); err != nil {
+				// err includes the case of context cancellation while waiting for
+				// admission.
+				colexecerror.ExpectedError(err)
+			}
+		}
 		i.scratch.data = i.scratch.data[:0]
 		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
+		// Eagerly throw away the RawBytes memory.
+		m.Data.RawBytes = nil
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
-		// For now, we don't enforce any footprint-based memory limit.
-		// TODO(yuzefovich): refactor this.
+		// We rely on the outboxes to produce reasonably sized batches.
 		const maxBatchMemSize = math.MaxInt64
 		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
-		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
-			colexecerror.InternalError(err)
-		}
+		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {
+			if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
+				colexecerror.InternalError(err)
+			}
+		})
+		// At this point, we have lost all references to the serialized bytes
+		// (because ArrowToBatch nils out elements in i.scratch.data once
+		// processed), so we update the allocator accordingly.
+		i.allocator.AdjustMemoryUsage(-numSerializedBytes)
 		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(i.scratch.b.Length()))
 		return i.scratch.b
 	}

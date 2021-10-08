@@ -11,6 +11,7 @@
 package execgen
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/dave/dst"
@@ -51,4 +52,24 @@ func prettyPrintExprs(exprs ...dst.Expr) string {
 		stmts[i] = &dst.ExprStmt{X: exprs[i]}
 	}
 	return prettyPrintStmts(stmts...)
+}
+
+func parseStmt(stmt string) (dst.Stmt, error) {
+	f, err := decorator.Parse(fmt.Sprintf(
+		`package main
+func test() {
+	%s
+}`, stmt))
+	if err != nil {
+		return nil, err
+	}
+	return f.Decls[0].(*dst.FuncDecl).Body.List[0], nil
+}
+
+func mustParseStmt(stmt string) dst.Stmt {
+	ret, err := parseStmt(stmt)
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }

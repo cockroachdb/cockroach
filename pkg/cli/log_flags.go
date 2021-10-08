@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -179,6 +178,11 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		return err
 	}
 
+	// If using a custom config, report the configuration at the start of the logging stream.
+	if cliCtx.logConfigInput.isSet {
+		log.Ops.Infof(ctx, "using explicit logging configuration:\n%s", cliCtx.logConfigInput.s)
+	}
+
 	if cliCtx.ambiguousLogDir {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
@@ -199,7 +203,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		outputDirectory = *firstStoreDir
 	}
 	for _, fc := range h.Config.Sinks.FileGroups {
-		if fc.Channels.HasChannel(channel.DEV) && fc.Dir != nil && *fc.Dir != "" {
+		if fc.Channels.AllChannels.HasChannel(channel.DEV) && fc.Dir != nil && *fc.Dir != "" {
 			outputDirectory = *fc.Dir
 			break
 		}
@@ -207,6 +211,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
 	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
 	serverCfg.CPUProfileDirName = filepath.Join(outputDirectory, base.CPUProfileDir)
+	serverCfg.InflightTraceDirName = filepath.Join(outputDirectory, base.InflightTraceDir)
 
 	return nil
 }
@@ -287,8 +292,8 @@ func (l *logConfigFlags) reset() {
 	l.sqlAuditLogDir = settableString{}
 	*l.fileMaxSizeVal = *humanizeutil.NewBytesValue(&l.fileMaxSize)
 	*l.maxGroupSizeVal = *humanizeutil.NewBytesValue(&l.maxGroupSize)
-	l.fileMaxSize = int64(d.FileDefaults.MaxFileSize)
-	l.maxGroupSize = int64(d.FileDefaults.MaxGroupSize)
+	l.fileMaxSize = int64(*d.FileDefaults.MaxFileSize)
+	l.maxGroupSize = int64(*d.FileDefaults.MaxGroupSize)
 	l.fileThreshold = severity.UNKNOWN
 	l.stderrThreshold = severity.UNKNOWN
 	l.stderrNoColor = settableBool{}
@@ -318,10 +323,12 @@ func (l *logConfigFlags) propagate(
 		c.FileDefaults.Dir = &l.logDir.s
 	}
 	if l.fileMaxSizeVal.IsSet() {
-		c.FileDefaults.MaxFileSize = logconfig.ByteSize(l.fileMaxSize)
+		s := logconfig.ByteSize(l.fileMaxSize)
+		c.FileDefaults.MaxFileSize = &s
 	}
 	if l.maxGroupSizeVal.IsSet() {
-		c.FileDefaults.MaxGroupSize = logconfig.ByteSize(l.maxGroupSize)
+		s := logconfig.ByteSize(l.maxGroupSize)
+		c.FileDefaults.MaxGroupSize = &s
 	}
 	if l.fileThreshold.IsSet() {
 		c.FileDefaults.Filter = l.fileThreshold
@@ -415,46 +422,37 @@ func (s *settableBool) Set(v string) error {
 }
 
 func addPredefinedLogFiles(c *logconfig.Config) {
-	if c.Sinks.FileGroups == nil {
-		c.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
+	h := logconfig.Holder{Config: *c}
+	if err := h.Set(predefinedLogFiles); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "programming error: incorrect config"))
 	}
-	m := c.Sinks.FileGroups
-	for ch, prefix := range predefinedLogFiles {
-		b := predefinedAuditFiles[ch]
-		// Legacy behavior: the --sql-audit-dir overrides the directory
-		// for just this sink.
-		var dir *string
-		if prefix == "sql-audit" && cliCtx.deprecatedLogOverrides.sqlAuditLogDir.isSet {
-			dir = &cliCtx.deprecatedLogOverrides.sqlAuditLogDir.s
-		}
-		m[prefix] = &logconfig.FileSinkConfig{
-			Channels: logconfig.ChannelList{Channels: []logpb.Channel{ch}},
-			Dir:      dir,
-			CommonSinkConfig: logconfig.CommonSinkConfig{
-				Auditable: &b,
-			},
-		}
+	*c = h.Config
+	if cliCtx.deprecatedLogOverrides.sqlAuditLogDir.isSet {
+		c.Sinks.FileGroups["sql-audit"].Dir = &cliCtx.deprecatedLogOverrides.sqlAuditLogDir.s
 	}
 }
 
 // predefinedLogFiles are the files defined when the --log flag
 // does not otherwise override the file sinks.
-var predefinedLogFiles = map[logpb.Channel]string{
-	channel.STORAGE:           "pebble",
-	channel.SESSIONS:          "sql-auth",
-	channel.SENSITIVE_ACCESS:  "sql-audit",
-	channel.SQL_EXEC:          "sql-exec",
-	channel.SQL_PERF:          "sql-slow",
-	channel.SQL_INTERNAL_PERF: "sql-slow-internal-only",
-}
-
-// predefinedAuditFiles indicate which channel-specific files are
-// preconfigured as "audit" logs: with event numbering and with
-// synchronous writes. Audit logs are configured this way to ensure
-// non-repudiability.
-var predefinedAuditFiles = map[logpb.Channel]bool{
-	channel.SESSIONS: true,
-	// TODO(knz): add the PRIVILEGES channel.
-	//  channel.PRIVILEGES:       true,
-	channel.SENSITIVE_ACCESS: true,
-}
+// TODO(knz): add the PRIVILEGES channel.
+const predefinedLogFiles = `
+sinks:
+ file-groups:
+  default:
+    channels:
+      INFO: [DEV, OPS]
+      WARNING: all except [DEV, OPS]
+  health:                 { channels: HEALTH  }
+  pebble:                 { channels: STORAGE }
+  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
+  sql-auth:               { channels: SESSIONS, auditable: true }
+  sql-audit:              { channels: SENSITIVE_ACCESS, auditable: true }
+  sql-exec:               { channels: SQL_EXEC }
+  sql-schema:             { channels: SQL_SCHEMA }
+  sql-slow:               { channels: SQL_PERF }
+  sql-slow-internal-only: { channels: SQL_INTERNAL_PERF }
+  telemetry:
+    channels: TELEMETRY
+    max-file-size: 102400
+    max-group-size: 1048576
+`

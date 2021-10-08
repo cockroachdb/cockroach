@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 	"github.com/spf13/pflag"
 )
 
@@ -79,55 +79,8 @@ func (l *localityList) Set(value string) error {
 	return nil
 }
 
-// type used to implement parsing a list of localities for the cockroach demo command.
-type demoLocalityList []roachpb.Locality
-
-// Type implements the pflag.Value interface.
-func (l *demoLocalityList) Type() string { return "demoLocalityList" }
-
-// String implements the pflag.Value interface.
-func (l *demoLocalityList) String() string {
-	s := ""
-	for _, loc := range []roachpb.Locality(*l) {
-		s += loc.String()
-	}
-	return s
-}
-
-// Set implements the pflag.Value interface.
-func (l *demoLocalityList) Set(value string) error {
-	*l = []roachpb.Locality{}
-	locs := strings.Split(value, ":")
-	for _, value := range locs {
-		parsedLoc := &roachpb.Locality{}
-		if err := parsedLoc.Set(value); err != nil {
-			return err
-		}
-		*l = append(*l, *parsedLoc)
-	}
-	return nil
-}
-
 // This file contains definitions for data types suitable for use by
 // the flag+pflag packages.
-
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
-
-// Type implements the pflag.Value interface.
-func (s *statementsValue) Type() string { return "statementsValue" }
-
-// String implements the pflag.Value interface.
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
-}
-
-// Set implements the pflag.Value interface.
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
 
 type dumpMode int
 
@@ -314,67 +267,6 @@ func (s *nodeDecommissionWaitType) Set(value string) error {
 	return nil
 }
 
-type tableDisplayFormat int
-
-const (
-	tableDisplayTSV tableDisplayFormat = iota
-	tableDisplayCSV
-	tableDisplayTable
-	tableDisplayRecords
-	tableDisplaySQL
-	tableDisplayHTML
-	tableDisplayRaw
-	tableDisplayLastFormat
-)
-
-// Type implements the pflag.Value interface.
-func (f *tableDisplayFormat) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (f *tableDisplayFormat) String() string {
-	switch *f {
-	case tableDisplayTSV:
-		return "tsv"
-	case tableDisplayCSV:
-		return "csv"
-	case tableDisplayTable:
-		return "table"
-	case tableDisplayRecords:
-		return "records"
-	case tableDisplaySQL:
-		return "sql"
-	case tableDisplayHTML:
-		return "html"
-	case tableDisplayRaw:
-		return "raw"
-	}
-	return ""
-}
-
-// Set implements the pflag.Value interface.
-func (f *tableDisplayFormat) Set(s string) error {
-	switch s {
-	case "tsv":
-		*f = tableDisplayTSV
-	case "csv":
-		*f = tableDisplayCSV
-	case "table":
-		*f = tableDisplayTable
-	case "records":
-		*f = tableDisplayRecords
-	case "sql":
-		*f = tableDisplaySQL
-	case "html":
-		*f = tableDisplayHTML
-	case "raw":
-		*f = tableDisplayRaw
-	default:
-		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
-	}
-	return nil
-}
-
 // bytesOrPercentageValue is a flag that accepts an integer value, an integer
 // plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
 // cases, it transforms the string flag input into an int64 value.
@@ -423,15 +315,15 @@ func memoryPercentResolver(percent int) (int64, error) {
 //
 // An error is returned if dir does not exist.
 func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
-	fileSystemUsage := gosigar.FileSystemUsage{}
-	if err := fileSystemUsage.Get(dir); err != nil {
+	du, err := vfs.Default.GetDiskUsage(dir)
+	if err != nil {
 		return nil, err
 	}
-	if fileSystemUsage.Total > math.MaxInt64 {
+	if du.TotalBytes > math.MaxInt64 {
 		return nil, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
+			humanize.IBytes(du.TotalBytes), humanizeutil.IBytes(math.MaxInt64))
 	}
-	deviceCapacity := int64(fileSystemUsage.Total)
+	deviceCapacity := int64(du.TotalBytes)
 
 	return func(percent int) (int64, error) {
 		return (deviceCapacity * int64(percent)) / 100, nil

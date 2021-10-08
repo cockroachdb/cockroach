@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -303,7 +303,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// RocksDB metrics.
+	// RocksDB/Pebble metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
 		Help:        "Count of block cache hits",
@@ -406,6 +406,24 @@ var (
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRdbL0Sublevels = metric.Metadata{
+		Name:        "storage.l0-sublevels",
+		Help:        "Number of Level 0 sublevels",
+		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRdbL0NumFiles = metric.Metadata{
+		Name:        "storage.l0-num-files",
+		Help:        "Number of Level 0 files",
+		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRdbWriteStalls = metric.Metadata{
+		Name:        "storage.write-stalls",
+		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Disk health metrics.
 	metaDiskSlow = metric.Metadata{
@@ -485,8 +503,12 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
-		Name:        "raft.process.workingnanos",
-		Help:        "Nanoseconds spent in store.processRaft() working",
+		Name: "raft.process.workingnanos",
+		Help: `Nanoseconds spent in store.processRaft() working.
+
+This is the sum of the measurements passed to the raft.process.handleready.latency
+histogram.
+`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -497,40 +519,110 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandsApplied = metric.Metadata{
-		Name:        "raft.commandsapplied",
-		Help:        "Count of Raft commands applied",
+		Name: "raft.commandsapplied",
+		Help: `Count of Raft commands applied.
+
+This measurement is taken on the Raft apply loops of all Replicas (leaders and
+followers alike), meaning that it does not measure the number of Raft commands
+*proposed* (in the hypothetical extreme case, all Replicas may apply all commands
+through snapshots, thus not increasing this metric at all).
+Instead, it is a proxy for how much work is being done advancing the Replica
+state machines on this node.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftLogCommitLatency = metric.Metadata{
-		Name:        "raft.process.logcommit.latency",
-		Help:        "Latency histogram for committing Raft log entries",
+		Name: "raft.process.logcommit.latency",
+		Help: `Latency histogram for committing Raft log entries to stable storage
+
+This measures the latency of durably committing a group of newly received Raft
+entries as well as the HardState entry to disk. This excludes any data
+processing, i.e. we measure purely the commit latency of the resulting Engine
+write. Homogeneous bands of p50-p99 latencies (in the presence of regular Raft
+traffic), make it likely that the storage layer is healthy. Spikes in the
+latency bands can either hint at the presence of large sets of Raft entries
+being received, or at performance issues at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandCommitLatency = metric.Metadata{
-		Name:        "raft.process.commandcommit.latency",
-		Help:        "Latency histogram for committing Raft commands",
+		Name: "raft.process.commandcommit.latency",
+		Help: `Latency histogram for applying a batch of Raft commands to the state machine.
+
+This metric is misnamed: it measures the latency for *applying* a batch of
+committed Raft commands to a Replica state machine. This requires only
+non-durable I/O (except for replication configuration changes).
+
+Note that a "batch" in this context is really a sub-batch of the batch received
+for application during raft ready handling. The
+'raft.process.applycommitted.latency' histogram is likely more suitable in most
+cases, as it measures the total latency across all sub-batches (i.e. the sum of
+commandcommit.latency for a complete batch).
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	// TODO(tbg): I think this metric skews low because we will often handle Readies
+	// for which the result is that there is nothing to do. Do we want to change this
+	// metric to only record ready handling when there is a Ready? That seems more
+	// useful, experimentally it seems that we're recording 50% no-ops right now.
+	// Though they aren't really no-ops, they still have to get a mutex and check
+	// for a Ready, etc, but I still think it would be better to avoid those measure-
+	// ments and to count the number of noops instead if we really want to.
 	metaRaftHandleReadyLatency = metric.Metadata{
-		Name:        "raft.process.handleready.latency",
-		Help:        "Latency histogram for handling a Raft ready",
+		Name: "raft.process.handleready.latency",
+		Help: `Latency histogram for handling a Raft ready.
+
+This measures the end-to-end-latency of the Raft state advancement loop, and
+in particular includes:
+- snapshot application
+- SST ingestion
+- durably appending to the Raft log (i.e. includes fsync)
+- entry application (incl. replicated side effects, notably log truncation)
+as well as updates to in-memory structures.
+
+The above steps include the work measured in 'raft.process.commandcommit.latency',
+as well as 'raft.process.applycommitted.latency'. Note that matching percentiles
+of these metrics may nevertheless be *higher* than that of the handlready latency.
+This is because not every handleready cycle leads to an update to the applycommitted
+and commandcommit latencies. For example, under tpcc-100 on a single node, the
+handleready count is approximately twice the logcommit count (and logcommit count
+tracks closely with applycommitted count).
+
+High percentile outliers can be caused by individual large Raft commands or
+storage layer blips. An increase in lower (say the 50th) percentile is often
+driven by either CPU exhaustion or a slowdown at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftApplyCommittedLatency = metric.Metadata{
-		Name:        "raft.process.applycommitted.latency",
-		Help:        "Latency histogram for applying all committed Raft commands in a Raft ready",
+		Name: "raft.process.applycommitted.latency",
+		Help: `Latency histogram for applying all committed Raft commands in a Raft ready.
+
+This measures the end-to-end latency of applying all commands in a Raft ready. Note that
+this closes over possibly multiple measurements of the 'raft.process.commandcommit.latency'
+metric, which receives datapoints for each sub-batch processed in the process.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftSchedulerLatency = metric.Metadata{
-		Name:        "raft.scheduler.latency",
-		Help:        "Nanoseconds spent waiting for a range to be processed by the Raft scheduler",
+		Name: "raft.scheduler.latency",
+		Help: `Queueing durations for ranges waiting to be processed by the Raft scheduler.
+
+This histogram measures the delay from when a range is registered with the scheduler
+for processing to when it is actually processed. This does not include the duration
+of processing.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRaftTimeoutCampaign = metric.Metadata{
+		Name:        "raft.timeoutcampaign",
+		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
+		Measurement: "Elections called after timeout",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Raft message metrics.
@@ -613,8 +705,11 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftEnqueuedPending = metric.Metadata{
-		Name:        "raft.enqueued.pending",
-		Help:        "Number of pending outgoing messages in the Raft Transport queue",
+		Name: "raft.enqueued.pending",
+		Help: `Number of pending outgoing messages in the Raft Transport queue.
+
+The queue is bounded in size, so instead of unbounded growth one would observe a
+ceiling value in the tens of thousands.`,
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -627,8 +722,15 @@ var (
 
 	// Raft log metrics.
 	metaRaftLogFollowerBehindCount = metric.Metadata{
-		Name:        "raftlog.behind",
-		Help:        "Number of Raft log entries followers on other stores are behind",
+		Name: "raftlog.behind",
+		Help: `Number of Raft log entries followers on other stores are behind.
+
+This gauge provides a view of the aggregate number of log entries the Raft leaders
+on this node think the followers are behind. Since a raft leader may not always
+have a good estimate for this information for all of its followers, and since
+followers are expected to be behind (when they are not required as part of a
+quorum) *and* the aggregate thus scales like the count of such followers, it is
+difficult to meaningfully interpret this metric.`,
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -960,31 +1062,74 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCResolveFailed = metric.Metadata{
+		Name:        "queue.gc.info.resolvefailed",
+		Help:        "Number of cleanup intent failures during GC",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaGCTxnIntentsResolveFailed = metric.Metadata{
+		Name:        "queue.gc.info.transactionresolvefailed",
+		Help:        "Number of intent cleanup failures for local transactions during GC",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Slow request metrics.
 	metaLatchRequests = metric.Metadata{
-		Name:        "requests.slow.latch",
-		Help:        "Number of requests that have been stuck for a long time acquiring latches",
+		Name: "requests.slow.latch",
+		Help: `Number of requests that have been stuck for a long time acquiring latches.
+
+Latches moderate access to the KV keyspace for the purpose of evaluating and
+replicating commands. A slow latch acquisition attempt is often caused by
+another request holding and not releasing its latches in a timely manner. This
+in turn can either be caused by a long delay in evaluation (for example, under
+severe system overload) or by delays at the replication layer.
+
+This gauge registering a nonzero value usually indicates a serious problem and
+should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowLeaseRequests = metric.Metadata{
-		Name:        "requests.slow.lease",
-		Help:        "Number of requests that have been stuck for a long time acquiring a lease",
+		Name: "requests.slow.lease",
+		Help: `Number of requests that have been stuck for a long time acquiring a lease.
+
+This gauge registering a nonzero value usually indicates range or replica
+unavailability, and should be investigated. In the common case, we also
+expect to see 'requests.slow.raft' to register a nonzero value, indicating
+that the lease requests are not getting a timely response from the replication
+layer.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowRaftRequests = metric.Metadata{
-		Name:        "requests.slow.raft",
-		Help:        "Number of requests that have been stuck for a long time in raft",
+		Name: "requests.slow.raft",
+		Help: `Number of requests that have been stuck for a long time in the replication layer.
+
+An (evaluated) request has to pass through the replication layer, notably the
+quota pool and raft. If it fails to do so within a highly permissive duration,
+the gauge is incremented (and decremented again once the request is either
+applied or returns an error).
+
+A nonzero value indicates range or replica unavailability, and should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
-		Name:        "requests.backpressure.split",
-		Help:        "Number of backpressured writes waiting on a Range split",
+		Name: "requests.backpressure.split",
+		Help: `Number of backpressured writes waiting on a Range split.
+
+A Range will backpressure (roughly) non-system traffic when the range is above
+the configured size until the range splits. When the rate of this metric is
+nonzero over extended periods of time, it should be investigated why splits are
+not occurring.
+`,
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1021,13 +1166,47 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	// Export request counter.
+	metaExportEvalTotalDelay = metric.Metadata{
+		Name:        "exportrequest.delay.total",
+		Help:        "Amount by which evaluation of Export requests was delayed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// Encryption-at-rest metrics.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
 	metaEncryptionAlgorithm = metric.Metadata{
 		Name:        "rocksdb.encryption.algorithm",
-		Help:        "algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
+		Help:        "Algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
+	}
+
+	// Concurrency control metrics.
+	metaConcurrencyLocks = metric.Metadata{
+		Name:        "kv.concurrency.locks",
+		Help:        "Number of active locks held in lock tables. Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
+		Name:        "kv.concurrency.locks_with_wait_queues",
+		Help:        "Number of active locks held in lock tables with active wait-queues",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLockWaitQueueWaiters = metric.Metadata{
+		Name:        "kv.concurrency.lock_wait_queue_waiters",
+		Help:        "Number of requests actively waiting in a lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
+		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+		Help:        "Maximum number of requests actively waiting in any single lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Closed timestamp metrics.
@@ -1114,6 +1293,9 @@ type StoreMetrics struct {
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
 	RdbPendingCompaction        *metric.Gauge
+	RdbL0Sublevels              *metric.Gauge
+	RdbL0NumFiles               *metric.Gauge
+	RdbWriteStalls              *metric.Gauge
 
 	// Disk health metrics.
 	DiskSlow    *metric.Gauge
@@ -1145,6 +1327,7 @@ type StoreMetrics struct {
 	RaftHandleReadyLatency    *metric.Histogram
 	RaftApplyCommittedLatency *metric.Histogram
 	RaftSchedulerLatency      *metric.Histogram
+	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -1215,6 +1398,10 @@ type StoreMetrics struct {
 	GCPushTxn                    *metric.Counter
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
+	// Failures resolving intents that belong to transactions in other ranges.
+	GCResolveFailed *metric.Counter
+	// Failures resolving intents that belong to local transactions.
+	GCTxnIntentsResolveFailed *metric.Counter
 
 	// Slow request counts.
 	SlowLatchRequests *metric.Gauge
@@ -1232,6 +1419,9 @@ type StoreMetrics struct {
 	AddSSTableProposalTotalDelay  *metric.Counter
 	AddSSTableProposalEngineDelay *metric.Counter
 
+	// Export request stats.
+	ExportRequestProposalTotalDelay *metric.Counter
+
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
 	EncryptionAlgorithm *metric.Gauge
@@ -1239,9 +1429,14 @@ type StoreMetrics struct {
 	// RangeFeed counts.
 	RangeFeedMetrics *rangefeed.Metrics
 
+	// Concurrency control metrics.
+	Locks                          *metric.Gauge
+	LocksWithWaitQueues            *metric.Gauge
+	LockWaitQueueWaiters           *metric.Gauge
+	MaxLockWaitQueueWaitersForLock *metric.Gauge
+
 	// Closed timestamp metrics.
-	ClosedTimestampMaxBehindNanos  *metric.Gauge
-	ClosedTimestampFailuresToClose *metric.Gauge
+	ClosedTimestampMaxBehindNanos *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1402,7 +1597,7 @@ type tenantStorageMetrics struct {
 }
 
 func newTenantsStorageMetrics() *TenantsStorageMetrics {
-	b := aggmetric.MakeBuilder(tenantrate.TenantIDLabel)
+	b := aggmetric.MakeBuilder(multitenant.TenantIDLabel)
 	sm := &TenantsStorageMetrics{
 		LiveBytes:      b.Gauge(metaLiveBytes),
 		KeyBytes:       b.Gauge(metaKeyBytes),
@@ -1470,7 +1665,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Server-side transaction metrics.
 		CommitWaitsBeforeCommitTrigger: metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
 
-		// RocksDB metrics.
+		// RocksDB/Pebble metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
 		RdbBlockCacheMisses:         metric.NewGauge(metaRdbBlockCacheMisses),
 		RdbBlockCacheUsage:          metric.NewGauge(metaRdbBlockCacheUsage),
@@ -1488,6 +1683,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
+		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
+		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 
 		// Disk health metrics.
 		DiskSlow:    metric.NewGauge(metaDiskSlow),
@@ -1514,6 +1712,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftHandleReadyLatency:    metric.NewLatency(metaRaftHandleReadyLatency, histogramWindow),
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
 		RaftSchedulerLatency:      metric.NewLatency(metaRaftSchedulerLatency, histogramWindow),
+		RaftTimeoutCampaign:       metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [...]*metric.Counter{
@@ -1598,6 +1797,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+		GCResolveFailed:              metric.NewCounter(metaGCResolveFailed),
+		GCTxnIntentsResolveFailed:    metric.NewCounter(metaGCTxnIntentsResolveFailed),
 
 		// Wedge request counters.
 		SlowLatchRequests: metric.NewGauge(metaLatchRequests),
@@ -1614,15 +1815,23 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
 		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
 
+		// ExportRequest proposal.
+		ExportRequestProposalTotalDelay: metric.NewCounter(metaExportEvalTotalDelay),
+
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
 
 		// RangeFeed counters.
 		RangeFeedMetrics: rangefeed.NewMetrics(),
 
+		// Concurrency control metrics.
+		Locks:                          metric.NewGauge(metaConcurrencyLocks),
+		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
+		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
+		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
+
 		// Closed timestamp metrics.
-		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
-		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
+		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 	}
 	storeRegistry.AddMetricStruct(sm)
 
@@ -1668,23 +1877,30 @@ func (sm *TenantsStorageMetrics) subtractMVCCStats(
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
-	sm.RdbBlockCacheHits.Update(m.BlockCacheHits)
-	sm.RdbBlockCacheMisses.Update(m.BlockCacheMisses)
-	sm.RdbBlockCacheUsage.Update(m.BlockCacheUsage)
-	sm.RdbBlockCachePinnedUsage.Update(m.BlockCachePinnedUsage)
-	sm.RdbBloomFilterPrefixUseful.Update(m.BloomFilterPrefixUseful)
-	sm.RdbBloomFilterPrefixChecked.Update(m.BloomFilterPrefixChecked)
-	sm.RdbMemtableTotalSize.Update(m.MemtableTotalSize)
-	sm.RdbFlushes.Update(m.Flushes)
-	sm.RdbFlushedBytes.Update(m.FlushedBytes)
-	sm.RdbCompactions.Update(m.Compactions)
-	sm.RdbIngestedBytes.Update(m.IngestedBytes)
-	sm.RdbCompactedBytesRead.Update(m.CompactedBytesRead)
-	sm.RdbCompactedBytesWritten.Update(m.CompactedBytesWritten)
-	sm.RdbTableReadersMemEstimate.Update(m.TableReadersMemEstimate)
-	sm.RdbReadAmplification.Update(m.ReadAmplification)
-	sm.RdbPendingCompaction.Update(m.PendingCompactionBytesEstimate)
-	sm.RdbNumSSTables.Update(m.NumSSTables)
+	sm.RdbBlockCacheHits.Update(m.BlockCache.Hits)
+	sm.RdbBlockCacheMisses.Update(m.BlockCache.Misses)
+	sm.RdbBlockCacheUsage.Update(m.BlockCache.Size)
+	// TODO(jackson): Delete RdbBlockCachePinnedUsage or calculate the
+	// equivalent (the sum of IteratorMetrics.ReadAmp for all open iterator,
+	// times the block size).
+	sm.RdbBlockCachePinnedUsage.Update(0)
+	sm.RdbBloomFilterPrefixUseful.Update(m.Filter.Hits)
+	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
+	sm.RdbMemtableTotalSize.Update(int64(m.MemTable.Size))
+	sm.RdbFlushes.Update(m.Flush.Count)
+	sm.RdbFlushedBytes.Update(int64(m.Levels[0].BytesFlushed))
+	sm.RdbCompactions.Update(m.Compact.Count)
+	sm.RdbIngestedBytes.Update(int64(m.IngestedBytes()))
+	compactedRead, compactedWritten := m.CompactedBytes()
+	sm.RdbCompactedBytesRead.Update(int64(compactedRead))
+	sm.RdbCompactedBytesWritten.Update(int64(compactedWritten))
+	sm.RdbTableReadersMemEstimate.Update(m.TableCache.Size)
+	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
+	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
+	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
+	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
+	sm.RdbNumSSTables.Update(m.NumSSTables())
+	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
 }

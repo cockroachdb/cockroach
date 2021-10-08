@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,18 +49,24 @@ func MakeInserter(
 	tableDesc catalog.TableDescriptor,
 	insertCols []catalog.Column,
 	alloc *rowenc.DatumAlloc,
+	sv *settings.Values,
+	internal bool,
+	metrics *Metrics,
 ) (Inserter, error) {
 	ri := Inserter{
-		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableNonPrimaryIndexes()),
+		Helper: newRowHelper(
+			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), sv, internal, metrics,
+		),
+
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		if _, ok := ri.InsertColIDtoRowIndex.Get(colID); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetColumnName(i))
+			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
 		}
 	}
 

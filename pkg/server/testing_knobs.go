@@ -12,7 +12,9 @@ package server
 
 import (
 	"net"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,9 +27,11 @@ type TestingKnobs struct {
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
 	// automatic version upgrade mechanism.
 	DisableAutomaticVersionUpgrade int32 // accessed atomically
-	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
+	// DefaultZoneConfigOverride, if set, overrides the default zone config
+	// defined in `pkg/config/zone.go`.
 	DefaultZoneConfigOverride *zonepb.ZoneConfig
-	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
+	// DefaultSystemZoneConfigOverride, if set, overrides the default system
+	// zone config defined in `pkg/config/zone.go`
 	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
 	// an RPC server address, and prior to waiting on PauseAfterGettingRPCAddress below.
@@ -80,6 +84,9 @@ type TestingKnobs struct {
 	OnDecommissionedCallback func(livenesspb.Liveness)
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
+	//
+	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
+	// matically to the StoreSpecs used.
 	StickyEngineRegistry StickyInMemEnginesRegistry
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
@@ -88,6 +95,17 @@ type TestingKnobs struct {
 	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
 	// back to the KV layer upon server start.
 	ImportTimeseriesFile string
+	// ImportTimeseriesMappingFile points to a file containing a YAML map from storeID
+	// to nodeID, for use with ImportTimeseriesFile.
+	ImportTimeseriesMappingFile string
+	// DrainSleepFn used in testing to override the usual sleep function with
+	// a custom function that counts the number of times the sleep function is called.
+	DrainSleepFn func(time.Duration)
+
+	// TenantBlobClientFactory supplies a BlobClientFactory for
+	// use by tenants. By default, tenants have no blob client
+	// factory.
+	TenantBlobClientFactory blobs.BlobClientFactory
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -185,7 +186,7 @@ func TestListBackups(t *testing.T) {
 			{"." + ts[2].GoTime().Format(backupccl.DateBasedIntoFolderName)},
 		}
 		cols := []string{"path"}
-		rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
+		rowSliceIter := clisqlexec.NewRowSliceIter(rows, "l" /*align*/)
 		if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
 			t.Fatalf("TestListBackups: PrintQueryOutput: %v", err)
 		}
@@ -227,7 +228,7 @@ func TestListIncremental(t *testing.T) {
 		{"/fooFolder" + expectedIncFolder2, ts[1].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339)},
 	}
 	cols := []string{"path", "start time", "end time"}
-	rowSliceIter := cli.NewRowSliceIter(rows, "lll" /*align*/)
+	rowSliceIter := clisqlexec.NewRowSliceIter(rows, "lll" /*align*/)
 	if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
 		t.Fatalf("TestListIncremental: PrintQueryOutput: %v", err)
 	}
@@ -414,6 +415,9 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	// the small test-case will get entirely buffered/merged by small-file merging
+	// and mean there one only be a single file.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
 	sqlDB.Exec(t, `CREATE DATABASE testDB`)
 	sqlDB.Exec(t, `USE testDB`)
 	sqlDB.Exec(t, `CREATE TABLE fooTable(id int PRIMARY KEY)`)

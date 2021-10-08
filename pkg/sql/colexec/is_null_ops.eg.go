@@ -11,7 +11,6 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -147,7 +146,7 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -157,7 +156,7 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -169,7 +168,7 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -179,7 +178,7 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 				if nulls.NullAt(i) {
 					projCol[i] = !o.negate
 				} else {
-					projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 
 			}
@@ -299,7 +298,7 @@ func (o *isTupleNullSelOp) Next() coldata.Batch {
 			for _, i := range sel {
 				selectTuple := nulls.NullAt(i) != o.negate
 				if !selectTuple {
-					selectTuple = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
 					sel[idx] = i
@@ -313,7 +312,7 @@ func (o *isTupleNullSelOp) Next() coldata.Batch {
 			for i := range sel {
 				selectTuple := nulls.NullAt(i) != o.negate
 				if !selectTuple {
-					selectTuple = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
 					sel[idx] = i

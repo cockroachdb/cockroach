@@ -12,11 +12,13 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "errorspb/errors.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "roachpb/span_config.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -44,6 +46,36 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
+// RoutingPolicy specifies how a request should be routed to the
+// replicas of its target range(s) by the DistSender. Policies can
+// dictate which replicas are considered to be targets and in which
+// order.
+enum RoutingPolicy {
+  // LEASEHOLDER means that the DistSender should route the request to the
+  // leaseholder replica(s) of its target range(s).
+  LEASEHOLDER = 0;
+  // NEAREST means that the DistSender should route the request to the
+  // nearest replica(s) of its target range(s).
+  NEAREST = 1;
+}
+
+// ResumeReason specifies why a ResumeSpan was generated instead of a
+// complete result.
+enum ResumeReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Zero value; no resume, or an unknown reason from a future or past cockroachdb version.
+  RESUME_UNKNOWN = 0;
+  // A key limit was exceeded, i.e. MaxSpanRequestKeys.
+  RESUME_KEY_LIMIT = 1;
+  // A byte limit was exceeded, i.e. TargetBytes.
+  // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_BYTE_LIMIT = 2;
+  // An intent limit was exceeded. This is currently never returned to clients,
+  // since MVCCScan converts the result into a WriteIntentError.
+  // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
+  RESUME_INTENT_LIMIT = 3;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   reserved 1, 2;
@@ -63,15 +95,6 @@ message RequestHeader {
 // ResponseHeader is returned with every storage node response. Note that this is
 // different from a BatchResponse's header.
 message ResponseHeader {
-  enum ResumeReason {
-    option (gogoproto.goproto_enum_prefix) = false;
-    // Zero value; no resume.
-    RESUME_UNKNOWN = 0;
-    // The spanning operation didn't finish because the key limit was
-    // exceeded.
-    RESUME_KEY_LIMIT = 1;
-  }
-
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
@@ -81,9 +104,10 @@ message ResponseHeader {
   // network.
   Transaction txn = 3;
   // The next span to resume from when the response doesn't cover the full span
-  // requested. This can happen when a bound on the keys is set through
-  // max_span_request_keys in the batch header or when a scan has been stopped
-  // before covering the requested data because of scan_options.
+  // requested. This can happen when a bound on the result size is set through
+  // max_span_request_keys or target_bytes in the batch header or when a scan
+  // has been stopped before covering the requested data because of
+  // scan_options.
   //
   // ResumeSpan is unset when the entire span of keys have been
   // operated on. The span is set to the original span if the request
@@ -92,9 +116,6 @@ message ResponseHeader {
   Span resume_span = 4;
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
-  // This field appeared in v2.0. Responses from storage coming from older
-  // servers will not contain it, but the conversion from a BatchResponse to a
-  // client.Result always fills it in.
   ResumeReason resume_reason = 7;
 
   // The number of keys operated on.
@@ -208,9 +229,6 @@ message ConditionalPutRequest {
   // Specify as true to put the value without a corresponding
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
-  //
-  // Callers should check the version gate clusterversion.CPutInline to make
-  // sure this is supported.
   bool inline = 7;
 }
 
@@ -669,6 +687,10 @@ message EndTxnRequest {
   //
   // WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
   // set this properly so it should not be relied upon for correctness.
+  //
+  // TODO(erikgrinaker): This flag is no longer used in v21.2 as we now always
+  // heartbeat the txn record, but we still need to set it when interacting with
+  // v21.1 nodes. It should be removed in v22.1.
   bool txn_heartbeating = 10;
   reserved 7, 8;
 }
@@ -1333,20 +1355,11 @@ message ExternalStorage {
   FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
-// WriteBatchRequest is arguments to the WriteBatch() method, to apply the
-// operations encoded in a BatchRepr.
-message WriteBatchRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The span of keys encoded in data, duplicated because the header span can
-  // be modified by DistSender and we use this one to fail fast.
-  Span data_span = 2 [(gogoproto.nullable) = false];
-  // A BatchRepr, the serialized form of a RocksDB Batch.
-  bytes data = 3;
-}
-
-// WriteBatchResponse is the response to a WriteBatch() operation.
-message WriteBatchResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+// RetryTracingEvent is the trace recording used to track retries.
+message RetryTracingEvent {
+  string operation = 1;
+  int32 attempt_number = 2;
+  string retry_error = 3;
 }
 
 enum MVCCFilter {
@@ -1355,7 +1368,7 @@ enum MVCCFilter {
 }
 
 // FileEncryptionOptions stores information needed by KV level requests (egs:
-// ExportRequest, ImportRequest) to encrypt or decrypt data.
+// ExportRequest) to encrypt or decrypt data.
 message FileEncryptionOptions {
   // Key specifies the key to use for encryption or decryption.
   bytes key = 1;
@@ -1366,16 +1379,32 @@ message FileEncryptionOptions {
 message ExportRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ExternalStorage storage = 2 [(gogoproto.nullable) = false];
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+
+  // ResumeKeyTS allows export request to resume at arbitrary key timestamp. This
+  // value doesn't affect export bounds, but ensures that no keys are skipped or
+  // duplicated when previous request doesn't complete fully and returned EndKeyTS
+  // together with resume span.
+  util.hlc.Timestamp resume_key_ts = 12 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "ResumeKeyTS"
+  ];
+
+  // MVCCFilter determines if request exports all data or latest data as of
+  // Timestamp specified in request header. If all data is requested StartTime
+  // is used as a lower bound and header Timestamp as higher bound or exported
+  // entries.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
+  // StartTime is only used whe MVCCFilter is set to All.
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+
+  // Split large rows in the middle of key sequence. This option will allow
+  // large history being broken up into target_file_size chunks and prevent
+  // blowing up on memory usage. This option is only allowed together with
+  // return_sst since caller should reconstruct full tables.
+  bool split_mid_key = 13;
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
-  // OmitChecksum, if true, will skip checksumming the sst and leave the
-  // `Sha512` field empty in the response. During a rolling upgrade to 2.1, it
-  // may still be set if the request is served by an old node, but since the
-  // caller has declare they're not going to use it, that's okay.
-  bool omit_checksum = 6;
 
   // EnableTimeBoundIteratorOptimization, if true, enables a performance
   // optimization that allows us to entirely skip over sstables in RocksDB that
@@ -1404,6 +1433,12 @@ message ExportRequest {
   // size of all versions of a single key. If TargetFileSize is non-positive
   // then there is no limit.
   int64 target_file_size = 10;
+
+  // ReturnSSTBelowSize is the threshold which (if non-zero) causes files which
+  // are below that size threshold to be returned, as if ReturnSST were set,
+  // instead of being written to the assigned storage location.
+  // Note: returned SSTs are never encrypted.
+  int64 return_sst_below_size = 11;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
@@ -1437,10 +1472,14 @@ message ExportResponse {
   // path.
   message File {
     Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp end_key_ts = 9 [
+        (gogoproto.nullable) = false,
+        (gogoproto.customname) = "EndKeyTS"
+    ];
     string path = 2;
     reserved 3;
     reserved 4;
-    bytes sha512 = 5;
+    reserved 5;
 
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
@@ -1451,51 +1490,6 @@ message ExportResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated File files = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
-}
-
-// ImportRequest is the argument to the Import() method, to bulk load key/value
-// entries.
-message ImportRequest {
-  message File {
-
-    ExternalStorage dir = 1 [(gogoproto.nullable) = false];
-    string path = 2;
-    reserved 3;
-    bytes sha512 = 4;
-  }
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Files contains an ordered list of files, each containing kv entries to
-  // import. Entries in later files with the same key override earlier ones.
-  repeated File files = 2 [(gogoproto.nullable) = false];
-  // DataSpan is the pre-rewrite keyrange of the data in `Files`.
-  Span data_span = 3 [(gogoproto.nullable) = false];
-  // EndTime, if not the zero value, will cause only entries before it to be
-  // imported.
-  util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
-  reserved 4;
-  message TableRekey {
-
-    // OldID is the previous ID of `new_desc`.
-    uint32 old_id = 1 [(gogoproto.customname) = "OldID"];
-    // NewDesc is an encoded Descriptor message.
-    bytes new_desc = 2;
-  }
-  // Rekeys contains the descriptors for the data being Imported and the
-  // previous ID for each (which is the ID used in the source data pointed to by
-  // `files`).
-  // TODO(dan): This field is a superset of the information represented by
-  // `key_rewrites` and will supercede it once rekeying of interleaved tables is
-  // fixed.
-  repeated TableRekey rekeys = 5 [(gogoproto.nullable) = false];
-
-  FileEncryptionOptions encryption = 7;
-}
-
-// ImportResponse is the response to a Import() operation.
-message ImportResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 2;
-  BulkOpSummary imported = 3 [(gogoproto.nullable) = false];
 }
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
@@ -1780,6 +1774,89 @@ message MigrateResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// QueryResolvedTimestampRequest is the argument to the QueryResolvedTimestamp()
+// method. It requests a resolved timestamp for the key span it is issued over.
+//
+// A resolved timestamp for a key span is a timestamp at or below which all
+// future reads within the span are guaranteed to produce the same results, i.e.
+// at which MVCC history has become immutable. The most up-to-date such bound
+// can be computed for a key span contained in a single range by taking the
+// minimum of the leaseholder's closed timestamp and the timestamp preceding the
+// earliest intent present on the range that overlaps with the key span of
+// interest. This optimum timestamp is nondecreasing over time, since the closed
+// timestamp will not regress and since it also prevents intents at lower
+// timestamps from being created. Follower replicas can also provide a resolved
+// timestamp, though it may not be the most recent one due to replication delay.
+// However, a given follower replica will similarly produce a nondecreasing
+// sequence of resolved timestamps.
+//
+// QueryResolvedTimestampRequest returns a resolved timestamp for the input key
+// span by returning the minimum of all replicas contacted in order to cover the
+// key span. This means that repeated invocations of this operation will be
+// guaranteed nondecreasing only if routed to the same replicas.
+//
+// A CONSISTENT read at or below a key span's resolved timestamp will never
+// block on replication or on conflicting transactions. However, as can be
+// inferred from the previous paragraph, for this to be guaranteed, the read
+// must be issued to the same replica or set of replicas (for multi-range reads)
+// that were consulted when computing the key span's resolved timestamp.
+//
+// A resolved timestamp for a key span is a sibling concept a resolved timestamp
+// for a rangefeed, which is defined in:
+//   pkg/kv/kvserver/rangefeed/resolved_timestamp.go
+// Whereas a resolved timestamp for a rangefeed refers to a timestamp below
+// which no future updates will be published on the rangefeed, a resolved
+// timestamp for a key span refers to a timestamp below which no future state
+// modifications that could change the result of read requests will be made.
+// Both concepts rely on some notion of immutability, but the former imparts
+// this property on a stream of events while the latter imparts this property
+// on materialized state.
+message QueryResolvedTimestampRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// QueryResolvedTimestampResponse is the response to a QueryResolvedTimestampRequest.
+message QueryResolvedTimestampResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // ResolvedTS is the resolved timestamp of the key span.
+  util.hlc.Timestamp resolved_ts = 2 [
+    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+}
+
+// ScanInterleavedIntentsRequest is the request for a ScanInterleavedIntents operation.
+// This is a read-only operation that returns all interleaved (non-separated)
+// intents found over the request range.
+message ScanInterleavedIntentsRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ScanInterleavedIntentsResponse is the response to a ScanInterleavedIntents operation.
+message ScanInterleavedIntentsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The intents encountered in the part of the request span that was
+  // evaluated. A resume span is set in the response header if the entirety of
+  // the request span was not evaluated.
+  repeated Intent intents = 3 [(gogoproto.nullable) = false];
+}
+
+// BarrierRequest is the request for a Barrier operation. This goes through Raft
+// and has the purpose of waiting until all conflicting in-flight operations on
+// this range have completed, without blocking any new operations.
+message BarrierRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// BarrierResponse is the response for a Barrier operation.
+message BarrierResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Timestamp at which this Barrier was evaluated. Can be used to guarantee
+  // future operations happen on the same or newer leaseholders.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1818,9 +1895,7 @@ message RequestUnion {
     InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
-    WriteBatchRequest write_batch = 31;
     ExportRequest export = 32;
-    ImportRequest import = 34;
     QueryTxnRequest query_txn = 33;
     QueryIntentRequest query_intent = 42;
     AdminScatterRequest admin_scatter = 36;
@@ -1832,8 +1907,11 @@ message RequestUnion {
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
+    QueryResolvedTimestampRequest query_resolved_timestamp = 51;
+    ScanInterleavedIntentsRequest scan_interleaved_intents = 52;
+    BarrierRequest barrier = 53;
   }
-  reserved 8, 15, 23, 25, 27;
+  reserved 8, 15, 23, 25, 27, 31, 34;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1870,9 +1948,7 @@ message ResponseUnion {
     CheckConsistencyResponse check_consistency = 24;
     InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
-    WriteBatchResponse write_batch = 31;
     ExportResponse export = 32;
-    ImportResponse import = 34;
     QueryTxnResponse query_txn = 33;
     QueryIntentResponse query_intent = 42;
     AdminScatterResponse admin_scatter = 36;
@@ -1884,8 +1960,11 @@ message ResponseUnion {
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
+    QueryResolvedTimestampResponse query_resolved_timestamp = 51;
+    ScanInterleavedIntentsResponse scan_interleaved_intents = 52;
+    BarrierResponse barrier = 53;
   }
-  reserved 8, 15, 23, 25, 27, 28;
+  reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
@@ -1900,6 +1979,15 @@ message Header {
   // requests, writes are performed at the provisional commit timestamp
   // (txn.WriteTimestamp).
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  // timestamp_from_server_clock is set when a non-transactional BatchRequest
+  // has its timestamp initialized to the wall time of the server node. This
+  // flag is needed to ensure that such requests are never served as follower
+  // reads. Initializing the timestamp of a request on a node that holds a
+  // follower instead of the leaseholder for a range and then using this
+  // timestamp to deem a follower read safe could allow for consistency
+  // violations where a non-transactional read following a write could fail to
+  // observe the write.
+  bool timestamp_from_server_clock = 20;
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
@@ -1926,6 +2014,18 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   ReadConsistencyType read_consistency = 6;
+  // routing_policy specifies how a request should be routed to the
+  // replicas of its target range(s) by the DistSender. The default is
+  // LEASEHOLDER, which means that the request should be routed to the
+  // leaseholder(s) of its target range(s).
+  //
+  // The policy does not dictate which replicas in a range are eligible to
+  // serve the request, only which replicas are considered as targets by
+  // the DistSender, and in which order. A request that is routed to an
+  // ineligible replica (a function of request type, timestamp, and read
+  // consistency) will be rejected by that replica and the DistSender will
+  // target another replica in the range.
+  RoutingPolicy routing_policy = 19;
   // wait_policy specifies the desired behavior for the batch request if it
   // encounters a conflicting lock held by another active transaction.
   //
@@ -1935,6 +2035,27 @@ message Header {
   // If the desired behavior is to block on the conflicting lock up to some
   // maximum duration, use the Block wait policy and set a context timeout.
   kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  // lock_timeout specifies the maximum amount of time that the batch request
+  // will wait while attempting to acquire a lock on a key or while blocking on
+  // an existing lock in order to perform a non-locking read on a key. The time
+  // limit applies separately to each lock acquisition attempt. If the timeout
+  // elapses when waiting for a lock, a WriteIntentError will be returned.
+  //
+  // Unlike in some other systems like PostgreSQL, where non-locking reads do
+  // not wait on conflicting locks, in CockroachDB, non-locking reads do wait
+  // for conflicting locks to be released. Because of this, the lock_timeout
+  // configuration applies to non-locking reads in read-write and read-only
+  // transactions as well.
+  //
+  // Only the (default) Block wait policy will allow a request to wait on
+  // conflicting locks, so the timeout only makes sense in conjunction with the
+  // Block wait policy. The Error wait policy will throw an error immediately if
+  // a conflicting lock held by an active transaction is encountered, so this
+  // timeout can never be hit with an Error wait policy.
+  //
+  // A value of zero disables the timeout.
+  google.protobuf.Duration lock_timeout = 21 [(gogoproto.nullable) = false,
+                                              (gogoproto.stdduration) = true];
   // If set to a non-zero value, the total number of keys touched by requests in
   // the batch is limited. A resume span will be provided on the response of the
   // requests that were not able to run to completion before the limit was
@@ -1983,7 +2104,8 @@ message Header {
   // request types:
   // - ScanRequest
   // - ReverseScanRequest
-  // - DeleteRangeRequest
+  // - DeleteRangeRequest(*)
+  // - GetRequest
   // - RevertRangeRequest
   // - ResolveIntentRangeRequest
   //
@@ -1991,6 +2113,9 @@ message Header {
   // the limit has no effect on them:
   // - QueryIntentRequest
   // - EndTxnRequest
+  //
+  // [*] DeleteRangeRequests are generally not allowed to be batched together
+  // with a commit (i.e. 1PC), except if Require1PC is also set. See #37457.
   //
   // Forward requests and reverse requests cannot be mixed in the same batch if
   // a limit is set. There doesn't seem to be a fundamental reason for this
@@ -2038,7 +2163,115 @@ message Header {
   // current batch. When set, it allows the server to handle pushes and write
   // too old conditions locally.
   bool can_forward_read_timestamp = 16;
+  // bounded_staleness is set when a read-only batch is performing a bounded
+  // staleness read and wants its timestamp to be chosen dynamically, based
+  // on a resolved timestamp from its target replica(s).
+  //
+  // Transactional requests are not allowed to set this field. As a result,
+  // the request can not span ranges and will be rejected by the DistSender
+  // with an OpRequiresTxnError if it attempts to.
+  //
+  // Requests with a non-zero timestamp are not allowed to set this field.
+  BoundedStalenessHeader bounded_staleness = 22;
   reserved 7, 10, 12, 14;
+}
+
+// BoundedStalenessHeader contains configuration values pertaining to bounded
+// staleness read requests.
+message BoundedStalenessHeader {
+  // min_timestamp_bound places an (inclusive) lower bound on the dynamically
+  // chosen timestamp during a bounded staleness read. During such reads, a
+  // resolved timestamp over the request's key span will initially be computed
+  // on the target replica. If the resolved timestamp is equal to or greater
+  // than the minimum timestamp bound, then the batch timestamp will be set to
+  // the resolved timestamp, the batch will be evaluated, and the negotiated
+  // timestamp will be recorded in the BatchResponse Header. If the resolved
+  // timestamp is less than the minimum timestamp bound, then the request will
+  // either be rejected with a MinTimestampBoundUnsatisfiableError or will be
+  // redirected to the leaseholder and permitted to block on conflicting
+  // transactions, depending on the value of min_timestamp_bound_strict.
+  //
+  // This field is required when a BoundedStalenessHeader is set in a Header.
+  util.hlc.Timestamp min_timestamp_bound = 1 [(gogoproto.nullable) = false];
+  // min_timestamp_bound_strict specifies whether a bounded staleness read
+  // whose min_timestamp_bound cannot be satisfied by the first replica it
+  // visits (subject to routing_policy) without blocking should be rejected
+  // with a MinTimestampBoundUnsatisfiableError or will be redirected to the
+  // leaseholder and permitted to block on conflicting transactions. If the
+  // flag is true, blocking is never permitted and users should be prepared
+  // to handle MinTimestampBoundUnsatisfiableErrors. If the flag is false,
+  // blocking is permitted and MinTimestampBoundUnsatisfiableErrors will never
+  // be returned.
+  bool min_timestamp_bound_strict = 2;
+  // max_timestamp_bound places an (exclusive) upper bound on the dynamically
+  // chosen timestamp during a bounded staleness read. If the field is set and a
+  // resolved timestamp over the request's key span is computed to be greater
+  // than or equal to the maximum timestamp bound, the batch timestamp will be
+  // set to the timestamp preceding the maximum timestamp bound instead, then
+  // the batch will be evaluated at this timestamp, and it will be recorded in
+  // the BatchResponse Header.
+  //
+  // This field is optional when a BoundedStalenessHeader is set in a Header.
+  // However, if the field is set, max_timestamp_bound must be greater than
+  // min_timestamp_bound.
+  util.hlc.Timestamp max_timestamp_bound = 3 [(gogoproto.nullable) = false];
+}
+
+// AdmissionHeader contains information utilized by admission control for the
+// request.
+message AdmissionHeader {
+  // Priority is utilized within a tenant. See admission.WorkPriority.
+  int32 priority = 1;
+  // CreateTime is equivalent to Time.UnixNano() at the creation time of this
+  // request or a parent request. See admission.WorkInfo.Priority for details.
+  // It is used to give preference to older requests.
+  int64 create_time = 2;
+
+  // Source represents the immediate source of a request. FROM_SQL represents
+  // a KV request originating in SQL, and ROOT_KV represents a request
+  // originating within KV, but at the root of the tree of requests.
+  // BatchRequests can cause other BatchRequests (e.g. to PushTransaction),
+  // which may result in yet more BatchRequests (e.g. to
+  // ResolveIndeterminateCommit). These can cause a deadlock when using slot
+  // based admission control. Only FROM_SQL and ROOT_KV requests are subject
+  // to admission control. This behavior errs on the side of no deadlock, if
+  // we overlooked an instrumentation point, since the default value of OTHER
+  // bypasses admission control.
+  enum Source {
+    OTHER = 0;
+    FROM_SQL = 1;
+    ROOT_KV = 2;
+  }
+  Source source = 3;
+
+  // SourceLocation specifies physically where the call originated. LOCAL
+  // means the client is collocated on the same node as the server. It is set
+  // on codepaths that use internalClientAdapter which avoids using gRPC for
+  // local calls to the KV API.
+  enum SourceLocation {
+    REMOTE = 0;
+    LOCAL = 1;
+  }
+  SourceLocation source_location = 4;
+
+  // NoMemoryReservedAtSource is set by the source/client when it has
+  // effectively reserved close to 0 bytes. It is read by the server only when
+  // SourceLocation=LOCAL, to differentiate this 0 reservation case from the
+  // case where the client has already reserved enough memory based on
+  // previous responses. In the latter case the server avoids reserving more
+  // since it would result in double counting. Not setting this defaults to
+  // turning off server reserving more memory -- this optimistic choice was
+  // made to err on the side of avoiding double counting in case we forget to
+  // instrument some calling path.
+  //
+  // NOTE: This field is a temporary field until we move to comprehensive
+  // accounting at the client, by reserving all the bytes for responses, and
+  // explicitly propagating these through DistSender to the servers, so the
+  // servers can (best-effort) respect these values when producing responses.
+  // In that future world, the local server will explicitly know what has
+  // already been accounted for, and can start reserving more only when it
+  // exceeds.
+  bool no_memory_reserved_at_source = 5;
 }
 
 // A BatchRequest contains one or more requests to be executed in
@@ -2049,6 +2282,7 @@ message BatchRequest {
 
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
+  AdmissionHeader admission_header = 3 [(gogoproto.nullable) = false];
 }
 
 // A BatchResponse contains one or more responses, one per request
@@ -2137,6 +2371,9 @@ message RangeFeedRequest {
   // with_diff specifies whether RangeFeedValue updates should contain the
   // previous value that was overwritten.
   bool with_diff = 3;
+  // AdmissionHeader is used only at the start of the range feed stream, since
+  // the initial catch-up scan be expensive.
+  AdmissionHeader admission_header = 4 [(gogoproto.nullable) = false];
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
@@ -2223,6 +2460,99 @@ message GossipSubscriptionEvent {
   kv.kvpb.Error error = 4;
 }
 
+// TenantConsumption contains information about resource utilization by a
+// tenant, which directly factors into their bill.
+message TenantConsumption {
+  double r_u = 1;
+  uint64 read_requests = 2;
+  uint64 read_bytes = 3;
+  uint64 write_requests = 4;
+  uint64 write_bytes = 5;
+  double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];
+  uint64 pgwire_egress_bytes = 7 [(gogoproto.customname) = "PGWireEgressBytes"];
+
+  // Note: if any fields are changed, the Sub and Add methods must be updated.
+}
+
+// TokenBucketRequest is used by tenants to obtain Request Units and report
+// consumption.
+message TokenBucketRequest {
+  // Consumption that occurred since this node's last request.
+  TenantConsumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
+
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+
+  // InstanceID is the ID of the SQL pod instance from where the request
+  // originates.
+  uint32 instance_id = 3 [(gogoproto.customname) = "InstanceID"];
+
+  // NextLiveInstanceID is the ID of the next live SQL instance for this tenant,
+  // in circular order by ID.
+  //
+  // In other words:
+  //  - if this instance has the largest ID, NextLiveInstanceID is the smallest
+  //    ID of a live instance.
+  //  - otherwise, NextLiveInstanceID is the smallest ID of a live instance that
+  //    is greater than InstanceID.
+  //
+  // In particular, if this is the only live instance, then NextLiveInstanceID
+  // will equal InstanceID.
+  //
+  // The information in this field is used by the server to trigger checking for
+  // dead instances; it is acceptable for the information to be stale.
+  //
+  // Can be zero if this information is not currently available.
+  uint32 next_live_instance_id = 8 [(gogoproto.customname) = "NextLiveInstanceID"];
+
+  // InstanceLease uniquely identifies the SQL pod instance from where the
+  // request originates, in light of ID reuse.
+  bytes instance_lease = 4;
+
+  // SeqNum is a strictly positive, monotonically increasing sequence number,
+  // used to detect duplicate requests on the server side (to avoid
+  // double-charging). The consumption reported in a request with a lower
+  // sequence number than the last request is ignored.
+  int64 seq_num = 7;
+
+  // RequestedRU is the number of requested tokens (RUs).
+  double requested_r_u = 5;
+
+  // TargetRequestPeriod is the approximate frequency of requests, used to limit
+  // TrickleDuration in the response.
+  google.protobuf.Duration target_request_period = 6 [(gogoproto.nullable) = false,
+                                                      (gogoproto.stdduration) = true];
+}
+
+message TokenBucketResponse {
+  // If non-empty, the other fields will be empty. This field stores any error
+  // that occurs on the server, allowing us to differentiate between those and
+  // RPC errors.
+  errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
+
+  // GrantedTokens is the amount of RUs granted. In most cases, this is equal to
+  // the requested RUs; the only exception is when TrickleDuration would
+  // otherwise exceed TargetRequestPeriod, in which case the number of granted
+  // RUs is reduced.
+  double granted_r_u = 2;
+
+  // TrickleDuration describes how the granted tokens can be consumed.
+  //
+  // If zero, the granted tokens can be used immediately, without restriction.
+  // If set, the granted tokens become available at a constant rate over the
+  // trickle time period. E.g. if we are granted 1000 tokens and the trickle
+  // duration is 10 seconds, the tokens become available at a rate of
+  // 100 tokens/sec for the next 10 seconds.
+  //
+  // TrickleDuration is at most the given TargetRequestPeriod.
+  google.protobuf.Duration trickle_duration = 3 [(gogoproto.nullable) = false,
+                                                 (gogoproto.stdduration) = true];
+
+  // FallbackRate indicates a rate (in RU/s) that the instance will use once it
+  // runs out of tokens and a problem prevents TokenBucket requests from
+  // completing.
+  double fallback_rate = 4;
+}
+
 // JoinNodeRequest is used to specify to the server node what the client's
 // binary version is. If it's not compatible with the rest of the cluster, the
 // join attempt is refused.
@@ -2248,9 +2578,21 @@ service Internal {
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket        (TokenBucketRequest)        returns (TokenBucketResponse)            {}
+
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
+
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
+  rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) { }
+
+  // UpdateSpanConfigs is used to update the span configurations over given
+  // keyspans.
+  rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
 }
 
 // ContentionEvent is a message that will be attached to BatchResponses
@@ -2266,4 +2608,15 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+}
+
+// ScanStats is a message that will be attached to BatchResponses containing
+// information about what happened during each scan and get in the request.
+message ScanStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 num_interface_seeks = 1;
+  uint64 num_internal_seeks = 2;
+  uint64 num_interface_steps = 3;
+  uint64 num_internal_steps = 4;
 }

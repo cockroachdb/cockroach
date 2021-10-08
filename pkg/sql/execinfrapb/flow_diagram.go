@@ -182,6 +182,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if !jr.LookupExpr.Empty() {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", jr.LookupExpr))
 	}
+	if !jr.RemoteLookupExpr.Empty() {
+		details = append(details, fmt.Sprintf("Remote lookup join on: %s", jr.RemoteLookupExpr))
+	}
 	if !jr.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
 	}
@@ -308,6 +311,9 @@ func (s *SorterSpec) summary() (string, []string) {
 	if s.OrderingMatchLen != 0 {
 		details = append(details, fmt.Sprintf("match len: %d", s.OrderingMatchLen))
 	}
+	if s.Limit > 0 {
+		details = append(details, fmt.Sprintf("TopK: %d", s.Limit))
+	}
 	return "Sorter", details
 }
 
@@ -402,10 +408,12 @@ func (is *InputSyncSpec) summary(showTypes bool) (string, []string) {
 		}
 	}
 	switch is.Type {
-	case InputSyncSpec_UNORDERED:
+	case InputSyncSpec_PARALLEL_UNORDERED:
 		return "unordered", typs
 	case InputSyncSpec_ORDERED:
 		return "ordered", append(typs, is.Ordering.diagramString())
+	case InputSyncSpec_SERIAL_UNORDERED:
+		return "serial unordered", typs
 	default:
 		return "unknown", []string{}
 	}

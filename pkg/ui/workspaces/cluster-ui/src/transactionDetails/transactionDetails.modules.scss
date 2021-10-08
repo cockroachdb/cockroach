@@ -1,0 +1,12 @@
+@import '../core/index.module.scss';
+
+.summary-columns {
+  margin-bottom: $spacing-large;
+}
+.summary-card {
+  margin-bottom: 0;
+}
+
+.tooltip-info {
+  border-bottom: 1px dashed $colors--neutral-5;
+}

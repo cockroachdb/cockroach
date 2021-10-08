@@ -4,7 +4,6 @@ set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
-
 tc_start_block "Variable Setup"
 export BUILDER_HIDE_GOPATH_SRC=1
 
@@ -25,13 +24,15 @@ release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET:-binaries.cockroachdb.com}"
-  google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS"
+  google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
   if [[ -z "${PRE_RELEASE}" ]] ; then
     dockerhub_repository="docker.io/cockroachdb/cockroach"
   else
     dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
   fi
-  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+  # Used for docker login for gcloud
+  gcr_hostname="us-docker.pkg.dev"
   s3_download_hostname="${bucket}"
   git_repo_for_tag="cockroachdb/cockroach"
 else
@@ -39,6 +40,7 @@ else
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
+  gcr_hostname="us.gcr.io"
   s3_download_hostname="${bucket}.s3.amazonaws.com"
   git_repo_for_tag="cockroachlabs/release-staging"
   if [[ -z "$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+\.[0-9]+$')" ]] ; then
@@ -53,10 +55,17 @@ else
   fi
 fi
 
-# Used for docker login for gcloud
-gcr_hostname="us.gcr.io"
-
 tc_end_block "Variable Setup"
+
+
+tc_start_block "Check remote tag"
+github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
+configure_git_ssh_key
+if git_wrapped ls-remote --exit-code --tags "ssh://git@github.com/${git_repo_for_tag}.git" "${build_name}"; then
+  echo "Tag ${build_name} already exists"
+  exit 1
+fi
+tc_end_block "Check remote tag"
 
 
 tc_start_block "Tag the release"
@@ -103,9 +112,7 @@ tc_end_block "Make and push docker images"
 
 
 tc_start_block "Push release tag to GitHub"
-github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
-configure_git_ssh_key
-push_to_git "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
+git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
 tc_end_block "Push release tag to GitHub"
 
 
@@ -155,3 +162,55 @@ else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
 fi
 tc_end_block "Tag docker image as latest"
+
+
+tc_start_block "Verify docker images"
+
+images=(
+  "${dockerhub_repository}:${build_name}"
+  "${gcr_repository}:${build_name}"
+)
+if [[ -z "$PRE_RELEASE" ]]; then
+  images+=("${dockerhub_repository}:latest-${release_branch}")
+fi
+if [[ -n "${PUBLISH_LATEST}" ]]; then
+  images+=("${dockerhub_repository}:latest")
+fi
+
+error=0
+
+for img in "${images[@]}"; do
+  docker rmi "$img"
+  docker pull "$img"
+  output=$(docker run "$img" version)
+  build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+
+  # Build Type should always be "release"
+  if [ "$build_type" != "release" ]; then
+    echo "ERROR: Release type mismatch, expected 'release', got '$build_type'"
+    error=1
+  fi
+  if [ "$sha" != "$BUILD_VCS_NUMBER" ]; then
+    echo "ERROR: SHA mismatch, expected '$BUILD_VCS_NUMBER', got '$sha'"
+    error=1
+  fi
+  if [ "$build_tag" != "$build_name" ]; then
+    echo "ERROR: Build tag mismatch, expected '$build_name', got '$build_tag'"
+    error=1
+  fi
+
+  build_tag_output=$(docker run "$img" version --build-tag)
+  if [ "$build_tag_output" != "$build_name" ]; then
+    echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
+    error=1
+  fi
+done
+
+if [ $error = 1 ]; then
+  echo "ERROR: Docker image verification failed, see logs above"
+  exit 1
+fi
+
+tc_end_block "Verify docker images"

@@ -13,8 +13,8 @@ mark_build() {
   release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
   if [[ -z "${DRY_RUN}" ]] ; then
-    google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
-    gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+    google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   else
     google_credentials=$GOOGLE_COCKROACH_RELEASE_CREDENTIALS
     gcr_repository="us.gcr.io/cockroach-release/cockroach-test"

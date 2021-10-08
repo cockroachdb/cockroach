@@ -1,0 +1,198 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+
+// TODO(irfansharif): We could have the proto definitions in pkg/config/zonepb
+// use these messages instead of duplicating everything.
+
+// GCPolicy dictates the garbage collection policy to apply over a given span.
+// It parallels the definition found in zonepb/zone.proto.
+message GCPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // TTLSeconds is the number of seconds overwritten values will be retained
+  // before garbage collection. A value <= 0 means older versions are never
+  // GC-ed.
+  int32 ttl_seconds = 1 [(gogoproto.customname) = "TTLSeconds"];
+}
+
+// Constraint constrains the stores that a replica can be stored on. It
+// parallels the definition found in zonepb/zone.proto.
+message Constraint {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  enum Type {
+    // REQUIRED ensures all replicas are placed on stores with locality tags
+    // that match the constraint. Replication will fail if there aren't any such
+    // stores.
+    REQUIRED = 0;
+    // PROHIBITED prevents replicas from being placed on stores with locality
+    // tags that match the constrain.
+    PROHIBITED = 1;
+  }
+
+  // Type captures the kind of constraint this is: required or prohibited.
+  Type type = 1;
+
+  // Key captures the locality tag key we're constraining against.
+  string key = 2;
+
+  // Value is the locality tag value we're constraining against.
+  string value = 3;
+}
+
+// ConstraintsConjunction is the set of constraints that need to be satisfied
+// together by replicas. It parallels the definition found in zonepb/zone.proto.
+message ConstraintsConjunction {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  // NumReplicas is the number of replicas that should abide by the constraints
+  // below. If set to zero, the constraints will apply to all replicas of the
+  // range.
+  //
+  // NB: Only REQUIRED constraints are allowed when the number of replicas is
+  // non-zero.
+  int32 num_replicas = 1;
+
+  // Constraints is the set that needs to be satisfied by the store in order for
+  // us to place replicas on it.
+  repeated Constraint constraints = 2 [(gogoproto.nullable) = false];
+}
+
+// LeasePreference specifies a preference about where range leases should be
+// located. It parallels the definition found in zonepb/zone.proto.
+message LeasePreference {
+  option (gogoproto.equal) = true;
+
+  // Constraints is the set that needs to be satisfied by the store in order for
+  // us to prefer placing leases on it.
+  repeated Constraint constraints = 1 [(gogoproto.nullable) = false];
+}
+
+// SpanConfig holds the configuration that applies to a given keyspan. It
+// parallels the definition found in zonepb/zone.proto.
+message SpanConfig {
+  option (gogoproto.equal) = true;
+
+  // RangeMinBytes is the minimum size, in bytes, a range can have. When a range
+  // is less than this size, it'll be merged with an adjacent range.
+  int64 range_min_bytes = 1;
+
+  // RangeMaxBytes is the maximum size, in bytes, a range can have. When a range
+  // is more than this size, it'll split into two ranges.
+  int64 range_max_bytes = 2;
+
+  // GCPolicy dictates the the GC policy to apply over a range.
+  GCPolicy gc_policy = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCPolicy"];
+
+  // GlobalReads specifies whether transactions operating over the range(s)
+  // should be configured to provide non-blocking behavior, meaning that reads
+  // can be served consistently from all replicas and do not block on writes. In
+  // exchange, writes get pushed into the future and must wait on commit to
+  // ensure linearizability. For more, see #52745.
+  bool global_reads = 4;
+
+  // NumReplicas specifies the number of replicas, including both voting and
+  // non-voting kinds.
+  int32 num_replicas = 5;
+
+  // NumVoters specifies the number of voter replicas. If set to zero, we'll
+  // consider NumReplicas to be the voter replica count instead (i.e. no
+  // non-voting replicas).
+  int32 num_voters = 6;
+
+  // Constraints constrain which stores the both voting and non-voting replicas
+  // can be placed on.
+  //
+  // NB: The NumReplicas fields in Constraints must either:
+  // - add up to at most SpanConfig.NumReplicas (pinning the sum of replicas and
+  //   having the rest float freely);
+  // - all be zero (applying each constraint to all replicas).
+  repeated ConstraintsConjunction constraints = 7 [(gogoproto.nullable) = false];
+
+  // VoterConstraints constrains which stores the voting replicas can be placed
+  // on. This must be compatible with the Constraints field above, but not
+  // necessarily a subset. It's compatible as long as there are no prohibitive
+  // constraints above that are required here.
+  repeated ConstraintsConjunction voter_constraints = 8 [(gogoproto.nullable) = false];
+
+  // LeasePreference captures the preference for how range leases are to be
+  // placed. They're allowed to be placed elsewhere if needed, but will follow
+  // the stated preferences when possible.
+  //
+  // More than one lease preference is allowed; they're considered as the most
+  // preferred option to least. The first preference that an existing replica of
+  // a range matches will take priority for the lease.
+  repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+}
+
+// SpanConfigEntry ties a span to its corresponding config.
+message SpanConfigEntry {
+  // Span is the keyspan the config is said to apply over.
+  Span span = 1 [(gogoproto.nullable) = false];
+
+  // Config is the set of attributes that apply over the corresponding keyspan.
+  SpanConfig config = 2 [(gogoproto.nullable) = false];
+};
+
+// GetSpanConfigsRequest is used to fetch the span configurations over the
+// specified keyspans.
+message GetSpanConfigsRequest {
+  // Spans to request the configurations for. The spans listed here are not
+  // allowed to overlap with one another.
+  repeated Span spans = 1 [(gogoproto.nullable) = false];
+};
+
+// GetSpanConfigsResponse lists out the span configurations that overlap with
+// the requested spans.
+message GetSpanConfigsResponse {
+  // SpanConfigEntries capture the span configurations over the requested spans.
+  // The results for each Span in the matching GetSpanConfigsRequest are
+  // flattened out into a single slice, and follow the same ordering. It's
+  // possible for there to be no configurations for a given span; there'll
+  // simply be no entries for it.
+  repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
+};
+
+// UpdateSpanConfigsRequest is used to update the span configurations over the
+// given spans.
+//
+// This is a "targeted" API: the spans being deleted are expected to have been
+// present with the same bounds (same start/end key); the same is true for spans
+// being upserted with new configs. If bounds are mismatched, an error is
+// returned. If spans are being added, they're expected to not overlap with any
+// existing spans. When divvying up an existing span into multiple others,
+// callers are expected to delete the old and upsert the new ones. This can
+// happen as part of the same request; we delete the spans marked for deletion
+// before upserting whatever was requested.
+//
+// Spans are not allowed to overlap with other spans in the same list but can
+// across lists. This is necessary to support the delete+upsert semantics
+// described above.
+message UpdateSpanConfigsRequest {
+  // ToDelete captures the spans we want to delete configs for.
+  repeated Span to_delete = 1 [(gogoproto.nullable) = false];
+
+  // ToUpsert captures the spans we want to upsert and the configs we want to
+  // upsert with.
+  repeated SpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
+};
+
+message UpdateSpanConfigsResponse { };
+

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,7 +32,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -118,10 +117,10 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		// variable number of bytes in `dstVecIdx`, so we will have to either shift
 		// the bytes after that element left or right, depending on how long the
 		// source bytes slice is. Refer to the CopySlice comment for an example.
-		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
+		c.vecs[dstVecIdx].CopySlice(c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 		// {{else}}
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		execgen.SET(c.vecs[dstVecIdx], dstIdx, v)
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 		// {{end}}
 	}
 }

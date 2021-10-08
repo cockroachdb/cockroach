@@ -202,7 +202,7 @@ func (t *MVCCValueMerger) ensureOrder(oldToNew bool) {
 
 func (t *MVCCValueMerger) deserializeMVCCValueAndAppend(value []byte) error {
 	if err := protoutil.Unmarshal(value, &t.meta); err != nil {
-		return errors.Errorf("corrupted operand value: %v", err)
+		return errors.Wrap(err, "corrupted operand value")
 	}
 	if len(t.meta.RawBytes) < mvccHeaderSize {
 		return errors.Errorf("operand value too short")
@@ -214,7 +214,7 @@ func (t *MVCCValueMerger) deserializeMVCCValueAndAppend(value []byte) error {
 		t.timeSeriesOps = append(t.timeSeriesOps, roachpb.InternalTimeSeriesData{})
 		ts := &t.timeSeriesOps[len(t.timeSeriesOps)-1]
 		if err := protoutil.Unmarshal(t.meta.RawBytes[mvccHeaderSize:], ts); err != nil {
-			return errors.Errorf("corrupted timeseries: %v", err)
+			return errors.Wrap(err, "corrupted timeseries")
 		}
 	} else {
 		if t.timeSeriesOps != nil {

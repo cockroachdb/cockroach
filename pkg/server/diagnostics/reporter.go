@@ -93,7 +93,7 @@ type Reporter struct {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "diagnostics", func(ctx context.Context) {
+	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
 
@@ -159,7 +159,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 			"error: %v", res.Status, b, err)
 		return
 	}
-	r.SQLServer.ResetReportedStats(ctx)
+	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 }
 
 // CreateReport generates a new diagnostics report containing information about
@@ -251,7 +251,13 @@ func (r *Reporter) CreateReport(
 		}
 	}
 
-	info.SqlStats = r.SQLServer.GetScrubbedReportingStats()
+	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx)
+	if err != nil {
+		if log.V(2 /* level */) {
+			log.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)
+		}
+	}
+
 	return &info
 }
 

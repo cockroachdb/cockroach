@@ -48,9 +48,9 @@ type Columnarizer struct {
 	// Note that we consciously don't embed a colexecop.InitHelper here because
 	// we currently rely on the ProcessorBase to provide the same (and more)
 	// functionality.
-	// TODO(yuzefovich): consider whether embedding ProcessorBase into the
-	// columnarizers makes sense.
-	execinfra.ProcessorBase
+	// TODO(yuzefovich): consider whether embedding ProcessorBaseNoHelper into
+	// the columnarizers makes sense.
+	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
 	mode      columnarizerMode
@@ -80,7 +80,7 @@ func NewBufferingColumnarizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
-) (*Columnarizer, error) {
+) *Columnarizer {
 	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerBufferingMode)
 }
 
@@ -91,7 +91,7 @@ func NewStreamingColumnarizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
-) (*Columnarizer, error) {
+) *Columnarizer {
 	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerStreamingMode)
 }
 
@@ -102,12 +102,11 @@ func newColumnarizer(
 	processorID int32,
 	input execinfra.RowSource,
 	mode columnarizerMode,
-) (*Columnarizer, error) {
-	var err error
+) *Columnarizer {
 	switch mode {
 	case columnarizerBufferingMode, columnarizerStreamingMode:
 	default:
-		return nil, errors.AssertionFailedf("unexpected columnarizerMode %d", mode)
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected columnarizerMode %d", mode))
 	}
 	c := &Columnarizer{
 		allocator:       allocator,
@@ -115,34 +114,30 @@ func newColumnarizer(
 		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
 		mode:            mode,
 	}
-	if err = c.ProcessorBase.Init(
-		nil,
-		&execinfrapb.PostProcessSpec{},
-		input.OutputTypes(),
+	c.ProcessorBaseNoHelper.Init(
+		nil, /* self */
 		flowCtx,
+		flowCtx.EvalCtx,
 		processorID,
 		nil, /* output */
-		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(c.Ctx); util.CrdbTestBuild && err != nil {
+				if err := c.Close(); util.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
 				}
 				return nil
 			}},
-	); err != nil {
-		return nil, err
-	}
-	c.typs = c.OutputTypes()
-	return c, nil
+	)
+	c.typs = c.input.OutputTypes()
+	return c
 }
 
-// Init is part of the Operator interface.
+// Init is part of the colexecop.Operator interface.
 func (c *Columnarizer) Init(ctx context.Context) {
 	if c.removedFromFlow {
 		return
@@ -186,7 +181,7 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 	return s
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 func (c *Columnarizer) Next() coldata.Batch {
 	if c.removedFromFlow {
 		return coldata.ZeroBatch
@@ -195,7 +190,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 	switch c.mode {
 	case columnarizerBufferingMode:
 		c.batch, reallocated = c.allocator.ResetMaybeReallocate(
-			c.typs, c.batch, 1 /* minCapacity */, c.maxBatchMemSize,
+			c.typs, c.batch, 1 /* minDesiredCapacity */, c.maxBatchMemSize,
 		)
 	case columnarizerStreamingMode:
 		// Note that we're not using ResetMaybeReallocate because we will
@@ -258,14 +253,6 @@ func (c *Columnarizer) Next() coldata.Batch {
 	return c.batch
 }
 
-// Run is part of the execinfra.Processor interface.
-//
-// Columnarizers are not expected to be Run, so we prohibit calling this method
-// on them.
-func (c *Columnarizer) Run(context.Context) {
-	colexecerror.InternalError(errors.AssertionFailedf("Columnarizer should not be Run"))
-}
-
 var (
 	_ colexecop.DrainableOperator = &Columnarizer{}
 	_ colexecop.Closer            = &Columnarizer{}
@@ -294,8 +281,8 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	return c.accumulatedMeta
 }
 
-// Close is part of the colexecop.Operator interface.
-func (c *Columnarizer) Close(context.Context) error {
+// Close is part of the colexecop.ClosableOperator interface.
+func (c *Columnarizer) Close() error {
 	if c.removedFromFlow {
 		return nil
 	}
@@ -303,7 +290,7 @@ func (c *Columnarizer) Close(context.Context) error {
 	return nil
 }
 
-// ChildCount is part of the Operator interface.
+// ChildCount is part of the execinfra.OpNode interface.
 func (c *Columnarizer) ChildCount(verbose bool) int {
 	if _, ok := c.input.(execinfra.OpNode); ok {
 		return 1
@@ -311,7 +298,7 @@ func (c *Columnarizer) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child is part of the Operator interface.
+// Child is part of the execinfra.OpNode interface.
 func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		if n, ok := c.input.(execinfra.OpNode); ok {

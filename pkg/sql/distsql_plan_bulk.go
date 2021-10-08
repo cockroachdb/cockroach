@@ -30,7 +30,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	if err != nil {
 		return planCtx, []roachpb.NodeID{dsp.gatewayNodeID}, nil //nolint:returnerrcheck
 	}
-	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
+	resp, err := ss.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -1,9 +1,10 @@
 # Common helpers for teamcity-*.sh scripts.
 
 # root is the absolute path to the root directory of the repository.
-root=$(cd "$(dirname "$0")/.." && pwd)
+root="$(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ))"
 
 source "$root/build/teamcity-common-support.sh"
+source "$root/build/teamcity/util.sh"
 
 remove_files_on_exit() {
   rm -f ~/.ssh/id_rsa{,.pub}
@@ -102,6 +103,12 @@ function run_json_test() {
     rm -f "${fullfile}"
   fi
   rm -f "${tmpfile}" artifacts/stripped.txt
+
+  # Some unit tests test automatic ballast creation. These ballasts can be
+  # larger than the maximum artifact size. Remove any artifacts with the
+  # EMERGENCY_BALLAST filename.
+  find artifacts -name "EMERGENCY_BALLAST" -delete
+
   tc_end_block "artifacts"
 
   # Make it easier to figure out whether we're exiting because of a test failure
@@ -112,13 +119,21 @@ function run_json_test() {
   return $status
 }
 
-function maybe_stress() {
+function would_stress() {
   # Don't stressrace on the release branches; we only want that to happen on the
   # PRs. There's no need in making master flakier than it needs to be; nightly
   # stress will weed out the flaky tests.
-  # NB: as a consequence of the above, this code doesn't know about posting
-  # Github issues.
   if tc_release_branch; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+function maybe_stress() {
+   # NB: This code doesn't know about posting Github issues as we don't stress on
+   # the release branches.
+  if ! would_stress; then
     return 0
   fi
 
@@ -270,18 +285,11 @@ tc_release_branch() {
   [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
 }
 
-tc_start_block() {
-  echo "##teamcity[blockOpened name='$1']"
-}
 
 if_tc() {
   if [[ "${TC_BUILD_ID-}" ]]; then
     "$@"
   fi
-}
-
-tc_end_block() {
-  echo "##teamcity[blockClosed name='$1']"
 }
 
 tc_prepare() {

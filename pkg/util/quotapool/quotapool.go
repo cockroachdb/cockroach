@@ -220,7 +220,7 @@ func (qp *AbstractPool) Acquire(ctx context.Context, r Request) (err error) {
 		qp.config.onWaitStart(ctx, qp.name, r)
 	}
 	if qp.config.onWaitFinish != nil {
-		defer qp.config.onWaitFinish(ctx, qp.name, r)
+		defer qp.config.onWaitFinish(ctx, qp.name, r, start)
 	}
 
 	// Set up the infrastructure to report slow requests.

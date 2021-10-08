@@ -1,0 +1,192 @@
+load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
+load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl",
+     "action_config",
+     "feature",
+     "flag_group",
+     "flag_set",
+     "tool")
+
+all_compile_actions = [
+    ACTION_NAMES.c_compile,
+    ACTION_NAMES.cpp_compile,
+]
+
+all_link_actions = [
+    ACTION_NAMES.cpp_link_executable,
+]
+
+all_archive_actions = [
+    ACTION_NAMES.cpp_link_static_library,
+]
+
+def _impl(ctx):
+    action_configs = [
+        action_config(
+            action_name = ACTION_NAMES.c_compile,
+            tools = [tool(path="bin/%{target}-gcc")],
+        ),
+        action_config(
+            action_name = ACTION_NAMES.cpp_compile,
+            tools = [tool(path="bin/%{target}-g++")],
+        ),
+        action_config(
+            action_name = ACTION_NAMES.cpp_link_executable,
+            tools = [tool(path="bin/%{target}-g++")],
+        ),
+        action_config(
+            action_name = ACTION_NAMES.cpp_link_static_library,
+            tools = [tool(path="bin/%{target}-ar")],
+        ),
+
+    ]
+
+    opt_feature = feature(
+        name = "opt",
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-O3",
+                        ]
+                    ),
+                ]),
+            ),
+        ],
+    )
+    fastbuild_feature = feature(name = "fastbuild")
+    dbg_feature = feature(
+        name = "dbg",
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-g3",
+                        ]
+                    ),
+                ]),
+            ),
+        ],
+    )
+
+    supports_pic_feature = feature(name = "supports_pic", enabled = True)
+    supports_dynamic_linker_feature = feature(name = "supports_dynamic_linker", enabled = False)
+
+    default_archiver_flags = feature(
+        name = "archiver_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    flag_group(flags = ["rcsD"]),
+                    flag_group(
+                        flags = ["%{output_execpath}"],
+                        expand_if_available = "output_execpath",
+                    ),
+                ],
+            ),
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    flag_group(
+                        iterate_over = "libraries_to_link",
+                        flag_groups = [
+                            flag_group(
+                                flags = ["%{libraries_to_link.name}"],
+                            ),
+                        ],
+                        expand_if_available = "libraries_to_link",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
+    default_compile_flags = feature(
+        name = "default_compile_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = ([
+                    flag_group(
+                        flags = [
+                            "-Wall",
+                            "-I%{repo_path}/%{target}/include/c++/6.5.0",
+                        ],
+                    ),
+                ]),
+            ),
+        ],
+    )
+
+    linker_flags = []
+    if "%{target}" == "x86_64-w64-mingw32":
+        linker_flags.append("-static")
+    if "-linux-" in "%{target}":
+        # At various points in the build process we can use either clang or
+        # clang++ to link. The first of these arguments tells `clang` to link
+        # libstdc++/libgcc library, and the last two do the same for `clang++`.
+        linker_flags += [
+            "-Wl,-Bstatic,-lgcc,-lstdc++,-Bdynamic",
+            "-static-libgcc",
+            "-static-libstdc++",
+        ]
+    else:
+        linker_flags.append("-lstdc++")
+    if "%{target}" in ("x86_64-unknown-linux-gnu", "s390x-ibm-linux-gnu"):
+        linker_flags.append("-lrt")
+
+    default_linker_flags = feature(
+        name = "default_linker_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_link_actions,
+                flag_groups = ([flag_group(flags = linker_flags)]),
+            ),
+        ],
+    )
+
+    features = [
+        opt_feature,
+        fastbuild_feature,
+        dbg_feature,
+        supports_pic_feature,
+        supports_dynamic_linker_feature,
+        default_compile_flags,
+        default_linker_flags,
+        default_archiver_flags,
+    ]
+
+    return cc_common.create_cc_toolchain_config_info(
+        ctx = ctx,
+        features = features,
+        toolchain_identifier = "%{target}-cross-toolchain",
+        host_system_name = "%{target}",
+        target_system_name = "%{target}",
+        target_cpu = "%{target}",
+        target_libc = "glibc-2.14",
+        compiler = "clang",
+        abi_version = "clang-10.0.0",
+        abi_libc_version = "%{target}",
+        action_configs = action_configs,
+        cxx_builtin_include_directories = [
+            "%sysroot%/usr/include",
+            "%{repo_path}/%{target}/include/c++/6.5.0",
+            "%{repo_path}/lib/gcc/%{target}/6.5.0/include",
+            "%{repo_path}/lib/gcc/%{target}/6.5.0/include-fixed",
+        ],
+        builtin_sysroot = "%{repo_path}/%{target}/sysroot",
+    )
+
+cc_toolchain_config = rule(
+    implementation = _impl,
+    attrs = {},
+    provides = [CcToolchainConfigInfo],
+)

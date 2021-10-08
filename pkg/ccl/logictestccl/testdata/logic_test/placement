@@ -1,0 +1,44 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
+
+statement error PLACEMENT requires that the session setting enable_multiregion_placement_policy is enabled
+CREATE DATABASE no_cluster_setting PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" PLACEMENT RESTRICTED
+
+statement ok
+CREATE DATABASE to_be_altered PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+statement error ALTER DATABASE PLACEMENT requires that the session setting enable_multiregion_placement_policy is enabled
+ALTER DATABASE to_be_altered PLACEMENT RESTRICTED
+
+statement ok
+SET enable_multiregion_placement_policy = true;
+
+statement error PRIMARY REGION must be specified when using PLACEMENT
+CREATE DATABASE no_region_placement PLACEMENT RESTRICTED
+
+statement ok
+ALTER DATABASE to_be_altered PLACEMENT RESTRICTED
+
+statement ok
+CREATE DATABASE no_region_placement
+
+statement error database must have associated regions before a placement policy can be set
+ALTER DATABASE no_region_placement PLACEMENT RESTRICTED
+
+statement error PLACEMENT RESTRICTED can only be used with SURVIVE ZONE FAILURE
+CREATE DATABASE region_survivable_strict PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE PLACEMENT RESTRICTED
+
+statement ok
+CREATE DATABASE zone_survivable_strict PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" PLACEMENT RESTRICTED
+
+statement error a region-survivable database cannot also have a restricted placement policy
+ALTER DATABASE zone_survivable_strict SURVIVE REGION FAILURE
+
+statement ok
+CREATE DATABASE region_survivable_default PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
+
+statement error a region-survivable database cannot also have a restricted placement policy
+ALTER DATABASE region_survivable_default PLACEMENT RESTRICTED
+

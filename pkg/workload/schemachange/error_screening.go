@@ -11,16 +11,17 @@
 package schemachange
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
-func tableExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS (
+func tableExists(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT table_name
     FROM information_schema.tables 
    WHERE table_schema = $1
@@ -28,8 +29,8 @@ func tableExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
    )`, tableName.Schema(), tableName.Object())
 }
 
-func viewExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS (
+func viewExists(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT table_name
     FROM information_schema.views 
    WHERE table_schema = $1
@@ -37,8 +38,8 @@ func viewExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
    )`, tableName.Schema(), tableName.Object())
 }
 
-func sequenceExists(tx *pgx.Tx, seqName *tree.TableName) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS (
+func sequenceExists(ctx context.Context, tx pgx.Tx, seqName *tree.TableName) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT sequence_name
     FROM information_schema.sequences
    WHERE sequence_schema = $1
@@ -46,8 +47,10 @@ func sequenceExists(tx *pgx.Tx, seqName *tree.TableName) (bool, error) {
    )`, seqName.Schema(), seqName.Object())
 }
 
-func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS (
+func columnExistsOnTable(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT column_name
     FROM information_schema.columns 
    WHERE table_schema = $1
@@ -56,25 +59,34 @@ func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName strin
    )`, tableName.Schema(), tableName.Object(), columnName)
 }
 
-func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
-	return scanBool(tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
+func tableHasRows(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
 }
 
-func scanBool(tx *pgx.Tx, query string, args ...interface{}) (b bool, err error) {
-	err = tx.QueryRow(query, args...).Scan(&b)
+func scanBool(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (b bool, err error) {
+	err = tx.QueryRow(ctx, query, args...).Scan(&b)
 	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
 }
 
-func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS (
+func scanString(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (s string, err error) {
+	err = tx.QueryRow(ctx, query, args...).Scan(&s)
+	return s, errors.Wrapf(err, "scanString: %q %q", query, args)
+}
+
+func schemaExists(ctx context.Context, tx pgx.Tx, schemaName string) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT schema_name
 		FROM information_schema.schemata
    WHERE schema_name = $1
 	)`, schemaName)
 }
 
-func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
-	return scanBool(tx, `
+func tableHasDependencies(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(ctx, tx, `
 	SELECT EXISTS(
         SELECT fd.descriptor_name
           FROM crdb_internal.forward_dependencies AS fd
@@ -92,7 +104,9 @@ func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 	`, tableName.Object(), tableName.Schema())
 }
 
-func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+func columnIsDependedOn(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
 	// To see if a column is depended on, the ordinal_position of the column is looked up in
 	// information_schema.columns. Then, this position is used to see if that column has view dependencies
 	// or foreign key dependencies which would be stored in crdb_internal.forward_dependencies and
@@ -102,7 +116,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 	// stored as a list of numbers in a string, so SQL functions are used to parse these values
 	// into arrays. unnest is used to flatten rows with this column of array type into multiple rows,
 	// so performing unions and joins is easier.
-	return scanBool(tx, `SELECT EXISTS(
+	return scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT source.column_id
 			FROM (
 			   SELECT DISTINCT column_id
@@ -141,14 +155,36 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 )`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
-func colIsPrimaryKey(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return columnsStoredInPrimaryIdx(tx, tableName, tree.NameList([]tree.Name{tree.Name(columnName)}))
+func colIsPrimaryKey(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	primaryColumns, err := scanStringArray(ctx, tx,
+		`SELECT array_agg(column_name)
+		FROM (
+			SELECT DISTINCT column_name
+				FROM information_schema.statistics
+			WHERE index_name = 'primary'
+				AND table_schema = $1
+				AND table_name = $2
+				AND storing = 'NO'
+		);
+	`, tableName.Schema(), tableName.Object())
+	if err != nil {
+		return false, err
+	}
+
+	for _, primaryColumn := range primaryColumns {
+		if primaryColumn == columnName {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary constraints)
 // will be violated upon inserting the specified rows into the specified table.
 func violatesUniqueConstraints(
-	tx *pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
 ) (bool, error) {
 
 	if len(rows) == 0 {
@@ -157,7 +193,7 @@ func violatesUniqueConstraints(
 
 	// Fetch unique constraints from the database. The format returned is an array of string arrays.
 	// Each string array is a group of column names for which a unique constraint exists.
-	constraints, err := scanStringArrayRows(tx, `
+	constraints, err := scanStringArrayRows(ctx, tx, `
 	 SELECT DISTINCT array_agg(cols.column_name ORDER BY cols.column_name)
 					    FROM (
 					          SELECT d.oid,
@@ -202,7 +238,9 @@ func violatesUniqueConstraints(
 		// will be inserted into the database.
 		previousRows := map[string]bool{}
 		for _, row := range rows {
-			violation, err := violatesUniqueConstraintsHelper(tx, tableName, columns, constraint, row, previousRows)
+			violation, err := violatesUniqueConstraintsHelper(
+				ctx, tx, tableName, columns, constraint, row, previousRows,
+			)
 			if err != nil {
 				return false, err
 			}
@@ -216,7 +254,8 @@ func violatesUniqueConstraints(
 }
 
 func violatesUniqueConstraintsHelper(
-	tx *pgx.Tx,
+	ctx context.Context,
+	tx pgx.Tx,
 	tableName *tree.TableName,
 	columns []string,
 	constraint []string,
@@ -270,7 +309,7 @@ func violatesUniqueConstraintsHelper(
 	previousRows[queryString] = true
 
 	// Check for uniqueness against rows in the database.
-	exists, err := scanBool(tx, queryString)
+	exists, err := scanBool(ctx, tx, queryString)
 	if err != nil {
 		return false, err
 	}
@@ -281,8 +320,10 @@ func violatesUniqueConstraintsHelper(
 	return false, nil
 }
 
-func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]string, error) {
-	rows, err := tx.Query(query, args...)
+func scanStringArrayRows(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) ([][]string, error) {
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "scanStringArrayRows: %q %q", query, args)
 	}
@@ -301,8 +342,10 @@ func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]str
 	return results, nil
 }
 
-func indexExists(tx *pgx.Tx, tableName *tree.TableName, indexName string) (bool, error) {
-	return scanBool(tx, `SELECT EXISTS(
+func indexExists(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, indexName string,
+) (bool, error) {
+	return scanBool(ctx, tx, `SELECT EXISTS(
 			SELECT *
 			  FROM information_schema.statistics
 			 WHERE table_schema = $1
@@ -311,46 +354,17 @@ func indexExists(tx *pgx.Tx, tableName *tree.TableName, indexName string) (bool,
   )`, tableName.Schema(), tableName.Object(), indexName)
 }
 
-func columnsStoredInPrimaryIdx(
-	tx *pgx.Tx, tableName *tree.TableName, columnNames tree.NameList,
-) (bool, error) {
-	columnsMap := map[string]bool{}
-	for _, name := range columnNames {
-		columnsMap[string(name)] = true
-	}
-
-	primaryColumns, err := scanStringArray(tx, `
-		SELECT array_agg(column_name)
-	  FROM (
-	        SELECT DISTINCT column_name
-	          FROM information_schema.statistics
-	         WHERE index_name = 'primary'
-	           AND table_schema = $1
-	           AND table_name = $2
-	       );
-	`, tableName.Schema(), tableName.Object())
-
-	if err != nil {
-		return false, err
-	}
-
-	for _, primaryColumn := range primaryColumns {
-		if _, exists := columnsMap[primaryColumn]; exists {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func scanStringArray(tx *pgx.Tx, query string, args ...interface{}) (b []string, err error) {
-	err = tx.QueryRow(query, args...).Scan(&b)
+func scanStringArray(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (b []string, err error) {
+	err = tx.QueryRow(ctx, query, args...).Scan(&b)
 	return b, errors.Wrapf(err, "scanStringArray %q %q", query, args)
 }
 
 // canApplyUniqueConstraint checks if the rows in a table are unique with respect
 // to the specified columns such that a unique constraint can successfully be applied.
 func canApplyUniqueConstraint(
-	tx *pgx.Tx, tableName *tree.TableName, columns []string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string,
 ) (bool, error) {
 	columnNames := strings.Join(columns, ", ")
 
@@ -368,7 +382,7 @@ func canApplyUniqueConstraint(
 		}
 	}
 
-	return scanBool(tx,
+	return scanBool(ctx, tx,
 		fmt.Sprintf(`
 		SELECT (
 	       SELECT count(*)
@@ -387,8 +401,10 @@ func canApplyUniqueConstraint(
 
 }
 
-func columnContainsNull(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return scanBool(tx, fmt.Sprintf(`SELECT EXISTS (
+func columnContainsNull(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (
 		SELECT %s
 		  FROM %s
 	   WHERE %s IS NULL
@@ -396,9 +412,9 @@ func columnContainsNull(tx *pgx.Tx, tableName *tree.TableName, columnName string
 }
 
 func constraintIsPrimary(
-	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
-	return scanBool(tx, fmt.Sprintf(`
+	return scanBool(ctx, tx, fmt.Sprintf(`
 	SELECT EXISTS(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
@@ -411,9 +427,9 @@ func constraintIsPrimary(
 
 // Checks if a column has a single unique constraint.
 func columnHasSingleUniqueConstraint(
-	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
 	SELECT EXISTS(
 	        SELECT column_name
 	          FROM (
@@ -435,9 +451,9 @@ func columnHasSingleUniqueConstraint(
 	`, tableName.Schema(), tableName.Object(), columnName)
 }
 func constraintIsUnique(
-	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
-	return scanBool(tx, fmt.Sprintf(`
+	return scanBool(ctx, tx, fmt.Sprintf(`
 	SELECT EXISTS(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
@@ -449,10 +465,10 @@ func constraintIsUnique(
 }
 
 func columnIsStoredComputed(
-	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
 SELECT COALESCE(
         (
             SELECT attgenerated
@@ -465,9 +481,11 @@ SELECT COALESCE(
 `, tableName.String(), columnName)
 }
 
-func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+func columnIsComputed(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
 SELECT COALESCE(
         (
             SELECT attgenerated
@@ -480,8 +498,8 @@ SELECT COALESCE(
 `, tableName.String(), columnName)
 }
 
-func constraintExists(tx *pgx.Tx, constraintName string) (bool, error) {
-	return scanBool(tx, fmt.Sprintf(`
+func constraintExists(ctx context.Context, tx pgx.Tx, constraintName string) (bool, error) {
+	return scanBool(ctx, tx, fmt.Sprintf(`
 	SELECT EXISTS(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
@@ -491,7 +509,8 @@ func constraintExists(tx *pgx.Tx, constraintName string) (bool, error) {
 }
 
 func rowsSatisfyFkConstraint(
-	tx *pgx.Tx,
+	ctx context.Context,
+	tx pgx.Tx,
 	parentTable *tree.TableName,
 	parentColumn *column,
 	childTable *tree.TableName,
@@ -501,7 +520,7 @@ func rowsSatisfyFkConstraint(
 	if parentTable.Schema() == childTable.Schema() && parentTable.Object() == childTable.Object() && parentColumn.name == childColumn.name {
 		return true, nil
 	}
-	return scanBool(tx, fmt.Sprintf(`
+	return scanBool(ctx, tx, fmt.Sprintf(`
 	SELECT NOT EXISTS(
 	  SELECT *
 	    FROM %s as t1
@@ -513,9 +532,9 @@ func rowsSatisfyFkConstraint(
 
 // violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
 func violatesFkConstraints(
-	tx *pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
 ) (bool, error) {
-	fkConstraints, err := scanStringArrayRows(tx, fmt.Sprintf(`
+	fkConstraints, err := scanStringArrayRows(ctx, tx, fmt.Sprintf(`
 		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
 		  FROM (
 		        SELECT conkey, confkey, conrelid, confrelid
@@ -566,7 +585,9 @@ func violatesFkConstraints(
 				continue
 			}
 
-			violation, err := violatesFkConstraintsHelper(tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, row)
+			violation, err := violatesFkConstraintsHelper(
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, row,
+			)
 			if err != nil {
 				return false, err
 			}
@@ -583,7 +604,8 @@ func violatesFkConstraints(
 // violatesFkConstraintsHelper checks if a single row will violate a foreign key constraint
 // between the childColumn and parentColumn.
 func violatesFkConstraintsHelper(
-	tx *pgx.Tx,
+	ctx context.Context,
+	tx pgx.Tx,
 	columnNameToIndexMap map[string]int,
 	parentTableSchema, parentTableName, parentColumn, childColumn string,
 	row []string,
@@ -595,7 +617,7 @@ func violatesFkConstraintsHelper(
 		return false, nil
 	}
 
-	return scanBool(tx, fmt.Sprintf(`
+	return scanBool(ctx, tx, fmt.Sprintf(`
 	SELECT NOT EXISTS (
 	    SELECT * from %s.%s
 	    WHERE %s = %s
@@ -604,9 +626,9 @@ func violatesFkConstraintsHelper(
 }
 
 func columnIsInDroppingIndex(
-	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
 SELECT EXISTS(
         SELECT index_id
           FROM (
@@ -644,10 +666,10 @@ const descriptorsAndConstraintMutationsCTE = `descriptors AS (
                             )`
 
 func constraintInDroppingState(
-	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
 	// TODO(ajwerner): Figure out how to plumb the column name into this query.
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
   WITH `+descriptorsAndConstraintMutationsCTE+`
 SELECT true
        IN (
@@ -661,9 +683,9 @@ SELECT true
 }
 
 func columnNotNullConstraintInMutation(
-	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
-	return scanBool(tx, `
+	return scanBool(ctx, tx, `
   WITH `+descriptorsAndConstraintMutationsCTE+`,
        col AS (
             SELECT (c->>'id')::INT8 AS id
@@ -682,8 +704,10 @@ SELECT EXISTS(
 `, tableName.String(), columnName)
 }
 
-func schemaContainsTypesWithCrossSchemaReferences(tx *pgx.Tx, schemaName string) (bool, error) {
-	return scanBool(tx, `
+func schemaContainsTypesWithCrossSchemaReferences(
+	ctx context.Context, tx pgx.Tx, schemaName string,
+) (bool, error) {
+	return scanBool(ctx, tx, `
   WITH database_id AS (
                     SELECT id
                       FROM system.namespace
@@ -747,8 +771,8 @@ SELECT EXISTS(
 
 // enumMemberPresent determines whether val is a member of the enum.
 // This includes non-public members.
-func enumMemberPresent(tx *pgx.Tx, enum string, val string) (bool, error) {
-	return scanBool(tx, `
+func enumMemberPresent(ctx context.Context, tx pgx.Tx, enum string, val string) (bool, error) {
+	return scanBool(ctx, tx, `
 WITH enum_members AS (
 	SELECT
 				json_array_elements(
@@ -776,8 +800,11 @@ SELECT
 }
 
 // tableHasOngoingSchemaChanges returns whether the table has any mutations lined up.
-func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+func tableHasOngoingSchemaChanges(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
 	return scanBool(
+		ctx,
 		tx,
 		`
 		SELECT json_array_length(
@@ -796,8 +823,11 @@ func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, 
 
 // tableHasOngoingAlterPKSchemaChanges checks whether a given table has an ALTER
 // PRIMARY KEY related change in progress.
-func tableHasOngoingAlterPKSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+func tableHasOngoingAlterPKSchemaChanges(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
 	return scanBool(
+		ctx,
 		tx,
 		`
 WITH
@@ -834,9 +864,58 @@ SELECT
 	)
 }
 
+// getRegionColumn returns the column used for partitioning a REGIONAL BY ROW
+// table. This column is either the tree.RegionalByRowRegionDefaultCol column,
+// or the column specified in the AS clause. This function asserts if the
+// supplied table is not REGIONAL BY ROW.
+func getRegionColumn(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (string, error) {
+	isTableRegionalByRow, err := tableIsRegionalByRow(ctx, tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !isTableRegionalByRow {
+		return "", errors.AssertionFailedf(
+			"invalid call to get region column of table %s which is not a REGIONAL BY ROW table",
+			tableName.String())
+	}
+
+	regionCol, err := scanString(
+		ctx,
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	COALESCE (d->'localityConfig'->'regionalByRow'->>'as', $2)
+FROM
+	descriptors;
+`,
+		tableName.String(),
+		tree.RegionalByRowRegionDefaultCol,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return regionCol, nil
+}
+
 // tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
-func tableIsRegionalByRow(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+func tableIsRegionalByRow(ctx context.Context, tx pgx.Tx, tableName *tree.TableName) (bool, error) {
 	return scanBool(
+		ctx,
 		tx,
 		`
 WITH
@@ -869,8 +948,9 @@ SELECT
 
 // databaseHasRegionChange determines whether the database is currently undergoing
 // a region change.
-func databaseHasRegionChange(tx *pgx.Tx) (bool, error) {
+func databaseHasRegionChange(ctx context.Context, tx pgx.Tx) (bool, error) {
 	isMultiRegion, err := scanBool(
+		ctx,
 		tx,
 		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
 	)
@@ -878,6 +958,7 @@ func databaseHasRegionChange(tx *pgx.Tx) (bool, error) {
 		return false, err
 	}
 	return scanBool(
+		ctx,
 		tx,
 		`
 WITH enum_members AS (
@@ -902,11 +983,12 @@ SELECT EXISTS (
 	)
 }
 
-// databaseHasOngoingAlterPKChanges checks whether a given database has any tables
+// databaseHasRegionalByRowChange checks whether a given database has any tables
 // which are currently undergoing a change to or from REGIONAL BY ROW, or
 // REGIONAL BY ROW tables with schema changes on it.
-func databaseHasRegionalByRowChange(tx *pgx.Tx) (bool, error) {
+func databaseHasRegionalByRowChange(ctx context.Context, tx pgx.Tx) (bool, error) {
 	return scanBool(
+		ctx,
 		tx,
 		`
 WITH

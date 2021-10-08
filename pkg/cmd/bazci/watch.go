@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,6 +21,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/errors"
 )
 
 // SourceDir is an enumeration of possible output locations.
@@ -142,7 +146,7 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 			{path.Join(relDir, "test.xml"), mungeTestXML},
 			{path.Join(relDir, "*", "test.xml"), mungeTestXML},
 		} {
-			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0666, phase,
+			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0644, phase,
 				tup.stagefn)
 			if err != nil {
 				return err
@@ -197,10 +201,56 @@ func (w watcher) stageBinaryArtifacts() error {
 		head := strings.ReplaceAll(strings.TrimPrefix(bin, "//"), ":", "/")
 		components := strings.Split(bin, ":")
 		relBinPath := path.Join(head+"_", components[len(components)-1])
-		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0777, finalizePhase,
+		if usingCrossWindowsConfig() {
+			relBinPath = relBinPath + ".exe"
+		}
+		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
 			return err
+		}
+	}
+	for _, bin := range w.info.genruleTargets {
+		// Ask Bazel to list all the outputs of the genrule.
+		query, err := runBazelReturningStdout("query", "--output=xml", bin)
+		if err != nil {
+			return err
+		}
+		outs, err := bazelutil.OutputsOfGenrule(bin, query)
+		if err != nil {
+			return err
+		}
+		for _, relBinPath := range outs {
+			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	for _, bin := range w.info.cmakeTargets {
+		// These targets don't have stable, predictable locations, so
+		// they have to be hardcoded.
+		var ext string
+		if usingCrossWindowsConfig() {
+			ext = "dll"
+		} else if usingCrossDarwinConfig() {
+			ext = "dylib"
+		} else {
+			ext = "so"
+		}
+		switch bin {
+		case "//c-deps:libgeos":
+			for _, relBinPath := range []string{
+				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
+				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
+			} {
+				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
+				if err != nil {
+					return err
+				}
+			}
+		default:
+			return errors.Newf("Unrecognized cmake target %s", bin)
 		}
 	}
 	return nil
@@ -214,8 +264,10 @@ func copyContentTo(srcContent []byte, outFile io.Writer) error {
 }
 
 // mungeTestXML parses and slightly munges the XML in the source file and writes
-// it to the output file. Helper function meant to be used with
-// maybeStageArtifact.
+// it to the output file. TeamCity kind of knows how to interpret the schema,
+// but the schema isn't *exactly* what it's expecting. By munging the XML's
+// here we ensure that the TC test view is as useful as possible.
+// Helper function meant to be used with maybeStageArtifact.
 func mungeTestXML(srcContent []byte, outFile io.Writer) error {
 	// Parse the XML into a testSuites struct.
 	suites := testSuites{}
@@ -269,7 +321,7 @@ func (w *cancelableWriter) Write(p []byte) (n int, err error) {
 
 func (w *cancelableWriter) Close() error {
 	if !w.Canceled {
-		err := os.MkdirAll(path.Dir(w.filename), 0777)
+		err := os.MkdirAll(path.Dir(w.filename), 0755)
 		if err != nil {
 			return err
 		}
@@ -315,7 +367,7 @@ func (w *cancelableWriter) Close() error {
 //
 // For example, one might stage a set of log files with a call like:
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
-//                      0666, incrementalUpdatePhase, copycontentTo)
+//                      0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
 	root SourceDir,
 	pattern string,

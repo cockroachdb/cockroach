@@ -369,10 +369,10 @@ func TestClientPutInline(t *testing.T) {
 func TestClientCPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 	db := createTestClient(t, s)
-	ctx := kv.CtxForCPutInline(context.Background())
 	key := testUser + "/key"
 	value := []byte("value")
 
@@ -733,7 +733,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x"); err != nil {
+		if _, err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x", false /* returnKeys */); err != nil {
 			t.Fatalf("%d: unable to clean up: %s", k, err)
 		}
 		concurrentIncrements(db, t)

@@ -15,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/diskmap",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/memsize",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",

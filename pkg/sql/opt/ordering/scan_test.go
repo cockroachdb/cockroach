@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -31,7 +32,8 @@ func TestScan(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	var f norm.Factory
 	f.Init(evalCtx, tc)
 	md := f.Metadata()

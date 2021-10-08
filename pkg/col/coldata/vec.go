@@ -19,7 +19,10 @@ import (
 )
 
 // Column is an interface that represents a raw array of a Go native type.
-type Column interface{}
+type Column interface {
+	// Len returns the number of elements in the Column.
+	Len() int
+}
 
 // SliceArgs represents the arguments passed in to Vec.Append and Nulls.set.
 type SliceArgs struct {
@@ -37,17 +40,6 @@ type SliceArgs struct {
 	// before SrcEndIdx is the last element appended to the destination slice,
 	// similar to Src[SrcStartIdx:SrcEndIdx].
 	SrcEndIdx int
-}
-
-// CopySliceArgs represents the extension of SliceArgs that is passed in to
-// Vec.Copy.
-type CopySliceArgs struct {
-	SliceArgs
-	// SelOnDest, if true, uses the selection vector as a lens into the
-	// destination as well as the source. Normally, when SelOnDest is false, the
-	// selection vector is applied to the source vector, but the results are
-	// copied densely into the destination vector.
-	SelOnDest bool
 }
 
 // Vec is an interface that represents a column vector that's accessible by
@@ -87,10 +79,10 @@ type Vec interface {
 	Datum() DatumVec
 
 	// Col returns the raw, typeless backing storage for this Vec.
-	Col() interface{}
+	Col() Column
 
 	// SetCol sets the member column (in the case of mutable columns).
-	SetCol(interface{})
+	SetCol(Column)
 
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
@@ -108,13 +100,19 @@ type Vec interface {
 	// undefined).
 	Append(SliceArgs)
 
-	// Copy uses CopySliceArgs to copy elements of a source Vec into this Vec. It is
+	// Copy uses SliceArgs to copy elements of a source Vec into this Vec. It is
 	// logically equivalent to:
 	// copy(destVec[args.DestIdx:], args.Src[args.SrcStartIdx:args.SrcEndIdx])
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
-	// Refer to the CopySliceArgs comment for specifics and TestCopy for examples.
-	Copy(CopySliceArgs)
+	// Refer to the SliceArgs comment for specifics and TestCopy for examples.
+	Copy(SliceArgs)
+
+	// CopyWithReorderedSource copies a value at position order[sel[i]] in src
+	// into the receiver at position sel[i]. len(sel) elements are copied.
+	// Resulting values of elements not mentioned in sel are undefined after
+	// this function.
+	CopyWithReorderedSource(src Vec, sel, order []int)
 
 	// Window returns a "window" into the Vec. A "window" is similar to Golang's
 	// slice of the current Vec from [start, end), but the returned object is NOT
@@ -225,7 +223,7 @@ func (m *memColumn) IsBytesLike() bool {
 	return false
 }
 
-func (m *memColumn) SetCol(col interface{}) {
+func (m *memColumn) SetCol(col Column) {
 	m.col = col
 }
 
@@ -273,7 +271,7 @@ func (m *memColumn) Datum() DatumVec {
 	return m.col.(DatumVec)
 }
 
-func (m *memColumn) Col() interface{} {
+func (m *memColumn) Col() Column {
 	return m.col
 }
 
@@ -294,37 +292,7 @@ func (m *memColumn) SetNulls(n *Nulls) {
 }
 
 func (m *memColumn) Length() int {
-	switch m.CanonicalTypeFamily() {
-	case types.BoolFamily:
-		return len(m.col.(Bools))
-	case types.BytesFamily:
-		return m.Bytes().Len()
-	case types.IntFamily:
-		switch m.t.Width() {
-		case 16:
-			return len(m.col.(Int16s))
-		case 32:
-			return len(m.col.(Int32s))
-		case 0, 64:
-			return len(m.col.(Int64s))
-		default:
-			panic(fmt.Sprintf("unexpected int width: %d", m.t.Width()))
-		}
-	case types.FloatFamily:
-		return len(m.col.(Float64s))
-	case types.DecimalFamily:
-		return len(m.col.(Decimals))
-	case types.TimestampTZFamily:
-		return len(m.col.(Times))
-	case types.IntervalFamily:
-		return len(m.col.(Durations))
-	case types.JsonFamily:
-		return m.JSON().Len()
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return m.col.(DatumVec).Len()
-	default:
-		panic(fmt.Sprintf("unhandled type %s", m.t))
-	}
+	return m.col.Len()
 }
 
 func (m *memColumn) Capacity() int {

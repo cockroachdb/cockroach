@@ -46,8 +46,7 @@ const STORAGE = logpb.Channel_STORAGE
 
 // SESSIONS is used to report client network activity when enabled via
 // the `server.auth_log.sql_connections.enabled` and/or
-// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
-// [cluster settings](cluster-settings.html):
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
 //
 // - Connections opened/closed
 // - Authentication events: logins, failed attempts
@@ -130,3 +129,8 @@ const SQL_PERF = logpb.Channel_SQL_PERF
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
+
+// TELEMETRY reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+const TELEMETRY = logpb.Channel_TELEMETRY

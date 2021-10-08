@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenanttokenbucket",
+    srcs = ["tenant_token_bucket.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/roachpb:with-mocks"],
+)
+
+go_test(
+    name = "tenanttokenbucket_test",
+    srcs = ["tenant_token_bucket_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":tenanttokenbucket"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

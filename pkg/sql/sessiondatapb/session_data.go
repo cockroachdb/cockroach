@@ -80,12 +80,12 @@ func BytesEncodeFormatFromString(val string) (_ BytesEncodeFormat, ok bool) {
 
 func (m VectorizeExecMode) String() string {
 	switch m {
-	case VectorizeOff:
-		return "off"
-	case VectorizeOn:
+	case VectorizeOn, VectorizeUnset:
 		return "on"
 	case VectorizeExperimentalAlways:
 		return "experimental_always"
+	case VectorizeOff:
+		return "off"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -96,19 +96,19 @@ func (m VectorizeExecMode) String() string {
 func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	var m VectorizeExecMode
 	switch strings.ToUpper(val) {
-	case "OFF":
-		m = VectorizeOff
 	case "ON":
 		m = VectorizeOn
 	case "EXPERIMENTAL_ALWAYS":
 		m = VectorizeExperimentalAlways
+	case "OFF":
+		m = VectorizeOff
 	default:
 		return 0, false
 	}
 	return m, true
 }
 
-// User retrieves the session user.
+// User retrieves the current user.
 func (s *SessionData) User() security.SQLUsername {
 	return s.UserProto.Decode()
 }

@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "admission",
+    srcs = [
+        "doc.go",
+        "granter.go",
+        "work_queue.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/admission",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "admission_test",
+    srcs = [
+        "granter_test.go",
+        "work_queue_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":admission"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_stretchr_testify//require",
+    ],
+)

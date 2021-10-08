@@ -144,6 +144,53 @@ vectorized: true
           table: t_idx@t_idx_v_idx
           spans: /1-/2
 
+# Covering lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@t_idx_v_idx
+│ equality: (column1) = (v)
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 3 rows
+      row 0, expr 0: 1
+      row 1, expr 0: 10
+      row 2, expr 0: 5
+
+# Non-covering lookup join that requires a second join on the primary index.
+query T
+EXPLAIN (VERBOSE) SELECT a, b, v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│
+└── • lookup join (inner)
+    │ columns: (column1, a, v)
+    │ estimated row count: 30 (missing stats)
+    │ table: t_idx@t_idx_v_idx
+    │ equality: (column1) = (v)
+    │
+    └── • values
+          columns: (column1)
+          size: 1 column, 3 rows
+          row 0, expr 0: 1
+          row 1, expr 0: 10
+          row 2, expr 0: 5
+
 subtest Insert
 
 # TODO(radu): we shouldn't need to synthesize v here.
@@ -423,6 +470,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
@@ -504,6 +552,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
@@ -546,6 +595,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
@@ -594,6 +644,7 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: t_idx@t_idx_v_idx
                       spans: /45-/46
+                      locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
@@ -663,6 +714,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
@@ -705,6 +757,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 subtest Upsert
 
@@ -825,6 +878,7 @@ vectorized: true
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -887,6 +941,7 @@ vectorized: true
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -1019,6 +1074,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1155,6 +1211,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1233,6 +1290,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1432,3 +1490,79 @@ vectorized: true
   estimated row count: 3 (missing stats)
   table: inv@iv_jv_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Regression tests for #65343. Collated string locales should be normalized so
+# that indexes on collated string virtual columns are scanned for any given
+# locale format in a query.
+subtest 65343
+
+statement ok
+CREATE TABLE t65343 (
+  s STRING,
+  c STRING COLLATE en_US AS (s COLLATE en_US) VIRTUAL,
+  INDEX (c)
+)
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]

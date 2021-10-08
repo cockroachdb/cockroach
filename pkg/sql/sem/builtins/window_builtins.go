@@ -590,7 +590,9 @@ func newNtileWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = pgerror.Newf(
+// ErrInvalidArgumentForNtile is thrown when the ntile function is given an
+// argument less than or equal to zero.
+var ErrInvalidArgumentForNtile = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(
@@ -613,7 +615,7 @@ func (w *ntileWindow) Compute(
 		nbuckets := int(tree.MustBeDInt(arg))
 		if nbuckets <= 0 {
 			// per spec: If argument is less than or equal to 0, then an error is returned.
-			return nil, errInvalidArgumentForNtile
+			return nil, ErrInvalidArgumentForNtile
 		}
 
 		w.ntile = tree.NewDInt(1)
@@ -803,7 +805,9 @@ func newNthValueWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = pgerror.Newf(
+// ErrInvalidArgumentForNthValue should be thrown when the nth_value window
+// function is given a value of 'n' less than zero.
+var ErrInvalidArgumentForNthValue = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
@@ -820,7 +824,7 @@ func (nthValueWindow) Compute(
 
 	nth := int(tree.MustBeDInt(arg))
 	if nth <= 0 {
-		return nil, errInvalidArgumentForNthValue
+		return nil, ErrInvalidArgumentForNthValue
 	}
 
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)

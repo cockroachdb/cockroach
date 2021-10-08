@@ -42,7 +42,7 @@ go_test(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/ipaddr",
@@ -51,6 +51,7 @@ go_test(
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
@@ -82,8 +83,9 @@ genrule(
     cmd = """
        GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
        GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+       # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
        sed -e 's/type Type encodingtype.T/type Type int/' $(location encoding.go) > encoding_tmp.go && \
-       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
          $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type encoding_tmp.go
     """,
     exec_tools = [

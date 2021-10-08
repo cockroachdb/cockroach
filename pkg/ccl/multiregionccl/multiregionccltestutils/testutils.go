@@ -23,6 +23,7 @@ import (
 type multiRegionTestClusterParams struct {
 	baseDir         string
 	replicationMode base.TestClusterReplicationMode
+	useDatabase     string
 }
 
 // MultiRegionTestClusterParamsOption is an option that can be passed to
@@ -47,11 +48,18 @@ func WithReplicationMode(
 	}
 }
 
+// WithUseDatabase is an option to set the UseDatabase server option.
+func WithUseDatabase(db string) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.useDatabase = db
+	}
+}
+
 // TestingCreateMultiRegionCluster creates a test cluster with numServers number
 // of nodes and the provided testing knobs applied to each of the nodes. Every
 // node is placed in its own locality, named "us-east1", "us-east2", and so on.
 func TestingCreateMultiRegionCluster(
-	t *testing.T, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
+	t testing.TB, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
 ) (*testcluster.TestCluster, *gosql.DB, func()) {
 	serverArgs := make(map[int]base.TestServerArgs)
 	regionNames := make([]string, numServers)
@@ -69,6 +77,7 @@ func TestingCreateMultiRegionCluster(
 		serverArgs[i] = base.TestServerArgs{
 			Knobs:         knobs,
 			ExternalIODir: params.baseDir,
+			UseDatabase:   params.useDatabase,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},

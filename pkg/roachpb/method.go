@@ -134,8 +134,6 @@ const (
 	WriteBatch
 	// Export dumps a keyrange into files.
 	Export
-	// Import bulk loads key/value entries.
-	Import
 	// AdminScatter moves replicas and leaseholders for a selection of ranges.
 	// Best-effort.
 	AdminScatter
@@ -158,9 +156,19 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
-	// VerifyProtectedTimestamp determines whether the specified protection record
-	// will be respected by this Range.
+	// AdminVerifyProtectedTimestamp determines whether the specified protection
+	// record will be respected by this Range.
 	AdminVerifyProtectedTimestamp
+	// QueryResolvedTimestamp requests the resolved timestamp of the key span it
+	// is issued over.
+	QueryResolvedTimestamp
+	// ScanInterleavedIntents is a command to return interleaved intents
+	// encountered over a key range.
+	ScanInterleavedIntents
+	// Barrier is a command that ensures all conflicting in-flight operations on
+	// this range before this command have finished by the time it returns. It
+	// does not block new operations that started after this command's evaluation.
+	Barrier
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

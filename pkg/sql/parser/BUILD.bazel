@@ -10,7 +10,7 @@ go_library(
         "help.go",
         "lexer.go",
         "parse.go",
-        "scan.go",
+        "scanner.go",
         "show_syntax.go",
         ":gen-help-messages",  # keep
         ":sql-goyacc",  # keep
@@ -22,13 +22,13 @@ go_library(
     deps = [
         "//pkg/docs",
         "//pkg/geo/geopb",  # keep
-        "//pkg/roachpb",  # keep
+        "//pkg/roachpb:with-mocks",  # keep
         "//pkg/security",  # keep
-        "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",  # keep
+        "//pkg/sql/scanner",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -46,13 +46,13 @@ go_test(
         "lexer_test.go",
         "parse_internal_test.go",
         "parse_test.go",
-        "scan_test.go",
+        "scanner_test.go",
         ":gen-helpmap-test",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [
-        "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
@@ -69,7 +69,6 @@ go_test(
 sh_binary(
     name = "sql-gen",
     srcs = ["sql-gen.sh"],
-    data = ["sql-gen.sh"],
 )
 
 # Define the target to auto-generate sql.go from the grammar file.
@@ -96,7 +95,6 @@ genrule(
 sh_binary(
     name = "help-gen-test",
     srcs = ["help_gen_test.sh"],
-    data = ["help_gen_test.sh"],
 )
 
 # Define the target to auto-generate a helpmap test helper file.

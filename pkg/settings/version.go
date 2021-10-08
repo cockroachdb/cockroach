@@ -151,8 +151,8 @@ func (v *VersionSetting) GetInternal(sv *Values) interface{} {
 }
 
 // SetInternal updates the setting's value in the provided Values container.
-func (v *VersionSetting) SetInternal(sv *Values, newVal interface{}) {
-	sv.setGeneric(v.getSlotIdx(), newVal)
+func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal interface{}) {
+	sv.setGeneric(ctx, v.getSlotIdx(), newVal)
 }
 
 // setToDefault is part of the extendingSetting interface. This is a no-op for
@@ -161,7 +161,7 @@ func (v *VersionSetting) SetInternal(sv *Values, newVal interface{}) {
 //
 // TODO(irfansharif): Is this true? Shouldn't the default here just the the
 // version we initialize with?
-func (v *VersionSetting) setToDefault(_ *Values) {}
+func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
@@ -175,16 +175,4 @@ func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *V
 	setting := MakeVersionSetting(impl)
 	register(key, desc, &setting)
 	return &setting
-}
-
-// SetOnChange is part of the Setting interface, and is discouraged for use in
-// VersionSetting (we're implementing it here to not fall back on the embedded
-// `common` type definition).
-//
-// NB: VersionSetting is unique in more ways than one, and we might want to move
-// it out of the settings package before long (see TODO on the type itself). In
-// our current usage we don't rely on attaching pre-change triggers, so let's
-// not add it needlessly.
-func (v *VersionSetting) SetOnChange(_ *Values, _ func()) {
-	panic("unimplemented")
 }

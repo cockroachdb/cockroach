@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,8 +47,9 @@ type comment struct {
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
+	txn := p.ExtendedEvalContext().Txn
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
-		ctx, "show-tables-with-comment", p.Txn(), query)
+		ctx, "show-tables-with-comment", txn, query)
 	if err != nil {
 		log.VEventf(ctx, 1, "%q", err)
 	} else {
@@ -107,7 +108,7 @@ func ShowCreateView(
 	}
 	f.WriteString(") AS ")
 
-	// Convert sequences referenced by ID in the view back to their names.
+	// Deserialize user-defined types in the view query.
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
 	if err != nil {
 		log.Warningf(ctx,
@@ -115,7 +116,7 @@ func ShowCreateView(
 			desc.GetName(), desc.GetID(), err)
 		f.WriteString(desc.GetViewQuery())
 	} else {
-		// Deserialize user-defined types in the view query.
+		// Convert sequences referenced by ID in the view back to their names.
 		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
 			ctx, semaCtx, typeReplacedViewQuery)
 		if err != nil {
@@ -375,7 +376,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 	if c := desc.GetLocalityConfig(); c != nil {
 		f.WriteString(" LOCALITY ")
-		return tabledesc.FormatTableLocalityConfig(c, f)
+		return multiregion.FormatTableLocalityConfig(c, f)
 	}
 	return nil
 }
@@ -415,7 +416,7 @@ func showCreateInterleave(
 	fmtCtx.FormatNode(&parentName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.IndexDesc().ColumnNames[:sharedPrefixLen]...)
+	formatQuoteNames(buf, idx.IndexDesc().KeyColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
 	return nil
 }
@@ -427,7 +428,7 @@ func ShowCreatePartitioning(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
-	partDesc *descpb.PartitioningDescriptor,
+	part catalog.Partitioning,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
@@ -435,7 +436,7 @@ func ShowCreatePartitioning(
 	isPrimaryKeyOfPartitionAllByTable :=
 		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idx.GetID() && colOffset == 0
 
-	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
+	if part.NumColumns() == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
 	}
 	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
@@ -464,77 +465,84 @@ func ShowCreatePartitioning(
 		buf.WriteString(`ALL `)
 	}
 	buf.WriteString(`BY `)
-	if len(partDesc.List) > 0 {
+	if part.NumLists() > 0 {
 		buf.WriteString(`LIST`)
-	} else if len(partDesc.Range) > 0 {
+	} else if part.NumRanges() > 0 {
 		buf.WriteString(`RANGE`)
 	} else if isPrimaryKeyOfPartitionAllByTable {
 		buf.WriteString(`NOTHING`)
 		return nil
 	} else {
-		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
+		return errors.Errorf(`invalid partition descriptor: %v`, part.PartitioningDesc())
 	}
 	buf.WriteString(` (`)
-	for i := 0; i < int(partDesc.NumColumns); i++ {
+	for i := 0; i < part.NumColumns(); i++ {
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idx.GetColumnName(colOffset + i))
+		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i := range partDesc.List {
-		part := &partDesc.List[i]
-		if i != 0 {
+	isFirst := true
+	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatNameP(&part.Name)
+		fmtCtx.FormatNameP(&name)
 		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
-		for j, values := range part.Values {
+		for j, values := range values {
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idx, partDesc, values, fakePrefixDatums)
+				a, codec, tableDesc, idx, part, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
 			buf.WriteString(tuple.String())
 		}
 		buf.WriteString(`)`)
-		if err := ShowCreatePartitioning(
-			a, codec, tableDesc, idx, &part.Subpartitioning, buf, indent+1,
-			colOffset+int(partDesc.NumColumns),
-		); err != nil {
-			return err
-		}
+		return ShowCreatePartitioning(
+			a, codec, tableDesc, idx, subPartitioning, buf, indent+1, colOffset+part.NumColumns(),
+		)
+	})
+	if err != nil {
+		return err
 	}
-	for i, part := range partDesc.Range {
-		if i != 0 {
+	isFirst = true
+	err = part.ForEachRange(func(name string, from, to []byte) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		buf.WriteString(part.Name)
+		buf.WriteString(name)
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idx, partDesc, part.FromInclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idx, partDesc, part.ToExclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, to, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(toTuple.String())
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	buf.WriteString("\n")
 	buf.WriteString(indentStr)
@@ -548,9 +556,6 @@ func showConstraintClause(
 	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
-		if e.Hidden {
-			continue
-		}
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")

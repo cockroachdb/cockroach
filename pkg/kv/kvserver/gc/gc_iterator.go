@@ -160,7 +160,7 @@ func (b *gcIteratorRingBuf) pushBack(it iterator) {
 		panic("cannot add to full gcIteratorRingBuf")
 	}
 	i := (b.head + b.len) % gcIteratorRingBufSize
-	b.allocs[i] = b.allocs[i][:0]
+	b.allocs[i] = b.allocs[i].Truncate()
 	k := it.UnsafeKey()
 	v := it.UnsafeValue()
 	b.allocs[i], k.Key = b.allocs[i].Copy(k.Key, len(v))

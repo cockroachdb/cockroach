@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
-	"github.com/twpayne/go-geom"
+	geom "github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/xy"
 )
 
@@ -55,23 +55,29 @@ func Node(g geo.Geometry) (geo.Geometry, error) {
 
 	glines, err := lines.AsGeomT()
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("error transforming lines: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "error transforming lines")
 	}
 	ep, err := extractEndpoints(g)
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("error extracting endpoints: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "error extracting endpoints")
 	}
 	var mllines *geom.MultiLineString
 	switch t := glines.(type) {
 	case *geom.MultiLineString:
 		mllines = t
+	case *geom.GeometryCollection:
+		if t.Empty() {
+			t.SetSRID(int(g.SRID()))
+			return geo.MakeGeometryFromGeomT(t)
+		}
+		return geo.Geometry{}, errors.AssertionFailedf("unknown GEOMETRYCOLLECTION: %T", t)
 	default:
 		return geo.Geometry{}, errors.AssertionFailedf("unknown LineMerge result type: %T", t)
 	}
 
 	gep, err := ep.AsGeomT()
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("error transforming endpoints: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "error transforming endpoints")
 	}
 	mpep := gep.(*geom.MultiPoint)
 	mlout, err := splitLinesByPoints(mllines, mpep)
@@ -81,7 +87,7 @@ func Node(g geo.Geometry) (geo.Geometry, error) {
 	mlout.SetSRID(int(g.SRID()))
 	out, err := geo.MakeGeometryFromGeomT(mlout)
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("could not transform output into geometry: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "could not transform output into geometry")
 	}
 	return out, nil
 }
@@ -102,16 +108,16 @@ func splitLinesByPoints(
 			p := mpep.Point(j)
 			splitted, splitLines, err = splitLineByPoint(l, p.Coords())
 			if err != nil {
-				return nil, errors.Newf("could not split line: %v", err)
+				return nil, errors.Wrap(err, "could not split line")
 			}
 			if splitted {
 				err = mlout.Push(splitLines[0])
 				if err != nil {
-					return nil, errors.Newf("could not construct output geometry: %v", err)
+					return nil, errors.Wrap(err, "could not construct output geometry")
 				}
 				err = mlout.Push(splitLines[1])
 				if err != nil {
-					return nil, errors.Newf("could not construct output geometry: %v", err)
+					return nil, errors.Wrap(err, "could not construct output geometry")
 				}
 				break
 			}
@@ -119,7 +125,7 @@ func splitLinesByPoints(
 		if !splitted {
 			err = mlout.Push(l)
 			if err != nil {
-				return nil, errors.Newf("could not construct output geometry: %v", err)
+				return nil, errors.Wrap(err, "could not construct output geometry")
 			}
 		}
 	}
@@ -132,7 +138,7 @@ func extractEndpoints(g geo.Geometry) (geo.Geometry, error) {
 
 	gt, err := g.AsGeomT()
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("error transforming geometry: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "error transforming geometry")
 	}
 
 	switch gt := gt.(type) {
@@ -141,7 +147,7 @@ func extractEndpoints(g geo.Geometry) (geo.Geometry, error) {
 		for _, endpoint := range endpoints {
 			err := mp.Push(endpoint)
 			if err != nil {
-				return geo.Geometry{}, errors.Newf("error creating output geometry: %v", err)
+				return geo.Geometry{}, errors.Wrap(err, "error creating output geometry")
 			}
 		}
 	case *geom.MultiLineString:
@@ -151,7 +157,7 @@ func extractEndpoints(g geo.Geometry) (geo.Geometry, error) {
 			for _, endpoint := range endpoints {
 				err := mp.Push(endpoint)
 				if err != nil {
-					return geo.Geometry{}, errors.Newf("error creating output geometry: %v", err)
+					return geo.Geometry{}, errors.Wrap(err, "error creating output geometry")
 				}
 			}
 		}
@@ -161,7 +167,7 @@ func extractEndpoints(g geo.Geometry) (geo.Geometry, error) {
 
 	result, err := geo.MakeGeometryFromGeomT(mp)
 	if err != nil {
-		return geo.Geometry{}, errors.Newf("error creating output geometry: %v", err)
+		return geo.Geometry{}, errors.Wrap(err, "error creating output geometry")
 	}
 	return result, nil
 }
@@ -206,12 +212,12 @@ func splitLineByPoint(l *geom.LineString, p geom.Coord) (bool, []*geom.LineStrin
 	l1 := geom.NewLineString(l.Layout())
 	_, err := l1.SetCoords(coordsA)
 	if err != nil {
-		return false, []*geom.LineString{}, errors.Newf("could not set coords: %v", err)
+		return false, []*geom.LineString{}, errors.Wrap(err, "could not set coords")
 	}
 	l2 := geom.NewLineString(l.Layout())
 	_, err = l2.SetCoords(coordsB)
 	if err != nil {
-		return false, []*geom.LineString{}, errors.Newf("could not set coords: %v", err)
+		return false, []*geom.LineString{}, errors.Wrap(err, "could not set coords")
 	}
 	return true, []*geom.LineString{l1, l2}, nil
 }

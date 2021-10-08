@@ -268,7 +268,10 @@ type IndexID uint32
 //  - FORCE_INDEX=<index_name|index_id>
 //  - ASC / DESC
 //  - NO_INDEX_JOIN
+//  - NO_ZIGZAG_JOIN
 //  - IGNORE_FOREIGN_KEYS
+//  - FORCE_ZIGZAG
+//  - FORCE_ZIGZAG=<index_name|index_id>*
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
@@ -278,6 +281,8 @@ type IndexFlags struct {
 	Direction Direction
 	// NoIndexJoin cannot be specified together with an index.
 	NoIndexJoin bool
+	// NoZigzagJoin indicates we should not plan a zigzag join for this scan.
+	NoZigzagJoin bool
 	// IgnoreForeignKeys disables optimizations based on outbound foreign key
 	// references from this table. This is useful in particular for scrub queries
 	// used to verify the consistency of foreign key relations.
@@ -285,6 +290,14 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// Zigzag hinting fields are distinct:
+	// ForceZigzag means we saw a TABLE@{FORCE_ZIGZAG}
+	// ZigzagIndexes means we saw TABLE@{FORCE_ZIGZAG=name}
+	// ZigzagIndexIDs means we saw TABLE@{FORCE_ZIGZAG=[ID]}
+	// The only allowable combinations are when a valid id and name are combined.
+	ForceZigzag    bool
+	ZigzagIndexes  []UnrestrictedName
+	ZigzagIndexIDs []IndexID
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -299,6 +312,9 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoIndexJoin && other.NoIndexJoin {
 		return errors.New("NO_INDEX_JOIN specified multiple times")
 	}
+	if ih.NoZigzagJoin && other.NoZigzagJoin {
+		return errors.New("NO_ZIGZAG_JOIN specified multiple times")
+	}
 	if ih.IgnoreForeignKeys && other.IgnoreForeignKeys {
 		return errors.New("IGNORE_FOREIGN_KEYS specified multiple times")
 	}
@@ -307,6 +323,7 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	}
 	result := *ih
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
+	result.NoZigzagJoin = ih.NoZigzagJoin || other.NoZigzagJoin
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
@@ -326,6 +343,29 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 		result.IndexID = other.IndexID
 	}
 
+	if other.ForceZigzag {
+		if ih.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG specified multiple times")
+		}
+		result.ForceZigzag = true
+	}
+
+	// We can have N zigzag indexes (in theory, we only support 2 now).
+	if len(other.ZigzagIndexes) > 0 {
+		if result.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG hints not distinct")
+		}
+		result.ZigzagIndexes = append(result.ZigzagIndexes, other.ZigzagIndexes...)
+	}
+
+	// We can have N zigzag indexes (in theory, we only support 2 now).
+	if len(other.ZigzagIndexIDs) > 0 {
+		if result.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG hints not distinct")
+		}
+		result.ZigzagIndexIDs = append(result.ZigzagIndexIDs, other.ZigzagIndexIDs...)
+	}
+
 	// We only set at the end to avoid a partially changed structure in one of the
 	// error cases above.
 	*ih = result
@@ -342,14 +382,29 @@ func (ih *IndexFlags) Check() error {
 	if ih.Direction != 0 && !ih.ForceIndex() {
 		return errors.New("ASC/DESC must be specified in conjunction with an index")
 	}
+	if ih.zigzagForced() && ih.NoIndexJoin {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+	if ih.zigzagForced() && ih.ForceIndex() {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX")
+	}
+	if ih.zigzagForced() && ih.NoZigzagJoin {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN")
+	}
+	for _, name := range ih.ZigzagIndexes {
+		if len(string(name)) == 0 {
+			return errors.New("FORCE_ZIGZAG index name cannot be empty string")
+		}
+	}
+
 	return nil
 }
 
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if !ih.NoIndexJoin && !ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys &&
-		ih.Direction == 0 {
+	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.IgnoreForeignKeys &&
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -379,6 +434,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			ctx.WriteString("NO_INDEX_JOIN")
 		}
 
+		if ih.NoZigzagJoin {
+			sep()
+			ctx.WriteString("NO_ZIGZAG_JOIN")
+		}
+
 		if ih.IgnoreForeignKeys {
 			sep()
 			ctx.WriteString("IGNORE_FOREIGN_KEYS")
@@ -388,8 +448,37 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			sep()
 			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
 		}
+
+		if ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0 {
+			sep()
+			if ih.ForceZigzag {
+				ctx.WriteString("FORCE_ZIGZAG")
+			} else {
+				needSep := false
+				for _, name := range ih.ZigzagIndexes {
+					if needSep {
+						sep()
+					}
+					ctx.WriteString("FORCE_ZIGZAG=")
+					ctx.FormatNode(&name)
+					needSep = true
+				}
+				for _, id := range ih.ZigzagIndexIDs {
+					if needSep {
+						sep()
+					}
+					ctx.WriteString("FORCE_ZIGZAG=")
+					ctx.Printf("[%d]", id)
+					needSep = true
+				}
+			}
+		}
 		ctx.WriteString("}")
 	}
+}
+
+func (ih *IndexFlags) zigzagForced() bool {
+	return ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0
 }
 
 // AliasedTableExpr represents a table expression coupled with an optional
@@ -814,6 +903,32 @@ const (
 	GROUPS
 )
 
+// Name returns a string representation of the window frame mode to be used in
+// struct names for generated code.
+func (m WindowFrameMode) Name() string {
+	switch m {
+	case RANGE:
+		return "Range"
+	case ROWS:
+		return "Rows"
+	case GROUPS:
+		return "Groups"
+	}
+	return ""
+}
+
+func (m WindowFrameMode) String() string {
+	switch m {
+	case RANGE:
+		return "RANGE"
+	case ROWS:
+		return "ROWS"
+	case GROUPS:
+		return "GROUPS"
+	}
+	return ""
+}
+
 // OverrideWindowDef implements the logic to have a base window definition which
 // then gets augmented by a different window definition.
 func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
@@ -859,6 +974,40 @@ func (ft WindowFrameBoundType) IsOffset() bool {
 	return ft == OffsetPreceding || ft == OffsetFollowing
 }
 
+// Name returns a string representation of the bound type to be used in struct
+// names for generated code.
+func (ft WindowFrameBoundType) Name() string {
+	switch ft {
+	case UnboundedPreceding:
+		return "UnboundedPreceding"
+	case OffsetPreceding:
+		return "OffsetPreceding"
+	case CurrentRow:
+		return "CurrentRow"
+	case OffsetFollowing:
+		return "OffsetFollowing"
+	case UnboundedFollowing:
+		return "UnboundedFollowing"
+	}
+	return ""
+}
+
+func (ft WindowFrameBoundType) String() string {
+	switch ft {
+	case UnboundedPreceding:
+		return "UNBOUNDED PRECEDING"
+	case OffsetPreceding:
+		return "OFFSET PRECEDING"
+	case CurrentRow:
+		return "CURRENT ROW"
+	case OffsetFollowing:
+		return "OFFSET FOLLOWING"
+	case UnboundedFollowing:
+		return "UNBOUNDED FOLLOWING"
+	}
+	return ""
+}
+
 // WindowFrameBound specifies the offset and the type of boundary.
 type WindowFrameBound struct {
 	BoundType  WindowFrameBoundType
@@ -895,6 +1044,36 @@ const (
 	// ExcludeTies represents EXCLUDE TIES mode of frame exclusion.
 	ExcludeTies
 )
+
+func (node WindowFrameExclusion) String() string {
+	switch node {
+	case NoExclusion:
+		return "EXCLUDE NO ROWS"
+	case ExcludeCurrentRow:
+		return "EXCLUDE CURRENT ROW"
+	case ExcludeGroup:
+		return "EXCLUDE GROUP"
+	case ExcludeTies:
+		return "EXCLUDE TIES"
+	}
+	return ""
+}
+
+// Name returns a string representation of the exclusion type to be used in
+// struct names for generated code.
+func (node WindowFrameExclusion) Name() string {
+	switch node {
+	case NoExclusion:
+		return "NoExclusion"
+	case ExcludeCurrentRow:
+		return "ExcludeCurrentRow"
+	case ExcludeGroup:
+		return "ExcludeGroup"
+	case ExcludeTies:
+		return "ExcludeTies"
+	}
+	return ""
+}
 
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {

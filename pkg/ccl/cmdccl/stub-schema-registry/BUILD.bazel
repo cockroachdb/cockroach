@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "stub-schema-registry_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/stub-schema-registry",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/ccl/changefeedccl/cdctest"],
+)
+
+go_binary(
+    name = "stub-schema-registry",
+    embed = [":stub-schema-registry_lib"],
+    visibility = ["//visibility:public"],
+)

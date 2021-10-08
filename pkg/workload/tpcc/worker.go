@@ -12,6 +12,7 @@ package tpcc
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/exp/rand"
 )
 
@@ -80,6 +83,39 @@ var allTxs = [...]txInfo{
 	},
 }
 
+type txCounter struct {
+	// success and error count the number of successes and failures, respectively,
+	// for the given tx.
+	success, error prometheus.Counter
+}
+
+type txCounters map[string]txCounter
+
+func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
+	m := txCounters{}
+	f := promauto.With(reg)
+	for _, tx := range allTxs {
+		m[tx.name] = txCounter{
+			success: f.NewCounter(
+				prometheus.CounterOpts{
+					Namespace: histogram.PrometheusNamespace,
+					Subsystem: tpccMeta.Name,
+					Name:      fmt.Sprintf("%s_success_total", tx.name),
+					Help:      fmt.Sprintf("The total number of successful %s transactions.", tx.name),
+				},
+			),
+			error: f.NewCounter(
+				prometheus.CounterOpts{
+					Namespace: histogram.PrometheusNamespace,
+					Subsystem: tpccMeta.Name,
+					Name:      fmt.Sprintf("%s_error_total", tx.name),
+					Help:      fmt.Sprintf("The total number of error %s transactions.", tx.name),
+				}),
+		}
+	}
+	return m
+}
+
 func initializeMix(config *tpcc) error {
 	config.txInfos = append([]txInfo(nil), allTxs[0:]...)
 	nameToTx := make(map[string]int)
@@ -131,6 +167,8 @@ type worker struct {
 
 	deckPerm []int
 	permIdx  int
+
+	counters txCounters
 }
 
 func newWorker(
@@ -138,6 +176,7 @@ func newWorker(
 	config *tpcc,
 	mcp *workload.MultiConnPool,
 	hists *histogram.Histograms,
+	counters txCounters,
 	warehouse int,
 ) (*worker, error) {
 	w := &worker{
@@ -147,6 +186,7 @@ func newWorker(
 		warehouse: warehouse,
 		deckPerm:  append([]int(nil), config.deck...),
 		permIdx:   len(config.deck),
+		counters:  counters,
 	}
 	for i := range w.txs {
 		var err error
@@ -188,12 +228,17 @@ func (w *worker) run(ctx context.Context) error {
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
 	if _, err := tx.run(context.Background(), warehouseID); err != nil {
+		w.counters[txInfo.name].error.Inc()
 		return errors.Wrapf(err, "error in %s", txInfo.name)
 	}
 	if ctx.Err() == nil {
 		elapsed := timeutil.Since(start)
+		// NB: this histogram *should* be named along the lines of
+		// `txInfo.name+"_success"` but we already rely on the names and shouldn't
+		// change them now.
 		w.hists.Get(txInfo.name).Record(elapsed)
 	}
+	w.counters[txInfo.name].success.Inc()
 
 	// 5.2.5.4: Think time is taken independently from a negative exponential
 	// distribution. Think time = -log(r) * u, where r is a uniform random number

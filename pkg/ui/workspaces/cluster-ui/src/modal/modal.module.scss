@@ -1,0 +1,32 @@
+@import '../core/index.module';
+
+.crl-modal {
+  @include base;
+  :global {
+    .ant-modal-footer {
+      border-top: none;
+      padding: 0;
+    }
+
+    .ant-modal-header {
+      border-bottom: none;
+      padding-top: unset;
+      padding-bottom: unset;
+    }
+
+    .ant-modal-content {
+      padding: $spacing-medium;
+      box-shadow: 0px 0px 1px rgba(71, 88, 114, 0.47);
+      border-radius: 5px;
+      min-width: 560px;
+    }
+  }
+
+  &__close-icon {
+    color: $colors--neutral-7;
+    margin: $spacing-medium $spacing-medium $spacing-medium-small $spacing-medium-small;
+    font-size: $font-size--large;
+    line-height: $spacing-smaller;
+    font-weight: $font-weight--extra-bold;
+  }
+}

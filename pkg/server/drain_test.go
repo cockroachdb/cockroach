@@ -14,8 +14,10 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -37,7 +39,8 @@ func TestDrain(t *testing.T) {
 
 // doTestDrain runs the drain test.
 func doTestDrain(tt *testing.T) {
-	t := newTestDrainContext(tt)
+	var drainSleepCallCount = 0
+	t := newTestDrainContext(tt, &drainSleepCallCount)
 	defer t.Close()
 
 	// Issue a probe. We're not draining yet, so the probe should
@@ -45,24 +48,29 @@ func doTestDrain(tt *testing.T) {
 	resp := t.sendProbe()
 	t.assertDraining(resp, false)
 	t.assertRemaining(resp, false)
+	t.assertEqual(0, drainSleepCallCount)
 
 	// Issue a drain without shutdown, so we can probe more afterwards.
 	resp = t.sendDrainNoShutdown()
 	t.assertDraining(resp, true)
 	t.assertRemaining(resp, true)
+	t.assertEqual(1, drainSleepCallCount)
 
 	// Issue another probe. This checks that the server is still running
-	// (i.e. Shutdown: false was effective) and also that the draining
-	// status is still properly reported.
+	// (i.e. Shutdown: false was effective), the draining status is
+	// still properly reported, and the server slept once.
 	resp = t.sendProbe()
 	t.assertDraining(resp, true)
 	// probe-only has no remaining.
 	t.assertRemaining(resp, false)
+	t.assertEqual(1, drainSleepCallCount)
 
-	// Issue another drain. Verify that the remaining is zero (i.e. complete).
+	// Issue another drain. Verify that the remaining is zero (i.e. complete)
+	// and that the server did not sleep again.
 	resp = t.sendDrainNoShutdown()
 	t.assertDraining(resp, true)
 	t.assertRemaining(resp, false)
+	t.assertEqual(1, drainSleepCallCount)
 
 	// Now issue a drain request without drain but with shutdown.
 	// We're expecting the node to be shut down after that.
@@ -70,6 +78,7 @@ func doTestDrain(tt *testing.T) {
 	if resp != nil {
 		t.assertDraining(resp, true)
 		t.assertRemaining(resp, false)
+		t.assertEqual(1, drainSleepCallCount)
 	}
 
 	// Now expect the server to be shut down.
@@ -89,13 +98,20 @@ type testDrainContext struct {
 	connCloser func()
 }
 
-func newTestDrainContext(t *testing.T) *testDrainContext {
+func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainContext {
 	tc := &testDrainContext{
 		T: t,
 		tc: testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			// We need to start the cluster insecure in order to not
 			// care about TLS settings for the RPC client connection.
 			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DrainSleepFn: func(time.Duration) {
+							*drainSleepCallCount++
+						},
+					},
+				},
 				Insecure: true,
 			},
 		}),
@@ -172,6 +188,13 @@ func (t *testDrainContext) assertRemaining(resp *serverpb.DrainResponse, remaini
 	if actualRemaining := (resp.DrainRemainingIndicator > 0); remaining != actualRemaining {
 		t.Fatalf("expected remaining %v, got %v", remaining, actualRemaining)
 	}
+}
+
+func (t *testDrainContext) assertEqual(expected int, actual int) {
+	if expected == actual {
+		return
+	}
+	t.Fatalf("expected sleep call count to be %v, got %v", expected, actual)
 }
 
 func (t *testDrainContext) getDrainResponse(

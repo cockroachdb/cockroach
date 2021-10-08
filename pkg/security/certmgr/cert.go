@@ -10,7 +10,10 @@
 
 package certmgr
 
-import "context"
+import (
+	"context"
+	"crypto/tls"
+)
 
 //go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
 
@@ -43,4 +46,6 @@ type Cert interface {
 	Err() error
 	// ClearErr will clear the last reported err and allow reloads to resume.
 	ClearErr()
+	// TLSCert will return the last loaded tls.Certificate
+	TLSCert() *tls.Certificate
 }

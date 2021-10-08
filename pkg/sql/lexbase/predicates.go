@@ -55,6 +55,10 @@ func init() {
 		"similar",
 		"time",
 		"generated",
+		"reset",
+		"role",
+		"user",
+		"on",
 	} {
 		reservedOrLookaheadKeywords[s] = struct{}{}
 	}

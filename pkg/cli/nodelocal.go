@@ -19,6 +19,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -35,15 +38,15 @@ var nodeLocalUploadCmd = &cobra.Command{
 Uploads a file to a gateway node's local file system using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runUpload),
+	RunE: clierrorplus.MaybeShoutError(runUpload),
 }
 
-func runUpload(cmd *cobra.Command, args []string) error {
+func runUpload(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach nodelocal", useSystemDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	source := args[0]
 	destination := args[1]
@@ -71,12 +74,14 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destination string) error {
-	if err := conn.ensureConn(); err != nil {
+func uploadFile(
+	ctx context.Context, conn clisqlclient.Conn, reader io.Reader, destination string,
+) error {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return err
 	}
@@ -87,7 +92,7 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		Host:   "self",
 		Path:   destination,
 	}
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
+	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
 		sql.NodelocalFileUploadTable))
 	if err != nil {
 		return err
@@ -125,11 +130,11 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		return err
 	}
 
-	nodeID, _, _, err := conn.getServerMetadata()
+	nodeID, _, _, err := conn.GetServerMetadata()
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
 	}
-	fmt.Printf("successfully uploaded to nodelocal://%s\n", filepath.Join(nodeID.String(), destination))
+	fmt.Printf("successfully uploaded to nodelocal://%s\n", filepath.Join(roachpb.NodeID(nodeID).String(), destination))
 	return nil
 }
 

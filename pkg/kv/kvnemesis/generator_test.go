@@ -119,11 +119,23 @@ func TestRandStep(t *testing.T) {
 					client.PutMissing++
 				}
 			case *ScanOperation:
-				if o.ForUpdate {
+				if o.Reverse && o.ForUpdate {
+					client.ReverseScanForUpdate++
+				} else if o.Reverse {
+					client.ReverseScan++
+				} else if o.ForUpdate {
 					client.ScanForUpdate++
 				} else {
 					client.Scan++
 				}
+			case *DeleteOperation:
+				if _, ok := keys[string(o.Key)]; ok {
+					client.DeleteExisting++
+				} else {
+					client.DeleteMissing++
+				}
+			case *DeleteRangeOperation:
+				client.DeleteRange++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -135,7 +147,12 @@ func TestRandStep(t *testing.T) {
 	for {
 		step := g.RandStep(rng)
 		switch o := step.Op.GetValue().(type) {
-		case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
+		case *GetOperation,
+			*PutOperation,
+			*ScanOperation,
+			*BatchOperation,
+			*DeleteOperation,
+			*DeleteRangeOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)

@@ -135,7 +135,7 @@ func (pt *partitioningTest) parse() error {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
-		mutDesc, err := importccl.MakeSimpleTableDescriptor(
+		mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
@@ -1264,7 +1264,10 @@ func TestSelectPartitionExprs(t *testing.T) {
 		{`p33p44,p335p445,p33dp44d`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
 	}
 
-	evalCtx := &tree.EvalContext{Codec: keys.SystemSQLCodec}
+	evalCtx := &tree.EvalContext{
+		Codec:    keys.SystemSQLCodec,
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
 	for _, test := range tests {
 		t.Run(test.partitions, func(t *testing.T) {
 			var partNames tree.NameList
@@ -1342,12 +1345,12 @@ func TestRepartitioning(t *testing.T) {
 				} else {
 					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.GetName())
 				}
-				if testIndex.GetPartitioning().NumColumns == 0 {
+				if testIndex.GetPartitioning().NumColumns() == 0 {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
 						&rowenc.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
-						&testIndex.IndexDesc().Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
+						testIndex.GetPartitioning(), &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)
 					}
@@ -1357,8 +1360,11 @@ func TestRepartitioning(t *testing.T) {
 				// Verify that repartitioning removes zone configs for partitions that
 				// have been removed.
 				newPartitionNames := map[string]struct{}{}
-				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
-					newPartitionNames[name] = struct{}{}
+				for _, index := range test.new.parsed.tableDesc.NonDropIndexes() {
+					_ = index.GetPartitioning().ForEachPartitionName(func(name string) error {
+						newPartitionNames[name] = struct{}{}
+						return nil
+					})
 				}
 				for _, row := range sqlDB.QueryStr(
 					t, "SELECT partition_name FROM crdb_internal.zones WHERE partition_name IS NOT NULL") {
@@ -1418,7 +1424,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 	// Get the zone config corresponding to the table.
 	table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
-	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.GetID())))
+	kv, err := kvDB.Get(ctx, config.MakeZoneKey(keys.SystemSQLCodec, table.GetID()))
 	if err != nil {
 		t.Fatal(err)
 	}

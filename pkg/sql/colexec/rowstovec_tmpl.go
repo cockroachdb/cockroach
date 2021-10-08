@@ -76,7 +76,7 @@ func _ROWS_TO_COL_VEC(
 				//gcassert:bce
 				// {{end}}
 				// {{end}}
-				_SET(col, i, castV)
+				col.Set(i, castV)
 			}
 		}
 	}

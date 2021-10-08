@@ -14,10 +14,16 @@ DROP DATABASE crdb_internal
 query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
+crdb_internal  active_range_feeds           table  NULL  NULL  NULL
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
+crdb_internal  cluster_contended_indexes    view   NULL  NULL  NULL
+crdb_internal  cluster_contended_keys       view   NULL  NULL  NULL
+crdb_internal  cluster_contended_tables     view   NULL  NULL  NULL
 crdb_internal  cluster_contention_events    table  NULL  NULL  NULL
 crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
+crdb_internal  cluster_distsql_flows        table  NULL  NULL  NULL
+crdb_internal  cluster_inflight_traces      table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
@@ -26,6 +32,7 @@ crdb_internal  create_statements            table  NULL  NULL  NULL
 crdb_internal  create_type_statements       table  NULL  NULL  NULL
 crdb_internal  cross_db_references          table  NULL  NULL  NULL
 crdb_internal  databases                    table  NULL  NULL  NULL
+crdb_internal  default_privileges           table  NULL  NULL  NULL
 crdb_internal  feature_usage                table  NULL  NULL  NULL
 crdb_internal  forward_dependencies         table  NULL  NULL  NULL
 crdb_internal  gossip_alerts                table  NULL  NULL  NULL
@@ -33,15 +40,18 @@ crdb_internal  gossip_liveness              table  NULL  NULL  NULL
 crdb_internal  gossip_network               table  NULL  NULL  NULL
 crdb_internal  gossip_nodes                 table  NULL  NULL  NULL
 crdb_internal  index_columns                table  NULL  NULL  NULL
+crdb_internal  index_usage_statistics       table  NULL  NULL  NULL
 crdb_internal  interleaved                  table  NULL  NULL  NULL
 crdb_internal  invalid_objects              table  NULL  NULL  NULL
 crdb_internal  jobs                         table  NULL  NULL  NULL
+crdb_internal  kv_node_liveness             table  NULL  NULL  NULL
 crdb_internal  kv_node_status               table  NULL  NULL  NULL
 crdb_internal  kv_store_status              table  NULL  NULL  NULL
 crdb_internal  leases                       table  NULL  NULL  NULL
 crdb_internal  lost_descriptors_with_data   table  NULL  NULL  NULL
 crdb_internal  node_build_info              table  NULL  NULL  NULL
 crdb_internal  node_contention_events       table  NULL  NULL  NULL
+crdb_internal  node_distsql_flows           table  NULL  NULL  NULL
 crdb_internal  node_inflight_trace_spans    table  NULL  NULL  NULL
 crdb_internal  node_metrics                 table  NULL  NULL  NULL
 crdb_internal  node_queries                 table  NULL  NULL  NULL
@@ -55,13 +65,17 @@ crdb_internal  partitions                   table  NULL  NULL  NULL
 crdb_internal  predefined_comments          table  NULL  NULL  NULL
 crdb_internal  ranges                       view   NULL  NULL  NULL
 crdb_internal  ranges_no_leases             table  NULL  NULL  NULL
+crdb_internal  regions                      table  NULL  NULL  NULL
 crdb_internal  schema_changes               table  NULL  NULL  NULL
 crdb_internal  session_trace                table  NULL  NULL  NULL
 crdb_internal  session_variables            table  NULL  NULL  NULL
+crdb_internal  statement_statistics         table  NULL  NULL  NULL
 crdb_internal  table_columns                table  NULL  NULL  NULL
 crdb_internal  table_indexes                table  NULL  NULL  NULL
 crdb_internal  table_row_statistics         table  NULL  NULL  NULL
 crdb_internal  tables                       table  NULL  NULL  NULL
+crdb_internal  tenant_usage_details         view   NULL  NULL  NULL
+crdb_internal  transaction_statistics       table  NULL  NULL  NULL
 crdb_internal  zones                        table  NULL  NULL  NULL
 
 statement ok
@@ -139,10 +153,10 @@ Channel
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
-query ITTTTTTTTTTTRTTI colnames
+query ITTTTTTTTTTTRTTIITTIT colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
+job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id  trace_id  last_run  next_run  num_runs  execution_errors
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -154,10 +168,10 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRBB colnames
+query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTT colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan sample_plan database_name exec_node_ids
 
 query ITTTIIRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
@@ -265,6 +279,12 @@ SELECT * FROM crdb_internal.zones WHERE false
 zone_id  subzone_id  target  range_name  database_name  schema_name  table_name  index_name  partition_name
 raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
 
+
+query IITTT colnames
+SELECT * FROM crdb_internal.cluster_inflight_traces WHERE trace_id=123
+----
+trace_id  node_id  root_op_name  trace_str  jaeger_json
+
 query IIIIBTIT colnames
 SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
@@ -301,6 +321,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 22  RANGE liveness
 25  TABLE system.public.replication_constraint_stats
 27  TABLE system.public.replication_stats
+45  TABLE system.public.tenant_usage
 53  DATABASE testdb
 54  TABLE testdb.public.foo
 57  TABLE test.schema.bar
@@ -358,18 +379,18 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.1
+21.2
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
-1        DB         URL     postgresql://root@127.0.0.1:<port>?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+1        DB         URL     postgresql://root@127.0.0.1:<port>/defaultdb?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
 1        DB         Scheme  postgresql
 1        DB         User    root
 1        DB         Host    127.0.0.1
 1        DB         Port    <port>
-1        DB         URI     /?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+1        DB         URI     /defaultdb?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
 1        UI         URL     https://127.0.0.1:<port>
 1        UI         Scheme  https
 1        UI         User    ·
@@ -517,7 +538,7 @@ select * from crdb_internal.node_inflight_trace_spans
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.1
+21.2
 
 user root
 
@@ -565,13 +586,17 @@ SELECT key, max_retries, flags LIKE '!%' AS f
  WHERE application_name = 'test_max_retry'
 ORDER BY key, f
 ----
-CREATE SEQUENCE s                                                     0  false
-DROP SEQUENCE s                                                       0  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            1  true
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  true
-SET application_name = DEFAULT                                        0  false
+CREATE SEQUENCE s                                                         0  false
+DROP SEQUENCE s                                                           0  false
+RESET application_name                                                    0  false
+SELECT IF(nextval('_') < _, crdb_internal.force_retry('_'::INTERVAL), _)  0  true
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                2  false
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                1  true
 
+query T
+SELECT database_name FROM crdb_internal.node_statement_statistics limit 1
+----
+test
 
 # Testing split_enforced_until when truncating and dropping.
 statement ok
@@ -794,7 +819,6 @@ database_name  grantee   privilege_type
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 
 statement ok
 SET DATABASE = test
@@ -812,7 +836,6 @@ defaultdb      root      ALL
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 postgres       admin     ALL
 postgres       root      ALL
 system         admin     GRANT
@@ -836,7 +859,6 @@ defaultdb      root      ALL
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 postgres       admin     ALL
 postgres       root      ALL
 system         admin     GRANT
@@ -879,3 +901,15 @@ query B
 SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'temp'
 ----
 true
+
+query TT
+SELECT * FROM crdb_internal.regions ORDER BY 1
+----
+test  {}
+
+# Regression test for incorrectly handling tree.DOidWrappers by some builtins
+# (#69684).
+statement ok
+CREATE TABLE t69684(a NAME);
+INSERT INTO t69684 VALUES ('foo');
+SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)

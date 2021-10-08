@@ -34,6 +34,7 @@ func NewSortChunks(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
+	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(errors.AssertionFailedf(
@@ -45,11 +46,11 @@ func NewSortChunks(
 	for i := range alreadySortedCols {
 		alreadySortedCols[i] = orderingCols[i].ColIdx
 	}
-	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols)
+	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
 	if err != nil {
 		return nil, err
 	}
-	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:])
+	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,9 @@ func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// batch that hasn't been "processed" and should be the first to be exported.
 	firstTupleIdx := c.input.exportState.numProcessedTuplesFromBatch
 	if c.input.batch != nil && firstTupleIdx+c.exportedFromBatch < c.input.batch.Length() {
-		colexecutils.MakeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
+		colexecutils.MakeWindowIntoBatch(
+			c.windowedBatch, c.input.batch, firstTupleIdx, c.input.batch.Length(), c.input.inputTypes,
+		)
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}
@@ -215,6 +218,7 @@ type chunker struct {
 	// alreadySortedCols indicates the columns on which the input is already
 	// ordered.
 	alreadySortedCols []uint32
+	nullsAreDistinct  bool
 
 	// batch is the last read batch from input.
 	batch coldata.Batch
@@ -262,11 +266,12 @@ func newChunker(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	alreadySortedCols []uint32,
+	nullsAreDistinct bool,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(inputTypes[col])
+		partitioners[i], err = newPartitioner(inputTypes[col], nullsAreDistinct)
 		if err != nil {
 			return nil, err
 		}
@@ -277,6 +282,7 @@ func newChunker(
 		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
+		nullsAreDistinct:  nullsAreDistinct,
 		partitioners:      partitioners,
 		state:             chunkerReading,
 	}, nil
@@ -327,7 +333,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol)), s.partitionCol,
 					s.batch.Length())
 			}
-			s.chunks = boolVecToSel64(s.partitionCol, s.chunks[:0])
+			s.chunks = boolVecToSel(s.partitionCol, s.chunks[:0])
 
 			if s.bufferedTuples.Length() == 0 {
 				// There are no buffered tuples, so a new chunk starts in the current
@@ -355,6 +361,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 						0, /*aValueIdx */
 						s.batch.ColVec(int(s.alreadySortedCols[i])),
 						0, /* bValueIdx */
+						s.nullsAreDistinct,
 					)
 					i++
 				}
@@ -425,10 +432,8 @@ func (s *chunker) buffer(start int, end int) {
 	if start == end {
 		return
 	}
-	s.allocator.PerformOperation(s.bufferedTuples.ColVecs(), func() {
-		s.exportState.numProcessedTuplesFromBatch = end
-		s.bufferedTuples.AppendTuples(s.batch, start, end)
-	})
+	s.exportState.numProcessedTuplesFromBatch = end
+	s.bufferedTuples.AppendTuples(s.batch, start, end)
 }
 
 func (s *chunker) spool() {

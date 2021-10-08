@@ -41,7 +41,7 @@ func makeBackupManifest(
 	// We only care about the files' span.
 	files := make([]BackupManifest_File, 0)
 	for i, span := range append(spans, introducedSpans...) {
-		files = append(files, BackupManifest_File{Span: span, Path: fmt.Sprintf("%d.sst", i)})
+		files = append(files, BackupManifest_File{Span: span, Path: fmt.Sprintf("data/%d.sst", i)})
 	}
 
 	return BackupManifest{

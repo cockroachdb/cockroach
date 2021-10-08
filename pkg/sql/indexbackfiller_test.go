@@ -33,11 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -82,7 +81,7 @@ func TestIndexBackfiller(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -235,17 +234,17 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					Name:    "virtual_column_backed_index",
 					ID:      mut.NextIndexID,
 					Unique:  true,
-					Version: descpb.EmptyArraysInInvertedIndexesVersion,
-					ColumnNames: []string{
+					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
+					KeyColumnNames: []string{
 						mut.Columns[2].Name,
 					},
-					ColumnDirections: []descpb.IndexDescriptor_Direction{
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 						descpb.IndexDescriptor_ASC,
 					},
-					ColumnIDs: []descpb.ColumnID{
+					KeyColumnIDs: []descpb.ColumnID{
 						mut.Columns[2].ID,
 					},
-					ExtraColumnIDs: []descpb.ColumnID{
+					KeySuffixColumnIDs: []descpb.ColumnID{
 						mut.Columns[0].ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
@@ -312,21 +311,21 @@ INSERT INTO foo VALUES (1), (10), (100);
 					Name:    "new_primary_index",
 					ID:      mut.NextIndexID,
 					Unique:  true,
-					Version: descpb.EmptyArraysInInvertedIndexesVersion,
-					ColumnNames: []string{
+					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
+					KeyColumnNames: []string{
 						mut.Columns[0].Name,
 					},
-					ColumnDirections: []descpb.IndexDescriptor_Direction{
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 						descpb.IndexDescriptor_ASC,
 					},
 					StoreColumnNames: []string{
 						columnWithDefault.Name,
 						computedColumnNotInPrimaryIndex.Name,
 					},
-					ColumnIDs: []descpb.ColumnID{
+					KeyColumnIDs: []descpb.ColumnID{
 						mut.Columns[0].ID,
 					},
-					ExtraColumnIDs: nil,
+					KeySuffixColumnIDs: nil,
 					StoreColumnIDs: []descpb.ColumnID{
 						columnWithDefault.ID,
 						computedColumnNotInPrimaryIndex.ID,
@@ -360,16 +359,21 @@ INSERT INTO foo VALUES (1), (10), (100);
 		idx, err := table.FindIndexWithID(indexID)
 		colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		var valsNeeded util.FastIntSet
-		if idx.Primary() {
-			for _, column := range table.PublicColumns() {
-				if !column.IsVirtual() {
-					valsNeeded.Add(colIdxMap.GetDefault(column.GetID()))
+		{
+			colIDsNeeded := idx.CollectKeyColumnIDs()
+			if idx.Primary() {
+				for _, column := range table.PublicColumns() {
+					if !column.IsVirtual() {
+						colIDsNeeded.Add(column.GetID())
+					}
 				}
+			} else {
+				colIDsNeeded.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+				colIDsNeeded.UnionWith(idx.CollectKeySuffixColumnIDs())
 			}
-		} else {
-			_ = idx.ForEachColumnID(func(id descpb.ColumnID) error {
-				valsNeeded.Add(colIdxMap.GetDefault(id))
-				return nil
+
+			colIDsNeeded.ForEach(func(colID descpb.ColumnID) {
+				valsNeeded.Add(colIdxMap.GetDefault(colID))
 			})
 		}
 		require.NoError(t, err)
@@ -381,6 +385,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 			reverse,
 			descpb.ScanLockingStrength_FOR_NONE,
 			descpb.ScanLockingWaitPolicy_BLOCK,
+			0,
 			false,
 			&alloc,
 			mm.Monitor(),
@@ -396,7 +401,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		))
 
 		require.NoError(t, fetcher.StartScan(
-			ctx, txn, spans, false, 0, true, false, /* forceProductionBatchSize */
+			ctx, txn, spans, rowinfra.NoBytesLimit, 0, true, false, /* forceProductionBatchSize */
 		))
 		var rows []tree.Datums
 		for {
@@ -468,13 +473,12 @@ INSERT INTO foo VALUES (1), (10), (100);
 		// mutation. Also, create an associated job and set it up to be blocked.
 		s0 := tc.Server(0)
 		lm := s0.LeaseManager().(*lease.Manager)
-		ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
 		settings := s0.ClusterSettings()
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 		jr := s0.JobRegistry().(*jobs.Registry)
 		var j *jobs.Job
 		var table catalog.TableDescriptor
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
@@ -515,8 +519,6 @@ INSERT INTO foo VALUES (1), (10), (100);
 			table = mut.ImmutableCopy().(catalog.TableDescriptor)
 			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)
 		}))
-		_, err := lm.WaitForOneVersion(ctx, tableID, retry.Options{})
-		require.NoError(t, err)
 
 		// Run the index backfill
 		changer := sql.NewSchemaChangerForTesting(
@@ -528,7 +530,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Make the mutation complete, then read the index and validate that it
 		// has the expected contents.
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			table, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -27,6 +28,10 @@ import (
 )
 
 func TestFluentClient(t *testing.T) {
+	// CLI tests are sensitive to the server version, but test binaries don't have
+	// a version injected. Pretend to be a very up-to-date version.
+	defer build.TestingOverrideTag("v999.0.0")()
+
 	defer leaktest.AfterTest(t)()
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
@@ -42,7 +47,7 @@ func TestFluentClient(t *testing.T) {
 	cfg.Sinks.FluentServers = map[string]*logconfig.FluentSinkConfig{
 		"ops": {
 			Address:  serverAddr,
-			Channels: logconfig.ChannelList{Channels: []Channel{channel.OPS}}},
+			Channels: logconfig.SelectChannels(channel.OPS)},
 	}
 	// Derive a full config using the same directory as the
 	// TestLogScope.
@@ -75,7 +80,7 @@ func TestFluentClient(t *testing.T) {
 	msg, err := json.Marshal(info)
 	require.NoError(t, err)
 
-	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":58,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"log_test.ops"}`
+	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":63,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"logtest.ops","v":"v999.0.0"}`
 	require.Equal(t, expected, string(msg))
 }
 

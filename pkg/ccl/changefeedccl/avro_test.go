@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -43,6 +45,15 @@ import (
 	"golang.org/x/text/collate"
 )
 
+var testTypes = make(map[string]*types.T)
+var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
+
+func makeTestSemaCtx() tree.SemaContext {
+	testSemaCtx := tree.MakeSemaContext()
+	testSemaCtx.TypeResolver = testTypeResolver
+	return testSemaCtx
+}
+
 func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
@@ -56,8 +67,8 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
 	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
-	semaCtx := tree.MakeSemaContext()
-	mutDesc, err := importccl.MakeSimpleTableDescriptor(
+	semaCtx := makeTestSemaCtx()
+	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
@@ -67,7 +78,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	evalCtx := &tree.EvalContext{}
 
 	valuesStmt, err := parser.ParseOne(values)
@@ -136,7 +147,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
@@ -145,6 +156,37 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 // overflow an int64.
 func randTime(rng *rand.Rand) time.Time {
 	return timeutil.Unix(0, rng.Int63())
+}
+
+//Create a thin, in-memory user-defined enum type
+func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T {
+
+	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))
+	physReps := enum.GenerateNEvenlySpacedBytes(len(enumLabels))
+	for i := range enumLabels {
+		members[i] = descpb.TypeDescriptor_EnumMember{
+			LogicalRepresentation:  string(enumLabels[i]),
+			PhysicalRepresentation: physReps[i],
+			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+		}
+	}
+
+	enumKind := descpb.TypeDescriptor_ENUM
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:        typeName.Type(),
+		ID:          0,
+		Kind:        enumKind,
+		EnumMembers: members,
+		Version:     1,
+	}).BuildCreatedMutableType()
+
+	typ, _ := typeDesc.MakeTypesT(context.Background(), &typeName, nil)
+
+	testTypes[typeName.SQLString()] = typ
+
+	return typ
+
 }
 
 func TestAvroSchema(t *testing.T) {
@@ -248,9 +290,6 @@ func TestAvroSchema(t *testing.T) {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			return true
-		case types.IntervalFamily, types.BitFamily:
-			// Implement these as customer demand dictates.
-			return true
 		case types.ArrayFamily:
 			if !randgen.IsAllowedForArray(typ.ArrayContents()) {
 				return true
@@ -277,6 +316,13 @@ func TestAvroSchema(t *testing.T) {
 			typesToTest = append(typesToTest, collatedType)
 		}
 	}
+
+	testEnum := createEnum(
+		tree.EnumValueList{tree.EnumValue(`open`), tree.EnumValue(`closed`)},
+		tree.MakeUnqualifiedTypeName(`switch`),
+	)
+
+	typesToTest = append(typesToTest, testEnum)
 
 	// Generate a test for each column type with a random datum of that type.
 	for _, typ := range typesToTest {
@@ -324,7 +370,9 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, row := range rows {
-				evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+				evalCtx := &tree.EvalContext{
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+				}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
@@ -375,6 +423,7 @@ func TestAvroSchema(t *testing.T) {
 			`GEOMETRY`:          `["null","bytes"]`,
 			`INET`:              `["null","string"]`,
 			`INT8`:              `["null","long"]`,
+			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
@@ -383,12 +432,15 @@ func TestAvroSchema(t *testing.T) {
 			`TIMESTAMP`:         `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`TIMESTAMPTZ`:       `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`UUID`:              `["null","string"]`,
-			`DECIMAL(3,2)`:      `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
+
+			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2},"string"]`,
 		}
 
-		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`)) {
+		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily, types.BitFamily:
+			case types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -476,10 +528,27 @@ func TestAvroSchema(t *testing.T) {
 				sql:  `'2019-01-02 03:04:05'`,
 				avro: `{"long.timestamp-micros":1546398245000000}`},
 
+			{sqlType: `INTERVAL`, sql: `NULL`, avro: `null`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr 2 mons 3 d 4 hrs 5 mins 6 secs'`,
+				avro: `{"string":"P1Y2M3DT4H5M6S"}`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr -6 ms'`,
+				avro: `{"string":"P1YT-0.006S"}`},
+
 			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
 			{sqlType: `DECIMAL(4,1)`,
 				sql:  `1.2`,
 				avro: `{"bytes.decimal":"\f"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'Infinity'`,
+				avro: `{"string":"Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL '-Infinity'`,
+				avro: `{"string":"-Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'NaN'`,
+				avro: `{"string":"NaN"}`},
 
 			{sqlType: `UUID`, sql: `NULL`, avro: `null`},
 			{sqlType: `UUID`,
@@ -510,12 +579,18 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `JSONB`,
 				sql:  `'{"b": 1}'`,
 				avro: `{"string":"{\"b\": 1}"}`},
+
+			{sqlType: `VARBIT`, sql: `B'010'`, avro: `{"array":[3,4611686018427387904]}`}, // Take the 3 most significant bits of 1<<62
+
 			{sqlType: `BOOL[]`,
 				sql:  `'{true, true, false, null}'`,
 				avro: `{"array":[{"boolean":true},{"boolean":true},{"boolean":false},null]}`},
 			{sqlType: `VARCHAR COLLATE "fr"`,
 				sql:  `'Bonjour' COLLATE "fr"`,
 				avro: `{"string":"Bonjour"}`},
+			{sqlType: `switch`, // User-defined enum with values "open", "closed"
+				sql:  `'open'`,
+				avro: `{"string":"open"}`},
 		}
 
 		for _, test := range goldens {
@@ -792,8 +867,30 @@ func BenchmarkEncodeInt(b *testing.B) {
 	benchmarkEncodeType(b, types.Int, randEncDatumRow(types.Int))
 }
 
+func BenchmarkEncodeBitSmall(b *testing.B) {
+	smallBit := types.MakeBit(8)
+	benchmarkEncodeType(b, smallBit, randEncDatumRow(smallBit))
+}
+
+func BenchmarkEncodeBitLarge(b *testing.B) {
+	largeBit := types.MakeBit(64*3 + 1)
+	benchmarkEncodeType(b, largeBit, randEncDatumRow(largeBit))
+}
+
+func BenchmarkEncodeVarbit(b *testing.B) {
+	benchmarkEncodeType(b, types.VarBit, randEncDatumRow(types.VarBit))
+}
+
 func BenchmarkEncodeBool(b *testing.B) {
 	benchmarkEncodeType(b, types.Bool, randEncDatumRow(types.Bool))
+}
+
+func BenchmarkEncodeEnum(b *testing.B) {
+	testEnum := createEnum(
+		tree.EnumValueList{tree.EnumValue(`open`), tree.EnumValue(`closed`)},
+		tree.MakeUnqualifiedTypeName(`switch`),
+	)
+	benchmarkEncodeType(b, testEnum, randEncDatumRow(testEnum))
 }
 
 func BenchmarkEncodeFloat(b *testing.B) {
@@ -850,6 +947,10 @@ func BenchmarkEncodeTimestamp(b *testing.B) {
 
 func BenchmarkEncodeTimestampTZ(b *testing.B) {
 	benchmarkEncodeType(b, types.TimestampTZ, randEncDatumRow(types.TimestampTZ))
+}
+
+func BenchmarkEncodeInterval(b *testing.B) {
+	benchmarkEncodeType(b, types.Interval, randEncDatumRow(types.Interval))
 }
 
 func BenchmarkEncodeDecimal(b *testing.B) {

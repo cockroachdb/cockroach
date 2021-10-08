@@ -69,7 +69,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// UX friendliness safeguard.
-	if upd.Where == nil && b.evalCtx.SessionData.SafeUpdates {
+	if upd.Where == nil && b.evalCtx.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
 	}
 
@@ -193,7 +193,16 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
 		ord := mb.tabID.ColumnOrdinal(targetColID)
-		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
+		targetCol := mb.tab.Column(ord)
+		checkDatumTypeFitsColumnType(targetCol, sourceCol.typ)
+
+		for _, expr := range exprs {
+			// Compatibility check the input expression against the corresponding
+			// table column.
+			if len(expr.Names) == 1 && expr.Names[0] == targetCol.ColName() {
+				checkUpdateExpression(targetCol, expr)
+			}
+		}
 
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
@@ -217,7 +226,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 		// Allow right side of SET to be DEFAULT.
 		if _, ok := expr.(tree.DefaultVal); ok {
-			expr = mb.parseDefaultOrComputedExpr(targetColID)
+			expr = mb.parseDefaultExpr(targetColID)
 		}
 
 		// Add new column to the projections scope.
@@ -306,7 +315,11 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// table. These are not visible to queries, and will always be updated to
 	// their default values. This is necessary because they may not yet have been
 	// set by the backfiller.
-	mb.addSynthesizedDefaultCols(mb.updateColIDs, false /* includeOrdinary */)
+	mb.addSynthesizedDefaultCols(
+		mb.updateColIDs,
+		false, /* includeOrdinary */
+		true,  /* applyOnUpdate */
+	)
 
 	// Possibly round DECIMAL-related columns containing update values. Do
 	// this before evaluating computed expressions, since those may depend on
@@ -332,7 +345,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.disambiguateColumns()
 
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols()
+	mb.addCheckConstraintCols(true /* isUpdate */)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during

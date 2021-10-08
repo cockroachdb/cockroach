@@ -16,20 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
-
-// DescriptorKey is the interface implemented by both
-// databaseKey and tableKey. It is used to easily get the
-// descriptor key and plain name.
-type DescriptorKey interface {
-	Key(codec keys.SQLCodec) roachpb.Key
-	Name() string
-}
 
 const (
 	// DefaultDatabaseName is the name ofthe default CockroachDB database used
@@ -70,7 +62,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumColumns())
+	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumKeyColumns())
 
 	colIdx := 0
 	for i := 0; i < index.NumInterleaveAncestors(); i++ {
@@ -78,7 +70,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 		// Table/Index IDs are always encoded ascending.
 		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+			d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}
@@ -95,8 +87,8 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < index.NumColumns() {
-		d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+	for colIdx < index.NumKeyColumns() {
+		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
@@ -159,227 +151,96 @@ func PrettySpans(index catalog.Index, spans []roachpb.Span, skip int) string {
 	return b.String()
 }
 
-// DatabaseKey implements DescriptorKey.
-type DatabaseKey struct {
-	name string
+// NewNameKeyComponents returns a new catalog.NameKey instance for the given object
+// name scoped under the given parent schema and parent database.
+func NewNameKeyComponents(
+	parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) catalog.NameKey {
+	return descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 }
 
-// NewDatabaseKey returns a new DatabaseKey.
-func NewDatabaseKey(name string) DatabaseKey {
-	return DatabaseKey{name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (dk DatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, keys.RootNamespaceID, keys.RootNamespaceID, dk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (dk DatabaseKey) Name() string {
-	return dk.name
-}
-
-// TableKey implements DescriptorKey interface.
-type TableKey struct {
-	parentID       descpb.ID
-	parentSchemaID descpb.ID
-	name           string
-}
-
-// NewPublicTableKey returns a new TableKey scoped under the public schema.
-func NewPublicTableKey(parentID descpb.ID, name string) TableKey {
-	return TableKey{parentID: parentID, parentSchemaID: keys.PublicSchemaID, name: name}
-}
-
-// NewTableKey returns a new TableKey.
-func NewTableKey(parentID descpb.ID, parentSchemaID descpb.ID, name string) TableKey {
-	return TableKey{parentID: parentID, parentSchemaID: parentSchemaID, name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (tk TableKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, tk.parentID, tk.parentSchemaID, tk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (tk TableKey) Name() string {
-	return tk.name
-}
-
-// SchemaKey implements DescriptorKey interface.
-type SchemaKey struct {
-	parentID descpb.ID
-	name     string
-}
-
-// NewSchemaKey returns a new SchemaKey
-func NewSchemaKey(parentID descpb.ID, name string) SchemaKey {
-	return SchemaKey{parentID: parentID, name: name}
-}
-
-// NewPublicSchemaKey returns a new SchemaKey specific to the public schema.
-func NewPublicSchemaKey(parentID descpb.ID) SchemaKey {
-	return SchemaKey{parentID: parentID, name: tree.PublicSchema}
-}
-
-// Key implements DescriptorKey interface.
-func (sk SchemaKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, sk.parentID, keys.RootNamespaceID, sk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (sk SchemaKey) Name() string {
-	return sk.name
-}
-
-// DeprecatedTableKey implements DescriptorKey interface.
-type DeprecatedTableKey struct {
-	parentID descpb.ID
-	name     string
-}
-
-// NewDeprecatedTableKey returns a new DeprecatedTableKey.
-func NewDeprecatedTableKey(parentID descpb.ID, name string) DeprecatedTableKey {
-	return DeprecatedTableKey{parentID, name}
-}
-
-// Key implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, dtk.parentID, dtk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Name() string {
-	return dtk.name
-}
-
-// DeprecatedDatabaseKey implements DescriptorKey interface.
-type DeprecatedDatabaseKey struct {
-	name string
-}
-
-// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey.
-func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
-	return DeprecatedDatabaseKey{name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, keys.RootNamespaceID, ddk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Name() string {
-	return ddk.name
-}
-
-// MakeNameMetadataKey returns the key for the name, as expected by
-// versions >= 20.1.
-// Pass name == "" in order to generate the prefix key to use to scan over all
-// of the names for the specified parentID.
-func MakeNameMetadataKey(
+// MakeObjectNameKey returns the roachpb.Key for the given object name
+// scoped under the given schema in the given database.
+func MakeObjectNameKey(
 	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
 ) roachpb.Key {
-	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.GetID()), uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
-	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
-	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
-	if name != "" {
-		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.PublicColumns()[3].GetID()))
-	}
-	return k
+	return EncodeNameKey(codec, NewNameKeyComponents(parentID, parentSchemaID, name))
 }
 
-// DecodeNameMetadataKey returns the components that make up the
-// NameMetadataKey for version >= 20.1.
+// MakePublicObjectNameKey returns the roachpb.Key for the given object name
+// scoped under the public schema in the given database.
+func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
+	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.PublicSchemaID, name))
+}
+
+// MakeSchemaNameKey returns the roachpb.Key for the given schema name scoped
+// under the given database.
+func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
+	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, name))
+}
+
+// MakePublicSchemaNameKey returns the roachpb.Key corresponding to the public
+// schema scoped under the given database.
+func MakePublicSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {
+	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, tree.PublicSchema))
+}
+
+// MakeDatabaseNameKey returns the roachpb.Key corresponding to the database
+// with the given name.
+func MakeDatabaseNameKey(codec keys.SQLCodec, name string) roachpb.Key {
+	return EncodeNameKey(codec, NewNameKeyComponents(keys.RootNamespaceID, keys.RootNamespaceID, name))
+}
+
+// EncodeNameKey encodes nameKey using codec.
+func EncodeNameKey(codec keys.SQLCodec, nameKey catalog.NameKey) roachpb.Key {
+	r := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
+	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentID()))
+	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentSchemaID()))
+	if nameKey.GetName() != "" {
+		r = encoding.EncodeBytesAscending(r, []byte(nameKey.GetName()))
+		r = keys.MakeFamilyKey(r, catconstants.NamespaceTableFamilyID)
+	}
+	return r
+}
+
+// DecodeNameMetadataKey is the reciprocal of EncodeNameKey.
 func DecodeNameMetadataKey(
 	codec keys.SQLCodec, k roachpb.Key,
-) (parentID, parentSchemaID descpb.ID, name string, err error) {
+) (nameKey descpb.NameInfo, err error) {
 	k, _, err = codec.DecodeTablePrefix(k)
 	if err != nil {
-		return 0, 0, "", err
+		return nameKey, err
 	}
 
 	var buf uint64
 	k, buf, err = encoding.DecodeUvarintAscending(k)
 	if err != nil {
-		return 0, 0, "", err
+		return nameKey, err
 	}
-	if buf != uint64(systemschema.NamespaceTable.GetPrimaryIndexID()) {
-		return 0, 0, "", errors.Newf("tried get table %d, but got %d", systemschema.NamespaceTable.GetPrimaryIndexID(), buf)
+	if buf != uint64(catconstants.NamespaceTablePrimaryIndexID) {
+		return nameKey, errors.Newf("tried get table %d, but got %d", catconstants.NamespaceTablePrimaryIndexID, buf)
 	}
 
 	k, buf, err = encoding.DecodeUvarintAscending(k)
 	if err != nil {
-		return 0, 0, "", err
+		return nameKey, err
 	}
-	parentID = descpb.ID(buf)
+	nameKey.ParentID = descpb.ID(buf)
 
 	k, buf, err = encoding.DecodeUvarintAscending(k)
 	if err != nil {
-		return 0, 0, "", err
+		return nameKey, err
 	}
-	parentSchemaID = descpb.ID(buf)
+	nameKey.ParentSchemaID = descpb.ID(buf)
 
 	var bytesBuf []byte
 	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
 	if err != nil {
-		return 0, 0, "", err
+		return nameKey, err
 	}
-	name = string(bytesBuf)
+	nameKey.Name = string(bytesBuf)
 
-	return parentID, parentSchemaID, name, nil
-}
-
-// MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
-// versions < 20.1. Pass name == "" in order to generate the prefix key to use
-// to scan over all of the names for the specified parentID.
-func MakeDeprecatedNameMetadataKey(
-	codec keys.SQLCodec, parentID descpb.ID, name string,
-) roachpb.Key {
-	k := codec.IndexPrefix(
-		uint32(systemschema.DeprecatedNamespaceTable.GetID()), uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
-	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
-	if name != "" {
-		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.PublicColumns()[2].GetID()))
-	}
-	return k
-}
-
-// DecodeDeprecatedNameMetadataKey returns the components that make up the
-// NameMetadataKey for version < 20.1.
-func DecodeDeprecatedNameMetadataKey(
-	codec keys.SQLCodec, k roachpb.Key,
-) (parentID descpb.ID, name string, err error) {
-	k, _, err = codec.DecodeTablePrefix(k)
-	if err != nil {
-		return 0, "", err
-	}
-
-	var buf uint64
-	k, buf, err = encoding.DecodeUvarintAscending(k)
-	if err != nil {
-		return 0, "", err
-	}
-	if buf != uint64(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()) {
-		return 0, "", errors.Newf("tried get table %d, but got %d", systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID(), buf)
-	}
-
-	k, buf, err = encoding.DecodeUvarintAscending(k)
-	if err != nil {
-		return 0, "", err
-	}
-	parentID = descpb.ID(buf)
-
-	var bytesBuf []byte
-	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
-	if err != nil {
-		return 0, "", err
-	}
-	name = string(bytesBuf)
-
-	return parentID, name, nil
+	return nameKey, nil
 }
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.

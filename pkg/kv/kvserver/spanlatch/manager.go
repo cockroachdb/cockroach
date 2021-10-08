@@ -16,7 +16,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
@@ -113,6 +113,9 @@ type Guard struct {
 	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
 	latchesPtrs [spanset.NumSpanScope][spanset.NumSpanAccess]unsafe.Pointer
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
+	// Non-nil only when AcquireOptimistic has retained the snapshot for later
+	// checking of conflicts, and waiting.
+	snap *snapshot
 }
 
 func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
@@ -205,6 +208,122 @@ func (m *Manager) Acquire(ctx context.Context, spans *spanset.SpanSet) (*Guard, 
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
+	if err != nil {
+		m.Release(lg)
+		return nil, err
+	}
+	return lg, nil
+}
+
+// AcquireOptimistic is like Acquire, except it does not wait for latches over
+// overlapping spans to be released before returning. Instead, it
+// optimistically assumes that there are no currently held latches that need
+// to be waited on. This can be verified after the fact by passing the Guard
+// and the spans actually read to CheckOptimisticNoConflicts.
+//
+// Despite existing latches being ignored by this method, future calls to
+// Acquire will observe the latches inserted here and will wait for them to be
+// Released, as usual.
+//
+// The method returns a Guard which must be provided to the
+// CheckOptimisticNoConflicts, Release methods.
+func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet) *Guard {
+	lg, snap := m.sequence(spans)
+	lg.snap = &snap
+	return lg
+}
+
+// WaitFor waits for conflicting latches on the spans without adding
+// any latches itself. Fast path for operations that only require past latches
+// to be released without blocking new latches.
+func (m *Manager) WaitFor(ctx context.Context, spans *spanset.SpanSet) error {
+	// The guard is only used to store latches by this request. These latches
+	// are not actually inserted using insertLocked.
+	lg := newGuard(spans)
+
+	m.mu.Lock()
+	snap := m.snapshotLocked(spans)
+	defer snap.close()
+	m.mu.Unlock()
+
+	return m.wait(ctx, lg, snap)
+}
+
+// CheckOptimisticNoConflicts returns true iff the spans in the provided
+// spanset do not conflict with any existing latches (in the snapshot created
+// in AcquireOptimistic). It must only be called after AcquireOptimistic, and
+// if it returns true, the caller can skip calling WaitUntilAcquired and it is
+// sufficient to only call Release. If it returns false, the caller will
+// typically call WaitUntilAcquired to wait for latch acquisition. It is also
+// acceptable for the caller to skip WaitUntilAcquired and directly call
+// Release, in which case it never held the latches.
+func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) bool {
+	if lg.snap == nil {
+		panic(errors.AssertionFailedf("snap must not be nil"))
+	}
+	snap := lg.snap
+	var search latch
+	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
+		tr := &snap.trees[s]
+		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
+			ss := spans.GetSpans(a, s)
+			for _, sp := range ss {
+				search.span = sp.Span
+				search.ts = sp.Timestamp
+				switch a {
+				case spanset.SpanReadOnly:
+					// Search for writes at equal or lower timestamps.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreLater) {
+						return false
+					}
+				case spanset.SpanReadWrite:
+					// Search for all other writes.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreNothing) {
+						return false
+					}
+					// Search for reads at equal or higher timestamps.
+					it = tr[spanset.SpanReadOnly].MakeIter()
+					if overlaps(&it, &search, ignoreEarlier) {
+						return false
+					}
+				default:
+					panic("unknown access")
+				}
+			}
+		}
+	}
+	// Note that we don't call lg.snap.close() since even when this returns
+	// true, it is acceptable for the caller to call WaitUntilAcquired.
+	return true
+}
+
+func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
+	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
+		// The held latch may have already been signaled, but that doesn't allow
+		// us to ignore it, since it could have been held while we were
+		// concurrently evaluating, and we may not have observed the result of
+		// evaluation of that conflicting latch holder.
+		held := it.Cur()
+		if !ignore(search.ts, held.ts) {
+			return true
+		}
+	}
+	return false
+}
+
+// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts has
+// returned false, and so the caller needs to do pessimistic latching.
+func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, error) {
+	if lg.snap == nil {
+		panic(errors.AssertionFailedf("snap must not be nil"))
+	}
+	defer func() {
+		lg.snap.close()
+		lg.snap = nil
+	}()
+	err := m.wait(ctx, lg, *lg.snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -333,8 +452,9 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 				switch a {
 				case spanset.SpanReadOnly:
 					// Wait for writes at equal or lower timestamps.
-					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreLater); err != nil {
+					a2 := spanset.SpanReadWrite
+					it := tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -344,13 +464,15 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// it is an unreleased latch so we prefer waiting on longer
 					// latches first. We expect writes to take longer than reads
 					// to release their latches, so we wait on them first.
-					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreNothing); err != nil {
+					a2 := spanset.SpanReadWrite
+					it := tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
-					it = tr[spanset.SpanReadOnly].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreEarlier); err != nil {
+					a2 = spanset.SpanReadOnly
+					it = tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -366,7 +488,12 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 // with the search latch and which should not be ignored given their timestamp
 // and the supplied ignoreFn.
 func (m *Manager) iterAndWait(
-	ctx context.Context, t *timeutil.Timer, it *iterator, wait *latch, ignore ignoreFn,
+	ctx context.Context,
+	t *timeutil.Timer,
+	it *iterator,
+	waitType, heldType spanset.SpanAccess,
+	wait *latch,
+	ignore ignoreFn,
 ) error {
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
@@ -376,7 +503,7 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		if err := m.waitForSignal(ctx, t, wait, held); err != nil {
+		if err := m.waitForSignal(ctx, t, waitType, heldType, wait, held); err != nil {
 			return err
 		}
 	}
@@ -384,7 +511,10 @@ func (m *Manager) iterAndWait(
 }
 
 // waitForSignal waits for the latch that is currently held to be signaled.
-func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, held *latch) error {
+func (m *Manager) waitForSignal(
+	ctx context.Context, t *timeutil.Timer, waitType, heldType spanset.SpanAccess, wait, held *latch,
+) error {
+	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	for {
 		select {
 		case <-held.done.signalChan():
@@ -393,14 +523,15 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 			t.Read = true
 			defer t.Reset(base.SlowRequestThreshold)
 
-			log.Warningf(ctx, "have been waiting %s to acquire latch %s, held by %s",
-				base.SlowRequestThreshold, wait, held)
+			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
+				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
 				defer m.slowReqs.Dec(1)
 			}
 		case <-ctx.Done():
-			log.VEventf(ctx, 2, "%s while acquiring latch %s, held by %s", ctx.Err(), wait, held)
+			log.VEventf(ctx, 2, "%s while acquiring %s latch %s, held by %s latch %s",
+				ctx.Err(), waitType, wait, heldType, held)
 			return ctx.Err()
 		case <-m.stopper.ShouldQuiesce():
 			// While shutting down, requests may acquire
@@ -415,6 +546,9 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 // owned latches.
 func (m *Manager) Release(lg *Guard) {
 	lg.done.signal()
+	if lg.snap != nil {
+		lg.snap.close()
+	}
 
 	m.mu.Lock()
 	m.removeLocked(lg)
@@ -440,18 +574,26 @@ func (m *Manager) removeLocked(lg *Guard) {
 	}
 }
 
-// Info returns information about the state of the Manager.
-func (m *Manager) Info() (global, local kvserverpb.LatchManagerInfo) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	global = m.scopes[spanset.SpanGlobal].infoLocked()
-	local = m.scopes[spanset.SpanLocal].infoLocked()
-	return global, local
+// Metrics holds information about the state of a Manager.
+type Metrics struct {
+	ReadCount  int64
+	WriteCount int64
 }
 
-func (sm *scopedManager) infoLocked() kvserverpb.LatchManagerInfo {
-	var info kvserverpb.LatchManagerInfo
-	info.ReadCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
-	info.WriteCount = int64(sm.trees[spanset.SpanReadWrite].Len())
-	return info
+// Metrics returns information about the state of the Manager.
+func (m *Manager) Metrics() Metrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	globalReadCount, globalWriteCount := m.scopes[spanset.SpanGlobal].metricsLocked()
+	localReadCount, localWriteCount := m.scopes[spanset.SpanLocal].metricsLocked()
+	return Metrics{
+		ReadCount:  globalReadCount + localReadCount,
+		WriteCount: globalWriteCount + localWriteCount,
+	}
+}
+
+func (sm *scopedManager) metricsLocked() (readCount, writeCount int64) {
+	readCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
+	writeCount = int64(sm.trees[spanset.SpanReadWrite].Len())
+	return readCount, writeCount
 }

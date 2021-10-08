@@ -16,6 +16,7 @@ import (
 	"io"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/linkedin/goavro/v2"
 )
@@ -453,6 +453,7 @@ type avroInputReader struct {
 var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	tableDesc catalog.TableDescriptor,
 	avroOpts roachpb.AvroOptions,
@@ -463,6 +464,7 @@ func newAvroInputReader(
 
 	return &avroInputReader{
 		importContext: &parallelImportContext{
+			semaCtx:    semaCtx,
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,

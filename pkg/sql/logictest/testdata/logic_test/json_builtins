@@ -1178,6 +1178,11 @@ SELECT row_to_json(row(1,'foo')), row_to_json(NULL), row_to_json(row())
 ----
 {"f1": 1, "f2": "foo"}  NULL  {}
 
+query T
+SELECT row_to_json(x) FROM (SELECT 1 AS "OnE", 2 AS "tO_") x
+----
+{"OnE": 1, "tO_": 2}
+
 
 # TODO(jordan,radu): this should also work without the .*.
 query T

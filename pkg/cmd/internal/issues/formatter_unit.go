@@ -68,23 +68,17 @@ var UnitTestFormatter = IssueFormatter{
 		}
 
 		r.Collapsed("Reproduce", func() {
-			// TODO(tbg): this should be generated here.
-			if data.ReproductionCommand != "" {
-				r.P(func() {
-					r.Escaped("To reproduce, try:\n")
-					r.CodeBlock("bash", data.ReproductionCommand)
-				})
+			if data.ReproductionCommand != nil {
+				data.ReproductionCommand(r)
 			}
 
 			if len(data.Parameters) != 0 {
-				r.P(func() {
-					r.Escaped("Parameters in this failure:\n")
-					for _, p := range data.Parameters {
-						r.Escaped("\n- ")
-						r.Escaped(p)
-						r.Escaped("\n")
-					}
-				})
+				r.Escaped("Parameters in this failure:\n")
+				for _, p := range data.Parameters {
+					r.Escaped("\n- ")
+					r.Escaped(p)
+					r.Escaped("\n")
+				}
 			}
 		})
 

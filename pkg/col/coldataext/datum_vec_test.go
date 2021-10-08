@@ -21,40 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDatum(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dv := &datumVec{evalCtx: &tree.EvalContext{}}
-	var d1 *Datum
-	var d2 tree.Datum
-	d1 = &Datum{Datum: &tree.DJSON{JSON: json.FromString("string")}}
-	d2 = &tree.DJSON{JSON: json.FromString("string")}
-
-	// Datum can be compared with regular datum.
-	require.True(t, d1.CompareDatum(dv, d2) == 0)
-
-	d2 = &Datum{Datum: d2}
-
-	// Datum can be compared with another Datum.
-	require.True(t, d1.CompareDatum(dv, d2) == 0)
-
-	// Datum implicitly views nil as tree.DNull.
-	require.True(t, d1.CompareDatum(dv, tree.DNull) == d1.CompareDatum(dv, nil /* other */))
-
-	// Datum panics if compared with incompatible type.
-	d2 = tree.NewDString("s")
-	require.Panics(t,
-		func() { d1.CompareDatum(dv, d2) },
-		"different datum type should have caused panic when compared",
-	)
-
-	d2 = &Datum{Datum: d2}
-	require.Panics(t,
-		func() { d1.CompareDatum(dv, d2) },
-		"different datum type should have caused panic when compared",
-	)
-}
-
 func TestDatumVec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // MakeSegmentedOrdering returns an ordering choice which satisfies both
@@ -155,4 +157,46 @@ func (c *CustomFuncs) HasRangeFrameWithOffset(w memo.WindowsExpr) bool {
 		}
 	}
 	return false
+}
+
+// MakeWindowPrivate constructs a new WindowPrivate with the given partition
+// columns and ordering choice.
+func (c *CustomFuncs) MakeWindowPrivate(
+	partition opt.ColSet, ordering props.OrderingChoice,
+) *memo.WindowPrivate {
+	return &memo.WindowPrivate{
+		Partition: partition,
+		Ordering:  ordering,
+	}
+}
+
+// MakeRowNumberWindowFunc returns a WindowsExpr with a row_number window
+// function, as well as the corresponding output ColumnID.
+func (c *CustomFuncs) MakeRowNumberWindowFunc() (fn memo.WindowsExpr, outputCol opt.ColumnID) {
+	outputCol = c.mem.Metadata().AddColumn("row_num", types.Int)
+	private := &memo.WindowsItemPrivate{
+		Frame: memo.WindowFrame{
+			Mode:           tree.RANGE,
+			StartBoundType: tree.UnboundedPreceding,
+			EndBoundType:   tree.CurrentRow,
+			FrameExclusion: tree.NoExclusion,
+		},
+		Col: outputCol,
+	}
+	return memo.WindowsExpr{c.f.ConstructWindowsItem(&memo.RowNumberExpr{}, private)}, outputCol
+}
+
+// LimitToRowNumberFilter constructs a filter corresponding to
+// 'rowNumCol <= limitValue' for TryDecorrelateLimit.
+func (c *CustomFuncs) LimitToRowNumberFilter(
+	limit tree.Datum, rowNumCol opt.ColumnID,
+) memo.FiltersExpr {
+	if _, ok := limit.(*tree.DInt); !ok {
+		panic(errors.AssertionFailedf("expected integer limit value"))
+	}
+	return memo.FiltersExpr{
+		c.f.ConstructFiltersItem(
+			c.f.ConstructLe(c.f.ConstructVariable(rowNumCol), c.f.ConstructConstVal(limit, types.Int)),
+		),
+	}
 }

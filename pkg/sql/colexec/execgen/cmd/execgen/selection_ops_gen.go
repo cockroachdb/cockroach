@@ -37,11 +37,6 @@ func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
 
-	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
-	s = replaceManipulationFuncsAmbiguous(".Left", s)
-	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
-	s = replaceManipulationFuncsAmbiguous(".Right", s)
-
 	s = strings.ReplaceAll(s, "_HAS_NULLS", "$hasNulls")
 	selConstLoop := makeFunctionRegex("_SEL_CONST_LOOP", 1)
 	s = selConstLoop.ReplaceAllString(s, `{{template "selConstLoop" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)

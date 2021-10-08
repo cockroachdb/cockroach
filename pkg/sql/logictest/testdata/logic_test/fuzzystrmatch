@@ -50,7 +50,7 @@ SELECT soundex('Anne'), soundex('Margaret'), difference('Anne', 'Margaret');
 ----
 A500 M626 0
 
-query TTT
-SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL);
+query TTTT
+SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL), difference(NULL, 'Bob');
 ----
-A500 · ·
+A500  NULL  NULL  NULL

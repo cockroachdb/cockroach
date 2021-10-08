@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +35,36 @@ import (
 )
 
 const all, latest = true, false
+
+func makeKVT(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
+	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
+}
+
+func makeKVTxn(
+	key roachpb.Key, val []byte, ts hlc.Timestamp,
+) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
+	txnID := uuid.MakeV4()
+	txnMeta := enginepb.TxnMeta{
+		Key:            key,
+		ID:             txnID,
+		Epoch:          1,
+		WriteTimestamp: ts,
+	}
+	return roachpb.Transaction{
+			TxnMeta:       txnMeta,
+			ReadTimestamp: ts,
+		}, roachpb.Value{
+			RawBytes: val,
+		}, roachpb.MakeIntent(&txnMeta, key)
+}
+
+func intents(intents ...roachpb.Intent) []roachpb.Intent {
+	return intents
+}
+
+func kvs(kvs ...MVCCKeyValue) []MVCCKeyValue {
+	return kvs
+}
 
 func iterateExpectErr(
 	e Engine,
@@ -43,6 +75,7 @@ func iterateExpectErr(
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
+
 		t.Run("aggregate-intents", func(t *testing.T) {
 			assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents)
 		})
@@ -104,10 +137,10 @@ func assertExpectErrs(
 	expectedIntents []roachpb.Intent,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-		EndKey:                       endKey,
-		StartTime:                    startTime,
-		EndTime:                      endTime,
-		EnableWriteIntentAggregation: true,
+		EndKey:       endKey,
+		StartTime:    startTime,
+		EndTime:      endTime,
+		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
 	})
 	defer iter.Close()
 	var iterFn func()
@@ -152,8 +185,17 @@ func assertExportedErrs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big,
-		useTBI, sstFile)
+	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+		StartKey:           MVCCKey{Key: startKey},
+		EndKey:             endKey,
+		StartTS:            startTime,
+		EndTS:              endTime,
+		ExportAllRevisions: revisions,
+		TargetSize:         big,
+		MaxSize:            big,
+		StopMidKey:         false,
+		UseTBI:             useTBI,
+	}, sstFile)
 	require.Error(t, err)
 
 	if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
@@ -181,8 +223,17 @@ func assertExportedKVs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big,
-		useTBI, sstFile)
+	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+		StartKey:           MVCCKey{Key: startKey},
+		EndKey:             endKey,
+		StartTS:            startTime,
+		EndTS:              endTime,
+		ExportAllRevisions: revisions,
+		TargetSize:         big,
+		MaxSize:            big,
+		StopMidKey:         false,
+		UseTBI:             useTBI,
+	}, sstFile)
 	require.NoError(t, err)
 	data := sstFile.Data()
 	if data == nil {
@@ -299,7 +350,7 @@ func assertIteratedKVs(
 		EnableTimeBoundIteratorOptimization: useTBI,
 		StartTime:                           startTime,
 		EndTime:                             endTime,
-		EnableWriteIntentAggregation:        true,
+		IntentPolicy:                        MVCCIncrementalIterIntentPolicyAggregate,
 	})
 	defer iter.Close()
 	var iterFn func()
@@ -392,16 +443,11 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
-	}
-
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv2_4_4 := makeKVT(testKey2, testValue4, ts4)
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -507,6 +553,256 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	}
 }
 
+func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var (
+		keyMax   = roachpb.KeyMax
+		testKey1 = roachpb.Key("/db1")
+		testKey2 = roachpb.Key("/db2")
+
+		testValue1 = []byte("val1")
+		testValue2 = []byte("val2")
+
+		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
+		// as upper/lower-bound during iterator initialization.
+		tsMin = hlc.Timestamp{WallTime: 0, Logical: 1}
+		ts1   = hlc.Timestamp{WallTime: 1, Logical: 0}
+		ts2   = hlc.Timestamp{WallTime: 2, Logical: 0}
+		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
+	)
+
+	inline1_1_1 := makeKVT(testKey1, testValue1, hlc.Timestamp{})
+	kv2_1_1 := makeKVT(testKey2, testValue1, ts1)
+	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
+
+	for _, engineImpl := range mvccEngineImpls {
+		e := engineImpl.create()
+		defer e.Close()
+		for _, kv := range []MVCCKeyValue{inline1_1_1, kv2_1_1, kv2_2_2} {
+			v := roachpb.Value{RawBytes: kv.Value}
+			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Run(engineImpl.name, func(t *testing.T) {
+			t.Run("PolicyError returns error if inline value is found", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    tsMin,
+					EndTime:      tsMax,
+					InlinePolicy: MVCCIncrementalIterInlinePolicyError,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				_, err := iter.Valid()
+				assert.EqualError(t, err, "unexpected inline value found: \"/db1\"")
+			})
+			t.Run("PolicyEmit returns inline values to caller", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    tsMin,
+					EndTime:      tsMax,
+					InlinePolicy: MVCCIncrementalIterInlinePolicyEmit,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				expectInlineKeyValue(t, iter, inline1_1_1)
+				iter.Next()
+				expectKeyValue(t, iter, kv2_2_2)
+				iter.Next()
+				expectKeyValue(t, iter, kv2_1_1)
+
+			})
+		})
+	}
+}
+
+func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var (
+		keyMax   = roachpb.KeyMax
+		testKey1 = roachpb.Key("/db1")
+		testKey2 = roachpb.Key("/db2")
+
+		testValue1 = []byte("val1")
+		testValue2 = []byte("val2")
+		testValue3 = []byte("val3")
+
+		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
+		// as upper/lower-bound during iterator initialization.
+		tsMin = hlc.Timestamp{WallTime: 0, Logical: 1}
+		ts1   = hlc.Timestamp{WallTime: 1, Logical: 0}
+		ts2   = hlc.Timestamp{WallTime: 2, Logical: 0}
+		ts3   = hlc.Timestamp{WallTime: 3, Logical: 0}
+		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
+	)
+
+	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
+		txnID := uuid.MakeV4()
+		txnMeta := enginepb.TxnMeta{
+			Key:            key,
+			ID:             txnID,
+			Epoch:          1,
+			WriteTimestamp: ts,
+		}
+		return roachpb.Transaction{
+				TxnMeta:       txnMeta,
+				ReadTimestamp: ts,
+			}, roachpb.Value{
+				RawBytes: val,
+			}, roachpb.MakeIntent(&txnMeta, key)
+	}
+
+	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
+	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
+	kv1_3_3 := makeKVT(testKey1, testValue3, ts3)
+	kv2_1_1 := makeKVT(testKey2, testValue1, ts1)
+	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
+	txn, val, intent2_2_2 := makeTxn(testKey2, testValue2, ts2)
+
+	intentErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{intent2_2_2}}
+
+	for _, engineImpl := range mvccEngineImpls {
+		e := engineImpl.create()
+		defer e.Close()
+		for _, kv := range []MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1} {
+			v := roachpb.Value{RawBytes: kv.Value}
+			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := MVCCPut(ctx, e, nil, txn.TxnMeta.Key, txn.ReadTimestamp, val, &txn); err != nil {
+			t.Fatal(err)
+		}
+		t.Run(engineImpl.name, func(t *testing.T) {
+			t.Run("PolicyError returns error if an intent is in the time range", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    tsMin,
+					EndTime:      tsMax,
+					IntentPolicy: MVCCIncrementalIterIntentPolicyError,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				for ; ; iter.Next() {
+					if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(keyMax) >= 0 {
+						break
+					}
+				}
+				_, err := iter.Valid()
+				assert.EqualError(t, err, intentErr.Error())
+			})
+			t.Run("PolicyError ignores intents outside of time range", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    ts2,
+					EndTime:      tsMax,
+					IntentPolicy: MVCCIncrementalIterIntentPolicyError,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				expectKeyValue(t, iter, kv1_3_3)
+				iter.Next()
+				valid, err := iter.Valid()
+				assert.NoError(t, err)
+				assert.False(t, valid)
+			})
+			t.Run("PolicyEmit returns inline values to caller", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    tsMin,
+					EndTime:      tsMax,
+					IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				for _, kv := range []MVCCKeyValue{kv1_3_3, kv1_2_2, kv1_1_1} {
+					expectKeyValue(t, iter, kv)
+					iter.Next()
+				}
+				expectIntent(t, iter, intent2_2_2)
+				iter.Next()
+				expectKeyValue(t, iter, kv2_2_2)
+				iter.Next()
+				expectKeyValue(t, iter, kv2_1_1)
+
+			})
+			t.Run("PolicyEmit ignores intents outside of time range", func(t *testing.T) {
+				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+					EndKey:       keyMax,
+					StartTime:    ts2,
+					EndTime:      tsMax,
+					IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+				})
+				defer iter.Close()
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				expectKeyValue(t, iter, kv1_3_3)
+				iter.Next()
+				valid, err := iter.Valid()
+				assert.NoError(t, err)
+				assert.False(t, valid)
+			})
+		})
+	}
+}
+
+func expectKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
+	valid, err := iter.Valid()
+	assert.True(t, valid, "expected valid iterator")
+	assert.NoError(t, err)
+
+	unsafeKey := iter.UnsafeKey()
+	unsafeVal := iter.UnsafeValue()
+
+	assert.True(t, unsafeKey.Key.Equal(kv.Key.Key), "keys not equal")
+	assert.Equal(t, kv.Key.Timestamp, unsafeKey.Timestamp)
+	assert.Equal(t, kv.Value, unsafeVal)
+
+}
+
+func expectInlineKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
+	valid, err := iter.Valid()
+	assert.True(t, valid)
+	assert.NoError(t, err)
+
+	unsafeKey := iter.UnsafeKey()
+	unsafeVal := iter.UnsafeValue()
+
+	var meta enginepb.MVCCMetadata
+	err = protoutil.Unmarshal(unsafeVal, &meta)
+	require.NoError(t, err)
+
+	assert.True(t, meta.IsInline())
+	assert.False(t, unsafeKey.IsValue())
+	assert.True(t, unsafeKey.Key.Equal(kv.Key.Key))
+	assert.Equal(t, kv.Value, meta.RawBytes)
+}
+
+func expectIntent(t *testing.T, iter SimpleMVCCIterator, intent roachpb.Intent) {
+	valid, err := iter.Valid()
+	assert.True(t, valid)
+	assert.NoError(t, err)
+
+	unsafeKey := iter.UnsafeKey()
+	unsafeVal := iter.UnsafeValue()
+
+	var meta enginepb.MVCCMetadata
+	err = protoutil.Unmarshal(unsafeVal, &meta)
+	require.NoError(t, err)
+	assert.NotNil(t, meta.Txn)
+
+	assert.False(t, unsafeKey.IsValue())
+	assert.True(t, unsafeKey.Key.Equal(intent.Key))
+	assert.Equal(t, meta.Timestamp, intent.Txn.WriteTimestamp.ToLegacyTimestamp())
+
+}
+
 func TestMVCCIncrementalIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -532,33 +828,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
-	}
-	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
-		txnID := uuid.MakeV4()
-		txnMeta := enginepb.TxnMeta{
-			Key:            key,
-			ID:             txnID,
-			Epoch:          1,
-			WriteTimestamp: ts,
-		}
-		return roachpb.Transaction{
-				TxnMeta:       txnMeta,
-				ReadTimestamp: ts,
-			}, roachpb.Value{
-				RawBytes: val,
-			}, roachpb.MakeIntent(&txnMeta, key)
-	}
-	intents := func(intents ...roachpb.Intent) []roachpb.Intent { return intents }
-
 	// Keys are named as kv<key>_<value>_<ts>.
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_4_4 := makeKVT(testKey1, testValue4, ts4)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv1Deleted3 := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name+"-latest", func(t *testing.T) {
@@ -593,11 +868,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1Deleted3, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
+			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
+			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
@@ -661,11 +936,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1Deleted3, kv1_2_2, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
+			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
+			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
@@ -765,7 +1040,16 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 				// Re-write the intent with a higher timestamp.
 				txn.WriteTimestamp = ts3
 				txn.Sequence = 2
-				return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
+				// Use a batch since MVCCPut is not atomic when using an Engine and we
+				// are not using latches to prevent a concurrent read in the other
+				// goroutine. A non-atomic Put can cause the strict invariant checking
+				// in intentInterleavingIter to be violated.
+				b := e.NewBatch()
+				defer b.Close()
+				if err := MVCCPut(ctx, b, nil, kA, ts1, vA2, txn); err != nil {
+					return err
+				}
+				return b.Commit(false)
 			})
 			g.Go(func() error {
 				// Iterate with a time range that includes the initial intent but does
@@ -911,7 +1195,8 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1 := NewInMemForTesting(ctx, roachpb.Attributes{}, 10<<20)
+	db1, err := Open(ctx, InMemory(), ForTesting)
+	require.NoError(t, err)
 	defer db1.Close()
 
 	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
@@ -946,7 +1231,8 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//
 	//   SSTable 2:
 	//     b@2
-	db2 := NewInMemForTesting(ctx, roachpb.Attributes{}, 10<<20)
+	db2, err := Open(ctx, InMemory(), ForTesting)
+	require.NoError(t, err)
 	defer db2.Close()
 
 	// NB: If the original intent was separated, iterating using an interleaving
@@ -1068,28 +1354,94 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
-			var expectedKVs []MVCCKeyValue
-			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: localMax})
-			for {
-				ok, err := iter.Valid()
-				if err != nil {
-					t.Fatal(err)
-				} else if !ok {
-					break
-				}
-				ts := iter.Key().Timestamp
-				if (ts.Less(testCase.end) || testCase.end == ts) && testCase.start.Less(ts) {
-					expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-				}
-				iter.Next()
-			}
-			if len(expectedKVs) < 1 {
-				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
-			}
+			expectedKVs := collectMatchingWithMVCCIterator(t, eng, testCase.start, testCase.end)
 
 			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
+		})
+	}
+}
+
+func collectMatchingWithMVCCIterator(
+	t *testing.T, eng Engine, start, end hlc.Timestamp,
+) []MVCCKeyValue {
+	var expectedKVs []MVCCKeyValue
+	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: localMax})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		ts := iter.Key().Timestamp
+		if (ts.Less(end) || end == ts) && start.Less(ts) {
+			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		}
+		iter.Next()
+	}
+	if len(expectedKVs) < 1 {
+		t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
+	}
+	return expectedKVs
+}
+
+func runIncrementalBenchmark(
+	b *testing.B, emk engineMaker, useTBI bool, ts hlc.Timestamp, opts benchDataOptions,
+) {
+	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
+	{
+		// Pull all of the sstables into the cache.  This
+		// probably defeates a lot of the benefits of the
+		// time-based optimization.
+		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		_, _ = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
+		iter.Close()
+	}
+	defer eng.Close()
+
+	startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
+	endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(opts.numKeys)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+			EnableTimeBoundIteratorOptimization: useTBI,
+			EndKey:                              endKey,
+			StartTime:                           ts,
+			EndTime:                             hlc.MaxTimestamp,
+		})
+		defer it.Close()
+		it.SeekGE(MVCCKey{Key: startKey})
+		for {
+			if ok, err := it.Valid(); err != nil {
+				b.Fatalf("failed incremental iteration: %+v", err)
+			} else if !ok {
+				break
+			}
+			it.Next()
+		}
+	}
+}
+
+func BenchmarkMVCCIncrementalIterator(b *testing.B) {
+	numVersions := 100
+	numKeys := 1000
+	valueBytes := 64
+
+	for _, useTBI := range []bool{true, false} {
+		b.Run(fmt.Sprintf("useTBI=%v", useTBI), func(b *testing.B) {
+			for _, tsExcludePercent := range []float64{0, 0.95} {
+				wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
+				ts := hlc.Timestamp{WallTime: wallTime}
+				b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
+					runIncrementalBenchmark(b, setupMVCCPebble, useTBI, ts, benchDataOptions{
+						numVersions: numVersions,
+						numKeys:     numKeys,
+						valueBytes:  valueBytes,
+					})
+				})
+			}
 		})
 	}
 }

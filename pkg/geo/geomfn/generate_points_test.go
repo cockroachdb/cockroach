@@ -30,21 +30,6 @@ func TestGenerateRandomPoints(t *testing.T) {
 		want geo.Geometry
 	}{
 		{
-			"number of points to generate less than minimum",
-			args{geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 1.1, 0 0))"), -1, 1},
-			geo.Geometry{},
-		},
-		{
-			"supported geometry, zero points to generate",
-			args{geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 1.1, 0 0))"), 0, 1},
-			geo.Geometry{},
-		},
-		{
-			"empty geometry",
-			args{geo.MustParseGeometry("POLYGON EMPTY"), 4, 1},
-			geo.Geometry{},
-		},
-		{
 			"Polygon - square",
 			args{geo.MustParseGeometry("POLYGON((1 1,1 2,2 2,2 1,1 1))"), 4, 2},
 			geo.MustParseGeometry("MULTIPOINT(1.55948870460174560115 1.30713530828859747501, 1.4638274793965568854 1.71250027479276534237, 1.6030771445518701146 1.60597601333107697918, 1.06344848690006488212 1.30988904426268293335)"),
@@ -118,7 +103,22 @@ func TestGenerateRandomPoints(t *testing.T) {
 			{
 				"generated area is too large",
 				args{geo.MustParseGeometry("POLYGON((0 0,0 100,0.00001 0.00000001,0.99999 0.00000001,1 100,1 0,0 0))"), 100, 1996},
-				"generating random points error: generated area is too large: 10001406, max 6533600",
+				"generated area is too large: 10001406, max 6533600",
+			},
+			{
+				"number of points to generate less than minimum",
+				args{geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 1.1, 0 0))"), -1, 1},
+				"points must be positive and geometry must not be empty",
+			},
+			{
+				"supported geometry, zero points to generate",
+				args{geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 1.1, 0 0))"), 0, 1},
+				"points must be positive and geometry must not be empty",
+			},
+			{
+				"empty geometry",
+				args{geo.MustParseGeometry("POLYGON EMPTY"), 4, 1},
+				"points must be positive and geometry must not be empty",
 			},
 		}
 		for _, tt := range errorTestCases {

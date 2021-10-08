@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStatementReuses(t *testing.T) {
@@ -316,4 +319,77 @@ func TestExplainStatsCollected(t *testing.T) {
 			t.Errorf("expected '%s', got '%s'", tc.expected, strings.TrimSpace(statsRow))
 		}
 	}
+}
+
+// TestExplainMVCCSteps makes sure that the MVCC stats are properly collected
+// during explain analyze. This can't be a normal logic test because the MVCC
+// stats are marked as nondeterministic (they change depending on number of
+// nodes in the query).
+func TestExplainMVCCSteps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderMetamorphic(t,
+		"this test expects a precise number of scan requests, which is not upheld "+
+			"in the metamorphic configuration that edits the kv batch size.")
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+
+	expectedSteps, expectedSeeks := 1000, 2
+	foundSteps, foundSeeks := getMVCCStats(t, r)
+
+	assert.Equal(t, expectedSteps, foundSteps)
+	assert.Equal(t, expectedSeeks, foundSeeks)
+	assert.Equal(t, expectedSteps, foundSteps)
+	assert.Equal(t, expectedSeeks, foundSeeks)
+
+	// Update all rows.
+	r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
+
+	expectedSteps, expectedSeeks = 2000, 2
+	foundSteps, foundSeeks = getMVCCStats(t, r)
+
+	assert.Equal(t, expectedSteps, foundSteps)
+	assert.Equal(t, expectedSeeks, foundSeeks)
+}
+
+func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner) (foundSteps, foundSeeks int) {
+	rows := r.Query(t, "EXPLAIN ANALYZE(VERBOSE) SELECT count(*) FROM ab")
+	var output strings.Builder
+	var str string
+	var err error
+	for rows.Next() {
+		if err := rows.Scan(&str); err != nil {
+			t.Fatal(err)
+		}
+		output.WriteString(str)
+		output.WriteByte('\n')
+		str = strings.TrimSpace(str)
+		// Numbers are printed with commas to indicate 1000s places, remove them.
+		str = strings.ReplaceAll(str, ",", "")
+		stepRe := regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/(\d+)`)
+		stepMatches := stepRe.FindStringSubmatch(str)
+		if len(stepMatches) == 3 {
+			foundSteps, err = strconv.Atoi(stepMatches[1])
+			assert.NoError(t, err)
+		}
+		seekRe := regexp.MustCompile(`MVCC seek count \(ext/int\): (\d+)/(\d+)`)
+		seekMatches := seekRe.FindStringSubmatch(str)
+		if len(seekMatches) == 3 {
+			foundSeeks, err = strconv.Atoi(seekMatches[1])
+			assert.NoError(t, err)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if t.Failed() {
+		fmt.Println("Explain output:")
+		fmt.Println(output.String())
+	}
+	return foundSteps, foundSeeks
 }

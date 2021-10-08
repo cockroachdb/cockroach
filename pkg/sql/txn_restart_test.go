@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -339,7 +340,9 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	return 0, false
 }
 
-func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, err error) {
+func (ta *TxnAborter) statementFilter(
+	ctx context.Context, _ *sessiondata.SessionData, stmt string, err error,
+) {
 	ta.mu.Lock()
 	log.Infof(ctx, "statement filter running on: %s, with err=%v", stmt, err)
 	ri, ok := ta.mu.stmtsToAbort[stmt]
@@ -1579,4 +1582,51 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test that auto-retried errors are recorded for the next iteration.
+func TestTxnAutoRetryReasonAvailable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numRetries = 3
+	retryCount := 0
+
+	params, cmdFilters := tests.CreateTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeRestart: func(ctx context.Context, reason error) {
+			retryCount++
+			if !testutils.IsError(reason, fmt.Sprintf("injected err %d", retryCount)) {
+				t.Fatalf("checking injected retryable error failed")
+			}
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	retriedStmtKey := []byte("test_key")
+
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
+			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
+					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN,
+						fmt.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
+				}
+			}
+			return nil
+		}, false)
+
+	defer cleanupFilter()
+
+	r := sqlutils.MakeSQLRunner(sqlDB)
+
+	r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+SELECT * from t.test WHERE k = 'test_key';
+`)
+
+	require.Equal(t, numRetries, retryCount)
 }

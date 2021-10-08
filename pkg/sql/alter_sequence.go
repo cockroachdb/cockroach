@@ -37,7 +37,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 		return nil, err
 	}
 
-	seqDesc, err := p.ResolveMutableTableDescriptorEx(
+	_, seqDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireSequenceDesc,
 	)
 	if err != nil {

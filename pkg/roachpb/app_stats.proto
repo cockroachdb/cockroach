@@ -87,6 +87,9 @@ message StatementStatistics {
   // RowsRead collects the number of rows read from disk.
   optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
+  // RowsWritten collects the number of rows written to disk.
+  optional NumericStat rows_written = 25 [(gogoproto.nullable) = false];
+
   // ExecStats are the execution statistics for this statement. These statistics
   // are sampled.
   optional ExecStats exec_stats = 21 [(gogoproto.nullable) = false];
@@ -139,6 +142,9 @@ message TransactionStatistics {
   // aggregation of all its statements' execution statistics. These statistics
   // are sampled.
   optional ExecStats exec_stats = 9 [(gogoproto.nullable) = false];
+
+  // RowsWritten collects the number of rows written to disk.
+  optional NumericStat rows_written = 10 [(gogoproto.nullable) = false];
 }
 
 
@@ -174,11 +180,17 @@ message StatementStatisticsKey {
   optional string app = 2 [(gogoproto.nullable) = false];
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
   optional bool failed = 4 [(gogoproto.nullable) = false];
-  optional bool opt = 5 [(gogoproto.nullable) = false];
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
   optional string database = 9 [(gogoproto.nullable) = false];
+  optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
+
+  reserved 5;
+  optional uint64 transaction_fingerprint_id = 11
+    [(gogoproto.nullable) = false,
+     (gogoproto.customname) = "TransactionFingerprintID",
+     (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some
@@ -187,21 +199,24 @@ message CollectedStatementStatistics {
   // ID is a hash of the statement key (query fingerprint, failure status,
   // implicit txn or not) which can be used to identify the statement
   // for instance in transaction statistics.
-  optional uint64 id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtID"];
+  optional uint64 id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtFingerprintID"];
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+  optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
 }
 
 
 // CollectedTransactionStatistics wraps collected timings and metadata for some
 // transaction executions.
 message CollectedTransactionStatistics {
-  // StatementIDs is the IDs of the statements which this transaction comprises,
-  // in order.
-  repeated uint64 statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
+  // StatementFingerprintIDs is the fingerprint IDs of the statements which this
+  // transaction comprises, in order.
+  repeated uint64 statement_fingerprint_ids = 1 [(gogoproto.customname) = "StatementFingerprintIDs", (gogoproto.casttype) = "StmtFingerprintID"] ;
   // App is the name of the app which executed the transaction.
   optional string app = 2 [(gogoproto.nullable) = false];
   optional TransactionStatistics stats = 3 [(gogoproto.nullable) = false];
+  optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+  optional uint64 transaction_fingerprint_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "TransactionFingerprintID", (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
 

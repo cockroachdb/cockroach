@@ -35,19 +35,25 @@ type TxnMetrics struct {
 
 	TxnsWithCondensedIntents      *metric.Counter
 	TxnsWithCondensedIntentsGauge *metric.Gauge
+	TxnsRejectedByLockSpanBudget  *metric.Counter
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
 
 	// Counts of restart types.
-	RestartsWriteTooOld           telemetry.CounterWithMetric
-	RestartsWriteTooOldMulti      telemetry.CounterWithMetric
-	RestartsSerializable          telemetry.CounterWithMetric
-	RestartsAsyncWriteFailure     telemetry.CounterWithMetric
-	RestartsReadWithinUncertainty telemetry.CounterWithMetric
-	RestartsTxnAborted            telemetry.CounterWithMetric
-	RestartsTxnPush               telemetry.CounterWithMetric
-	RestartsUnknown               telemetry.CounterWithMetric
+	RestartsWriteTooOld            telemetry.CounterWithMetric
+	RestartsWriteTooOldMulti       telemetry.CounterWithMetric
+	RestartsSerializable           telemetry.CounterWithMetric
+	RestartsAsyncWriteFailure      telemetry.CounterWithMetric
+	RestartsCommitDeadlineExceeded telemetry.CounterWithMetric
+	RestartsReadWithinUncertainty  telemetry.CounterWithMetric
+	RestartsTxnAborted             telemetry.CounterWithMetric
+	RestartsTxnPush                telemetry.CounterWithMetric
+	RestartsUnknown                telemetry.CounterWithMetric
+
+	// End transaction failure counters.
+	RollbacksFailed      *metric.Counter
+	AsyncRollbacksFailed *metric.Counter
 }
 
 var (
@@ -144,6 +150,15 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTxnsRejectedByLockSpanBudget = metric.Metadata{
+		Name: "txn.condensed_intent_spans_rejected",
+		Help: "KV transactions that have been aborted because they exceeded their intent tracking " +
+			"memory budget (kv.transaction.max_intents_bytes). " +
+			"Rejection is caused by kv.transaction.reject_over_max_intents_budget.",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaRestartsHistogram = metric.Metadata{
 		Name:        "txn.restarts",
 		Help:        "Number of restarted KV transactions",
@@ -195,6 +210,12 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsCommitDeadlineExceeded = metric.Metadata{
+		Name:        "txn.restarts.commitdeadlineexceeded",
+		Help:        "Number of restarts due to a transaction exceeding its deadline",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRestartsReadWithinUncertainty = metric.Metadata{
 		Name:        "txn.restarts.readwithinuncertainty",
 		Help:        "Number of restarts due to reading a new value within the uncertainty interval",
@@ -225,33 +246,49 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRollbacksFailed = metric.Metadata{
+		Name:        "txn.rollbacks.failed",
+		Help:        "Number of KV transaction that failed to send final abort",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAsyncRollbacksFailed = metric.Metadata{
+		Name:        "txn.rollbacks.async.failed",
+		Help:        "Number of KV transaction that failed to send abort asynchronously which is not always retried",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                        metric.NewCounter(metaAbortsRates),
-		Commits:                       metric.NewCounter(metaCommitsRates),
-		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
-		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
-		CommitWaits:                   metric.NewCounter(metaCommitWaitCount),
-		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
-		RefreshFail:                   metric.NewCounter(metaRefreshFail),
-		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
-		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
-		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
-		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
-		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
-		TxnsWithCondensedIntentsGauge: metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
-		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
-		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
-		RestartsSerializable:          telemetry.NewCounterWithMetric(metaRestartsSerializable),
-		RestartsAsyncWriteFailure:     telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
-		RestartsReadWithinUncertainty: telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
-		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
-		RestartsTxnPush:               telemetry.NewCounterWithMetric(metaRestartsTxnPush),
-		RestartsUnknown:               telemetry.NewCounterWithMetric(metaRestartsUnknown),
+		Aborts:                         metric.NewCounter(metaAbortsRates),
+		Commits:                        metric.NewCounter(metaCommitsRates),
+		Commits1PC:                     metric.NewCounter(metaCommits1PCRates),
+		ParallelCommits:                metric.NewCounter(metaParallelCommitsRates),
+		CommitWaits:                    metric.NewCounter(metaCommitWaitCount),
+		RefreshSuccess:                 metric.NewCounter(metaRefreshSuccess),
+		RefreshFail:                    metric.NewCounter(metaRefreshFail),
+		RefreshFailWithCondensedSpans:  metric.NewCounter(metaRefreshFailWithCondensedSpans),
+		RefreshMemoryLimitExceeded:     metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		RefreshAutoRetries:             metric.NewCounter(metaRefreshAutoRetries),
+		Durations:                      metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		TxnsWithCondensedIntents:       metric.NewCounter(metaTxnsWithCondensedIntentSpans),
+		TxnsWithCondensedIntentsGauge:  metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
+		TxnsRejectedByLockSpanBudget:   metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
+		Restarts:                       metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
+		RestartsWriteTooOld:            telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
+		RestartsWriteTooOldMulti:       telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
+		RestartsSerializable:           telemetry.NewCounterWithMetric(metaRestartsSerializable),
+		RestartsAsyncWriteFailure:      telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
+		RestartsCommitDeadlineExceeded: telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),
+		RestartsReadWithinUncertainty:  telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
+		RestartsTxnAborted:             telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
+		RestartsTxnPush:                telemetry.NewCounterWithMetric(metaRestartsTxnPush),
+		RestartsUnknown:                telemetry.NewCounterWithMetric(metaRestartsUnknown),
+		RollbacksFailed:                metric.NewCounter(metaRollbacksFailed),
+		AsyncRollbacksFailed:           metric.NewCounter(metaAsyncRollbacksFailed),
 	}
 }

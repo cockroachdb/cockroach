@@ -22,31 +22,31 @@ DELETE FROM abcde WHERE a=1
 ----
 delete abcde
  ├── columns: <none>
- ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+ ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── select
-      ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
-      ├── key: (12)
-      ├── fd: ()-->(8), (12)-->(9-11,13,14), (9,10)-->(11)
-      ├── prune: (9-14)
-      ├── interesting orderings: (+12 opt(8))
+      ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+      ├── key: (13)
+      ├── fd: ()-->(9), (13)-->(10-12,14-16), (10,11)-->(12)
+      ├── prune: (10-16)
+      ├── interesting orderings: (+13 opt(9))
       ├── scan abcde
-      │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+      │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
       │    ├── computed column expressions
-      │    │    └── d:11
+      │    │    └── d:12
       │    │         └── plus [type=int]
       │    │              ├── plus [type=int]
-      │    │              │    ├── variable: b:9 [type=int]
-      │    │              │    └── variable: c:10 [type=int]
+      │    │              │    ├── variable: b:10 [type=int]
+      │    │              │    └── variable: c:11 [type=int]
       │    │              └── const: 1 [type=int]
-      │    ├── key: (12)
-      │    ├── fd: (12)-->(8-11,13,14), (9,10)-->(11)
-      │    ├── prune: (8-14)
-      │    └── interesting orderings: (+12)
+      │    ├── key: (13)
+      │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+      │    ├── prune: (9-16)
+      │    └── interesting orderings: (+13)
       └── filters
-           └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
-                ├── variable: a:8 [type=int]
+           └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+                ├── variable: a:9 [type=int]
                 └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -60,32 +60,32 @@ project
  ├── prune: (1-4)
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (5)-->(2-4), (2,3)-->(4)
       └── select
-           ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
-           ├── key: (12)
-           ├── fd: ()-->(8), (12)-->(9-11,13,14), (9,10)-->(11)
-           ├── prune: (9-14)
-           ├── interesting orderings: (+12 opt(8))
+           ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           ├── key: (13)
+           ├── fd: ()-->(9), (13)-->(10-12,14-16), (10,11)-->(12)
+           ├── prune: (10-16)
+           ├── interesting orderings: (+13 opt(9))
            ├── scan abcde
-           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    ├── computed column expressions
-           │    │    └── d:11
+           │    │    └── d:12
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b:9 [type=int]
-           │    │              │    └── variable: c:10 [type=int]
+           │    │              │    ├── variable: b:10 [type=int]
+           │    │              │    └── variable: c:11 [type=int]
            │    │              └── const: 1 [type=int]
-           │    ├── key: (12)
-           │    ├── fd: (12)-->(8-11,13,14), (9,10)-->(11)
-           │    ├── prune: (8-14)
-           │    └── interesting orderings: (+12)
+           │    ├── key: (13)
+           │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    ├── prune: (9-16)
+           │    └── interesting orderings: (+13)
            └── filters
-                └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
-                     ├── variable: a:8 [type=int]
+                └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+                     ├── variable: a:9 [type=int]
                      └── const: 1 [type=int]
 
 # Input is cardinality 0-1 expression.
@@ -101,33 +101,33 @@ project
  ├── prune: (1-4)
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-5)
       └── select
-           ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            ├── cardinality: [0 - 1]
            ├── key: ()
-           ├── fd: ()-->(8-14)
-           ├── prune: (8-11,13,14)
+           ├── fd: ()-->(9-16)
+           ├── prune: (9-12,14-16)
            ├── scan abcde
-           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    ├── computed column expressions
-           │    │    └── d:11
+           │    │    └── d:12
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b:9 [type=int]
-           │    │              │    └── variable: c:10 [type=int]
+           │    │              │    ├── variable: b:10 [type=int]
+           │    │              │    └── variable: c:11 [type=int]
            │    │              └── const: 1 [type=int]
-           │    ├── key: (12)
-           │    ├── fd: (12)-->(8-11,13,14), (9,10)-->(11)
-           │    ├── prune: (8-14)
-           │    └── interesting orderings: (+12)
+           │    ├── key: (13)
+           │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    ├── prune: (9-16)
+           │    └── interesting orderings: (+13)
            └── filters
-                └── eq [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
-                     ├── variable: rowid:12 [type=int]
+                └── eq [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
+                     ├── variable: rowid:13 [type=int]
                      └── const: 1 [type=int]
 
 # Filter FD set.
@@ -141,30 +141,30 @@ project
  ├── prune: (1-4)
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: (2)==(3), (3)==(2), (5)-->(1-4), (2)-->(4)
       └── select
-           ├── columns: a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
-           ├── key: (12)
-           ├── fd: (12)-->(8-11,13,14), (9,10)-->(11), (9)==(10), (10)==(9)
-           ├── prune: (8,11-14)
-           ├── interesting orderings: (+12)
+           ├── columns: a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           ├── key: (13)
+           ├── fd: (13)-->(9-12,14-16), (10,11)-->(12), (10)==(11), (11)==(10)
+           ├── prune: (9,12-16)
+           ├── interesting orderings: (+13)
            ├── scan abcde
-           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    ├── computed column expressions
-           │    │    └── d:11
+           │    │    └── d:12
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b:9 [type=int]
-           │    │              │    └── variable: c:10 [type=int]
+           │    │              │    ├── variable: b:10 [type=int]
+           │    │              │    └── variable: c:11 [type=int]
            │    │              └── const: 1 [type=int]
-           │    ├── key: (12)
-           │    ├── fd: (12)-->(8-11,13,14), (9,10)-->(11)
-           │    ├── prune: (8-14)
-           │    └── interesting orderings: (+12)
+           │    ├── key: (13)
+           │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    ├── prune: (9-16)
+           │    └── interesting orderings: (+13)
            └── filters
-                └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
-                     ├── variable: b:9 [type=int]
-                     └── variable: c:10 [type=int]
+                └── eq [type=bool, outer=(10,11), constraints=(/10: (/NULL - ]; /11: (/NULL - ]), fd=(10)==(11), (11)==(10)]
+                     ├── variable: b:10 [type=int]
+                     └── variable: c:11 [type=int]

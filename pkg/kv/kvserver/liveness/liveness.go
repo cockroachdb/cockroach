@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -64,8 +62,6 @@ var (
 	// someone else has already incremented the epoch to the desired
 	// value.
 	ErrEpochAlreadyIncremented = errors.New("epoch already incremented")
-
-	errLiveClockNotLive = errors.New("not live")
 )
 
 type errRetryLiveness struct {
@@ -335,7 +331,7 @@ func (nl *NodeLiveness) SetDraining(
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			}
-			if grpcutil.IsAuthError(err) {
+			if grpcutil.IsConnectionRejected(err) {
 				return err
 			}
 			continue
@@ -642,6 +638,30 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
+// IsAvailable returns whether or not the specified node is available to serve
+// requests. It checks both the liveness and decommissioned states, but not
+// draining or decommissioning (since it may still be a leaseholder for ranges).
+// Returns false if the node is not in the local liveness table.
+func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
+	liveness, ok := nl.GetLiveness(nodeID)
+	return ok && liveness.IsLive(nl.clock.Now().GoTime()) && !liveness.Membership.Decommissioned()
+}
+
+// IsAvailableNotDraining returns whether or not the specified node is available
+// to serve requests (i.e. it is live and not decommissioned) and is not in the
+// process of draining/decommissioning. Note that draining/decommissioning nodes
+// could still be leaseholders for ranges until drained, so this should not be
+// used when the caller needs to be able to contact leaseholders directly.
+// Returns false if the node is not in the local liveness table.
+func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
+	liveness, ok := nl.GetLiveness(nodeID)
+	return ok &&
+		liveness.IsLive(nl.clock.Now().GoTime()) &&
+		!liveness.Membership.Decommissioning() &&
+		!liveness.Membership.Decommissioned() &&
+		!liveness.Draining
+}
+
 // NodeLivenessStartOptions are the arguments to `NodeLiveness.Start`.
 type NodeLivenessStartOptions struct {
 	Stopper *stop.Stopper
@@ -671,7 +691,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	nl.mu.engines = opts.Engines
 	nl.mu.Unlock()
 
-	_ = opts.Stopper.RunAsyncTask(ctx, "liveness-hb", func(context.Context) {
+	_ = opts.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
 		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())
@@ -701,7 +721,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 							liveness, err := nl.getLivenessFromKV(ctx, nodeID)
 							if err != nil {
 								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
-								if grpcutil.IsAuthError(err) {
+								if grpcutil.IsConnectionRejected(err) {
 									return err
 								}
 								continue
@@ -1193,8 +1213,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 // on commit.
 //
 // updateLiveness terminates certain errors that are expected to occur
-// sporadically, such as TransactionStatusError (due to the 1PC requirement of
-// the liveness txn, and ambiguous results).
+// sporadically, such as ambiguous results.
 //
 // If the CPut is successful (i.e. no error is returned and handleCondFailed is
 // not called), the value that has been written is returned as a Record.
@@ -1203,12 +1222,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 func (nl *NodeLiveness) updateLiveness(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
-	for {
-		// Before each attempt, ensure that the context has not expired.
-		if err := ctx.Err(); err != nil {
-			return Record{}, err
-		}
-
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		nl.mu.RLock()
 		engines := nl.mu.engines
 		nl.mu.RUnlock()
@@ -1231,6 +1245,10 @@ func (nl *NodeLiveness) updateLiveness(
 		}
 		return written, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return Record{}, err
+	}
+	panic("unreachable; should retry until ctx canceled")
 }
 
 func (nl *NodeLiveness) updateLivenessAttempt(
@@ -1300,8 +1318,19 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 				return Record{}, errors.Wrapf(err, "couldn't update node liveness from CPut actual value")
 			}
 			return Record{}, handleCondFailed(Record{Liveness: actualLiveness, raw: tErr.ActualValue.TagAndDataBytes()})
-		} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) ||
-			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+		} else if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+			// We generally want to retry ambiguous errors immediately, except if the
+			// ctx is canceled - in which case the ambiguous error is probably caused
+			// by the cancellation (and in any case it's pointless to retry with a
+			// canceled ctx).
+			if ctx.Err() != nil {
+				return Record{}, err
+			}
+			return Record{}, &errRetryLiveness{err}
+		} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) {
+			// 21.2 nodes can return a TransactionStatusError when they should have
+			// returned an AmbiguousResultError.
+			// TODO(andrei): Remove this in 22.2.
 			return Record{}, &errRetryLiveness{err}
 		}
 		return Record{}, err
@@ -1432,23 +1461,6 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		}
 	}
 	return liveNodes
-}
-
-// AsLiveClock returns a closedts.LiveClockFn that takes a current timestamp off
-// the clock and returns it only if node liveness indicates that the node is live
-// at that timestamp and the returned epoch.
-func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
-	return func(nodeID roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
-		now := nl.clock.Now()
-		liveness, ok := nl.GetLiveness(nodeID)
-		if !ok {
-			return hlc.Timestamp{}, 0, ErrRecordCacheMiss
-		}
-		if !liveness.IsLive(now.GoTime()) {
-			return hlc.Timestamp{}, 0, errLiveClockNotLive
-		}
-		return now, ctpb.Epoch(liveness.Epoch), nil
-	}
 }
 
 // GetNodeCount returns a count of the number of nodes in the cluster,

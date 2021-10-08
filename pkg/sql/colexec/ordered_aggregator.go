@@ -149,7 +149,9 @@ func NewOrderedAggregator(
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
 		}
 	}
-	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(args.Input, args.Spec.GroupCols, args.InputTypes)
+	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(
+		args.Input, args.Spec.GroupCols, args.InputTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +159,7 @@ func NewOrderedAggregator(
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
 	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		args, 1 /* allocSize */, false, /* isHashAgg */
+		args, args.Spec.Aggregations, 1 /* allocSize */, colexecagg.OrderedAggKind,
 	)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
@@ -280,18 +282,14 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			// Twice the batchSize is allocated to avoid having to check for
 			// overflow when outputting.
 			newMinCapacity := 2 * a.lastReadBatch.Length()
-			if newMinCapacity == 0 {
-				// If batchLength is 0, we still need to flush the last group,
-				// so we need to have the capacity of at least 1.
-				newMinCapacity = 1
-			}
 			if newMinCapacity > coldata.BatchSize() {
 				// ResetMaybeReallocate truncates the capacity to
 				// coldata.BatchSize(), but we actually want a batch with larger
 				// capacity, so we choose to instantiate the batch with fixed
 				// maximal capacity that can be needed by the aggregator.
 				a.allocator.ReleaseMemory(colmem.GetBatchMemSize(a.scratch.Batch))
-				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
+				newMinCapacity = 2 * coldata.BatchSize()
+				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
 				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
 					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
@@ -300,12 +298,8 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
 			// be sufficient.
-			tempBufferCapacity := newMinCapacity / 2
-			if tempBufferCapacity == 0 {
-				tempBufferCapacity = 1
-			}
 			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
-				a.outputTypes, a.scratch.tempBuffer, tempBufferCapacity, maxBatchMemSize,
+				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2, maxBatchMemSize,
 			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))
@@ -330,12 +324,10 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.unsafeBatch.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:         a.scratch.ColVec(i),
-									SrcStartIdx: 0,
-									SrcEndIdx:   coldata.BatchSize(),
-								},
+							coldata.SliceArgs{
+								Src:         a.scratch.ColVec(i),
+								SrcStartIdx: 0,
+								SrcEndIdx:   coldata.BatchSize(),
 							},
 						)
 					}
@@ -357,12 +349,10 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.scratch.tempBuffer.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.tempBuffer.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:         a.scratch.ColVec(i),
-									SrcStartIdx: coldata.BatchSize(),
-									SrcEndIdx:   a.scratch.resumeIdx,
-								},
+							coldata.SliceArgs{
+								Src:         a.scratch.ColVec(i),
+								SrcStartIdx: coldata.BatchSize(),
+								SrcEndIdx:   a.scratch.resumeIdx,
 							},
 						)
 					}
@@ -371,11 +361,9 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:       a.scratch.tempBuffer.ColVec(i),
-									SrcEndIdx: newResumeIdx,
-								},
+							coldata.SliceArgs{
+								Src:       a.scratch.tempBuffer.ColVec(i),
+								SrcEndIdx: newResumeIdx,
 							},
 						)
 					}
@@ -418,6 +406,6 @@ func (a *orderedAggregator) Reset(ctx context.Context) {
 	}
 }
 
-func (a *orderedAggregator) Close(ctx context.Context) error {
-	return a.toClose.Close(ctx)
+func (a *orderedAggregator) Close() error {
+	return a.toClose.Close()
 }

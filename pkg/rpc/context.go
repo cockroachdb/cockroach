@@ -40,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -157,7 +159,11 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		a := kvAuth{}
+		a := kvAuth{
+			tenant: tenantAuthorizer{
+				tenantID: ctx.tenID,
+			},
+		}
 
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
@@ -326,6 +332,13 @@ type connKey struct {
 	class      ConnectionClass
 }
 
+var _ redact.SafeFormatter = connKey{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("{n%d: %s (%v)}", c.nodeID, c.targetAddr, c.class)
+}
+
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
@@ -452,34 +465,59 @@ func (ctx *Context) GetLocalInternalClientForAddr(
 }
 
 type internalClientAdapter struct {
-	roachpb.InternalServer
+	server roachpb.InternalServer
 }
 
 // Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	return a.InternalServer.Batch(ctx, ba)
+	// Mark this as originating locally, which is useful for the decision about
+	// memory allocation tracking.
+	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+	return a.server.Batch(ctx, ba)
 }
 
 // RangeLookup implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) RangeLookup(
 	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
 ) (*roachpb.RangeLookupResponse, error) {
-	return a.InternalServer.RangeLookup(ctx, rl)
+	return a.server.RangeLookup(ctx, rl)
 }
 
 // Join implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest, _ ...grpc.CallOption,
 ) (*roachpb.JoinNodeResponse, error) {
-	return a.InternalServer.Join(ctx, req)
+	return a.server.Join(ctx, req)
 }
 
+// ResetQuorum is part of the roachpb.InternalClient interface.
 func (a internalClientAdapter) ResetQuorum(
 	ctx context.Context, req *roachpb.ResetQuorumRequest, _ ...grpc.CallOption,
 ) (*roachpb.ResetQuorumResponse, error) {
-	return a.InternalServer.ResetQuorum(ctx, req)
+	return a.server.ResetQuorum(ctx, req)
+}
+
+// TokenBucket is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest, opts ...grpc.CallOption,
+) (*roachpb.TokenBucketResponse, error) {
+	return a.server.TokenBucket(ctx, in)
+}
+
+// GetSpanConfigs is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) GetSpanConfigs(
+	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return a.server.GetSpanConfigs(ctx, req)
+}
+
+// UpdateSpanConfigs is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) UpdateSpanConfigs(
+	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return a.server.UpdateSpanConfigs(ctx, req)
 }
 
 type respStreamClientAdapter struct {
@@ -568,9 +606,11 @@ func (a internalClientAdapter) RangeFeed(
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
+	// Mark this as originating locally.
+	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	go func() {
 		defer cancel()
-		err := a.InternalServer.RangeFeed(args, rfAdapter)
+		err := a.server.RangeFeed(args, rfAdapter)
 		if err == nil {
 			err = io.EOF
 		}
@@ -601,7 +641,7 @@ func (a gossipSubscriptionClientAdapter) Send(e *roachpb.GossipSubscriptionEvent
 var _ roachpb.Internal_GossipSubscriptionClient = gossipSubscriptionClientAdapter{}
 var _ roachpb.Internal_GossipSubscriptionServer = gossipSubscriptionClientAdapter{}
 
-// GossipSubscription implements the roachpb.InternalClient interface.
+// GossipSubscription is part of the roachpb.InternalClient interface.
 func (a internalClientAdapter) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
@@ -612,7 +652,7 @@ func (a internalClientAdapter) GossipSubscription(
 
 	go func() {
 		defer cancel()
-		err := a.InternalServer.GossipSubscription(args, gsAdapter)
+		err := a.server.GossipSubscription(args, gsAdapter)
 		if err == nil {
 			err = io.EOF
 		}
@@ -641,17 +681,26 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 	for _, key := range keys {
 		ctx.conns.Delete(key)
 	}
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
-	}
+	log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		err := grpcConn.Close() // nolint:grpcconnclose
 		if err != nil && !grpcutil.IsClosedConnection(err) {
-			if log.V(1) {
-				log.Health.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
-			}
+			log.Health.Warningf(ctx.masterCtx, "failed to close client connection: %v", err)
 		}
 	}
+}
+
+// ConnHealth returns nil if we have an open connection of the request
+// class to the given node that succeeded on its most recent heartbeat.
+func (ctx *Context) ConnHealth(target string, nodeID roachpb.NodeID, class ConnectionClass) error {
+	// The local client is always considered healthy.
+	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+		return nil
+	}
+	if value, ok := ctx.conns.Load(connKey{target, nodeID, class}); ok {
+		return value.(*Connection).Health()
+	}
+	return ErrNoConnection
 }
 
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
@@ -728,7 +777,7 @@ func (ctx *Context) grpcDialOptions(
 		// is in setupSpanForIncomingRPC().
 		//
 		tagger := func(span *tracing.Span) {
-			span.SetTag("node", ctx.NodeID.String())
+			span.SetTag("node", attribute.IntValue(int(ctx.NodeID.Get())))
 		}
 		unaryInterceptors = append(unaryInterceptors,
 			tracing.ClientInterceptor(tracer, tagger))
@@ -987,9 +1036,7 @@ func (ctx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
-	if log.V(1) {
-		log.Health.Infof(ctx.masterCtx, "dialing %s", target)
-	}
+	log.Health.Infof(ctx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
 	conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 	return conn, dialer.redialChan, err
 }
@@ -1016,6 +1063,19 @@ func (ctx *Context) GRPCDialNode(
 		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
+}
+
+// GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
+// argument as a `NodeID` which it converts. This works because the
+// tenant gRPC server is initialized using the `InstanceID` so it
+// accepts our connection as matching the ID we're dialing.
+//
+// Since GRPCDialNode accepts a separate `target` and `NodeID` it
+// requires no further modification to work between pods.
+func (ctx *Context) GRPCDialPod(
+	target string, remoteInstanceID base.SQLInstanceID, class ConnectionClass,
+) *Connection {
+	return ctx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
 }
 
 func (ctx *Context) grpcDialNodeInternal(
@@ -1059,7 +1119,8 @@ func (ctx *Context) grpcDialNodeInternal(
 			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := ctx.runHeartbeat(conn, target, redialChan)
-					if err != nil && !grpcutil.IsClosedConnection(err) && !grpcutil.IsAuthError(err) {
+					if err != nil && !grpcutil.IsClosedConnection(err) &&
+						!grpcutil.IsConnectionRejected(err) {
 						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(conn, thisConnKeys...)
@@ -1088,6 +1149,10 @@ func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
 // the first heartbeat.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
+
+// ErrNoConnection is returned by ConnHealth when no connection exists to
+// the node.
+var ErrNoConnection = errors.New("no connection found")
 
 func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
@@ -1175,7 +1240,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
-			if grpcutil.IsAuthError(err) {
+			if grpcutil.IsConnectionRejected(err) {
 				returnErr = true
 			}
 

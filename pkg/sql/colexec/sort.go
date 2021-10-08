@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -33,8 +33,12 @@ func NewSorter(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, error) {
-	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
+	return newSorter(
+		allocator, newAllSpooler(allocator, input, inputTypes),
+		inputTypes, orderingCols, maxOutputBatchMemSize,
+	)
 }
 
 func newSorter(
@@ -42,6 +46,7 @@ func newSorter(
 	input spooler,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	maxOutputBatchMemSize int64,
 ) (colexecop.ResettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
@@ -51,7 +56,7 @@ func newSorter(
 			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
+			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
 			if err != nil {
 				return nil, err
 			}
@@ -59,13 +64,14 @@ func newSorter(
 	}
 
 	return &sortOp{
-		allocator:    allocator,
-		input:        input,
-		inputTypes:   inputTypes,
-		sorters:      make([]colSorter, len(orderingCols)),
-		partitioners: partitioners,
-		orderingCols: orderingCols,
-		state:        sortSpooling,
+		allocator:             allocator,
+		input:                 input,
+		inputTypes:            inputTypes,
+		sorters:               make([]colSorter, len(orderingCols)),
+		partitioners:          partitioners,
+		orderingCols:          orderingCols,
+		state:                 sortSpooling,
+		maxOutputBatchMemSize: maxOutputBatchMemSize,
 	}, nil
 }
 
@@ -138,9 +144,7 @@ func (p *allSpooler) spool() {
 	}
 	p.spooled = true
 	for batch := p.Input.Next(); batch.Length() != 0; batch = p.Input.Next() {
-		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
-			p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
-		})
+		p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	}
 }
 
@@ -213,7 +217,17 @@ type sortOp struct {
 	// state is the current state of the sort.
 	state sortState
 
-	output coldata.Batch
+	// The fields in the scratch are only used when we're sorting on more than
+	// one column and are mostly useful in the scenario when this sortOp is
+	// being used by the external sorter.
+	scratch struct {
+		partitions []int
+		// partitionsCol is used only in the global sort (i.e. not sort chunks).
+		partitionsCol []bool
+	}
+
+	output                coldata.Batch
+	maxOutputBatchMemSize int64
 
 	exported int
 }
@@ -226,7 +240,10 @@ type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
 	// which must be the same size as the input Vec and will be permuted with
 	// the same swaps as the column.
-	init(ctx context.Context, col coldata.Vec, order []int)
+	init(ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int)
+	// reset releases memory allocated by the colSorter. It should be called
+	// when the colSorter is no longer needed.
+	reset()
 	// sort globally sorts this sorter's column.
 	sort()
 	// sortPartitions sorts this sorter's column once for every partition in the
@@ -274,13 +291,10 @@ func (p *sortOp) Next() coldata.Batch {
 				p.state = sortDone
 				continue
 			}
-			if toEmit > coldata.BatchSize() {
-				toEmit = coldata.BatchSize()
+			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit, p.maxOutputBatchMemSize)
+			if toEmit > p.output.Capacity() {
+				toEmit = p.output.Capacity()
 			}
-			// For now, we don't enforce any footprint-based memory limit.
-			// TODO(yuzefovich): refactor this.
-			const maxBatchMemSize = math.MaxInt64
-			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit, maxBatchMemSize)
 			newEmitted := p.emitted + toEmit
 			for j := 0; j < len(p.inputTypes); j++ {
 				// At this point, we have already fully sorted the input. It is ok to do
@@ -289,13 +303,11 @@ func (p *sortOp) Next() coldata.Batch {
 				// variable-sized types like Bytes). Nonetheless, for performance reasons
 				// it would be sad to fallback to disk at this point.
 				p.output.ColVec(j).Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Sel:         p.order,
-							Src:         p.input.getValues(j),
-							SrcStartIdx: p.emitted,
-							SrcEndIdx:   newEmitted,
-						},
+					coldata.SliceArgs{
+						Sel:         p.order,
+						Src:         p.input.getValues(j),
+						SrcStartIdx: p.emitted,
+						SrcEndIdx:   newEmitted,
 					},
 				)
 			}
@@ -320,9 +332,12 @@ func (p *sortOp) sort() {
 		// There is nothing to sort.
 		return
 	}
-	// Allocate p.order and p.workingSpace if it hasn't been allocated yet or the
-	// underlying memory is insufficient.
+	// Allocate p.order if it hasn't been allocated yet or the underlying memory
+	// is insufficient.
 	if p.order == nil || cap(p.order) < spooledTuples {
+		sizeBefore := memsize.Int * int64(cap(p.order))
+		sizeAfter := memsize.Int * int64(spooledTuples)
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		p.order = make([]int, spooledTuples)
 	}
 	p.order = p.order[:spooledTuples]
@@ -332,10 +347,15 @@ func (p *sortOp) sort() {
 		p.order[i] = i
 	}
 
+	// TODO(mgartner): Avoid creating new sorters for ever invocation of this
+	// function. Instead, create two slices of sorters, one to use when the
+	// vector does not have nulls, and one to use when it maybe has nulls. The
+	// sorter reset function can be used to clean up the sorters for the next
+	// invocation.
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
 		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
-		p.sorters[i].init(p.Ctx, inputVec, p.order)
+		p.sorters[i].init(p.Ctx, p.allocator, inputVec, p.order)
 	}
 
 	// Now, sort each column in turn.
@@ -347,12 +367,19 @@ func (p *sortOp) sort() {
 		// All spooled tuples belong to the same partition, so the first column
 		// doesn't need special treatment - we just globally sort it.
 		p.sorters[0].sort()
+		p.sorters[0].reset()
 		if len(p.sorters) == 1 {
 			// We're done sorting. Transition to emitting.
 			return
 		}
 		sorters = sorters[1:]
-		partitionsCol = make([]bool, spooledTuples)
+		sizeBefore := memsize.Bool * int64(cap(p.scratch.partitionsCol))
+		// We want to make sure that partitionsCol is zeroed out if we're
+		// reusing it (and this method accomplishes that).
+		p.scratch.partitionsCol = colexecutils.MaybeAllocateBoolArray(p.scratch.partitionsCol, spooledTuples)
+		partitionsCol = p.scratch.partitionsCol
+		sizeAfter := memsize.Bool * int64(cap(p.scratch.partitionsCol))
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 	} else {
 		// There are at least two partitions already, so the first column needs the
 		// same special treatment as all others. The general sequence is as
@@ -388,7 +415,6 @@ func (p *sortOp) sort() {
 	// 2 a
 	// 2 b
 
-	partitions := make([]int, 0, 16)
 	for i, sorter := range sorters {
 		if !omitNextPartitioning {
 			// We partition the previous column by running an ordered distinct operation
@@ -402,10 +428,14 @@ func (p *sortOp) sort() {
 		}
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
-		partitions = boolVecToSel64(partitionsCol, partitions[:0])
+		sizeBefore := memsize.Int * int64(cap(p.scratch.partitions))
+		p.scratch.partitions = boolVecToSel(partitionsCol, p.scratch.partitions[:0])
+		sizeAfter := memsize.Int * int64(cap(p.scratch.partitions))
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
-		sorter.sortPartitions(partitions)
+		sorter.sortPartitions(p.scratch.partitions)
+		sorter.reset()
 	}
 }
 

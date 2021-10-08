@@ -26,6 +26,14 @@ type MutationVisitor interface {
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
+	CreateGcJobForDescriptor(context.Context, CreateGcJobForDescriptor) error
+	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
+	DrainDescriptorName(context.Context, DrainDescriptorName) error
+	UpdateRelationDeps(context.Context, UpdateRelationDeps) error
+	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
+	AddTypeBackRef(context.Context, AddTypeBackRef) error
+	RemoveRelationDependedOnBy(context.Context, RemoveRelationDependedOnBy) error
+	RemoveTypeBackRef(context.Context, RemoveTypeBackRef) error
 	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
 	MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) error
 	MakeDroppedIndexDeleteOnly(context.Context, MakeDroppedIndexDeleteOnly) error
@@ -37,6 +45,8 @@ type MutationVisitor interface {
 	MakeColumnAbsent(context.Context, MakeColumnAbsent) error
 	AddCheckConstraint(context.Context, AddCheckConstraint) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
+	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
+	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -57,6 +67,46 @@ func (op MakeAddedPrimaryIndexPublic) Visit(ctx context.Context, v MutationVisit
 // Visit is part of the MutationOp interface.
 func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateGcJobForDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGcJobForDescriptor(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MarkDescriptorAsDropped) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MarkDescriptorAsDropped(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DrainDescriptorName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DrainDescriptorName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpdateRelationDeps) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateRelationDeps(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnDefaultExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddTypeBackRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddTypeBackRef(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveRelationDependedOnBy) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveRelationDependedOnBy(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveTypeBackRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveTypeBackRef(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -112,4 +162,14 @@ func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.AddColumnFamily(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DropForeignKeyRef(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSequenceOwnedBy(ctx, op)
 }

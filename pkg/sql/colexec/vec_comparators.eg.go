@@ -25,7 +25,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -89,7 +89,7 @@ func (c *BoolVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -168,7 +168,7 @@ func (c *DecimalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx].Set(&v)
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -216,7 +216,7 @@ func (c *Int16VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -264,7 +264,7 @@ func (c *Int32VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -312,7 +312,7 @@ func (c *Int64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -368,7 +368,7 @@ func (c *Float64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -412,7 +412,7 @@ func (c *TimestampVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx in
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -449,7 +449,7 @@ func (c *IntervalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx][dstIdx] = v
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 	}
 }
 
@@ -520,7 +520,7 @@ func (c *DatumVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
-	cmp = left.(*coldataext.Datum).CompareDatum(c.vecs[vecIdx1], right)
+	cmp = coldataext.CompareDatum(left, c.vecs[vecIdx1], right)
 
 	return cmp
 }

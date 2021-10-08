@@ -11,6 +11,7 @@
 package security_test
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -149,6 +150,8 @@ func TestGetCertificateUsersMapped(t *testing.T) {
 		{"bar,foo", "foo:blah", "bar,blah"},
 		// Both principals mapped.
 		{"foo,bar", "foo:bar,bar:foo", "bar,foo"},
+		// Verify desired string splits.
+		{"foo:has:colon", "foo:has:colon:bar", "bar"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -192,6 +195,8 @@ func TestAuthenticationHook(t *testing.T) {
 		{false, "foo", security.NodeUserName(), "", true, false, false},
 		// Secure mode, node user.
 		{false, security.NodeUser, security.NodeUserName(), "", true, true, true},
+		// Secure mode, node cert and unrelated user.
+		{false, security.NodeUser, fooUser, "", true, false, false},
 		// Secure mode, root user.
 		{false, security.RootUser, security.NodeUserName(), "", true, false, false},
 		// Secure mode, tenant cert, foo user.
@@ -203,6 +208,8 @@ func TestAuthenticationHook(t *testing.T) {
 		{false, "foo,bar", blahUser, "foo:blah", true, true, false},
 		{false, "foo,bar", blahUser, "bar:blah", true, true, false},
 	}
+
+	ctx := context.Background()
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -217,11 +224,11 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				return
 			}
-			_, err = hook(tc.username, true /* clientConnection */)
+			_, err = hook(ctx, tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
 			}
-			_, err = hook(tc.username, false /* clientConnection */)
+			_, err = hook(ctx, tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
 			}

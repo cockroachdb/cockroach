@@ -1,0 +1,10 @@
+@import "../core/index.module";
+
+.loading-indicator {
+  margin: $spacing-medium auto;
+  width: 100%;
+}
+
+.alerts-container {
+  margin: 0 $spacing-medium;
+}

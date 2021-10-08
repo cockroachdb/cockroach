@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -33,15 +33,21 @@ import (
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
-	if mode == sessiondata.UseNewSchemaChangerOff ||
-		(mode == sessiondata.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
+	if mode == sessiondatapb.UseNewSchemaChangerOff ||
+		(mode == sessiondatapb.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
-	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext())
-	updated, err := b.Build(ctx, scs.nodes, stmt)
-	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
+	buildDeps := scbuild.Dependencies{
+		Res:          p,
+		SemaCtx:      p.SemaCtx(),
+		EvalCtx:      p.EvalContext(),
+		Descs:        p.Descriptors(),
+		AuthAccessor: p,
+	}
+	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.state, stmt)
+	if scbuild.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -53,7 +59,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, false, err
 	}
 	return &schemaChangePlanNode{
-		plannedState: updated,
+		plannedState: outputNodes,
 	}, true, nil
 }
 
@@ -75,10 +81,12 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 			log.Infof(ctx, "schema change waiting for concurrent schema changes on descriptor %d", descID)
 		}
 		blocked := false
-		if err := descs.Txn(
-			ctx, p.ExecCfg().Settings, p.LeaseMgr(), p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+		if err := p.ExecCfg().CollectionFactory.Txn(
+			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
 			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				txn.SetFixedTimestamp(ctx, now)
+				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
 				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
 					tree.ObjectLookupFlags{
 						CommonLookupFlags: tree.CommonLookupFlags{
@@ -108,23 +116,22 @@ type schemaChangePlanNode struct {
 	// plannedState contains the set of states produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
-	//
-	// TODO(ajwerner): Give this a better name.
-	plannedState []*scpb.Node
+	plannedState scpb.State
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.extendedEvalCtx.SchemaChangerState
 	executor := scexec.NewExecutor(p.txn, p.Descriptors(), p.EvalContext().Codec,
-		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs)
+		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs,
+		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor)
 	after, err := runNewSchemaChanger(
 		params.ctx, scplan.StatementPhase, s.plannedState, executor, scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs.nodes = after
+	scs.state = after
 	return nil
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
@@ -7,11 +7,6 @@ source "$(dirname "${0}")/teamcity-support.sh"
 # appropriate secrets for the ${CLOUD} parameter (along with other things,
 # apologies, you're going to have to dig around for them below or even better
 # yet, look at the job).
-
-# Note that when this script is called, the cockroach binary to be tested
-# already exists in the current directory.
-COCKROACH_BINARY="${PWD}/cockroach.linux-2.6.32-gnu-amd64"
-chmod +x "${COCKROACH_BINARY}"
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly $(date)" -N "" -f ~/.ssh/id_rsa
@@ -25,7 +20,8 @@ chmod o+rwx "${artifacts}"
 # Disable global -json flag.
 export PATH=$PATH:$(GOFLAGS=; go env GOPATH)/bin
 
-build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
+build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/roachprod \
+  > "${artifacts}/build.txt" 2>&1 || (cat "${artifacts}/build.txt"; false)
 
 # Set up Google credentials. Note that we need this for all clouds since we upload
 # perf artifacts to Google Storage at the end.
@@ -80,8 +76,6 @@ function upload_stats {
 trap upload_stats EXIT
 
 # Set up the parameters for the roachtest invocation.
-
-ARTIFACTS="${artifacts}"
 PARALLELISM=16
 CPUQUOTA=1024
 ZONES=""
@@ -97,7 +91,9 @@ case "${CLOUD}" in
     PARALLELISM=3
     CPUQUOTA=384
     if [ -z "${TESTS}" ]; then
-      TESTS="kv(0|95)|ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
+      # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
+      # isn't supported on AWS at time of writing.
+      TESTS="kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
     fi
     ;;
   *)
@@ -106,22 +102,18 @@ case "${CLOUD}" in
     ;;
 esac
 
-export \
-CLOUD="${CLOUD}" \
-ARTIFACTS="${ARTIFACTS}" \
-PARALLELISM="${PARALLELISM}" \
-CPUQUOTA="${CPUQUOTA}" \
-ZONES="${ZONES}" \
-COUNT="${COUNT-1}" \
-DEBUG="${DEBUG-false}" \
-BUILD_TAG="${BUILD_TAG}" \
-COCKROACH_BINARY="${COCKROACH_BINARY}" \
-SLACK_TOKEN="${SLACK_TOKEN}" \
-TC_BUILD_ID="${TC_BUILD_ID}" \
-TESTS="${TESTS}"
-
 # Teamcity has a 1300 minute timeout that, when reached, kills the process
 # without a stack trace (probably SIGKILL).  We'd love to see a stack trace
 # though, so after 1200 minutes, kill with SIGINT which will allow roachtest to
 # fail tests and cleanup.
-timeout -s INT $((1200*60)) "build/teamcity-nightly-roachtest-invoke.sh"
+timeout -s INT $((1200*60)) "build/teamcity-roachtest-invoke.sh" \
+  --cloud="${CLOUD}" \
+  --count="${COUNT-1}" \
+  --parallelism="${PARALLELISM}" \
+  --cpu-quota="${CPUQUOTA}" \
+  --cluster-id="${TC_BUILD_ID}" \
+  --build-tag="${BUILD_TAG}" \
+  --cockroach="${PWD}/cockroach-linux-2.6.32-gnu-amd64" \
+  --artifacts="${artifacts}" \
+  --slack-token="${SLACK_TOKEN}" \
+  "${TESTS}"

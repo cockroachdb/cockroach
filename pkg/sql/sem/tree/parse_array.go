@@ -158,7 +158,7 @@ func ParseDArrayFromString(
 ) (_ *DArray, dependsOnContext bool, _ error) {
 	ret, dependsOnContext, err := doParseDArrayFromString(ctx, s, t)
 	if err != nil {
-		return ret, false, makeParseError(s, types.MakeArray(t), err)
+		return ret, false, MakeParseError(s, types.MakeArray(t), err)
 	}
 	return ret, dependsOnContext, nil
 }

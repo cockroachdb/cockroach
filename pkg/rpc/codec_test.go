@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,13 +62,15 @@ func TestCodecMarshalUnmarshal(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input := test.filledMsgBuilder()
+			t.Logf("marshaling")
 			marshaled, err := testCodec.Marshal(input)
 			require.NoError(t, err, "marshal failed")
 			output := test.emptyMsgBuilder()
+			t.Logf("unmarshaling")
 			err = testCodec.Unmarshal(marshaled, output)
 			require.NoError(t, err, "unmarshal failed")
 			// reflect.DeepEqual/require.Equal can fail
-			// because of XXX_sizecache fields
+			// because of XXX_sizecache fields.
 			//
 			// google's proto Equal doesn't understand all
 			// gogoproto generated types and panics.
@@ -80,19 +83,29 @@ func TestCodecMarshalUnmarshal(t *testing.T) {
 			// (which uses require.DeepEqual). I doubt
 			// this would work for the general case, but
 			// it works for the protobufs tested here.
-			zeroXXXFields(input)
-			zeroXXXFields(output)
-			require.Equal(t, input, output)
+			//
+			// Additionally, in the newer grpc versions, Some non-exported
+			// fields (e.g. .state) are being set both during marshaling and
+			// unmarshaling. These are non-comparable. So we re-construct
+			// reference structs by only copying public, non-xXX fields.
+			t.Logf("comparing")
+			input2 := test.emptyMsgBuilder()
+			output2 := test.emptyMsgBuilder()
+			copyPublicFields(input2, input)
+			copyPublicFields(output2, output)
+			require.Equal(t, input2, output2)
 		})
 	}
 }
 
-func zeroXXXFields(v interface{}) {
-	val := reflect.Indirect(reflect.ValueOf(v))
-	typ := val.Type()
-	for i := 0; i < val.NumField(); i++ {
-		if strings.HasPrefix(typ.Field(i).Name, "XXX_") {
-			val.Field(i).Set(reflect.Zero(val.Field(i).Type()))
+func copyPublicFields(dst, src interface{}) {
+	srcval := reflect.Indirect(reflect.ValueOf(src))
+	dstval := reflect.Indirect(reflect.ValueOf(dst))
+	typ := srcval.Type()
+	for i := 0; i < srcval.NumField(); i++ {
+		fname := typ.Field(i).Name
+		if unicode.IsUpper(rune(fname[0])) && !strings.HasPrefix(fname, "XXX_") {
+			dstval.Field(i).Set(srcval.Field(i))
 		}
 	}
 }

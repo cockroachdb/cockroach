@@ -123,11 +123,12 @@ type scanColumnsConfig struct {
 	// columns are not included here.
 	wantedColumnsOrdinals []uint32
 
-	// virtualColumn maps the column ID of the virtual column (if it exists) to
-	// the column type actually stored in the index. For example, the inverted
-	// column of an inverted index has type bytes, even though the column
-	// descriptor matches the source column (Geometry, Geography, JSON or Array).
-	virtualColumn *struct {
+	// invertedColumn maps the column ID of the inverted column (if it exists)
+	// to the column type actually stored in the index. For example, the
+	// inverted column of an inverted index has type bytes, even though the
+	// column descriptor matches the source column (Geometry, Geography, JSON or
+	// Array).
+	invertedColumn *struct {
 		colID tree.ColumnID
 		typ   *types.T
 	}
@@ -266,9 +267,9 @@ func initColsForScan(
 			}
 		}
 
-		// If this is a virtual column, create a new descriptor with the correct
-		// type.
-		if vc := colCfg.virtualColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
+		// If this is an inverted column, create a new descriptor with the
+		// correct type.
+		if vc := colCfg.invertedColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
 			col = col.DeepCopy()
 			col.ColumnDesc().Type = vc.typ
 		}

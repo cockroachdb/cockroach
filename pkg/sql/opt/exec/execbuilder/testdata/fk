@@ -490,7 +490,7 @@ vectorized: true
 │           │ left cols are key
 │           │ right cols are key
 │           │
-│           ├── • except
+│           ├── • except all
 │           │   │
 │           │   ├── • scan buffer
 │           │   │     label: buffer 1
@@ -516,7 +516,7 @@ vectorized: true
             │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -564,7 +564,7 @@ vectorized: true
 │           │ table: child@child_p_idx
 │           │ equality: (p) = (p)
 │           │
-│           └── • except
+│           └── • except all
 │               │
 │               ├── • scan buffer
 │               │     label: buffer 1
@@ -580,7 +580,7 @@ vectorized: true
             │ table: child_nullable@child_nullable_p_idx
             │ equality: (p) = (p)
             │
-            └── • except
+            └── • except all
                 │
                 ├── • scan buffer
                 │     label: buffer 1
@@ -623,7 +623,7 @@ vectorized: true
             │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -764,7 +764,7 @@ vectorized: true
             │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -897,7 +897,7 @@ vectorized: true
             │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -1543,7 +1543,7 @@ vectorized: true
             │ table: partial_child@partial_idx (partial index)
             │ equality: (id) = (parent_id)
             │
-            └── • except
+            └── • except all
                 │
                 ├── • scan buffer
                 │     label: buffer 1

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build ignore
+// +build bazel
 
 package main
 
@@ -35,11 +35,11 @@ func main() {
 }
 
 type sinkInfo struct {
-	Comment         string
-	Name            string
-	AnchorName      string
-	Fields          []fieldInfo
-	InheritedFields []fieldInfo
+	Comment      string
+	Name         string
+	AnchorName   string
+	Fields       []fieldInfo
+	CommonFields []fieldInfo
 }
 
 type fieldInfo struct {
@@ -87,7 +87,7 @@ func run() error {
 	sort.Strings(keys)
 	var sortedSinkInfos []*sinkInfo
 	for _, k := range keys {
-		if k == "CommonSinkConfig" {
+		if k == "CommonSinkConfig" || strings.HasSuffix(k, "Defaults") {
 			// We don't want the common configuration to appear as a sink in
 			// the output doc.
 			continue
@@ -218,8 +218,18 @@ func readInput(infos map[string]*sinkInfo) error {
 			}
 
 			if otherMsg, ok := infos[typ]; ok {
-				// Inline the fields from the other struct here.
-				curSink.InheritedFields = append(curSink.InheritedFields, otherMsg.Fields...)
+				if typ == "CommonSinkConfig" {
+					// Inline the fields from the other struct here.
+					curSink.CommonFields = append(curSink.CommonFields, otherMsg.Fields...)
+				} else {
+					for _, f := range otherMsg.Fields {
+						f.Comment = fmt.Sprintf(
+							"%v Inherited from `%v.%v` if not specified.",
+							f.Comment, camelToSnake(otherMsg.Name), f.FieldName)
+						curSink.Fields = append(curSink.Fields, f)
+					}
+					curSink.CommonFields = append(curSink.CommonFields, otherMsg.CommonFields...)
+				}
 			} else {
 				fi := fieldInfo{
 					Comment:   comment,
@@ -235,11 +245,11 @@ func readInput(infos map[string]*sinkInfo) error {
 	return nil
 }
 
-var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z][a-z0-9]*)SinkConfig struct`)
+var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z]\w*)(SinkConfig|Defaults) struct`)
 
 var fieldDefRe = regexp.MustCompile(`^\s*` +
 	// Field name in Go.
-	`(?P<name>[A-Z][A-Za-z_0-9]*)` +
+	`(?P<name>[A-Z]\w*)` +
 	// Go type. Empty if embedded type.
 	`(?P<typ>(?: [^ ]+)?)` +
 	// Start of YAML annotation.
@@ -250,16 +260,27 @@ var fieldDefRe = regexp.MustCompile(`^\s*` +
 	`[^"]*"` + "`.*")
 
 func camelToSnake(typeName string) string {
-	var res strings.Builder
-	res.WriteByte(typeName[0] + 'a' - 'A')
-	for i := 1; i < len(typeName); i++ {
-		if typeName[i] >= 'A' && typeName[i] <= 'Z' {
-			res.WriteByte('-')
-			res.WriteByte(typeName[i] + 'a' - 'A')
-		} else {
-			res.WriteByte(typeName[i])
-		}
+	isUpper := func(c byte) bool {
+		return 'A' <= c && c <= 'Z'
 	}
+	toLower := func(c byte) byte {
+		if !isUpper(c) {
+			return c
+		}
+		return c - 'A' + 'a'
+	}
+
+	var res strings.Builder
+	res.WriteByte(toLower(typeName[0]))
+	for i := 1; i < len(typeName)-1; i++ {
+		// put a word break at transitions likeTHIS and LIKEThis
+		if isUpper(typeName[i]) && (!isUpper(typeName[i-1]) || !isUpper(typeName[i+1])) {
+			res.WriteByte('-')
+		}
+		res.WriteByte(toLower(typeName[i]))
+	}
+	// assume the last character isn't a one-letter word
+	res.WriteByte(toLower(typeName[len(typeName)-1]))
 	return res.String()
 }
 
@@ -287,13 +308,13 @@ Type-specific configuration options:
 {{end}}
 {{- end}}
 
-{{if .InheritedFields -}}
+{{if .CommonFields -}}
 
 Configuration options shared across all sink types:
 
 | Field | Description |
 |--|--|
-{{range .InheritedFields -}}
+{{range .CommonFields -}}
 | ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} |
 {{end}}
 {{- end}}
@@ -307,10 +328,23 @@ Configuration options shared across all sink types:
 Each sink can select multiple channels. The names of selected channels can
 be specified as a YAML array or as a string.
 
+Additionally, severity filters can be applied separately for
+different groups of channels.
+
 Example configurations:
 
     # Select just these two channels. Space is important.
+    # This uses the severity filter set by the separate 'filter' attribute
+    # in the sink configuration.
     channels: [OPS, HEALTH]
+
+    # Select PERF at severity INFO, and HEALTH and OPS at severity WARNING.
+    # The 'filter' attribute in the sink configuration is ignored.
+    channels: {INFO: [PERF], WARNING: [HEALTH, OPS]}
+
+    # The brackets are optional when selecting a single channel.
+    channels: OPS
+    channels: {INFO: PERF}
 
     # The selection is case-insensitive.
     channels: [ops, HeAlTh]
@@ -327,6 +361,13 @@ Example configurations:
     - OPS
     - HEALTH
 
+    channels:
+      INFO:
+      - PERF
+      WARNING:
+      - OPS
+      - HEALTH
+
 It is also possible to select all channels, using the "all" keyword.
 For example:
 
@@ -334,6 +375,12 @@ For example:
     channels: 'all'
     channels: [all]
     channels: ['all']
+
+Likewise:
+
+    channels: {INFO: all}
+
+etc.
 
 It is also possible to select all channels except for a subset, using the
 "all except" keyword prefix. This makes it possible to define sinks
@@ -343,4 +390,10 @@ that capture "everything else". For example:
     channels: all except [ops,health]
     channels: 'all except ops, health'
     channels: 'all except [ops, health]'
+
+Likewise:
+
+    channels: {INFO: all except ops,health}
+
+etc.
 `

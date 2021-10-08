@@ -19,13 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,16 +83,16 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	}
 	for _, name := range selectableTempNames {
 		// Check tables are accessible.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
+		var rows *gosql.Rows
+		rows, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
 		require.NoError(t, err)
+		require.NoError(t, rows.Close())
 	}
 
 	require.NoError(
 		t,
-		descs.Txn(
+		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
 			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
 			s.InternalExecutor().(*InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
@@ -116,8 +115,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 
 	// Check perm_table performs correctly, and has the right schema.
-	_, err = db.Query("SELECT * FROM perm_table")
+	var rows *gosql.Rows
+	rows, err = db.Query("SELECT * FROM perm_table")
 	require.NoError(t, err)
+	require.NoError(t, rows.Close())
 
 	var colDefault gosql.NullString
 	err = db.QueryRow(
@@ -126,96 +127,6 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	).Scan(&colDefault)
 	require.NoError(t, err)
 	assert.False(t, colDefault.Valid)
-}
-
-// Regression test for #51219, where the TempSchemaObject cleaner was trying to
-// clean up some objects under the public schema which had been present before
-// 19.2 upgrade because of a bug in the namespace fallback logic.
-func TestCleanupSchemaObjectsAfterVersionUpgrade(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// TODO(arul): Same comment as above about testing leases. See #52412.
-	defer lease.TestingDisableTableLeases()()
-
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	conn, err := db.Conn(ctx)
-	require.NoError(t, err)
-
-	_, err = conn.ExecContext(ctx, `
-SET experimental_enable_temp_tables=true;
-CREATE TEMP TABLE a_temp (a INT, c INT);
-CREATE SEQUENCE perm_sequence;
-CREATE TABLE perm_table (a INT, b INT);
-INSERT INTO perm_table VALUES (3, 4);
-`)
-	require.NoError(t, err)
-
-	namesToID, tempSchemaNames := constructNameToIDMapping(ctx, t, conn)
-	require.Equal(t, len(tempSchemaNames), 1, "unexpected number of temp schemas")
-	tempSchemaName := tempSchemaNames[0]
-	require.NotEqual(t, "", tempSchemaName)
-
-	// Simulate 19.2 -> 20.1 upgrade by placing perm_table and perm_sequence in
-	// the old namespace table.
-	deprecatedTbKey := catalogkeys.NewDeprecatedTableKey(
-		namesToID["defaultdb"], "perm_table").Key(keys.SystemSQLCodec)
-	deprecatedSeqKey := catalogkeys.NewDeprecatedTableKey(
-		namesToID["defaultdb"], "perm_sequence").Key(keys.SystemSQLCodec)
-	err = kvDB.CPut(ctx, deprecatedTbKey, namesToID["perm_table"], nil)
-	require.NoError(t, err)
-	err = kvDB.CPut(ctx, deprecatedSeqKey, namesToID["perm_sequence"], nil)
-	require.NoError(t, err)
-
-	tempNames := []string{
-		"a_temp",
-	}
-	for _, name := range append(tempNames, tempSchemaName) {
-		require.Contains(t, namesToID, name)
-	}
-	for _, name := range tempNames {
-		// Check tables are accessible.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
-		require.NoError(t, err)
-	}
-
-	require.NoError(
-		t,
-		descs.Txn(
-			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
-	)
-
-	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
-
-	// Check perm_table performs correctly, and has the right schema.
-	_, err = db.Query("SELECT * FROM perm_table")
-	require.NoError(t, err)
-
-	// Check perm_sequence performs correctly and has the right schema.
-	_, err = db.Query("SELECT * FROM perm_sequence")
-	require.NoError(t, err)
 }
 
 func TestTemporaryObjectCleaner(t *testing.T) {
@@ -234,6 +145,8 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			},
 		},
 	}
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond)
 	tc := serverutils.StartNewTestCluster(
 		t,
 		numNodes,
@@ -241,6 +154,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "defaultdb",
 				Knobs:       knobs,
+				Settings:    settings,
 			},
 		},
 	)
@@ -396,7 +310,7 @@ func constructNameToIDMapping(
 		require.NoError(t, err)
 
 		namesToID[name] = descpb.ID(id)
-		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
+		if strings.HasPrefix(name, catconstants.PgTempSchemaName) {
 			tempSchemaNames = append(tempSchemaNames, name)
 		}
 	}

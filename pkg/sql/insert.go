@@ -44,6 +44,8 @@ type insertNode struct {
 	run insertRun
 }
 
+var _ mutationPlanNode = &insertNode{}
+
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
 	ti         tableInserter
@@ -186,7 +188,7 @@ func (n *insertNode) startExec(params runParams) error {
 
 	n.run.initRowContainer(params, n.columns)
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -237,7 +239,8 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize {
+		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize ||
+			n.run.ti.b.ApproximateMutationBytes() >= n.run.ti.maxBatchByteSize {
 			break
 		}
 	}
@@ -253,6 +256,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := n.run.ti.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -261,7 +265,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc().GetID(), n.run.ti.lastBatchSize)
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), n.run.ti.lastBatchSize)
 
 	return n.run.ti.lastBatchSize > 0, nil
 }
@@ -282,4 +286,8 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+func (n *insertNode) rowsWritten() int64 {
+	return n.run.ti.rowsWritten
 }

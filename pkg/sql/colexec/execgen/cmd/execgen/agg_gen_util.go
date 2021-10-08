@@ -20,21 +20,26 @@ import (
 
 const (
 	// aggKindTmplVar specifies the template "variable" that describes the kind
-	// of aggregator using an aggregate function. It is replaced with either
-	// "Hash" or "Ordered" before executing the template.
+	// of aggregator using an aggregate function. It is replaced with "Hash",
+	// "Ordered", or "Window" before executing the template.
 	aggKindTmplVar = "_AGGKIND"
 	hashAggKind    = "Hash"
 	orderedAggKind = "Ordered"
+	windowAggKind  = "Window"
 )
 
-func registerAggGenerator(aggGen generator, filenameSuffix, dep string) {
+func registerAggGenerator(aggGen generator, filenameSuffix, dep string, genWindowVariant bool) {
 	aggGeneratorAdapter := func(aggKind string) generator {
 		return func(inputFileContents string, wr io.Writer) error {
 			inputFileContents = strings.ReplaceAll(inputFileContents, aggKindTmplVar, aggKind)
 			return aggGen(inputFileContents, wr)
 		}
 	}
-	for _, aggKind := range []string{hashAggKind, orderedAggKind} {
+	aggKinds := []string{hashAggKind, orderedAggKind}
+	if genWindowVariant {
+		aggKinds = append(aggKinds, windowAggKind)
+	}
+	for _, aggKind := range aggKinds {
 		registerGenerator(
 			aggGeneratorAdapter(aggKind),
 			fmt.Sprintf("%s_%s", strings.ToLower(aggKind), filenameSuffix),
@@ -52,6 +57,11 @@ type aggTmplInfoBase struct {
 	canonicalTypeFamily types.Family
 }
 
+// CopyVal is a function that should only be used in templates.
+func (b *aggTmplInfoBase) CopyVal(dest, src string) string {
+	return copyVal(b.canonicalTypeFamily, dest, src)
+}
+
 // SetVariableSize is a function that should only be used in templates. See the
 // comment on setVariableSize for more details.
 func (b aggTmplInfoBase) SetVariableSize(target, value string) string {
@@ -62,4 +72,5 @@ func (b aggTmplInfoBase) SetVariableSize(target, value string) string {
 var (
 	a aggTmplInfoBase
 	_ = a.SetVariableSize
+	_ = a.CopyVal
 )

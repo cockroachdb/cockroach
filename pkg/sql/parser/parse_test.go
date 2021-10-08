@@ -33,7 +33,7 @@ import (
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
 func TestParseDatadriven(t *testing.T) {
-	datadriven.Walk(t, "testdata/parse", func(t *testing.T, path string) {
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
@@ -55,7 +55,7 @@ func TestParseDatadriven(t *testing.T) {
 				// Check roundtrip and formatting with flags.
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthetized")
+				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthesized")
 				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
 				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
@@ -63,16 +63,16 @@ func TestParseDatadriven(t *testing.T) {
 				// first the literals are removed from statement to form a stat key,
 				// then the stat key is re-parsed, to undergo the anonymization stage.
 				// We also want to check the re-parsing is fine.
-				//
-				// TODO(knz,rafiss): Turn the following two cases into proper test
-				// errors once the bugs are fixed.
 				reparsedStmts, err := parser.Parse(constantsHidden)
 				if err != nil {
-					fmt.Fprintln(&buf, "REPARSE WITHOUT LITERALS FAILS:", err)
+					d.Fatalf(t, "unexpected error when reparsing without literals: %+v", err)
 				} else {
 					reparsedStmtsS := reparsedStmts.String()
 					if reparsedStmtsS != constantsHidden {
-						fmt.Fprintln(&buf, reparsedStmtsS, "-- UNEXPECTED REPARSED AST WITHOUT LITERALS")
+						d.Fatalf(t,
+							"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+							d.Input, constantsHidden, reparsedStmtsS,
+						)
 					}
 				}
 
@@ -82,6 +82,21 @@ func TestParseDatadriven(t *testing.T) {
 				}
 
 				return buf.String()
+
+			case "error":
+				_, err := parser.Parse(d.Input)
+				if err == nil {
+					return ""
+				}
+				pgerr := pgerror.Flatten(err)
+				msg := pgerr.Message
+				if pgerr.Detail != "" {
+					msg += "\nDETAIL: " + pgerr.Detail
+				}
+				if pgerr.Hint != "" {
+					msg += "\nHINT: " + pgerr.Hint
+				}
+				return msg
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
@@ -145,29 +160,6 @@ func TestParseSyntax(t *testing.T) {
 	}
 }
 
-func TestParseErrors(t *testing.T) {
-	datadriven.RunTest(t, "testdata/errors", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "error":
-			_, err := parser.Parse(d.Input)
-			if err == nil {
-				return ""
-			}
-			pgerr := pgerror.Flatten(err)
-			msg := pgerr.Message
-			if pgerr.Detail != "" {
-				msg += "\nDETAIL: " + pgerr.Detail
-			}
-			if pgerr.Hint != "" {
-				msg += "\nHINT: " + pgerr.Hint
-			}
-			return msg
-		}
-		d.Fatalf(t, "unsupported command: %s", d.Cmd)
-		return ""
-	})
-}
-
 func TestParsePanic(t *testing.T) {
 	// Replicates #1801.
 	defer func() {
@@ -207,14 +199,14 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op tree.UnaryOperator, expr tree.Expr) tree.Expr {
-		return &tree.UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op tree.UnaryOperatorSymbol, expr tree.Expr) tree.Expr {
+		return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(op), Expr: expr}
 	}
-	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
-		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op tree.BinaryOperatorSymbol, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(op), Left: left, Right: right}
 	}
-	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op tree.ComparisonOperatorSymbol, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(op), Left: left, Right: right}
 	}
 	not := func(expr tree.Expr) tree.Expr {
 		return &tree.NotExpr{Expr: expr}
@@ -226,13 +218,13 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.OrExpr{Left: left, Right: right}
 	}
 	concat := func(left, right tree.Expr) tree.Expr {
-		return &tree.BinaryExpr{Operator: tree.Concat, Left: left, Right: right}
+		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: left, Right: right}
 	}
 	regmatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegMatch), Left: left, Right: right}
 	}
 	regimatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegIMatch), Left: left, Right: right}
 	}
 
 	one := tree.NewNumVal(constant.MakeInt64(1), "1", false /* negative */)
@@ -369,6 +361,12 @@ func TestParsePrecedence(t *testing.T) {
 
 		// Unary ~ should have highest precedence.
 		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
+
+		// OPERATOR(pg_catalog.~) should not be error (#66861).
+		{
+			`'a' OPERATOR(pg_catalog.~) 'b'`,
+			&tree.ComparisonExpr{Operator: tree.ComparisonOperator{Symbol: tree.RegMatch, IsExplicitOperator: true}, Left: a, Right: b},
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -409,7 +407,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
-		{`CREATE OPERATOR a`, 0, `create operator`, ``},
+		{`CREATE OPERATOR a`, 65017, ``, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
 		{`CREATE RULE a`, 0, `create rule`, ``},
 		{`CREATE SERVER a`, 0, `create server`, ``},
@@ -443,7 +441,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DISCARD TEMPORARY`, 0, `discard temp`, ``},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
-		{`SET LOCAL foo = bar`, 32562, ``, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
 
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
@@ -534,10 +531,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT 1 FROM t GROUP BY CUBE (b)`, 46280, `cube`, ``},
 		{`SELECT 1 FROM t GROUP BY GROUPING SETS (b)`, 46280, `grouping sets`, ``},
 
-		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``, ``},
-
 		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},
 		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``},
@@ -573,6 +566,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+
+		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

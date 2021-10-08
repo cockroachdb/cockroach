@@ -1,3 +1,0 @@
-revoke_stmt ::=
-	'REVOKE' privilege_list 'FROM' name_list
-	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*

@@ -112,6 +112,6 @@ func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
-		Output: o.Out.Stats(),
+		Output: o.OutputHelper.Stats(),
 	}
 }

@@ -317,7 +317,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
+	ac := log.AmbientContext{Tracer: ts.Tracer()}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
@@ -335,7 +335,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	// Grant permissions to view the tables for the given viewing user.
-	privileges := []string{"SELECT", "UPDATE"}
+	privileges := []string{"CONNECT"}
 	query = fmt.Sprintf(
 		"GRANT %s ON DATABASE %s TO %s",
 		strings.Join(privileges, ", "),
@@ -387,7 +387,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if a, e := len(details.Grants), 4; a != e {
+			if a, e := len(details.Grants), 3; a != e {
 				t.Fatalf("# of grants %d != expected %d", a, e)
 			}
 
@@ -562,10 +562,6 @@ func TestRangeCount(t *testing.T) {
 		}
 
 		sysDBMap["public.descriptor"] = 1
-		// public.namespace resolves to public.namespace2, which means that we
-		// double count public.namespace2's range in this test. Set it to 0 to remove
-		// this double counting.
-		sysDBMap["public.namespace"] = 0
 	}
 	var systemTableRangeCount int64
 	for _, n := range sysDBMap {
@@ -651,7 +647,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			tblName := tc.tblName
 			schemaName := "testschema"
 
-			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
+			ac := log.AmbientContext{Tracer: ts.Tracer()}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 			defer span.Finish()
 
@@ -737,6 +733,10 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify indexes.
 			expIndexes := []serverpb.TableDetailsResponse_Index{
+				{Name: "primary", Column: "string_default", Direction: "N/A", Unique: true, Seq: 5, Storing: true},
+				{Name: "primary", Column: "default2", Direction: "N/A", Unique: true, Seq: 4, Storing: true},
+				{Name: "primary", Column: "nulls_not_allowed", Direction: "N/A", Unique: true, Seq: 3, Storing: true},
+				{Name: "primary", Column: "nulls_allowed", Direction: "N/A", Unique: true, Seq: 2, Storing: true},
 				{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
 				{Name: "descidx", Column: "rowid", Direction: "ASC", Unique: false, Seq: 2, Implicit: true},
 				{Name: "descidx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
@@ -793,7 +793,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
+	ac := log.AmbientContext{Tracer: ts.Tracer()}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	setupQueries := []string{
@@ -1410,9 +1410,14 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
-// getSystemJobIDs queries the jobs table for all jobs IDs. Sorted by decreasing creation time.
-func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner) []int64 {
-	rows := db.Query(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC;`)
+// getSystemJobIDs queries the jobs table for all job IDs that have
+// the given status. Sorted by decreasing creation time.
+func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner, status jobs.Status) []int64 {
+	rows := db.Query(
+		t,
+		`SELECT job_id FROM crdb_internal.jobs WHERE status=$1 ORDER BY created DESC`,
+		status,
+	)
 	defer rows.Close()
 
 	res := []int64{}
@@ -1434,8 +1439,18 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	// Get list of existing jobs (migrations). Assumed to all have succeeded.
-	existingIDs := getSystemJobIDs(t, sqlDB)
+	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
+		// Creating this client causes a user to be created, which causes jobs
+		// to be created, so we do it up-front rather than inside the test.
+		_, err := s.GetAuthenticatedHTTPClient(isAdmin)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	existingSucceededIDs := getSystemJobIDs(t, sqlDB, jobs.StatusSucceeded)
+	existingRunningIDs := getSystemJobIDs(t, sqlDB, jobs.StatusRunning)
+	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
 	testJobs := []struct {
 		id       int64
@@ -1487,16 +1502,56 @@ func TestAdminAPIJobs(t *testing.T) {
 		expectedIDsViaAdmin    []int64
 		expectedIDsViaNonAdmin []int64
 	}{
-		{"jobs", append([]int64{5, 4, 3, 2, 1}, existingIDs...), []int64{5}},
-		{"jobs?limit=1", []int64{5}, []int64{5}},
-		{"jobs?status=running", []int64{4, 2, 1}, []int64{}},
-		{"jobs?status=succeeded", append([]int64{5, 3}, existingIDs...), []int64{5}},
-		{"jobs?status=pending", []int64{}, []int64{}},
-		{"jobs?status=garbage", []int64{}, []int64{}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{5, 3, 2}, []int64{5}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}, []int64{}},
-		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}, []int64{}},
-		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}, []int64{}},
+		{
+			"jobs",
+			append([]int64{5, 4, 3, 2, 1}, existingIDs...),
+			[]int64{5},
+		},
+		{
+			"jobs?limit=1",
+			[]int64{5},
+			[]int64{5},
+		},
+		{
+			"jobs?status=running",
+			append([]int64{4, 2, 1}, existingRunningIDs...),
+			[]int64{},
+		},
+		{
+			"jobs?status=succeeded",
+			append([]int64{5, 3}, existingSucceededIDs...),
+			[]int64{5},
+		},
+		{
+			"jobs?status=pending",
+			[]int64{},
+			[]int64{},
+		},
+		{
+			"jobs?status=garbage",
+			[]int64{},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup),
+			[]int64{5, 3, 2},
+			[]int64{5},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore),
+			[]int64{1},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?type=%d", invalidJobType),
+			[]int64{},
+			[]int64{},
+		},
+		{
+			fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup),
+			[]int64{2},
+			[]int64{},
+		},
 	}
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
@@ -1515,6 +1570,13 @@ func TestAdminAPIJobs(t *testing.T) {
 				expected = testCase.expectedIDsViaNonAdmin
 			}
 
+			sort.Slice(expected, func(i, j int) bool {
+				return expected[i] < expected[j]
+			})
+
+			sort.Slice(resIDs, func(i, j int) bool {
+				return resIDs[i] < resIDs[j]
+			})
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}

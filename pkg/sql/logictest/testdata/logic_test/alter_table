@@ -22,8 +22,8 @@ SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
 a            INT8       false        NULL            ·                      {primary,t_f_idx}  false
-f            INT8       true         NULL            ·                      {t_f_idx}          false
-b            INT8       true         NULL            ·                      {}                 false
+f            INT8       true         NULL            ·                      {primary,t_f_idx}  false
+b            INT8       true         NULL            ·                      {primary}          false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -50,6 +50,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 t           foo         false       1             b            ASC        false    false
 t           foo         false       2             a            ASC        false    true
 t           primary     false       1             a            ASC        false    false
+t           primary     false       2             f            N/A        true     false
+t           primary     false       3             b            N/A        true     false
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
 
@@ -207,6 +209,9 @@ SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 t           primary     false       1             a            ASC        false    false
+t           primary     false       2             f            N/A        true     false
+t           primary     false       3             b            N/A        true     false
+t           primary     false       4             c            N/A        true     false
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
 
@@ -362,6 +367,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 o           oi          true        1             i            ASC        false    false
 o           oi          true        2             rowid        ASC        false    true
 o           primary     false       1             rowid        ASC        false    false
+o           primary     false       2             gf           N/A        true     false
+o           primary     false       3             i            N/A        true     false
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -456,10 +463,10 @@ SHOW COLUMNS FROM tt
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
 a            INT8       false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
-q            DECIMAL    false        NULL            ·                      {}                           false
-r            DECIMAL    true         NULL            ·                      {}                           false
-s            DECIMAL    false        NULL            ·                      {tt_s_key}                   false
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_t_key}                   false
+q            DECIMAL    false        NULL            ·                      {primary}                    false
+r            DECIMAL    true         NULL            ·                      {primary}                    false
+s            DECIMAL    false        NULL            ·                      {primary,tt_s_key}           false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {primary,tt_t_key}           false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -587,7 +594,7 @@ ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
 statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 
-statement error cannot access virtual schema in anonymous database
+statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
 subtest 26422
@@ -660,7 +667,7 @@ SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
 a            INT8       false        NULL            ·                      {primary}  false
-b            INT8       true         NULL            ·                      {}         false
+b            INT8       true         NULL            ·                      {primary}  false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -678,8 +685,8 @@ SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
 a            INT8       false        NULL            ·                      {foo,primary}  false
-b            INT8       true         NULL            ·                      {foo}          false
-c            INT8       true         NULL            ·                      {}             false
+b            INT8       true         NULL            ·                      {foo,primary}  false
+c            INT8       true         NULL            ·                      {primary}      false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -1402,6 +1409,8 @@ query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM regression_54196]
 ORDER BY index_name, column_name ASC
 ----
+primary                         col2
+primary                         col3
 primary                         rowid
 regression_54196_col2_col3_idx  col2
 regression_54196_col2_col3_idx  col3
@@ -1459,7 +1468,8 @@ statement ok
 CREATE TABLE uwi_child (
   d INT REFERENCES unique_without_index (d),
   e INT,
-  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e)
+  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e),
+  CONSTRAINT fk_e_d FOREIGN KEY (e, d) REFERENCES unique_without_index (e, d)
 )
 
 # We don't yet support adding a column marked as UNIQUE WITHOUT INDEX after a
@@ -1640,6 +1650,7 @@ SHOW CONSTRAINTS FROM uwi_child
 ----
 uwi_child  fk_d_e                         FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
 uwi_child  fk_d_ref_unique_without_index  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+uwi_child  fk_e_d                         FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
@@ -1812,3 +1823,177 @@ CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
 statement error pgcode 42P07 duplicate index name: \"idx\"
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
+
+# Regression test for a bug which occurred when adding a foreign key
+# constraint which is marked NOT VALID and is self-referencing.
+subtest self_reference_fk_not_valid
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES t(i) NOT VALID;
+
+# Demonstrate that the constraint is enforced.
+statement error pgcode 23503 insert on table "t" violates foreign key constraint "fk"
+INSERT INTO t VALUES (1, 0)
+
+statement ok
+DROP TABLE t;
+
+# Ensure unique constraint partial predicates are not ignored.
+subtest regression_67234
+
+statement ok
+CREATE TABLE t67234 (k INT PRIMARY KEY, a INT, b INT, FAMILY (k, a, b));
+ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
+ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t67234]
+----
+CREATE TABLE public.t67234 (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+   FAMILY fam_0_k_a_b (k, a, b),
+   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+)
+
+# Sanity: Check the number of user errors and
+# database errors in the test.
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
+----
+1
+
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 4;
+----
+1
+
+subtest generated_as_identity
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (a INT UNIQUE)
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT GENERATED ALWAYS AS IDENTITY
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO t (b) VALUES (2)
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT GENERATED BY DEFAULT AS IDENTITY
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   FAMILY "primary" (a, rowid, b, c)
+)
+
+statement ok
+INSERT INTO t (c) VALUES (2)
+
+statement ok
+DROP TABLE t
+
+subtest generated_as_identity_with_seq_option
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (a INT UNIQUE)
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT GENERATED ALWAYS AS IDENTITY (START 1 INCREMENT 3)
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT GENERATED ALWAYS AS IDENTITY (START 1 INCREMENT 3
+ CACHE 10)
+
+statement ok
+ALTER TABLE t DROP COLUMN c
+
+statement ok
+INSERT INTO t (a) VALUES (7), (8), (9)
+
+query II
+SELECT * FROM t ORDER BY a
+----
+7  1
+8  4
+9  7
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO t (a, b) VALUES (10, 2)
+
+statement error column "b" is an identity column
+ALTER TABLE t ALTER COLUMN b SET DEFAULT 10
+
+statement error identity column type must be INT, INT2, INT4 or INT8
+ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (a INT UNIQUE)
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3)
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3
+ CACHE 10)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   FAMILY "primary" (a, rowid, b, c)
+)
+
+statement ok
+ALTER TABLE t DROP COLUMN c
+
+statement ok
+INSERT INTO t (a) VALUES (7), (8), (9)
+
+query II
+SELECT * FROM t ORDER BY a
+----
+7  1
+8  4
+9  7
+
+statement ok
+INSERT INTO t (a, b) VALUES (10, 2)
+
+query II
+SELECT * FROM t ORDER BY a
+----
+7   1
+8   4
+9   7
+10  2
+
+statement error column "b" is an identity column
+ALTER TABLE t ALTER COLUMN b SET DEFAULT 10
+
+statement error identity column type must be INT, INT2, INT4 or INT8
+ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)

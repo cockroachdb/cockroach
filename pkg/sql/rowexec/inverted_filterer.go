@@ -227,7 +227,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.BytesFamily {
-			ifr.MoveToDraining(errors.New("virtual inverted column should have type bytes"))
+			ifr.MoveToDraining(errors.New("inverted column should have type bytes"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
@@ -321,7 +321,7 @@ func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(ifr.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
-		Output: ifr.Out.Stats(),
+		Output: ifr.OutputHelper.Stats(),
 	}
 }
 

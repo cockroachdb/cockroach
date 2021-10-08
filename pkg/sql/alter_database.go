@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +54,7 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -64,7 +67,16 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	newOwner := n.n.Owner
 	oldOwner := n.desc.GetPrivileges().Owner()
 
-	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwner); err != nil {
+		return err
+	}
+
+	// To alter the owner, the user also has to have CREATEDB privilege.
+	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	if err := params.p.setNewDatabaseOwner(params.ctx, n.desc, newOwner); err != nil {
 		return err
 	}
 
@@ -84,20 +96,11 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	return nil
 }
 
-// checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.
+// setNewDatabaseOwner handles setting a new database owner.
 // Called in ALTER DATABASE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
+func (p *planner) setNewDatabaseOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
 ) error {
-	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
-		return err
-	}
-
-	// To alter the owner, the user also has to have CREATEDB privilege.
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
-		return err
-	}
-
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
@@ -132,7 +135,7 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -235,6 +238,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			if n.n.IfNotExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("region %q already exists; skipping", n.n.Region),
+				)
+				return nil
+			}
 			return pgerror.Newf(
 				pgcode.DuplicateObject,
 				"region %q already added to database",
@@ -272,6 +282,12 @@ type alterDatabaseDropRegionNode struct {
 	toDrop                []*typedesc.Mutable
 }
 
+var allowDropFinalRegion = settings.RegisterBoolSetting(
+	"sql.multiregion.drop_primary_region.enabled",
+	"allows dropping the PRIMARY REGION of a database if it is the last region",
+	true,
+).WithPublic()
+
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropRegion,
@@ -284,13 +300,20 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
 	if !dbDesc.IsMultiRegion() {
+		if n.IfExists {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("region %q is not defined on the database; skipping", n.Region),
+			)
+			return &alterDatabaseDropRegionNode{}, nil
+		}
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
@@ -355,6 +378,15 @@ func (p *planner) AlterDatabaseDropRegion(
 				"You must designate another region as the primary region using "+
 					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
+			)
+		}
+
+		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop {
+			return nil, pgerror.Newf(
+				pgcode.InvalidDatabaseDefinition,
+				"databases in this cluster must have at least 1 region",
+				n.Region,
+				DefaultPrimaryRegionClusterSettingName,
 			)
 		}
 
@@ -526,6 +558,9 @@ func removeLocalityConfigFromAllTablesInDB(
 }
 
 func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+	if n.n == nil {
+		return nil
+	}
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
 		params.p.txn,
@@ -568,6 +603,20 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				if n.n.IfExists {
+					params.p.BufferClientNotice(
+						params.ctx,
+						pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
+					)
+					return nil
+				}
+				return pgerror.Newf(
+					pgcode.UndefinedObject,
+					"region %q has not been added to the database",
+					n.n.Region,
+				)
+			}
 			return err
 		}
 	}
@@ -611,7 +660,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -700,6 +749,19 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	// Update all GLOBAL tables' zone configurations. This is required as if
+	// LOCALITY GLOBAL is used with PLACEMENT RESTRICTED, the global tables' zone
+	// configs must be explicitly rebuilt so as to move their primary region.
+	if updatedRegionConfig.IsPlacementRestricted() {
+		if err := params.p.updateZoneConfigsForTables(
+			params.ctx,
+			n.desc,
+			WithOnlyGlobalTables,
+		); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -758,7 +820,7 @@ func addDefaultLocalityConfigToAllTables(
 func checkCanConvertTableToMultiRegion(
 	dbDesc catalog.DatabaseDescriptor, tableDesc catalog.TableDescriptor,
 ) error {
-	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns() > 0 {
 		return errors.WithDetailf(
 			pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
@@ -770,7 +832,7 @@ func checkCanConvertTableToMultiRegion(
 		)
 	}
 	for _, idx := range tableDesc.AllIndexes() {
-		if idx.GetPartitioning().NumColumns > 0 {
+		if idx.GetPartitioning().NumColumns() > 0 {
 			return errors.WithDetailf(
 				pgerror.Newf(
 					pgcode.ObjectNotInPrerequisiteState,
@@ -796,6 +858,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		tree.SurvivalGoalDefault,
 		n.n.PrimaryRegion,
 		[]tree.Name{n.n.PrimaryRegion},
+		tree.DataPlacementUnspecified,
 	)
 	if err != nil {
 		return err
@@ -925,7 +988,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -948,6 +1011,15 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 			"you must first add a primary region to the database using "+
 				"ALTER DATABASE %s PRIMARY REGION <region_name>",
 			n.n.Name.String(),
+		)
+	}
+
+	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure &&
+		n.desc.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
+		return errors.WithDetailf(
+			pgerror.New(pgcode.InvalidParameterValue,
+				"a region-survivable database cannot also have a restricted placement policy"),
+			"PLACEMENT RESTRICTED may only be used with SURVIVE ZONE FAILURE",
 		)
 	}
 
@@ -984,10 +1056,6 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
-		return err
-	}
-
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1001,7 +1069,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 
 	// Update all REGIONAL BY TABLE tables' zone configurations. This is required as replica
 	// placement for REGIONAL BY TABLE tables is dependant on the survival goal.
-	if err := params.p.updateZoneConfigsForAllTables(params.ctx, n.desc); err != nil {
+	if err := params.p.updateZoneConfigsForTables(params.ctx, n.desc); err != nil {
 		return err
 	}
 
@@ -1020,3 +1088,149 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 func (n *alterDatabaseSurvivalGoalNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabaseSurvivalGoalNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseSurvivalGoalNode) Close(context.Context)        {}
+
+type alterDatabasePlacementNode struct {
+	n    *tree.AlterDatabasePlacement
+	desc *dbdesc.Mutable
+}
+
+// AlterDatabasePlacement transforms a tree.AlterDatabasePlacement into a plan node.
+func (p *planner) AlterDatabasePlacement(
+	ctx context.Context, n *tree.AlterDatabasePlacement,
+) (planNode, error) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DatabasePlacementPolicy) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use PLACEMENT",
+			clusterversion.ByKey(clusterversion.DatabasePlacementPolicy))
+	}
+
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	if !p.EvalContext().SessionData().PlacementEnabled {
+		return nil, errors.WithHint(pgerror.New(
+			pgcode.FeatureNotSupported,
+			"ALTER DATABASE PLACEMENT requires that the session setting "+
+				"enable_multiregion_placement_policy is enabled",
+		),
+			"to enable, enable the session setting or the cluster "+
+				"setting sql.defaults.multiregion_placement_policy.enabled",
+		)
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabasePlacementNode{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabasePlacementNode) startExec(params runParams) error {
+	// If the database is not a multi-region database, the survival goal cannot be changed.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must have associated regions before a placement policy can be set",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.Name.String(),
+		)
+	}
+
+	if n.n.Placement == tree.DataPlacementRestricted &&
+		n.desc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return errors.WithDetailf(
+			pgerror.New(pgcode.InvalidParameterValue,
+				"a region-survivable database cannot also have a restricted placement policy"),
+			"PLACEMENT RESTRICTED may only be used with SURVIVE ZONE FAILURE",
+		)
+	}
+
+	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	telemetry.Inc(
+		sqltelemetry.AlterDatabasePlacementCounter(
+			n.n.Placement.TelemetryName(),
+		),
+	)
+
+	// Update the placement strategy in the database descriptor
+	newPlacement, err := TranslateDataPlacement(n.n.Placement)
+	if err != nil {
+		return err
+	}
+	n.desc.SetPlacement(newPlacement)
+
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		regionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
+		return err
+	}
+
+	// Update all GLOBAL tables' zone configurations. This is required because
+	// GLOBAL table's can inherit the database's zone configuration under the
+	// DEFAULT placement policy. However, under the RESTRICTED placement policy,
+	// non-voters are removed from the database. But global tables need non-voters
+	// to behave properly, and as such, need a bespoke zone configuration.
+	// Regardless of the transition direction (DEFAULT -> RESTRICTED, RESTRICTED
+	// -> DEFAULT), we need to refresh the zone configuration of all GLOBAL
+	// table's inside the database to either carry a bespoke configuration or go
+	// back to inheriting it from the database.
+	if err := params.p.updateZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+		WithOnlyGlobalTables,
+	); err != nil {
+		return err
+	}
+
+	// Log Alter Placement Goal event. This is an auditable log event and
+	// is recorded in the same transaction as the database descriptor, and zone
+	// configuration updates.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabasePlacement{
+			DatabaseName: n.desc.GetName(),
+			Placement:    newPlacement.String(),
+		},
+	)
+}
+
+func (n *alterDatabasePlacementNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabasePlacementNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabasePlacementNode) Close(context.Context)        {}

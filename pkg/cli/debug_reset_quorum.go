@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
@@ -36,7 +37,7 @@ Data on any surviving replicas will not be used to restore quorum.
 Instead, these replicas will be removed irrevocably.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugResetQuorum),
+	RunE: clierrorplus.MaybeDecorateError(runDebugResetQuorum),
 }
 
 func runDebugResetQuorum(cmd *cobra.Command, args []string) error {

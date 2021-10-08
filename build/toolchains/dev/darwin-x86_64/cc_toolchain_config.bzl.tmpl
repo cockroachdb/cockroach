@@ -78,7 +78,6 @@ def _impl(ctx):
                         flags = [
                             "-g1",
                             "-Wall",
-                            "-I%{repo_path}/include/c++/v1",
                         ],
                     ),
                 ]),
@@ -128,7 +127,6 @@ def _impl(ctx):
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
             "%{repo_path}/lib/clang/10.0.0/include",
-            "%{repo_path}/include/c++/v1",
         ],
         builtin_sysroot = "%{sdk_path}",
     )

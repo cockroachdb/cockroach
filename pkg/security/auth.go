@@ -11,6 +11,7 @@
 package security
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"strings"
@@ -27,23 +28,24 @@ var certPrincipalMap struct {
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster. It
 // returns an optional func that is run at connection close.
-type UserAuthHook func(SQLUsername, bool) (connClose func(), _ error)
+type UserAuthHook func(context.Context, SQLUsername, bool) (connClose func(), _ error)
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
 // map is used to transform principal names found in the Subject.CommonName or
-// DNS-type SubjectAlternateNames fields of certificates.
+// DNS-type SubjectAlternateNames fields of certificates. This function splits
+// each list entry on the final colon, allowing <source> to contain colons.
 func SetCertPrincipalMap(mappings []string) error {
 	m := make(map[string]string, len(mappings))
 	for _, v := range mappings {
 		if v == "" {
 			continue
 		}
-		parts := strings.Split(v, ":")
-		if len(parts) != 2 {
+		idx := strings.LastIndexByte(v, ':')
+		if idx == -1 {
 			return errors.Errorf("invalid <cert-principal>:<db-principal> mapping: %q", v)
 		}
-		m[parts[0]] = parts[1]
+		m[v[:idx]] = v[idx+1:]
 	}
 	certPrincipalMap.Lock()
 	certPrincipalMap.m = m
@@ -108,7 +110,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if requestedUser.Undefined() {
 			return nil, errors.New("user is missing")
@@ -132,10 +134,8 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 				errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user,
-		// except if the certificate user is NodeUser, which is allowed to
-		// act on behalf of all other users.
-		if !Contains(certUsers, requestedUser.Normalized()) && !Contains(certUsers, NodeUser) {
+		// The client certificate user must match the requested user.
+		if !Contains(certUsers, requestedUser.Normalized()) {
 			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 
@@ -146,7 +146,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
 		if requestedUser.Undefined() {
 			return nil, errors.New("user is missing")
 		}
@@ -160,7 +160,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
+		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
 			return nil, errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 

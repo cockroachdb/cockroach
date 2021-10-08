@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -50,7 +51,7 @@ func (p *planner) AlterTableLocality(
 		return nil, err
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptorEx(
+	_, tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireTableDesc,
 	)
 	if err != nil {
@@ -100,8 +101,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	params runParams,
 ) error {
 	if !n.tableDesc.IsLocalityGlobal() {
-		f := tree.NewFmtCtx(tree.FmtSimple)
-		if err := tabledesc.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
+		f := params.p.EvalContext().FmtCtx(tree.FmtSimple)
+		if err := multiregion.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
 			// While we're in an error path and generally it's bad to return a
 			// different error in an error path, we will only get an error here if the
 			// locality is corrupted, in which case, it's probably the right error
@@ -318,6 +319,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			ColumnDef: regionalByRowDefaultColDef(
 				enumOID,
 				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+				maybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
 			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
@@ -335,7 +337,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			tn,
 			n.tableDesc,
 			defaultColDef,
-			params.SessionData(),
 		); err != nil {
 			return err
 		}
@@ -379,8 +380,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		newColumnName,
 		newColumnID,
 		newColumnDefaultExpr,
-		n.tableDesc.PrimaryIndex.ColumnNames[primaryIndexColIdxStart:],
-		n.tableDesc.PrimaryIndex.ColumnDirections[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnNames[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnDirections[primaryIndexColIdxStart:],
 	)
 }
 
@@ -527,8 +528,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
@@ -545,8 +546,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)

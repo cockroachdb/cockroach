@@ -1,0 +1,9 @@
+alter_database_stmt ::=
+	alter_rename_database_stmt
+	| alter_zone_database_stmt
+	| alter_database_owner
+	| alter_database_to_schema_stmt
+	| alter_database_add_region_stmt
+	| alter_database_drop_region_stmt
+	| alter_database_survival_goal_stmt
+	| alter_database_primary_region_stmt

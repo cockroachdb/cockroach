@@ -27,6 +27,11 @@ type SQLStatusServer interface {
 	ListLocalContentionEvents(context.Context, *ListContentionEventsRequest) (*ListContentionEventsResponse, error)
 	ResetSQLStats(context.Context, *ResetSQLStatsRequest) (*ResetSQLStatsResponse, error)
 	Statements(context.Context, *StatementsRequest) (*StatementsResponse, error)
+	CombinedStatementStats(context.Context, *CombinedStatementsStatsRequest) (*StatementsResponse, error)
+	ListDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
+	ListLocalDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
+	Profile(ctx context.Context, request *ProfileRequest) (*JSONResponse, error)
+	IndexUsageStatistics(context.Context, *IndexUsageStatisticsRequest) (*IndexUsageStatisticsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -47,10 +52,18 @@ func MakeOptionalNodesStatusServer(s NodesStatusServer) OptionalNodesStatusServe
 	}
 }
 
-// NodesStatusServer is the subset of the serverpb.StatusInterface that is used
-// by the SQL subsystem but is unavailable to tenants.
+// NodesStatusServer is an endpoint that allows the SQL subsystem
+// to observe node descriptors.
+// It is unavailable to tenants.
 type NodesStatusServer interface {
-	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
+	ListNodesInternal(context.Context, *NodesRequest) (*NodesResponse, error)
+}
+
+// RegionsServer is the subset of the serverpb.StatusInterface that is used
+// by the SQL system to query for available regions.
+// It is available for tenants.
+type RegionsServer interface {
+	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

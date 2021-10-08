@@ -97,8 +97,8 @@ func Difference(a, b geo.Geometry) (geo.Geometry, error) {
 	return geo.ParseGeometryFromEWKB(diffEWKB)
 }
 
-// Simplify returns a simplified Geometry.
-func Simplify(g geo.Geometry, tolerance float64) (geo.Geometry, error) {
+// SimplifyGEOS returns a simplified Geometry with GEOS.
+func SimplifyGEOS(g geo.Geometry, tolerance float64) (geo.Geometry, error) {
 	if math.IsNaN(tolerance) || g.ShapeType2D() == geopb.ShapeType_Point || g.ShapeType2D() == geopb.ShapeType_MultiPoint {
 		return g, nil
 	}

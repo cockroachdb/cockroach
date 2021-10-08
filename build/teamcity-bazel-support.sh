@@ -1,11 +1,10 @@
-BAZEL_IMAGE=cockroachdb/bazel:20210505-134517
+# FYI: You can run `./dev builder` to run this Docker image. :)
+# `dev` depends on this variable! Don't change the name or format unless you
+# also update `dev` accordingly.
+BAZEL_IMAGE=cockroachdb/bazel:20211006-125507
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
-#
-# Set the TEAMCITY_BAZEL_SUPPORT_LINT variable for lints -- this will mount the
-# workspace as writeable in the Docker container, will avoid setting up the
-# artifacts directory, etc.
 run_bazel() {
     if [ -z "${root:-}" ]
     then
@@ -13,25 +12,21 @@ run_bazel() {
         exit 1
     fi
 
-    # Bazel configuration for CI.
-    cp $root/.bazelrc.ci $root/.bazelrc.user
-
     # Set up volumes.
-    vols="--volume /home/agent/.bazelcache:/root/.cache/bazel"
-
-    workspace_vol="--volume ${root}:/go/src/github.com/cockroachdb/cockroach"
-    if [ -z "${TEAMCITY_BAZEL_SUPPORT_LINT:-}" ]
-    then
-        artifacts_dir=$root/artifacts
-        mkdir -p "$artifacts_dir"
-
-        vols="${vols} ${workspace_vol}:ro"
-        vols="${vols} --volume ${artifacts_dir}:/artifacts"
-    else
-        vols="${vols} ${workspace_vol}"
-    fi
+    # TeamCity uses git alternates, so make sure we mount the path to the real
+    # git objects.
+    teamcity_alternates="/home/agent/system/git"
+    vols="--volume ${teamcity_alternates}:${teamcity_alternates}:ro"
+    artifacts_dir=$root/artifacts
+    mkdir -p "$artifacts_dir"
+    vols="${vols} --volume ${artifacts_dir}:/artifacts"
+    cache=/home/agent/.bzlhome
+    mkdir -p $cache
+    vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
+    vols="${vols} --volume ${cache}:/home/roach"
 
     docker run -i ${tty-} --rm --init \
+        -u "$(id -u):$(id -g)" \
         --workdir="/go/src/github.com/cockroachdb/cockroach" \
         ${vols} \
         $BAZEL_IMAGE "$@"

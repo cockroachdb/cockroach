@@ -89,7 +89,7 @@ message TableReaderSpec {
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 
   // This field used to be an upper bound for the number of rows we will read;
-  // replaced by the parallelize field. 
+  // replaced by the parallelize field.
   reserved 8;
 
   // If set, the TableReader can read all the spans in parallel, without any
@@ -97,6 +97,11 @@ message TableReaderSpec {
   // bound on the number of rows we can read, and when there is no limit or
   // limit hint.
   optional bool parallelize = 12 [(gogoproto.nullable) = false];
+
+  // batch_bytes_limit, if non-zero, controls the TargetBytes limits that the
+  // TableReader will use for its scans. If zero, then the server-side default
+  // is used. If parallelize is set, this cannot be set.
+  optional int64 batch_bytes_limit = 17 [(gogoproto.nullable) = false];
 
   // If non-zero, this enables inconsistent historical scanning where different
   // batches can be read with different timestamps. This is used for
@@ -145,11 +150,11 @@ message TableReaderSpec {
   // if is_check is true.
   repeated uint32 needed_columns = 15;
 
-  // Indicates a virtual column which may have a different type than the column
-  // stored in the table descriptor. For example, the inverted column in an
-  // inverted index has a different type than the column it indexes in the base
-  // table.
-  optional sqlbase.ColumnDescriptor virtual_column = 16;
+  // Indicates an inverted column which may have a different type than the
+  // column stored in the table descriptor. For example, the inverted column in
+  // an inverted index has a different type than the column it indexes in the
+  // base table.
+  optional sqlbase.ColumnDescriptor inverted_column = 16;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
@@ -280,12 +285,13 @@ message JoinReaderSpec {
   // more complicated than a simple equality between input columns and index
   // columns. In this case, LookupExpr specifies the expression that will be
   // used to construct the spans for each lookup. Currently, the only
-  // expressions supported are conjunctions (AND expressions) of equality and
-  // IN expressions, specifically:
+  // expressions supported are conjunctions (AND expressions) of equality, IN
+  // expressions, and simple inequalities, specifically:
   //  1. equalities between two variables (one from the input and one from the
   //     index) representing the equi-join condition(s),
   //  2. equalities between an index column and a constant, and
   //  3. IN expressions between an index column and a tuple of constants.
+  //  4. LT,GT,GE,LE between an index var and a constant.
   //
   // Variables in this expression are assigned in the same way as the ON
   // condition below. Assuming that the left stream has N columns and the right
@@ -296,6 +302,22 @@ message JoinReaderSpec {
   // For example, a valid LookupExpr for N=2 and M=2 might be:
   //   @3 IN (10, 20) AND @2 = @4.
   optional Expression lookup_expr = 16 [(gogoproto.nullable) = false];
+
+  // If RemoteLookupExpr is set, this is a locality optimized lookup join. In
+  // this case, LookupExpr contains the lookup join conditions targeting ranges
+  // located on local nodes (relative to the gateway region), and
+  // RemoteLookupExpr contains the lookup join conditions targeting remote
+  // nodes. The optimizer will only plan a locality optimized lookup join if it
+  // is known that each lookup returns at most one row. This fact allows the
+  // joinReader to use the local conditions in LookupExpr first, and if a match
+  // is found locally for each input row, there is no need to search remote
+  // nodes. If a local match is not found for all input rows, the joinReader
+  // uses RemoteLookupExpr to search remote nodes.
+  //
+  // The same restrictions on supported expressions that apply to LookupExpr
+  // also apply to RemoteLookupExpr. See the comment above LookupExpr for more
+  // details.
+  optional Expression remote_lookup_expr = 17 [(gogoproto.nullable) = false];
 
   // LookupColumns, like LookupExpr, represents the part of the join condition
   // used to perform the lookup into the index. It is used as an optimization
@@ -359,9 +381,11 @@ message JoinReaderSpec {
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
 
   // Indicates that the join reader should maintain the ordering of the input
-  // stream. This is applicable to both lookup joins and index joins.
-  // Maintaining ordering with lookup joins is expensive. With index joins,
-  // not maintaining ordering allows for optimizations at lower layers.
+  // stream. This is applicable to both lookup joins and index joins. For lookup
+  // joins, maintaining order is expensive because it requires buffering. For
+  // index joins buffering is not required, but still, if ordering is not
+  // required, we'll change the output order to allow for some Pebble
+  // optimizations.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
 
   reserved 12;
@@ -384,6 +408,13 @@ message JoinReaderSpec {
   // OutputGroupContinuationForLeftRow is true, MaintainOrdering must also
   // be true.
   optional bool output_group_continuation_for_left_row = 15 [(gogoproto.nullable) = false];
+
+  // lookup_batch_bytes_limit, if non-zero, controls the TargetBytes limits that
+  // the joiner will use for its lookups. If zero, then the server-side default
+  // is used. Note that, regardless of this setting, bytes limits are not always
+  // used for lookups - it depends on whether the joiner decides it wants
+  // DistSender-parallelism or not.
+  optional int64 lookup_batch_bytes_limit = 18 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -400,6 +431,10 @@ message SorterSpec {
   // first 'n' output ordering columns, can be optionally specified for
   // possible speed-ups taking advantage of the partial orderings.
   optional uint32 ordering_match_len = 2 [(gogoproto.nullable) = false];
+
+  // The limit of a top-k sort is the number of rows that the sorter should
+  // output. If limit is 0, then all rows should be output.
+  optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
 message DistinctSpec {

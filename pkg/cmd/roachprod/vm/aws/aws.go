@@ -201,6 +201,10 @@ type providerOpts struct {
 	// Overrides config.json AMI.
 	ImageAMI string
 
+	// IAMProfile designates the name of the instance profile to use for created
+	// EC2 instances if non-empty.
+	IAMProfile string
+
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
@@ -266,7 +270,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		0, "Additional throughput to provision, in MiB/s")
 
 	flags.VarP(&o.EBSVolumes, ProviderName+"-ebs-volume", "",
-		"Additional EBS disk to attached; specified as JSON: {VolumeType=io2,VolumeSize=213,Iops=321}")
+		`Additional EBS disk to attached, repeated for extra disks; specified as JSON: {"VolumeType":"io2","VolumeSize":213,"Iops":321}`)
 
 	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", nil,
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
@@ -276,11 +280,16 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
-		false, "Enable the use of multiple stores by creating one store directory per disk.  Default is to raid0 stripe all disks.")
+		false, "Enable the use of multiple stores by creating one store directory per disk. "+
+			"Default is to raid0 stripe all disks. "+
+			"See repeating --"+ProviderName+"-ebs-volume for adding extra volumes.")
 	flags.Float64Var(&o.CreateRateLimit, ProviderName+"-create-rate-limit", 2, "aws"+
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
+	flags.StringVar(&o.IAMProfile, ProviderName+"-	iam-profile", "roachprod-testing",
+		"the IAM instance profile to associate with created VMs if non-empty")
+
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -847,37 +856,55 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		args = append(args, "--cpu-options", cpuOptions)
 	}
 
+	if p.opts.IAMProfile != "" {
+		args = append(args, "--iam-instance-profile", "Name="+p.opts.IAMProfile)
+	}
+
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
 		if len(p.opts.EBSVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
 			p.opts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
+			p.opts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
 		if p.opts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
 			v := p.opts.EBSVolumes.newVolume()
 			v.Disk = p.opts.DefaultEBSVolume.Disk
+			v.Disk.DeleteOnTermination = true
 			p.opts.EBSVolumes = append(p.opts.EBSVolumes, v)
 		}
-
-		mapping, err := json.Marshal(p.opts.EBSVolumes)
-		if err != nil {
-			return err
-		}
-
-		deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
-		if err != nil {
-			return err
-		}
-		defer deviceMapping.Close()
-		if _, err := deviceMapping.Write(mapping); err != nil {
-			return err
-		}
-		args = append(args,
-			"--block-device-mapping",
-			"file://"+deviceMapping.Name(),
-		)
 	}
+
+	osDiskVolume := &ebsVolume{
+		DeviceName: "/dev/sda1",
+		Disk: ebsDisk{
+			VolumeType:          defaultEBSVolumeType,
+			VolumeSize:          opts.OsVolumeSize,
+			DeleteOnTermination: true,
+		},
+	}
+
+	p.opts.EBSVolumes = append(p.opts.EBSVolumes, osDiskVolume)
+
+	mapping, err := json.Marshal(p.opts.EBSVolumes)
+	if err != nil {
+		return err
+	}
+
+	deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
+	if err != nil {
+		return err
+	}
+	defer deviceMapping.Close()
+	if _, err := deviceMapping.Write(mapping); err != nil {
+		return err
+	}
+	args = append(args,
+		"--block-device-mapping",
+		"file://"+deviceMapping.Name(),
+	)
+
 	return p.runJSONCommand(args, &data)
 }
 

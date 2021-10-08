@@ -24,7 +24,7 @@ import (
 )
 
 type defaultHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	fn  tree.AggregateFunc
 	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
@@ -41,11 +41,11 @@ type defaultHashAgg struct {
 var _ AggregateFunc = &defaultHashAgg{}
 
 func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 }
 
 func (a *defaultHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
@@ -58,7 +58,7 @@ func (a *defaultHashAgg) Compute(
 			// Both aggregators convert the batch "sparsely" - without
 			// deselection - so converted values are at the same positions as
 			// the original ones.
-			for _, tupleIdx := range sel[:inputLen] {
+			for _, tupleIdx := range sel[startIdx:endIdx] {
 				// Note that the only function that takes no arguments is COUNT_ROWS, and
 				// it has an optimized implementation, so we don't need to check whether
 				// len(inputIdxs) is at least 1.
@@ -176,9 +176,9 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *defaultHashAggAlloc) Close(ctx context.Context) error {
+func (a *defaultHashAggAlloc) Close() error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(ctx)
+		fn.fn.Close(fn.ctx)
 	}
 	a.returnedFns = nil
 	return nil

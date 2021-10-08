@@ -1,0 +1,3 @@
+scrub_stmt ::=
+	scrub_table_stmt
+	| scrub_database_stmt

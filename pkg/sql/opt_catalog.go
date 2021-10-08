@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -92,18 +94,18 @@ type optSchema struct {
 	planner *planner
 
 	database catalog.DatabaseDescriptor
-	schema   catalog.ResolvedSchema
+	schema   catalog.SchemaDescriptor
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	switch os.schema.Kind {
+	switch os.schema.SchemaKind() {
 	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		// User defined schemas and the temporary schema have real ID's, so use
 		// them here.
-		return cat.StableID(os.schema.ID)
+		return cat.StableID(os.schema.GetID())
 	default:
 		// Virtual schemas and the public schema don't, so just fall back to the
 		// parent database's ID.
@@ -144,8 +146,8 @@ func (os *optSchema) GetDataSourceNames(
 
 func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	// If the schema is backed by a descriptor, then return it.
-	if os.schema.Kind == catalog.SchemaUserDefined {
-		return os.schema.Desc
+	if os.schema.SchemaKind() == catalog.SchemaUserDefined {
+		return os.schema
 	}
 	// Otherwise, just return the database descriptor.
 	return os.database
@@ -163,11 +165,9 @@ func (oc *optCatalog) ResolveSchema(
 	}
 
 	oc.tn.ObjectNamePrefix = *name
-	found, prefixI, err := oc.tn.ObjectNamePrefix.Resolve(
-		ctx,
-		oc.planner,
-		oc.planner.CurrentDatabase(),
-		oc.planner.CurrentSearchPath(),
+	found, prefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, oc.planner, oc.planner.CurrentDatabase(),
+		oc.planner.CurrentSearchPath(), &oc.tn.ObjectNamePrefix,
 	)
 	if err != nil {
 		return nil, cat.SchemaName{}, err
@@ -183,7 +183,6 @@ func (oc *optCatalog) ResolveSchema(
 		)
 	}
 
-	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
 		database: prefix.Database,
@@ -205,13 +204,13 @@ func (oc *optCatalog) ResolveDataSource(
 
 	oc.tn = *name
 	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
-	desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
+	prefix, desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
 
 	// Ensure that the current user can access the target schema.
-	if err := oc.planner.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+	if err := oc.planner.canResolveDescUnderSchema(ctx, prefix.Schema, desc); err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
 
@@ -372,6 +371,11 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		nil
 }
 
+// RoleExists is part of the cat.Catalog interface.
+func (oc *optCatalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return RoleExists(ctx, oc.planner.ExecCfg(), oc.planner.Txn(), role)
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
@@ -421,7 +425,7 @@ func (oc *optCatalog) dataSourceForTable(
 	var tableStats []*stats.TableStatistic
 	if !flags.NoTableStats {
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.GetID())
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
@@ -593,7 +597,7 @@ type optTable struct {
 	// columns contains all the columns presented to the catalog. This includes:
 	//  - ordinary table columns (those in the table descriptor)
 	//  - MVCC timestamp system column
-	//  - virtual columns (for inverted indexes).
+	//  - inverted columns
 	// They are stored in this order, though we shouldn't rely on that anywhere.
 	columns []cat.Column
 
@@ -657,7 +661,7 @@ func newOptTable(
 	// First, determine how many columns we will potentially need.
 	cols := ot.desc.DeletableColumns()
 	numCols := len(ot.desc.AllColumns())
-	// One for each inverted index virtual column.
+	// Add one for each inverted index column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
 		if index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -672,7 +676,9 @@ func newOptTable(
 		switch {
 		case col.Public():
 			kind = cat.Ordinary
-			if col.IsHidden() {
+			if col.IsInaccessible() {
+				visibility = cat.Inaccessible
+			} else if col.IsHidden() {
 				visibility = cat.Hidden
 			}
 		case col.WriteAndDeleteOnly():
@@ -683,7 +689,7 @@ func newOptTable(
 			visibility = cat.Inaccessible
 		}
 		if !col.IsVirtual() {
-			ot.columns[col.Ordinal()].InitNonVirtual(
+			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
 				col.ColName(),
@@ -693,6 +699,9 @@ func newOptTable(
 				visibility,
 				col.ColumnDesc().DefaultExpr,
 				col.ColumnDesc().ComputeExpr,
+				col.ColumnDesc().OnUpdateExpr,
+				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
+				col.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
@@ -724,7 +733,7 @@ func newOptTable(
 		found, _ := desc.FindColumnWithName(sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
-			col.InitNonVirtual(
+			col.Init(
 				ord,
 				cat.StableID(sysCol.GetID()),
 				sysCol.ColName(),
@@ -734,6 +743,9 @@ func newOptTable(
 				cat.MaybeHidden(sysCol.IsHidden()),
 				sysCol.ColumnDesc().DefaultExpr,
 				sysCol.ColumnDesc().ComputeExpr,
+				sysCol.ColumnDesc().OnUpdateExpr,
+				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
+				sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
 			)
 		}
 	}
@@ -795,32 +807,32 @@ func newOptTable(
 			// descriptors, it looks as if the table column is part of the
 			// index; in fact the key contains values *derived* from that
 			// column. In the catalog, we refer to this key as a separate,
-			// virtual column.
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetColumnID(idx.NumColumns() - 1))
+			// inverted column.
+			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
 
-			// Add a virtual column that refers to the inverted index key.
-			virtualCol, virtualColOrd := newColumn()
+			// Add a inverted column that refers to the inverted index key.
+			invertedCol, invertedColOrd := newColumn()
 
-			// All virtual inverted columns have type bytes.
+			// All inverted columns have type bytes.
 			typ := types.Bytes
-			virtualCol.InitVirtualInverted(
-				virtualColOrd,
+			invertedCol.InitInverted(
+				invertedColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
 				typ,
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, virtualColOrd)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, invertedColOrd)
 		} else {
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* virtualColOrd */)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */)
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
-		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns > 0 {
+		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 {
 			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 				name:         idx.GetName(),
 				table:        ot.ID(),
-				columns:      idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns:],
+				columns:      idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 				withoutIndex: true,
 				predicate:    idx.GetPredicate(),
 				// TODO(rytaft): will we ever support an unvalidated unique constraint
@@ -830,8 +842,7 @@ func newOptTable(
 		}
 	}
 
-	for i := range ot.desc.GetOutboundFKs() {
-		fk := &ot.desc.GetOutboundFKs()[i]
+	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       ot.ID(),
@@ -843,9 +854,9 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
-	for i := range ot.desc.GetInboundFKs() {
-		fk := &ot.desc.GetInboundFKs()[i]
+		return nil
+	})
+	_ = ot.desc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
 			name:              fk.Name,
 			originTable:       cat.StableID(fk.OriginTableID),
@@ -857,7 +868,8 @@ func newOptTable(
 			deleteAction:      fk.OnDelete,
 			updateAction:      fk.OnUpdate,
 		})
-	}
+		return nil
+	})
 
 	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
 	ot.families = make([]optFamily, len(desc.GetFamilies())-1)
@@ -879,7 +891,7 @@ func newOptTable(
 			case types.EnumFamily:
 				// We synthesize an (x IN (v1, v2, v3...)) check for enum types.
 				expr := &tree.ComparisonExpr{
-					Operator: tree.In,
+					Operator: tree.MakeComparisonOperator(tree.In),
 					Left:     &tree.ColumnItem{ColumnName: col.ColName()},
 					Right:    tree.NewDTuple(colType, tree.MakeAllDEnumsInType(colType)...),
 				}
@@ -1145,6 +1157,9 @@ type optIndex struct {
 	idx  catalog.Index
 	zone *zonepb.ZoneConfig
 
+	// columnOrds maps the index columns to table column ordinals.
+	columnOrds []int
+
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []descpb.ColumnID
@@ -1158,10 +1173,10 @@ type optIndex struct {
 	// partitions.
 	partitions []optPartition
 
-	// invertedVirtualColOrd is used if this is an inverted index; it stores the
-	// ordinal of the virtual column created to refer to the key of this index.
-	// It is -1 if this is not an inverted index.
-	invertedVirtualColOrd int
+	// invertedColOrd is used if this is an inverted index; it stores
+	// the ordinal of the inverted column created to refer to the key of this
+	// index. It is -1 if this is not an inverted index.
+	invertedColOrd int
 }
 
 var _ cat.Index = &optIndex{}
@@ -1174,74 +1189,76 @@ func (oi *optIndex) init(
 	idx catalog.Index,
 	zone *zonepb.ZoneConfig,
 	partZones map[string]*zonepb.ZoneConfig,
-	invertedVirtualColOrd int,
+	invertedColOrd int,
 ) {
 	oi.tab = tab
 	oi.idx = idx
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
-	oi.invertedVirtualColOrd = invertedVirtualColOrd
-	if idx.IndexDesc() == tab.desc.GetPrimaryIndex().IndexDesc() {
+	oi.invertedColOrd = invertedColOrd
+	if idx.Primary() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
-		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumColumns())
+		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumKeyColumns())
 		var pkCols util.FastIntSet
-		for i := 0; i < idx.NumColumns(); i++ {
-			id := idx.GetColumnID(i)
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			id := idx.GetKeyColumnID(i)
 			pkCols.Add(int(id))
 		}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if col := tab.Column(i); col.Kind() != cat.VirtualInverted && !col.IsVirtualComputed() {
+			if col := tab.Column(i); col.Kind() != cat.Inverted && !col.IsVirtualComputed() {
 				if id := col.ColID(); !pkCols.Contains(int(id)) {
 					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
 				}
 			}
 		}
-		oi.numCols = idx.NumColumns() + len(oi.storedCols)
+		oi.numCols = idx.NumKeyColumns() + len(oi.storedCols)
 	} else {
 		oi.storedCols = idx.IndexDesc().StoreColumnIDs
-		oi.numCols = idx.NumColumns() + idx.NumExtraColumns() + idx.NumStoredColumns()
+		oi.numCols = idx.NumKeyColumns() + idx.NumKeySuffixColumns() + idx.NumSecondaryStoredColumns()
 	}
 
 	// Collect information about the partitions.
 	idxPartitioning := idx.GetPartitioning()
-	oi.partitions = make([]optPartition, len(idxPartitioning.List))
-	for i := range idxPartitioning.List {
-		p := &idxPartitioning.List[i]
-		oi.partitions[i] = optPartition{
-			name:   p.Name,
+	oi.partitions = make([]optPartition, 0, idxPartitioning.NumLists())
+	_ = idxPartitioning.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+		op := optPartition{
+			name:   name,
 			zone:   &zonepb.ZoneConfig{},
-			datums: make([]tree.Datums, 0, len(p.Values)),
+			datums: make([]tree.Datums, 0, len(values)),
 		}
 
 		// Get the zone.
-		if zone, ok := partZones[p.Name]; ok {
-			oi.partitions[i].zone = zone
+		if zone, ok := partZones[name]; ok {
+			op.zone = zone
 		}
 
 		// Get the partition values.
 		var a rowenc.DatumAlloc
-		for _, valueEncBuf := range p.Values {
+		for _, valueEncBuf := range values {
 			t, _, err := rowenc.DecodePartitionTuple(
-				&a, oi.tab.codec, oi.tab.desc, oi.idx, &oi.idx.IndexDesc().Partitioning,
+				&a, oi.tab.codec, oi.tab.desc, oi.idx, oi.idx.GetPartitioning(),
 				valueEncBuf, nil, /* prefixDatums */
 			)
 			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err,
-					"while decoding partition tuple: %+v %+v", oi.tab.desc, oi.tab.desc.GetDependsOnTypes()))
+				log.Fatalf(context.TODO(), "error while decoding partition tuple: %+v %+v",
+					oi.tab.desc, oi.tab.desc.GetDependsOnTypes())
 			}
-			oi.partitions[i].datums = append(oi.partitions[i].datums, t.Datums)
+			op.datums = append(op.datums, t.Datums)
 			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
 			// Note that this functionality should be kept in sync with the test catalog
 			// implementation (test_catalog.go).
 		}
-	}
+
+		oi.partitions = append(oi.partitions, op)
+		return nil
+	})
 
 	if idx.IsUnique() {
 		notNull := true
-		for i := 0; i < idx.NumColumns(); i++ {
-			id := idx.GetColumnID(i)
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			id := idx.GetKeyColumnID(i)
 			ord, _ := tab.lookupColumnOrdinal(id)
 			if tab.Column(ord).IsNullable() {
 				notNull = false
@@ -1253,20 +1270,40 @@ func (oi *optIndex) init(
 			// Unique index with no null columns: columns from index are sufficient
 			// to form a key without needing extra primary key columns. There is no
 			// separate lax key.
-			oi.numLaxKeyCols = idx.NumColumns()
+			oi.numLaxKeyCols = idx.NumKeyColumns()
 			oi.numKeyCols = oi.numLaxKeyCols
 		} else {
 			// Unique index with at least one nullable column: extra primary key
 			// columns will be added to the row key when one of the unique index
 			// columns has a NULL value.
-			oi.numLaxKeyCols = idx.NumColumns()
-			oi.numKeyCols = oi.numLaxKeyCols + idx.NumExtraColumns()
+			oi.numLaxKeyCols = idx.NumKeyColumns()
+			oi.numKeyCols = oi.numLaxKeyCols + idx.NumKeySuffixColumns()
 		}
 	} else {
 		// Non-unique index: extra primary key columns are always added to the row
 		// key. There is no separate lax key.
-		oi.numLaxKeyCols = idx.NumColumns() + idx.NumExtraColumns()
+		oi.numLaxKeyCols = idx.NumKeyColumns() + idx.NumKeySuffixColumns()
 		oi.numKeyCols = oi.numLaxKeyCols
+	}
+
+	// Populate columnOrds.
+	inverted := oi.IsInverted()
+	numKeyCols := idx.NumKeyColumns()
+	numKeySuffixCols := idx.NumKeySuffixColumns()
+	oi.columnOrds = make([]int, oi.numCols)
+	for i := 0; i < oi.numCols; i++ {
+		var ord int
+		switch {
+		case inverted && i == numKeyCols-1:
+			ord = oi.invertedColOrd
+		case i < numKeyCols:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+		case i < numKeyCols+numKeySuffixCols:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
+		default:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
+		}
+		oi.columnOrds[i] = ord
 	}
 }
 
@@ -1310,43 +1347,26 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 	if !oi.IsInverted() {
 		panic("non-inverted indexes do not have inverted prefix columns")
 	}
-	return oi.idx.NumColumns() - 1
+	return oi.idx.NumKeyColumns() - 1
 }
 
 // Column is part of the cat.Index interface.
 func (oi *optIndex) Column(i int) cat.IndexColumn {
-	length := oi.idx.NumColumns()
-	if i < length {
-		ord := 0
-		if oi.IsInverted() && i == length-1 {
-			ord = oi.invertedVirtualColOrd
-		} else {
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetColumnID(i))
-		}
-		return cat.IndexColumn{
-			Column:     oi.tab.Column(ord),
-			Descending: oi.idx.GetColumnDirection(i) == descpb.IndexDescriptor_DESC,
-		}
+	ord := oi.columnOrds[i]
+	// Only key columns have a direction.
+	descending := i < oi.idx.NumKeyColumns() && oi.idx.GetKeyColumnDirection(i) == descpb.IndexDescriptor_DESC
+	return cat.IndexColumn{
+		Column:     oi.tab.Column(ord),
+		Descending: descending,
 	}
-
-	i -= length
-	length = oi.idx.NumExtraColumns()
-	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetExtraColumnID(i))
-		return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
-	}
-
-	i -= length
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (oi *optIndex) VirtualInvertedColumn() cat.IndexColumn {
+// InvertedColumn is part of the cat.Index interface.
+func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 	if !oi.IsInverted() {
-		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted virtual columns"))
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
 	}
-	ord := oi.idx.NumColumns() - 1
+	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
 }
 
@@ -1385,7 +1405,7 @@ func (oi *optIndex) Ordinal() int {
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ImplicitPartitioningColumnCount() int {
-	return int(oi.idx.GetPartitioning().NumImplicitColumns)
+	return oi.idx.GetPartitioning().NumImplicitColumns()
 }
 
 // InterleaveAncestorCount is part of the cat.Index interface.
@@ -1762,11 +1782,11 @@ func newOptVirtualTable(
 	id := cat.StableID(desc.GetID())
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
-		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		found, prefix, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
 		if err != nil {
 			return nil, err
 		}
-		if prefixI == nil {
+		if !found {
 			// The database was not found. This can happen e.g. when
 			// accessing a virtual schema over a non-existent
 			// database. This is a common scenario when the current db
@@ -1779,7 +1799,6 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 			id |= cat.StableID(prefix.Database.GetID()) << 32
 		}
 	}
@@ -1792,7 +1811,7 @@ func newOptVirtualTable(
 
 	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
 	// Init dummy PK column.
-	ot.columns[0].InitNonVirtual(
+	ot.columns[0].Init(
 		0,
 		math.MaxInt64, /* stableID */
 		"crdb_internal_vtable_pk",
@@ -1802,9 +1821,12 @@ func newOptVirtualTable(
 		cat.Hidden, /* hidden */
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
+		nil,        /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
 	)
 	for i, d := range desc.PublicColumns() {
-		ot.columns[i+1].InitNonVirtual(
+		ot.columns[i+1].Init(
 			i+1,
 			cat.StableID(d.GetID()),
 			tree.Name(d.GetName()),
@@ -1814,6 +1836,9 @@ func newOptVirtualTable(
 			cat.MaybeHidden(d.IsHidden()),
 			d.ColumnDesc().DefaultExpr,
 			d.ColumnDesc().ComputeExpr,
+			d.ColumnDesc().OnUpdateExpr,
+			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
+			d.ColumnDesc().GeneratedAsIdentitySequenceOption,
 		)
 	}
 
@@ -1838,7 +1863,7 @@ func newOptVirtualTable(
 	}
 
 	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
-		if idx.NumColumns() > 1 {
+		if idx.NumKeyColumns() > 1 {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
@@ -1977,7 +2002,7 @@ func (ot *optVirtualTable) OutboundForeignKeyCount() int {
 	return 0
 }
 
-// OutboundForeignKeyCount is part of the cat.Table interface.
+// OutboundForeignKey is part of the cat.Table interface.
 func (ot *optVirtualTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
 	panic(errors.AssertionFailedf("no FKs"))
 }
@@ -2099,9 +2124,9 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 		// Dummy PK index columns.
 		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
-	length := oi.idx.NumColumns()
+	length := oi.idx.NumKeyColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetColumnID(i))
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
@@ -2117,8 +2142,8 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
+// InvertedColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) InvertedColumn() cat.IndexColumn {
 	panic(errors.AssertionFailedf("virtual indexes are not inverted"))
 }
 
@@ -2271,7 +2296,23 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 
 	ids := make(descpb.IDs, 0, len(visitor.OIDs))
 	for collectedOid := range visitor.OIDs {
-		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
+		id, err := typedesc.UserDefinedTypeOIDToID(collectedOid)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// mapGeneratedAsIdentityType maps a descpb.GeneratedAsIdentityType into corresponding
+// cat.GeneratedAsIdentityType. This is a helper function for the read access to
+// the GeneratedAsIdentityType attribute for descpb.ColumnDescriptor.
+func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
+	mapGeneratedAsIdentityType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
+		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
+		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
+		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
+	}
+	return mapGeneratedAsIdentityType[inType]
 }

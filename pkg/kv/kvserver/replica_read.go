@@ -12,7 +12,9 @@ package kvserver
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/kr/pretty"
 )
 
@@ -61,7 +64,18 @@ func (r *Replica) executeReadOnlyBatch(
 		panic("expected consistent iterators")
 	}
 	if util.RaceEnabled {
-		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
+		// To account for direct access to separated intents in the lock table,
+		// add on corresponding lock table spans for all latches.
+		assertSpans := spans.Copy()
+		spans.Iterate(func(sa spanset.SpanAccess, _ spanset.SpanScope, span spanset.Span) {
+			ltKey, _ := keys.LockTableSingleKey(span.Key, nil)
+			var ltEndKey roachpb.Key
+			if span.EndKey != nil {
+				ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
+			}
+			assertSpans.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
+		})
+		rw = spanset.NewReadWriterAt(rw, assertSpans, ba.Timestamp)
 	}
 	defer rw.Close()
 
@@ -71,7 +85,13 @@ func (r *Replica) executeReadOnlyBatch(
 	// turn means that we can bump the timestamp cache *before* evaluation
 	// without risk of starving writes. Once we start doing that, we're free to
 	// release latches immediately after we acquire an engine iterator as long
-	// as we're performing a non-locking read.
+	// as we're performing a non-locking read. Note that this also requires that
+	// the request is not being optimistically evaluated (optimistic evaluation
+	// does not wait for latches or check locks). It would also be nice, but not
+	// required for correctness, that the read-only engine eagerly create an
+	// iterator (that is later cloned) while the latches are held, so that this
+	// request does not "see" the effect of any later requests that happen after
+	// the latches are released.
 
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
@@ -79,19 +99,68 @@ func (r *Replica) executeReadOnlyBatch(
 	)
 
 	// If the request hit a server-side concurrency retry error, immediately
-	// proagate the error. Don't assume ownership of the concurrency guard.
+	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
+		if g.EvalKind == concurrency.OptimisticEval {
+			// Since this request was not holding latches, it could have raced with
+			// intent resolution. So we can't trust it to add discovered locks, if
+			// there is a latch conflict. This means that a discovered lock plus a
+			// latch conflict will likely cause the request to evaluate at least 3
+			// times: optimistically; pessimistically and add the discovered lock;
+			// wait until resolution and evaluate pessimistically again.
+			//
+			// TODO(sumeer): scans and gets are correctly setting the resume span
+			// when returning a WriteIntentError. I am not sure about other
+			// concurrency errors. We could narrow the spans we check the latch
+			// conflicts for by using collectSpansRead as done below in the
+			// non-error path.
+			if !g.CheckOptimisticNoLatchConflicts() {
+				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			}
+		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, g, pErr
 	}
 
+	if g.EvalKind == concurrency.OptimisticEval {
+		if pErr == nil {
+			// Gather the spans that were read -- we distinguish the spans in the
+			// request from the spans that were actually read, using resume spans in
+			// the response.
+			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
+			if err != nil {
+				return nil, g, roachpb.NewError(err)
+			}
+			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
+				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			}
+		} else {
+			// There was an error, that was not classified as a concurrency retry
+			// error, and this request was not holding latches. This should be rare,
+			// and in the interest of not having subtle correctness bugs, we retry
+			// pessimistically.
+			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+		}
+	}
+
 	// Handle any local (leaseholder-only) side-effects of the request.
+	//
+	// Processing these is fine for optimistic evaluation since these were non
+	// conflicting intents so intent resolution could have been racing with this
+	// request even if latches were held.
 	intents := result.Local.DetachEncounteredIntents()
 	if pErr == nil {
 		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)
 	}
 
 	// Otherwise, update the timestamp cache and release the concurrency guard.
+	// Note:
+	// - The update to the timestamp cache is not gated on pErr == nil,
+	//   since certain semantic errors (e.g. ConditionFailedError on CPut)
+	//   require updating the timestamp cache (see updatesTSCacheOnErr).
+	// - For optimistic evaluation, used for limited scans, the update to the
+	//   timestamp cache limits itself to the spans that were read, by using
+	//   the ResumeSpans.
 	ec, g := endCmds{repl: r, g: g, st: st}, nil
 	ec.done(ctx, ba, br, pErr)
 
@@ -124,6 +193,54 @@ func (r *Replica) executeReadOnlyBatch(
 	return br, nil, pErr
 }
 
+// evalContextWithAccount wraps an EvalContext to provide a non-nil
+// mon.BoundAccount. This wrapping is conditional on various factors, and
+// specific to a request (see executeReadOnlyBatchWithServersideRefreshes),
+// which is why the implementation of EvalContext by Replica does not by
+// default provide a non-nil mon.BoundAccount.
+//
+// If we start using evalContextWithAccount on more code paths we should
+// consider using it everywhere and lift it to an earlier point in the code.
+// Then code that decides that we need a non-nil BoundAccount can set a field
+// instead of wrapping.
+type evalContextWithAccount struct {
+	batcheval.EvalContext
+	memAccount *mon.BoundAccount
+}
+
+var evalContextWithAccountPool = sync.Pool{
+	New: func() interface{} {
+		return &evalContextWithAccount{}
+	},
+}
+
+// newEvalContextWithAccount creates an evalContextWithAccount with an account
+// connected to the given monitor. It uses a sync.Pool.
+func newEvalContextWithAccount(
+	ctx context.Context, evalCtx batcheval.EvalContext, mon *mon.BytesMonitor,
+) *evalContextWithAccount {
+	ec := evalContextWithAccountPool.Get().(*evalContextWithAccount)
+	ec.EvalContext = evalCtx
+	if ec.memAccount != nil {
+		ec.memAccount.Init(ctx, mon)
+	} else {
+		acc := mon.MakeBoundAccount()
+		ec.memAccount = &acc
+	}
+	return ec
+}
+
+// close returns the accounted memory and returns objects to the sync.Pool.
+func (e *evalContextWithAccount) close(ctx context.Context) {
+	e.memAccount.Close(ctx)
+	// Clear the BoundAccount struct, so it can be later reused.
+	*e.memAccount = mon.BoundAccount{}
+	evalContextWithAccountPool.Put(e)
+}
+func (e evalContextWithAccount) GetResponseMemoryAccount() *mon.BoundAccount {
+	return e.memAccount
+}
+
 // executeReadOnlyBatchWithServersideRefreshes invokes evaluateBatch and retries
 // at a higher timestamp in the event of some retriable errors if allowed by the
 // batch/txn.
@@ -137,8 +254,50 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
+	var rootMonitor *mon.BytesMonitor
+	// Only do memory allocation accounting if the request did not originate
+	// locally, or for a local request that has reserved no memory. Local
+	// requests (originating in DistSQL) do memory accounting before issuing the
+	// request. Even though the accounting for the first request in the caller
+	// is small (the NoMemoryReservedAtSource=true case), subsequent ones use
+	// the size of the response for subsequent requests (see row.txnKVFetcher).
+	// Note that we could additionally add an OR-clause with
+	// ba.AdmissionHeader.Source != FROM_SQL for the if-block that does memory
+	// accounting. We don't do that currently since there are some SQL requests
+	// that are not marked as FROM_SQL.
+	//
+	// This whole scheme could be tightened, both in terms of marking, and
+	// compensating for the amount of memory reserved at the source.
+	//
+	// TODO(sumeer): for multi-tenant KV we should be accounting on a per-tenant
+	// basis and not letting a single tenant consume all the memory (we could
+	// place a limit equal to total/2).
+	if ba.AdmissionHeader.SourceLocation != roachpb.AdmissionHeader_LOCAL ||
+		ba.AdmissionHeader.NoMemoryReservedAtSource {
+		// rootMonitor will never be nil in production settings, but it can be nil
+		// for tests that do not have a monitor.
+		rootMonitor = r.store.getRootMemoryMonitorForKV()
+	}
+	var boundAccount *mon.BoundAccount
+	if rootMonitor != nil {
+		evalCtx := newEvalContextWithAccount(ctx, rec, rootMonitor)
+		boundAccount = evalCtx.memAccount
+		// Closing evalCtx also closes boundAccount. Memory is not actually
+		// released when this function returns, but at least the batch is fully
+		// evaluated. Ideally we would like to release after grpc has sent the
+		// response, but there are no interceptors at that stage. The interceptors
+		// execute before the response is marshaled in Server.processUnaryRPC by
+		// calling sendResponse. We are intentionally not using finalizers because
+		// they delay GC and because they have had bugs in the past (and can
+		// prevent GC of objects with cyclic references).
+		defer evalCtx.close(ctx)
+		rec = evalCtx
+	}
+
 	for retries := 0; ; retries++ {
 		if retries > 0 {
+			// It is safe to call Clear on an uninitialized BoundAccount.
+			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, lul, true /* readOnly */)
@@ -184,4 +343,66 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
+}
+
+// collectSpansRead uses the spans declared in the requests, and the resume
+// spans in the responses, to construct the effective spans that were read,
+// and uses that to compute the latch and lock spans.
+func (r *Replica) collectSpansRead(
+	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
+	baCopy := *ba
+	baCopy.Requests = make([]roachpb.RequestUnion, len(baCopy.Requests))
+	j := 0
+	for i := 0; i < len(baCopy.Requests); i++ {
+		baReq := ba.Requests[i]
+		req := baReq.GetInner()
+		header := req.Header()
+
+		resp := br.Responses[i].GetInner()
+		if resp.Header().ResumeSpan == nil {
+			// Fully evaluated.
+			baCopy.Requests[j] = baReq
+			j++
+			continue
+		}
+
+		switch t := resp.(type) {
+		case *roachpb.ScanResponse:
+			if header.Key.Equal(t.ResumeSpan.Key) {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			// The scan will resume at the inclusive ResumeSpan.Key. So
+			// ResumeSpan.Key has not been read and becomes the exclusive end key of
+			// what was read.
+			header.EndKey = t.ResumeSpan.Key
+		case *roachpb.ReverseScanResponse:
+			if header.EndKey.Equal(t.ResumeSpan.EndKey) {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			// The scan will resume at the exclusive ResumeSpan.EndKey and proceed
+			// towards the current header.Key. So ResumeSpan.EndKey has been read
+			// and becomes the inclusive start key of what was read.
+			header.Key = t.ResumeSpan.EndKey
+		default:
+			// Consider it fully evaluated, which is safe.
+			baCopy.Requests[j] = baReq
+			j++
+			continue
+		}
+		// The ResumeSpan has changed the header.
+		req = req.ShallowCopy()
+		req.SetHeader(header)
+		baCopy.Requests[j].MustSetInner(req)
+		j++
+	}
+	baCopy.Requests = baCopy.Requests[:j]
+
+	// Collect the batch's declared spans again, this time with the
+	// span bounds constrained to what was read.
+	var err error
+	latchSpans, lockSpans, _, err = r.collectSpans(&baCopy)
+	return latchSpans, lockSpans, err
 }

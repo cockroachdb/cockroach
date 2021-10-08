@@ -97,14 +97,6 @@ func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	return roachpb.NodeID(nodeID), err
 }
 
-// StoreSuggestedCompactionKeyPrefix returns a store-local prefix for all
-// suggested compaction keys. These are unused in versions 21.1 and later.
-//
-// TODO(bilal): Delete this method along with any related uses of it after 21.1.
-func StoreSuggestedCompactionKeyPrefix() roachpb.Key {
-	return MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
-}
-
 // StoreCachedSettingsKey returns a store-local key for store's cached settings.
 func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
 	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
@@ -284,12 +276,10 @@ func RangeStatsLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeStatsLegacyKey()
 }
 
-// RangeLastGCKey returns a system-local key for last used GC threshold on the
+// RangeGCThresholdKey returns a system-local key for last used GC threshold on the
 // user keyspace. Reads and writes <= this timestamp will not be served.
-//
-// TODO(tschottdorf): should be renamed to RangeGCThresholdKey.
-func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RangeLastGCKey()
+func RangeGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeGCThresholdKey()
 }
 
 // RangeVersionKey returns a system-local for the range version.
@@ -417,6 +407,13 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // processed times.
 func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
+}
+
+// RangeProbeKey returns a range-local key for probing. The
+// purpose of the key is to test CRDB in production; if any data is present at
+// the key, it has no purpose except in allowing testing CRDB in production.
+func RangeProbeKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, LocalRangeProbeSuffix, nil)
 }
 
 // LockTableSingleKey creates a key under which all single-key locks for the
@@ -553,20 +550,25 @@ func MustAddr(k roachpb.Key) roachpb.RKey {
 // range-local key, which is guaranteed to be located on the same range.
 // AddrUpperBound() returns the regular key that is just to the right, which may
 // not be on the same range but is suitable for use as the EndKey of a span
-// involving a range-local key.
+// involving a range-local key. The one exception to this is the local key
+// prefix itself; that continues to return the left key as having that as the
+// upper bound excludes all local keys.
 //
 // Logically, the keys are arranged as follows:
 //
 // k1 /local/k1/KeyMin ... /local/k1/KeyMax k1\x00 /local/k1/x00/KeyMin ...
 //
 // and so any end key /local/k1/x corresponds to an address-resolved end key of
-// k1\x00.
+// k1\x00, with the exception of /local/k1 itself (no suffix) which corresponds
+// to an address-resolved end key of k1.
 func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	rk, err := Addr(k)
 	if err != nil {
 		return rk, err
 	}
-	if IsLocal(k) {
+	// If k is the RangeKeyPrefix, it excludes all range local keys under rk.
+	// The Next() is not necessary.
+	if IsLocal(k) && !k.Equal(MakeRangeKeyPrefix(rk)) {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
 		rk = rk.Next()
@@ -655,6 +657,11 @@ func UserKey(key roachpb.RKey) roachpb.RKey {
 	buf = append(buf, prefix...)
 	buf = append(buf, key...)
 	return buf
+}
+
+// InMeta1 returns true iff a key is in the meta1 range (which includes RKeyMin).
+func InMeta1(k roachpb.RKey) bool {
+	return k.Equal(roachpb.RKeyMin) || bytes.HasPrefix(k, MustAddr(Meta1Prefix))
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
@@ -971,9 +978,9 @@ func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeStatsLegacySuffix...)
 }
 
-// RangeLastGCKey returns a system-local key for the last GC.
-func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
+// RangeGCThresholdKey returns a system-local key for the GC threshold.
+func (b RangeIDPrefixBuf) RangeGCThresholdKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeGCThresholdSuffix...)
 }
 
 // RangeVersionKey returns a system-local key for the range version.

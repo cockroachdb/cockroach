@@ -77,9 +77,9 @@ func (b *Builder) buildDataSource(
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			locking.ignoreLockingForCTE()
 			outScope = inScope.push()
-			inCols := make(opt.ColList, len(cte.cols))
-			outCols := make(opt.ColList, len(cte.cols))
-			outScope.cols = nil
+			inCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outScope.cols, outScope.extraCols = nil, nil
 			for i, col := range cte.cols {
 				id := col.ID
 				c := b.factory.Metadata().ColumnMeta(id)
@@ -87,6 +87,34 @@ func (b *Builder) buildDataSource(
 				newCol.table = *tn
 				inCols[i] = id
 				outCols[i] = newCol.id
+			}
+
+			if b.evalCtx.SessionData().PropagateInputOrdering && len(inScope.ordering) > 0 {
+				var oldToNew opt.ColMap
+				for i := range inCols {
+					oldToNew.Set(int(inCols[i]), int(outCols[i]))
+				}
+				outScope.ordering = make(opt.Ordering, len(inScope.ordering))
+				for i, col := range inScope.ordering {
+					var newID int
+					var ok bool
+					if newID, ok = oldToNew.Get(int(col.ID())); !ok {
+						c := b.factory.Metadata().ColumnMeta(col.ID())
+						outScope.extraCols = append(outScope.extraCols,
+							scopeColumn{
+								name: scopeColName(tree.Name("order_" + c.Alias)),
+								typ:  c.Type,
+							},
+						)
+						newCol := &outScope.extraCols[len(outScope.extraCols)-1]
+						b.populateSynthesizedColumn(newCol, nil)
+						newCol.table = *tn
+						newID = int(newCol.id)
+						inCols = append(inCols, col.ID())
+						outCols = append(outCols, newCol.id)
+					}
+					outScope.ordering[i] = opt.MakeOrderingColumn(opt.ColumnID(newID), col.Descending())
+				}
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
@@ -116,7 +144,7 @@ func (b *Builder) buildDataSource(
 				tableOrdinals(t, columnKinds{
 					includeMutations:       false,
 					includeSystem:          true,
-					includeVirtualInverted: false,
+					includeInverted:        false,
 					includeVirtualComputed: true,
 				}),
 				indexFlags, locking, inScope,
@@ -357,7 +385,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 					))
 				}
 				col := &scope.cols[colIdx]
-				if col.visibility != cat.Visible {
+				if col.visibility != visible {
 					continue
 				}
 				col.name = scopeColName(colAlias[aliasIdx])
@@ -400,7 +428,7 @@ func (b *Builder) buildScanFromTableRef(
 		ordinals = tableOrdinals(tab, columnKinds{
 			includeMutations:       false,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		})
 	}
@@ -484,7 +512,7 @@ func (b *Builder) buildScan(
 			name:         scopeColName(name),
 			table:        tabMeta.Alias,
 			typ:          col.DatumType(),
-			visibility:   col.Visibility(),
+			visibility:   columnVisibility(col.Visibility()),
 			kind:         kind,
 			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
 			tableOrdinal: ord,
@@ -510,6 +538,7 @@ func (b *Builder) buildScan(
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
@@ -522,9 +551,11 @@ func (b *Builder) buildScan(
 			if idx == -1 {
 				var err error
 				if indexFlags.Index != "" {
-					err = errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index %q not found", tree.ErrString(&indexFlags.Index))
 				} else {
-					err = errors.Errorf("index [%d] not found", indexFlags.IndexID)
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index [%d] not found", indexFlags.IndexID)
 				}
 				panic(err)
 			}
@@ -532,9 +563,52 @@ func (b *Builder) buildScan(
 			private.Flags.Index = idx
 			private.Flags.Direction = indexFlags.Direction
 		}
+		private.Flags.ForceZigzag = indexFlags.ForceZigzag
+		if len(indexFlags.ZigzagIndexes) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, name := range indexFlags.ZigzagIndexes {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).Name() == tree.Name(name) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
+				}
+			}
+		}
+		if len(indexFlags.ZigzagIndexIDs) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, id := range indexFlags.ZigzagIndexIDs {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).ID() == cat.StableID(id) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index [%d] not found", id))
+				}
+			}
+		}
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+	}
+	if b.evalCtx.AsOfSystemTime != nil && b.evalCtx.AsOfSystemTime.BoundedStaleness {
+		private.Flags.NoIndexJoin = true
+		private.Flags.NoZigzagJoin = true
 	}
 
 	b.addCheckConstraintsForTable(tabMeta)
@@ -544,8 +618,6 @@ func (b *Builder) buildScan(
 
 	// Add the partial indexes after constructing the scan so we can use the
 	// logical properties of the scan to fully normalize the index predicates.
-	// We don't need to add deletable partial index predicates in the context of
-	// a scan.
 	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
 
 	if !virtualColIDs.Empty() {
@@ -653,7 +725,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		if memo.ExprIsNeverNull(condition, notNullCols) {
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(condition, &sharedProps)
+			memo.BuildSharedProps(condition, &sharedProps, b.evalCtx)
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				filters = append(filters, b.factory.ConstructFiltersItem(condition))
 			}
@@ -709,7 +781,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			})
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(scalar, &sharedProps)
+			memo.BuildSharedProps(scalar, &sharedProps, b.evalCtx)
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				tabMeta.AddComputedCol(colID, scalar)
 			}
@@ -1178,18 +1250,27 @@ func (b *Builder) buildFromWithLateral(
 
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
-func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
+func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
+	asOf, err := tree.EvalAsOfTimestamp(
+		b.ctx,
+		asOfClause,
+		b.semaCtx,
+		b.evalCtx,
+		tree.EvalAsOfTimestampOptionAllowBoundedStaleness,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	if b.semaCtx.AsOfTimestamp == nil {
+	if b.evalCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.semaCtx.AsOfTimestamp != ts {
+	// Allow anything with max_timestamp_bound to differ, as this
+	// is a retry and we expect AOST to differ.
+	if *b.evalCtx.AsOfSystemTime != asOf &&
+		b.evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}

@@ -1,0 +1,3 @@
+show_survival_goal_stmt ::=
+	'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE'
+	| 'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE' database_name

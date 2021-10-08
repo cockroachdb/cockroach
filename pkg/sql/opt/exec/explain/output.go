@@ -13,6 +13,7 @@ package explain
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -146,12 +147,14 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinf
 	if ob.flags.HideValues {
 		flags |= tree.FmtHideConstants
 	}
-	f := tree.NewFmtCtx(flags)
-	f.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-		// Ensure proper quoting.
-		n := tree.Name(varColumns[idx].Name)
-		ctx.WriteString(n.String())
-	})
+	f := tree.NewFmtCtx(
+		flags,
+		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			// Ensure proper quoting.
+			n := tree.Name(varColumns[idx].Name)
+			ctx.WriteString(n.String())
+		}),
+	)
 	f.FormatNode(expr)
 	ob.AddField(key, f.CloseAndGetString())
 }
@@ -408,4 +411,13 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 		ob.AddTopLevelField("max sql temp disk usage",
 			humanizeutil.IBytes(bytes))
 	}
+}
+
+// AddRegionsStats adds a top-level field for regions executed on statistics.
+func (ob *OutputBuilder) AddRegionsStats(regions []string) {
+	ob.AddRedactableTopLevelField(
+		RedactNodes,
+		"regions",
+		strings.Join(regions, ", "),
+	)
 }

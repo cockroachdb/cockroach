@@ -71,7 +71,13 @@ func performGC(
 
 		// Drop database zone config when all the tables have been GCed.
 		if details.ParentID != descpb.InvalidID && isDoneGC(progress) {
-			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, execCfg.Codec, details.ParentID); err != nil {
+			if err := deleteDatabaseZoneConfig(
+				ctx,
+				execCfg.DB,
+				execCfg.Codec,
+				execCfg.Settings,
+				details.ParentID,
+			); err != nil {
 				return errors.Wrap(err, "deleting database zone config")
 			}
 		}
@@ -80,7 +86,12 @@ func performGC(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
+	defer func() {
+		if err != nil && !r.isPermanentGCError(err) {
+			err = jobs.MarkAsRetryJobError(err)
+		}
+	}()
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
@@ -99,7 +110,8 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	if len(details.InterleavedIndexes) > 0 {
 		// Before deleting any indexes, ensure that old versions of the table
 		// descriptor are no longer in use.
-		if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID); err != nil {
+		_, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID)
+		if err != nil {
 			return err
 		}
 		interleavedIndexIDs := make([]descpb.IndexID, len(details.InterleavedIndexes))
@@ -183,6 +195,15 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}) error {
 	return nil
+}
+
+// isPermanentGCError returns true if the error is a permanent job failure,
+// which indicates that the failed GC job cannot be retried.
+func (r *schemaChangeGCResumer) isPermanentGCError(err error) bool {
+	// Currently we classify errors based on Schema Change function to backport
+	// to 20.2 and 21.1. This functionality should be changed once #44594 is
+	// implemented.
+	return sql.IsPermanentSchemaChangeError(err)
 }
 
 func init() {

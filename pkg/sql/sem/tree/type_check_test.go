@@ -200,6 +200,9 @@ func TestTypeCheck(t *testing.T) {
 		{`(('{' || 'a' ||'}')::STRING[])[1]::STRING`, `((('{':::STRING || 'a':::STRING) || '}':::STRING)::STRING[])[1:::INT8]`},
 		{`(('{' || '1' ||'}')::INT[])[1]`, `((('{':::STRING || '1':::STRING) || '}':::STRING)::INT8[])[1:::INT8]`},
 		{`(ARRAY[1, 2, 3]::int[])[2]`, `(ARRAY[1:::INT8, 2:::INT8, 3:::INT8]:::INT8[])[2:::INT8]`},
+
+		// String preference.
+		{`st_geomfromgeojson($1)`, `st_geomfromgeojson($1:::STRING):::GEOMETRY`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {
@@ -312,6 +315,10 @@ func TestTypeCheckError(t *testing.T) {
 		{
 			`(pg_get_keywords()).foo`,
 			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
+		},
+		{
+			`((1,2,3)).foo`,
+			`could not identify column "foo" in record data type`,
 		},
 		{
 			`1::d.notatype`,

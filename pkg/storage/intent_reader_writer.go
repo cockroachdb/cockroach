@@ -14,39 +14,12 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-)
-
-// SeparatedIntentsEnabled controls whether separated intents are written. A
-// true setting is also gated on clusterversion.SeparatedIntents. After all
-// nodes in a cluster are at or beyond clusterversion.SeparatedIntents,
-// different nodes will see the version state transition at different times.
-// Even nodes that have not yet seen the transition need to be able to read
-// separated intents and to write over separated intents (due to a lease
-// transfer from a node that has seen the transition to one that has not).
-// Therefore, the clusterversion and the value of this setting do not affect
-// whether intentDemuxWriter or intentInterleavingReader are used. They only
-// affect whether intentDemuxWriter will write separated intents. As expected,
-// this value can be set to false to disable writing of separated intents.
-//
-// Currently there is no long-running migration to replace all interleaved
-// intents with separated intents, but we expect that when a cluster has been
-// running with this flag set to true for some time, most ranges will only
-// have separated intents. Similarly, setting this to false will gradually
-// cause most ranges to only have interleaved intents.
-var SeparatedIntentsEnabled = settings.RegisterBoolSetting(
-	"storage.transaction.separated_intents.enabled",
-	"if enabled, intents will be written to a separate lock table, instead of being "+
-		"interleaved with MVCC values",
-	true,
 )
 
 // This file defines wrappers for Reader and Writer, and functions to do the
@@ -56,32 +29,17 @@ var SeparatedIntentsEnabled = settings.RegisterBoolSetting(
 // PutIntent, ClearIntent, ClearMVCCRangeAndIntents.
 type intentDemuxWriter struct {
 	w Writer
-	// Must be non-nil if this intentDemuxWriter is used. We do the checking
-	// lazily when methods are called since the clients of intentDemuxWriter
-	// initialize it up-front, but don't know if they are being used by code
-	// that cares about intents (e.g. a temporary Engine used for disk-spilling
-	// during query execution will never read-write intents).
-	settings *cluster.Settings
 
-	cachedSettingsAreValid             bool
-	clusterVersionIsRecentEnoughCached bool
-	writeSeparatedIntentsCached        bool
+	// Can only be set to true by testing knobs to disable writing of separated
+	// intents.
+	disableSeparatedIntents bool
 }
 
 func wrapIntentWriter(
-	ctx context.Context, w Writer, settings *cluster.Settings, isLongLived bool,
+	ctx context.Context, w Writer, disableSeparatedIntents bool,
 ) intentDemuxWriter {
-	idw := intentDemuxWriter{w: w, settings: settings}
-	if !isLongLived && settings != nil {
-		// Cache the settings for performance.
-		idw.cachedSettingsAreValid = true
-		// Be resilient to the version not yet being initialized.
-		idw.clusterVersionIsRecentEnoughCached = !idw.settings.Version.ActiveVersionOrEmpty(ctx).Less(
-			clusterversion.ByKey(clusterversion.SeparatedIntents))
-
-		idw.writeSeparatedIntentsCached =
-			SeparatedIntentsEnabled.Get(&idw.settings.SV)
-	}
+	idw := intentDemuxWriter{w: w}
+	idw.disableSeparatedIntents = disableSeparatedIntents
 	return idw
 }
 
@@ -95,9 +53,6 @@ func (idw intentDemuxWriter) ClearIntent(
 	txnUUID uuid.UUID,
 	buf []byte,
 ) (_ []byte, separatedIntentCountDelta int, _ error) {
-	if idw.settings == nil {
-		return nil, 0, errors.AssertionFailedf("intentDemuxWriter not configured with cluster.Setttings")
-	}
 	switch state {
 	case ExistingIntentInterleaved:
 		return buf, 0, idw.w.ClearUnversioned(key)
@@ -129,22 +84,7 @@ func (idw intentDemuxWriter) PutIntent(
 	txnUUID uuid.UUID,
 	buf []byte,
 ) (_ []byte, separatedIntentCountDelta int, _ error) {
-	if idw.settings == nil {
-		return nil, 0, errors.AssertionFailedf("intentDemuxWriter not configured with cluster.Setttings")
-	}
-	var writeSeparatedIntents bool
-	if idw.cachedSettingsAreValid {
-		// Fast-path
-		writeSeparatedIntents = idw.clusterVersionIsRecentEnoughCached && idw.writeSeparatedIntentsCached
-	} else {
-		// Slow-path, when doing writes on the Engine directly. This should not be
-		// performance sensitive code.
-		writeSeparatedIntents =
-			// Be resilient to the version not yet being initialized.
-			!idw.settings.Version.ActiveVersionOrEmpty(ctx).Less(
-				clusterversion.ByKey(clusterversion.SeparatedIntents)) &&
-				SeparatedIntentsEnabled.Get(&idw.settings.SV)
-	}
+	writeSeparatedIntents := !idw.disableSeparatedIntents
 	var engineKey EngineKey
 	if state == ExistingIntentSeparated || writeSeparatedIntents {
 		engineKey, buf = LockTableKey{
@@ -191,9 +131,6 @@ func (idw intentDemuxWriter) PutIntent(
 func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
 	start, end roachpb.Key, buf []byte,
 ) ([]byte, error) {
-	if idw.settings == nil {
-		return nil, errors.AssertionFailedf("intentDemuxWriter not configured with cluster.Setttings")
-	}
 	err := idw.w.ClearRawRange(start, end)
 	if err != nil {
 		return buf, err
@@ -201,20 +138,6 @@ func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
 	return buf, idw.w.ClearRawRange(lstart, lend)
-}
-
-func (idw intentDemuxWriter) safeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
-	if idw.settings == nil {
-		return false,
-			errors.Errorf(
-				"intentDemuxWriter without cluster.Settings does not support SafeToWriteSeparatedIntents")
-	}
-	if idw.cachedSettingsAreValid {
-		return idw.clusterVersionIsRecentEnoughCached, nil
-	}
-	// Be resilient to the version not yet being initialized.
-	return !idw.settings.Version.ActiveVersionOrEmpty(ctx).Less(
-		clusterversion.ByKey(clusterversion.SeparatedIntents)), nil
 }
 
 // wrappableReader is used to implement a wrapped Reader. A wrapped Reader

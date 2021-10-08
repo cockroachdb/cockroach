@@ -1,14 +1,15 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "storage",
     srcs = [
         "array_32bit.go",
         "array_64bit.go",
+        "ballast.go",
         "batch.go",
         "disk_map.go",
         "doc.go",
-        "enable_cc.cc",
         "engine.go",
         "engine_key.go",
         "error.go",
@@ -16,69 +17,40 @@ go_library(
         "in_mem.go",
         "intent_interleaving_iter.go",
         "intent_reader_writer.go",
+        "min_version.go",
         "multi_iterator.go",
         "mvcc.go",
         "mvcc_incremental_iterator.go",
         "mvcc_logical_ops.go",
+        "open.go",
         "pebble.go",
         "pebble_batch.go",
         "pebble_file_registry.go",
         "pebble_iterator.go",
         "pebble_merge.go",
         "pebble_mvcc_scanner.go",
+        "resource_limiter.go",
         "row_counter.go",
         "slice.go",
         "slice_go1.9.go",
-        "sst_info.go",
         "sst_iterator.go",
         "sst_writer.go",
-        "stacks.go",
         "temp_dir.go",
         "temp_engine.go",
+        "testing_knobs.go",
+        ":gen-resourcelimitreached-stringer",  # keep
     ],
-    # List out all the c-dependencies pkg/storage depends on.
-    cdeps = [
-        "@cockroach//c-deps:libroach",
-    ],
-    cgo = True,
-
-    # Pin the clinkopts, we don't have to link libroach directly (which gazelle
-    # would auto-generate through the cgo tags if left unpinned. Those linker
-    # directives are implicitly defined by listing out the appropriate
-    # c-dependencies above.
-    #
-    # keep
-    clinkopts = select({
-        "@io_bazel_rules_go//go/platform:dragonfly": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:linux": [
-            "-lrt -lm -lpthread",
-            "-lrt -lpthread",
-        ],
-        "@io_bazel_rules_go//go/platform:windows": [
-            "-lshlwapi -lrpcrt4",
-        ],
-        "//conditions:default": [],
-    }),
-    # We do the same for the include directives. By defining the appropriate
-    # c-dependencies above, bazel determines the right ones automagically.
-    #
-    # keep
-    cppopts = [],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/observedts",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
@@ -91,21 +63,25 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/iterutil",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//bloom",
+        "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_pebble//vfs/atomicfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
-        "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
     ],
 )
@@ -114,6 +90,7 @@ go_test(
     name = "storage_test",
     size = "medium",
     srcs = [
+        "ballast_test.go",
         "batch_test.go",
         "bench_pebble_test.go",
         "bench_test.go",
@@ -124,6 +101,7 @@ go_test(
         "intent_interleaving_iter_test.go",
         "intent_reader_writer_test.go",
         "main_test.go",
+        "min_version_test.go",
         "multi_iterator_test.go",
         "mvcc_history_test.go",
         "mvcc_incremental_iterator_test.go",
@@ -133,7 +111,7 @@ go_test(
         "pebble_file_registry_test.go",
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
-        "sst_info_test.go",
+        "resource_limiter_test.go",
         "sst_iterator_test.go",
         "sst_writer_test.go",
         "temp_dir_test.go",
@@ -143,10 +121,11 @@ go_test(
     embed = [":storage"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
@@ -161,10 +140,12 @@ go_test(
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/shuffle",
         "//pkg/util/stop",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
@@ -173,10 +154,17 @@ go_test(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_protobuf//proto",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-resourcelimitreached-stringer",
+    src = "resource_limiter.go",
+    typ = "ResourceLimitReached",
 )

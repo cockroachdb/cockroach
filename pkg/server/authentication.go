@@ -254,8 +254,12 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
-		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
+		ctx,
+		s.server.sqlServer.execCfg,
+		s.server.sqlServer.execCfg.InternalExecutor,
+		username,
+		"", /* databaseName */
 	)
 
 	if err != nil {
@@ -413,8 +417,12 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
-		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+		ctx,
+		s.server.sqlServer.execCfg,
+		s.server.sqlServer.execCfg.InternalExecutor,
+		username,
+		"", /* databaseName */
 	)
 	if err != nil {
 		return false, false, err
@@ -427,17 +435,13 @@ func (s *authenticationServer) verifyPassword(
 		return false, false, err
 	}
 
-	validUntil, err := validUntilFn(ctx)
-	if err != nil {
-		return false, false, err
-	}
 	if validUntil != nil {
 		if validUntil.Time.Sub(timeutil.Now()) < 0 {
 			return false, true, nil
 		}
 	}
 
-	return security.CompareHashAndPassword(hashedPassword, password) == nil, false, nil
+	return security.CompareHashAndPassword(ctx, hashedPassword, password) == nil, false, nil
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.

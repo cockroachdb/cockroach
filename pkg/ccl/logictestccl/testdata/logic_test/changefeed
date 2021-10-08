@@ -3,6 +3,9 @@
 statement ok
 CREATE TABLE t ()
 
+statement ok
+SET CLUSTER SETTING kv.rangefeed.enabled = true
+
 user testuser
 
 statement error permission denied to create changefeed

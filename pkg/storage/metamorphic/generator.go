@@ -37,14 +37,11 @@ func makeStorageConfig(path string) base.StorageConfig {
 }
 
 func createTestPebbleEngine(path string, seed int64) (storage.Engine, error) {
-	pebbleConfig := storage.PebbleConfig{
-		StorageConfig: makeStorageConfig(path),
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return storage.NewPebble(context.Background(), pebbleConfig)
+	return storage.Open(
+		context.Background(),
+		storage.Filesystem(path),
+		storage.CacheSize(1<<20 /* 1 MiB */),
+		storage.Settings(cluster.MakeTestingClusterSettings()))
 }
 
 func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {

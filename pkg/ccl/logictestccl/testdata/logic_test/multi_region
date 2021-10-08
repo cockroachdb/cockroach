@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
 query TTTT colnames
 SHOW REGIONS
@@ -90,13 +90,19 @@ SET sql_safe_updates = true;
 USE multi_region_test_db
 
 # Ensure that the region types were created for all the MR databases above.
-query IITI colnames
-SELECT * FROM system.namespace WHERE name='crdb_internal_region'
+query ITT colnames
+SELECT
+  e."parentSchemaID",
+  parent.name AS db_name,
+  e.name AS enum_name
+FROM system.namespace e
+JOIN system.namespace parent ON (e."parentID" = parent.id)
+WHERE e.name='crdb_internal_region'
 ----
-parentID  parentSchemaID  name                  id
-55        29              crdb_internal_region  56
-58        29              crdb_internal_region  59
-61        29              crdb_internal_region  62
+parentSchemaID  db_name                                       enum_name
+29              multi_region_test_db                          crdb_internal_region
+29              multi_region_test_explicit_primary_region_db  crdb_internal_region
+29              region_test_db                                crdb_internal_region
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
@@ -136,6 +142,15 @@ ALTER TYPE multi_region_test_db.public.crdb_internal_region ADD VALUE 'us-east-1
 
 statement error "multi_region_test_db.public.crdb_internal_region" is a multi-region enum and can't be modified using the alter type command
 ALTER TYPE multi_region_test_db.public.crdb_internal_region DROP VALUE 'us-east-1'
+
+statement ok
+GRANT ALL ON DATABASE multi_region_test_db TO testuser;
+ALTER TYPE multi_region_test_db.public.crdb_internal_region OWNER TO testuser
+
+query T
+SELECT owner FROM [SHOW TYPES] WHERE name = 'crdb_internal_region' AND schema = 'public'
+----
+testuser
 
 statement error region "region_no_exists" does not exist\nHINT:.*valid regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists" REGION "region_no_exists"
@@ -554,8 +569,9 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
                         lease_preferences = '[[+region=ca-central-1]]'
 
 # Test adding a region after first region.
-statement ok
-ALTER DATABASE alter_test_db ADD REGION "us-east-1"
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "us-east-1"
+----
 
 query TTBT colnames
 show regions from database alter_test_db
@@ -591,11 +607,24 @@ ALTER DATABASE alter_test_db ADD REGION "test"
 statement error pgcode 42710 region "ap-southeast-2" already added to database
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "ap-southeast-2"
+----
+NOTICE: region "ap-southeast-2" already exists; skipping
+
 statement error cannot add region
 ALTER DATABASE new_db ADD REGION "us-west-1"
 
 statement error pq: database has no regions to drop
 ALTER DATABASE new_db DROP REGION "us-west-1"
+
+query TTBT colnames
+show regions from database alter_test_db
+----
+database       region          primary  zones
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 statement ok
 CREATE DATABASE alter_primary_region_db
@@ -1011,6 +1040,11 @@ CREATE DATABASE non_multi_region_db
 statement error pq: database has no regions to drop
 ALTER DATABASE non_multi_region_db DROP REGION "ca-central-1"
 
+query T noticetrace
+ALTER DATABASE non_multi_region_db DROP REGION IF EXISTS "ca-central-1"
+----
+NOTICE: region "ca-central-1" is not defined on the database; skipping
+
 statement ok
 CREATE DATABASE drop_region_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
 USE drop_region_db
@@ -1018,8 +1052,9 @@ USE drop_region_db
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
-statement ok
-ALTER DATABASE drop_region_db DROP REGION "us-east-1"
+query T noticetrace
+ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
+----
 
 # Ensure that events are generated for dropping the region
 query IT
@@ -1027,7 +1062,15 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
 ----
-1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION \"us-east-1\"", "Tag": "ALTER DATABASE DROP REGION", "User": "root"}
+1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION IF EXISTS \"us-east-1\"", "Tag": "ALTER DATABASE DROP REGION", "User": "root"}
+
+query T noticetrace
+ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
+----
+NOTICE: region "us-east-1" is not defined on the database; skipping
+
+statement error pgcode 42704 region "non-existent-region" has not been added to the database
+ALTER DATABASE drop_region_db DROP REGION "non-existent-region"
 
 query TTBT colnames
 SHOW REGIONS FROM DATABASE drop_region_db
@@ -1054,10 +1097,6 @@ CREATE TABLE drop_region_db.public.t(a int) LOCALITY REGIONAL BY TABLE IN "ap-so
 statement ok
 CREATE TABLE global_table () LOCALITY GLOBAL
 
-statement ok
-CREATE TABLE global_table_custom_gc_ttl () LOCALITY GLOBAL;
-ALTER TABLE global_table_custom_gc_ttl CONFIGURE ZONE USING gc.ttlseconds = 10
-
 statement error pq: could not remove enum value "ap-southeast-2" as it is the home region for table "t"
 ALTER DATABASE drop_region_db DROP REGION "ap-southeast-2"
 
@@ -1073,10 +1112,9 @@ ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 query TT colnames
 SELECT table_name, locality FROM [SHOW TABLES]
 ----
-table_name                  locality
-regional_by_table           NULL
-global_table                NULL
-global_table_custom_gc_ttl  NULL
+table_name         locality
+regional_by_table  NULL
+global_table       NULL
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE global_table
@@ -1088,17 +1126,6 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                num_replicas = 3,
                constraints = '[]',
                lease_preferences = '[]'
-
-query TT
-SHOW ZONE CONFIGURATION FOR TABLE global_table_custom_gc_ttl
-----
-TABLE global_table_custom_gc_ttl  ALTER TABLE global_table_custom_gc_ttl CONFIGURE ZONE USING
-                                  range_min_bytes = 134217728,
-                                  range_max_bytes = 536870912,
-                                  gc.ttlseconds = 10,
-                                  num_replicas = 3,
-                                  constraints = '[]',
-                                  lease_preferences = '[]'
 
 # Test a table that is implicitly homed in the primary region because it was
 # created before the first region was added to the multi-region DB.
@@ -1270,51 +1297,6 @@ statement ok
 ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
 
 statement ok
-CREATE DATABASE gc_ttl_predefined_db
-
-query TT
-SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
-----
-RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
-
-statement ok
-ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING gc.ttlseconds = 10;
-ALTER DATABASE gc_ttl_predefined_db PRIMARY REGION "ca-central-1"
-
-query TT
-SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
-----
-DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING
-                               range_min_bytes = 134217728,
-                               range_max_bytes = 536870912,
-                               gc.ttlseconds = 10,
-                               num_replicas = 3,
-                               num_voters = 3,
-                               constraints = '{+region=ca-central-1: 1}',
-                               voter_constraints = '[+region=ca-central-1]',
-                               lease_preferences = '[[+region=ca-central-1]]'
-
-statement ok
-ALTER DATABASE gc_ttl_predefined_db DROP REGION "ca-central-1"
-
-query TT
-SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
-----
-DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING
-                               range_min_bytes = 134217728,
-                               range_max_bytes = 536870912,
-                               gc.ttlseconds = 10,
-                               num_replicas = 3,
-                               constraints = '[]',
-                               lease_preferences = '[]'
-
-statement ok
 CREATE DATABASE zone_config_drop_region PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2"
 
 query TT
@@ -1418,100 +1400,6 @@ mat_view    NULL
 s2          NULL
 v2          NULL
 mat_view2   NULL
-
-# Regression test for #62269. Ensure that locality optimized search results in
-# a local plan, even when there is a lookup join or an inverted join.
-statement ok
-USE multi_region_test_db;
-CREATE TABLE promos (
-  promo_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  discount DECIMAL NOT NULL,
-  info JSON,
-  INVERTED INDEX (info),
-  FAMILY (promo_id, discount, info)
-) LOCALITY GLOBAL;
-CREATE TABLE orders (
-  order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  price    DECIMAL NOT NULL,
-  promo_id UUID REFERENCES promos,
-  info JSON,
-  FAMILY (order_id, price, promo_id, info)
-) LOCALITY REGIONAL BY ROW
-
-statement ok
-INSERT INTO promos VALUES ('7fe2dce4-ecac-4d12-87b6-e1c1f837d835', 50, '{"some": "info"}');
-INSERT INTO orders
-  VALUES ('94e4b847-8f2f-4ac5-83f1-641d6e3df727', 100, '7fe2dce4-ecac-4d12-87b6-e1c1f837d835', '{"some": "info"}')
-
-query T nodeidx=3
-USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
-    order_id, promo_id, price AS price_without_promo, price * discount AS price_with_promo
-FROM
-    orders JOIN promos USING (promo_id)
-WHERE
-    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
-----
-distribution: local
-vectorized: true
-·
-• render
-│
-└── • lookup join
-    │ table: promos@primary
-    │ equality: (promo_id) = (promo_id)
-    │ equality cols are key
-    │
-    └── • union all
-        │ limit: 1
-        │
-        ├── • scan
-        │     missing stats
-        │     table: orders@primary
-        │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
-        │
-        └── • scan
-              missing stats
-              table: orders@primary
-              spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUttO20AQfe9XjOaFizZKfIEES0hGbUqD0oQmVK3UtZDxjmHbZNfdXauuUJ76bf2vyjYUghoE9MHWzuXMnHM012i_LzDC4efT8dFoAttvRvOz-YfxDsyH4-HrM9BGkDmXgkFh9FLfvGRGcDRvH-c_pLvSpTtvGm6ruyCkzXSp3Hpj2wVvZ9P37WwLJ9PRpJ1u4eN8NDmG7dtdO_Dp3XA2_MsCDmHrIKTwYhD2O4Pczzthmu11BkHudfZDT-xTIPK-399ChkoLmqRLshh9wRAThoXRGVmrTZ26bhpGosKox1CqonR1OmGYaUMYXaOTbkEY4Vl6saAZpYJMt4cMBblULpqxrYK4MHKZmp_IcF6kykbQ5Rhz7HLkvDoIOa-o_l0MjjmvBnn35PcvzqvcE5xXnlCHddDf4tjtQaoEeKDdFRlkOC1dBLHHYp_FASYrhrp0d0ytSy8JI2_FXqbGe7KamnfvRYqerMLfqOKOfKkajiTWiCerf-ic6I4uuv66wrFcSgfeRg695zh5oqW6MTJYX9Me8z0jx1p_Kwv4qqUCrSKIa8CMlCDTOANxwCD262833ttIL3gOvRnZQitLD6zaJDxhSOKSWr-tLk1Gp0ZnzZo2nDa4JiHIurbqt8FINaXmEu-Dvf8B-4-CgzVw7yE4eBQcPgAnq1d_AgAA__8yFKQ7
-
-query T nodeidx=3
-USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
-    order_id, promos.promo_id, price AS price_without_promo, price * discount AS price_with_promo
-FROM
-    orders JOIN promos ON promos.info @> orders.info
-WHERE
-    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
-----
-distribution: local
-vectorized: true
-·
-• render
-│
-└── • lookup join
-    │ table: promos@primary
-    │ equality: (promo_id) = (promo_id)
-    │ equality cols are key
-    │ pred: info @> info
-    │
-    └── • inverted join
-        │ table: promos@promos_info_idx
-        │
-        └── • union all
-            │ limit: 1
-            │
-            ├── • scan
-            │     missing stats
-            │     table: orders@primary
-            │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
-            │
-            └── • scan
-                  missing stats
-                  table: orders@primary
-                  spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk99uGjsQxu_PU1hzk9PIhP0XICtFctTSlohCCpFaqUZos55N3IK9tb3tVhFXfba-V7W7JCmooCS9ANvj-Zjf5xluwX5dQAz9jxfDs8GI_P9qML2cvh--INP-sP_ykmgj0MyloCQ3eqntUb2sAzJFcjZtNvPv0t3ows3rhLvbQyKkTXWh3GZik0VeT8bvmhKWnI8Ho3URMr7bHUmVacJ44XkhrjOb2Ie3_Un_Ho-ckoOTCKOrXtRt9bIga0VJetzqhZnf6kS-6GAosm7QPQAKSgscJUu0EH-CCGYUcqNTtFabKnRbJwxECbFHQaq8cFV4RiHVBiG-BSfdAiGGy-RqgRNMBJq2BxQEukQu6p9tSFlu5DIxP4DCNE-UjUmbA-PQ5sB5eRJxXmL1ddV7w3nZy9rnv35yXma-4Lz0hTqtDt0DDm2PJEoQn2h3gwYojAsXE-ZTFlAWwWxFQRfugdS65Boh9lf0eW78R7upuL1nOXq0i2Cniwf4QtWMKDbAZ6u_-Bzpls7bwabDoVxKR_ydDN5TXnKgvqFxKM61VGja4WapZrBZs8yrWZ5LUQK9l_XL3BDWuZ96Fm49VbjvtcKnkFaE65ZHOyjvWj7U-kuRk89aKqJVTFglGI8I626CTlAJNDUrYceUsKD6HLLOTuLoKcQTtLlWFrf6vKtrMwoorrEZFqsLk-KF0WldpjmOa10dEGhdcxs0h4Gqr-q_0Z9i_1_EwV5xuCH2tsXhXnG0XxztFR9viWer_34HAAD__0Dh_b0=
 
 subtest enum_name_clash
 

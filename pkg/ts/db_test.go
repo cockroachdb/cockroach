@@ -792,8 +792,9 @@ func TestPollSource(t *testing.T) {
 // setting works properly.
 func TestDisableStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		TimeseriesStorageEnabled.Override(&tm.Cfg.Settings.SV, false)
+		TimeseriesStorageEnabled.Override(ctx, &tm.Cfg.Settings.SV, false)
 
 		// Basic storage operation: one data point.
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{

@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord",
-        "//pkg/roachpb",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlerrors",
@@ -24,7 +24,7 @@ go_test(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/gossip",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/util",
         "//pkg/util/hlc",

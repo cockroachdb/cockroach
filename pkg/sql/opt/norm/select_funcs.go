@@ -235,21 +235,50 @@ func (c *CustomFuncs) mergeSortedAnds(left, right opt.ScalarExpr) opt.ScalarExpr
 		nextRight = and.Right
 	}
 
-	if nextLeft.ID() == nextRight.ID() {
+	if nextLeft == nextRight {
 		// Eliminate duplicates.
 		return c.mergeSortedAnds(left, remainingRight)
 	}
-	if nextLeft.ID() < nextRight.ID() {
+	if nextLeft.Rank() < nextRight.Rank() {
 		return c.f.ConstructAnd(c.mergeSortedAnds(left, remainingRight), nextRight)
 	}
 	return c.f.ConstructAnd(c.mergeSortedAnds(remainingLeft, right), nextLeft)
 }
 
+// HasDuplicateFilters returns true if there are duplicate filters in f.
+func (c *CustomFuncs) HasDuplicateFilters(f memo.FiltersExpr) bool {
+	for i := 0; i < len(f); i++ {
+		for j := i + 1; j < len(f); j++ {
+			if f[i].Condition == f[j].Condition {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// DeduplicateFilters returns the input filters with duplicates removed.
+func (c *CustomFuncs) DeduplicateFilters(f memo.FiltersExpr) memo.FiltersExpr {
+	// Here we sort the filters by their scalar rank, though we don't really
+	// care that they are fully sorted. To remove duplicates we only care that
+	// duplicate expressions are grouped together, which they will be since
+	// their scalar rank must be equal.
+	result := c.SortFilters(f)
+	j := 1
+	for i := 1; i < len(result); i++ {
+		if result[i].Condition != result[i-1].Condition {
+			result[j] = result[i]
+			j++
+		}
+	}
+	return result[0:j]
+}
+
 // AreFiltersSorted determines whether the expressions in a FiltersExpr are
-// ordered by their expression IDs.
+// ordered by their expression ranks.
 func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
-	for i, n := 0, f.ChildCount(); i < n-1; i++ {
-		if f.Child(i).Child(0).(opt.ScalarExpr).ID() > f.Child(i+1).Child(0).(opt.ScalarExpr).ID() {
+	for i := 1; i < len(f); i++ {
+		if f[i-1].Condition.Rank() > f[i].Condition.Rank() {
 			return false
 		}
 	}
@@ -261,10 +290,7 @@ func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
 // in a different order.
 func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
 	result := make(memo.FiltersExpr, len(f))
-	for i, n := 0, f.ChildCount(); i < n; i++ {
-		fi := f.Child(i).(*memo.FiltersItem)
-		result[i] = *fi
-	}
+	copy(result, f)
 	result.Sort()
 	return result
 }

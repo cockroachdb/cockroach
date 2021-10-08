@@ -14,7 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/keys",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/encoding",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -30,7 +30,7 @@ go_test(
     ],
     embed = [":keys"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/testutils",
         "//pkg/util/bitarray",
         "//pkg/util/duration",

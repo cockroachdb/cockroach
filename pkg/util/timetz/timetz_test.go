@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,10 +31,10 @@ func TestParseTimeTZToStringRoundTrip(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			exampleTime, _, err := ParseTimeTZ(timeutil.Now(), tc, time.Microsecond)
+			exampleTime, _, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), tc, time.Microsecond)
 			assert.NoError(t, err)
 
-			exampleTimeFromString, _, err := ParseTimeTZ(timeutil.Now(), exampleTime.String(), time.Microsecond)
+			exampleTimeFromString, _, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), exampleTime.String(), time.Microsecond)
 			assert.NoError(t, err)
 
 			assert.True(t, exampleTime.Equal(exampleTimeFromString))
@@ -63,22 +64,22 @@ func TestTimeTZString(t *testing.T) {
 }
 
 func TestTimeTZ(t *testing.T) {
-	maxTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "24:00:00-1559", time.Microsecond)
+	maxTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
 	require.False(t, depOnCtx)
-	minTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "00:00:00+1559", time.Microsecond)
+	minTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), "00:00:00+1559", time.Microsecond)
 	require.NoError(t, err)
 	require.False(t, depOnCtx)
 
 	// These are all the same UTC time equivalents.
-	utcTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "11:14:15+0", time.Microsecond)
+	utcTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), "11:14:15+0", time.Microsecond)
 	require.NoError(t, err)
 	require.False(t, depOnCtx)
-	sydneyTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "21:14:15+10", time.Microsecond)
+	sydneyTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), "21:14:15+10", time.Microsecond)
 	require.NoError(t, err)
 	require.False(t, depOnCtx)
 
-	sydneyTimeWithMillisecond, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "21:14:15.001+10", time.Microsecond)
+	sydneyTimeWithMillisecond, depOnCtx, err := ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), "21:14:15.001+10", time.Microsecond)
 	require.NoError(t, err)
 	require.False(t, depOnCtx)
 
@@ -100,7 +101,7 @@ func TestTimeTZ(t *testing.T) {
 	}{
 		{
 			t:               weirdTimeZone,
-			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation((5*60*60)+(30*60)+15, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.TimeZoneOffsetToLocation((5*60*60)+(30*60)+15)),
 			toDuration:      time.Duration((10*60*60 - ((5 * 60 * 60) + 30*60 + 15))) * time.Second,
 			largerThan:      []TimeTZ{minTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -109,7 +110,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               utcTime,
-			toTime:          time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(0, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(0)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime, hawaiiTime},
@@ -118,7 +119,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               sydneyTime,
-			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime},
 			smallerThan:     []TimeTZ{maxTime, utcTime, hawaiiTime},
@@ -127,7 +128,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               sydneyTimeWithMillisecond,
-			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 1000000, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 1000000, timeutil.TimeZoneOffsetToLocation(10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15)*time.Second + 1*time.Millisecond,
 			largerThan:      []TimeTZ{minTime, utcTime, hawaiiTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -136,7 +137,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               hawaiiTime,
-			toTime:          time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(-10*60*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.TimeZoneOffsetToLocation(-10*60*60)),
 			toDuration:      time.Duration(11*60*60+14*60+15) * time.Second,
 			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime},
 			smallerThan:     []TimeTZ{maxTime},
@@ -145,7 +146,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               minTime,
-			toTime:          time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(15*60*60+59*60, "TimeTZ")),
+			toTime:          time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.TimeZoneOffsetToLocation(15*60*60+59*60)),
 			toDuration:      time.Duration(-(15*60*60 + 59*60)) * time.Second,
 			largerThan:      []TimeTZ{},
 			smallerThan:     []TimeTZ{maxTime, utcTime, sydneyTime, hawaiiTime},
@@ -154,7 +155,7 @@ func TestTimeTZ(t *testing.T) {
 		},
 		{
 			t:               maxTime,
-			toTime:          time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(-(15*60*60+59*60), "TimeTZ")),
+			toTime:          time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.TimeZoneOffsetToLocation(-(15*60*60 + 59*60))),
 			toDuration:      time.Duration(24*60*60+15*60*60+59*60) * time.Second,
 			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime, hawaiiTime},
 			smallerThan:     []TimeTZ{},
@@ -187,6 +188,7 @@ func TestParseTimeTZ(t *testing.T) {
 	testCases := []struct {
 		str       string
 		precision time.Duration
+		dateStyle pgdate.DateStyle
 
 		expected         TimeTZ
 		expectedDepOnCtx bool
@@ -197,6 +199,8 @@ func TestParseTimeTZ(t *testing.T) {
 		{str: "01:24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 24, 0, 0), 0), expectedDepOnCtx: true},
 		{str: "01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0), expectedDepOnCtx: true},
 		{str: "1970-01-01 01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "30/01/1970 01:02:03", dateStyle: pgdate.DateStyle{Order: pgdate.Order_DMY}, precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "01-30-1970 01:02:03", dateStyle: pgdate.DateStyle{Order: pgdate.Order_MDY}, precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
 		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
 		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
 		{str: "0000-01-01  01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
@@ -236,7 +240,7 @@ func TestParseTimeTZ(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d: %s", i, tc.str), func(t *testing.T) {
-			actual, depOnCtx, err := ParseTimeTZ(timeutil.Now(), tc.str, tc.precision)
+			actual, depOnCtx, err := ParseTimeTZ(timeutil.Now(), tc.dateStyle, tc.str, tc.precision)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

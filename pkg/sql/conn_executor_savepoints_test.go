@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -33,20 +34,45 @@ func TestSavepoints(t *testing.T) {
 	datadriven.Walk(t, "testdata/savepoints", func(t *testing.T, path string) {
 
 		params := base.TestServerArgs{}
-		s, sqlConn, _ := serverutils.StartServer(t, params)
+		s, origConn, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
-		if _, err := sqlConn.Exec("CREATE TABLE progress(n INT, marker BOOL)"); err != nil {
+		if _, err := origConn.Exec(`CREATE TABLE progress(
+      conn STRING,
+    	n INT, 
+    	marker BOOL,
+    	PRIMARY KEY (conn, n)
+	  )`); err != nil {
 			t.Fatal(err)
 		}
+
+		const defaultConn = "default"
+		sqlConns := make(map[string]*gosql.DB)
+		sqlConns[defaultConn] = origConn
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "sql":
+				// Determine which connection to run the SQL statements on. If no
+				// connection specifier is provided, use the "default" conn.
+				connName := defaultConn
+				sqlConn := sqlConns[connName]
+				if td.HasArg("conn") {
+					td.ScanArgs(t, "conn", &connName)
+
+					var ok bool
+					sqlConn, ok = sqlConns[connName]
+					if !ok {
+						sqlConn = serverutils.OpenDBConn(
+							t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+						sqlConns[connName] = sqlConn
+					}
+				}
+
 				// Implicitly abort any previously-ongoing txn.
 				_, _ = sqlConn.Exec("ABORT")
 				// Prepare for the next test.
-				if _, err := sqlConn.Exec("DELETE FROM progress"); err != nil {
+				if _, err := sqlConn.Exec("DELETE FROM progress WHERE conn = $1", connName); err != nil {
 					td.Fatalf(t, "cleaning up: %v", err)
 				}
 
@@ -76,7 +102,7 @@ func TestSavepoints(t *testing.T) {
 				// updateProgress loads the current set of writes
 				// into the progress bar.
 				updateProgress := func() {
-					rows, err := sqlConn.Query("SELECT n FROM progress")
+					rows, err := sqlConn.Query("SELECT n FROM progress WHERE conn = $1", connName)
 					if err != nil {
 						t.Logf("%d: reading progress: %v", stepNum, err)
 						// It's OK if we can't read this.
@@ -156,7 +182,7 @@ func TestSavepoints(t *testing.T) {
 					// Before each statement, mark the progress so far with
 					// a KV write.
 					if isOpenTxn(beforeStatus) {
-						_, err := sqlConn.Exec("INSERT INTO progress(n, marker) VALUES ($1, true)", stepNum)
+						_, err := sqlConn.Exec("INSERT INTO progress(conn, n, marker) VALUES ($1, $2, true)", connName, stepNum)
 						if err != nil {
 							td.Fatalf(t, "%d: before-stmt: %v", stepNum, err)
 						}

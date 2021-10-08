@@ -94,7 +94,3 @@ func disableOtherPermissionBits() {
 	mask |= 00007
 	_ = unix.Umask(mask)
 }
-
-func useUnixSocketsInDemo() bool {
-	return true
-}

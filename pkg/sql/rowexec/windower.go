@@ -12,10 +12,10 @@ package rowexec
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -422,7 +422,7 @@ func (w *windower) processPartition(
 		evalCtx: evalCtx,
 		rowCopy: make(rowenc.EncDatumRow, len(w.inputTypes)),
 	}
-	usage := sizeOfSliceOfRows + rowSliceOverhead + sizeOfRow*int64(len(w.windowFns))
+	usage := memsize.RowsOverhead + memsize.RowsOverhead + memsize.DatumsOverhead*int64(len(w.windowFns))
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
 		return err
 	}
@@ -457,14 +457,9 @@ func (w *windower) processPartition(
 				case execinfrapb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case execinfrapb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
+					datum, err := execinfra.DecodeDatum(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
-						return errors.NewAssertionErrorWithWrappedErrf(err,
-							"error decoding %d bytes", errors.Safe(len(startBound.TypedOffset)))
-					}
-					if len(rem) != 0 {
-						return errors.AssertionFailedf(
-							"%d trailing bytes in encoded value", errors.Safe(len(rem)))
+						return err
 					}
 					frameRun.StartBoundOffset = datum
 				case execinfrapb.WindowerSpec_Frame_GROUPS:
@@ -481,14 +476,9 @@ func (w *windower) processPartition(
 					case execinfrapb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case execinfrapb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
+						datum, err := execinfra.DecodeDatum(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
-							return errors.NewAssertionErrorWithWrappedErrf(err,
-								"error decoding %d bytes", errors.Safe(len(endBound.TypedOffset)))
-						}
-						if len(rem) != 0 {
-							return errors.AssertionFailedf(
-								"%d trailing bytes in encoded value", errors.Safe(len(rem)))
+							return err
 						}
 						frameRun.EndBoundOffset = datum
 					case execinfrapb.WindowerSpec_Frame_GROUPS:
@@ -525,7 +515,7 @@ func (w *windower) processPartition(
 		builtin := w.builtins[windowFnIdx]
 		builtin.Reset(ctx)
 
-		usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
+		usage = memsize.DatumsOverhead + memsize.DatumOverhead*int64(partition.Len())
 		if err := w.growMemAccount(&w.acc, usage); err != nil {
 			return err
 		}
@@ -586,7 +576,7 @@ func (w *windower) processPartition(
 					// We have already accounted for the size of a nil datum prior to
 					// allocating the slice for window values, so we need to keep that in
 					// mind.
-					if err := w.growMemAccount(&w.acc, int64(res.Size())-sizeOfDatum); err != nil {
+					if err := w.growMemAccount(&w.acc, int64(res.Size())-memsize.DatumOverhead); err != nil {
 						return err
 					}
 				}
@@ -602,7 +592,7 @@ func (w *windower) processPartition(
 		prevWindowFn = windowFn
 	}
 
-	if err := w.growMemAccount(&w.acc, sizeOfInt); err != nil {
+	if err := w.growMemAccount(&w.acc, memsize.Int); err != nil {
 		return err
 	}
 	w.partitionSizes = append(w.partitionSizes, w.partition.Len())
@@ -617,7 +607,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 	// We don't know how many partitions there are, so we'll be accounting for
 	// this memory right before every append to these slices.
-	usage := sliceOfIntsOverhead + sliceOfRowsSliceOverhead
+	usage := memsize.IntSliceOverhead + memsize.RowsSliceOverhead
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
 		return err
 	}
@@ -808,15 +798,6 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 	return true, nil
 }
 
-const sizeOfInt = int64(unsafe.Sizeof(int(0)))
-const sliceOfIntsOverhead = int64(unsafe.Sizeof([]int{}))
-const sizeOfSliceOfRows = int64(unsafe.Sizeof([][]tree.Datum{}))
-const sliceOfRowsSliceOverhead = int64(unsafe.Sizeof([][][]tree.Datum{}))
-const sizeOfRow = int64(unsafe.Sizeof([]tree.Datum{}))
-const rowSliceOverhead = int64(unsafe.Sizeof([][]tree.Datum{}))
-const sizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
-const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
-
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
 // name or returns an error if unknown function name is provided.
 func CreateWindowerSpecFunc(funcStr string) (execinfrapb.WindowerSpec_Func, error) {
@@ -843,7 +824,7 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(w.diskMonitor.MaximumBytes())),
 		},
-		Output: w.Out.Stats(),
+		Output: w.OutputHelper.Stats(),
 	}
 }
 

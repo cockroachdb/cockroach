@@ -10,7 +10,7 @@
 
 package colexec
 
-func boolVecToSel64(vec []bool, sel []int) []int {
+func boolVecToSel(vec []bool, sel []int) []int {
 	l := len(vec)
 	for i := 0; i < l; i++ {
 		if vec[i] {

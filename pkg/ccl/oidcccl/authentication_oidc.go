@@ -410,35 +410,35 @@ var ConfigureOIDC = func(
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
 
-	OIDCEnabled.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCClientID.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCClientID.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCClientSecret.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCClientSecret.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCRedirectURL.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCRedirectURL.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCProviderURL.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCProviderURL.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCScopes.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCScopes.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCClaimJSONKey.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCClaimJSONKey.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCPrincipalRegex.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCPrincipalRegex.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCButtonText.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCButtonText.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	OIDCAutoLogin.SetOnChange(&st.SV, func() {
-		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
+	OIDCAutoLogin.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 
 	return oidcAuthentication, nil

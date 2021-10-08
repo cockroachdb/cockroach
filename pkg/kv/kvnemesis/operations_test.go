@@ -28,25 +28,34 @@ func TestOperationsFormat(t *testing.T) {
 		expected string
 	}{
 		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
-		{step: step(batch(get(`b`), get(`c`))), expected: `
+		{step: step(del(`a`)), expected: `db0.Del(ctx, "a")`},
+		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
 			{
 			  b := &Batch{}
 			  b.Get(ctx, "b")
-			  b.Get(ctx, "c")
+			  b.ReverseScanForUpdate(ctx, "c", "e")
+			  b.Get(ctx, "f")
 			  db0.Run(ctx, b)
 			}
 		`},
 		{
-			step: step(closureTxn(ClosureTxnType_Commit, batch(get(`d`), get(`e`)), put(`f`, `g`))),
+			step: step(
+				closureTxn(ClosureTxnType_Commit,
+					batch(get(`g`), get(`h`), del(`i`)),
+					delRange(`j`, `k`),
+					put(`k`, `l`),
+				)),
 			expected: `
 			db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			  {
 			    b := &Batch{}
-			    b.Get(ctx, "d")
-			    b.Get(ctx, "e")
+			    b.Get(ctx, "g")
+			    b.Get(ctx, "h")
+			    b.Del(ctx, "i")
 			    txn.Run(ctx, b)
 			  }
-			  txn.Put(ctx, "f", g)
+			  txn.DelRange(ctx, "j", "k", true)
+			  txn.Put(ctx, "k", l)
 			  return nil
 			})
 			`,

@@ -161,7 +161,7 @@ TABLE t
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key bytes not null [virtual-inverted]
+ ├── j_inverted_key bytes not null [inverted]
  ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
  ├── PRIMARY INDEX primary
  │    ├── a int not null (implicit)
@@ -198,7 +198,7 @@ TABLE t
  │                   └── (4)
  ├── INVERTED INDEX t_j_idx
  │    ├── a int not null (implicit)
- │    ├── j_inverted_key bytes not null [virtual-inverted]
+ │    ├── j_inverted_key bytes not null [inverted]
  │    ├── pk int not null
  │    └── partitions
  │         └── j_implicit
@@ -226,6 +226,28 @@ CREATE TABLE fk_using_implicit_columns_against_t (
   ref_t_pk INT NOT NULL REFERENCES t,
   ref_t_c INT NOT NULL REFERENCES t(c)
 )
+
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t_one_family (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c),
+  FAMILY (pk, ref_t_pk, ref_t_c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE fk_using_implicit_columns_against_t_one_family]
+----
+CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
+   pk INT8 NOT NULL,
+   ref_t_pk INT8 NOT NULL,
+   ref_t_c INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+   CONSTRAINT fk_ref_t_pk_ref_t FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
+   CONSTRAINT fk_ref_t_c_ref_t FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
+   FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
+)
+
 
 query T
 EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
@@ -499,6 +521,14 @@ created_idx           c             false
 created_idx           pk            true
 primary               partition_by  true
 primary               pk            false
+primary               pk2           false
+primary               a             false
+primary               b             false
+primary               c             false
+primary               d             false
+primary               j             false
+primary               u             false
+primary               e             false
 t_a_idx               partition_by  true
 t_a_idx               a             false
 t_a_idx               pk            true

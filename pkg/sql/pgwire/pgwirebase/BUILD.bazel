@@ -36,7 +36,7 @@ go_library(
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",
-        "@com_github_jackc_pgx//pgtype",
+        "@com_github_jackc_pgtype//:pgtype",
         "@com_github_lib_pq//oid",
     ],
 )

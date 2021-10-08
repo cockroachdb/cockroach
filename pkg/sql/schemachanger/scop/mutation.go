@@ -16,6 +16,9 @@ import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 type mutationOp struct{ baseOp }
 
+// Make sure baseOp is used for linter.
+var _ = mutationOp{baseOp: baseOp{}}
+
 func (mutationOp) Type() Type { return MutationType }
 
 // MakeAddedIndexDeleteOnly adds a non-existent primary index to the
@@ -55,6 +58,58 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	// a secondary index. The value here sets it as it should be when adding
 	// the mutation, including the stored columns.
 	Index descpb.IndexDescriptor
+}
+
+// CreateGcJobForDescriptor creates a GC job for a given descriptor.
+type CreateGcJobForDescriptor struct {
+	mutationOp
+	DescID descpb.ID
+}
+
+// MarkDescriptorAsDropped marks a descriptor as dropped.
+type MarkDescriptorAsDropped struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// DrainDescriptorName marks a descriptor as dropped.
+type DrainDescriptorName struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// UpdateRelationDeps updates dependencies for a relation.
+type UpdateRelationDeps struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// RemoveColumnDefaultExpression removes the default expression on a given table column.
+type RemoveColumnDefaultExpression struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// AddTypeBackRef adds a type back references from a relation.
+type AddTypeBackRef struct {
+	mutationOp
+	DescID descpb.ID
+	TypeID descpb.ID
+}
+
+// RemoveRelationDependedOnBy removes a depended on by reference from a given relation.
+type RemoveRelationDependedOnBy struct {
+	mutationOp
+	TableID      descpb.ID
+	DependedOnBy descpb.ID
+}
+
+// RemoveTypeBackRef removes type back references from a relation.
+type RemoveTypeBackRef struct {
+	mutationOp
+	DescID descpb.ID
+	TypeID descpb.ID
 }
 
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
@@ -148,4 +203,20 @@ type AddColumnFamily struct {
 	mutationOp
 	TableID descpb.ID
 	Family  descpb.ColumnFamilyDescriptor
+}
+
+// DropForeignKeyRef drops a foreign key reference with
+// support for outbound/inbound keys.
+type DropForeignKeyRef struct {
+	mutationOp
+	TableID  descpb.ID
+	Name     string
+	Outbound bool
+}
+
+// RemoveSequenceOwnedBy removes a sequence owned by
+// reference.
+type RemoveSequenceOwnedBy struct {
+	mutationOp
+	TableID descpb.ID
 }

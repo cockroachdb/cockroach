@@ -31,6 +31,8 @@ query TT
 SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root' AND (job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'))
 ----
 SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
 
 query TTTTIT

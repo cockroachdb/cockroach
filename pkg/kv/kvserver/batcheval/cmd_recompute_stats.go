@@ -29,7 +29,7 @@ func init() {
 }
 
 func declareKeysRecomputeStats(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// We don't declare any user key in the range. This is OK since all we're doing is computing a
 	// stats delta, and applying this delta commutes with other operations on the same key space.
@@ -53,7 +53,7 @@ func declareKeysRecomputeStats(
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
 // returning the MVCCStats delta obtained in the process.
 func RecomputeStats(
-	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	desc := cArgs.EvalCtx.Desc()
 	args := cArgs.Args.(*roachpb.RecomputeStatsRequest)
@@ -64,27 +64,16 @@ func RecomputeStats(
 
 	args = nil // avoid accidental use below
 
-	// Open a snapshot from which we will read everything (including the
-	// MVCCStats). This is necessary because a batch does not provide us
-	// with a consistent view of the data -- reading from the batch, we
-	// could see skew between the stats recomputation and the MVCCStats
-	// we read from the range state if concurrent writes are inflight[1].
-	//
-	// Note that in doing so, we also circumvent the assertions (present in both
-	// the EvalContext and the batch in some builds) which check that all reads
-	// were previously declared. See the comment in `declareKeysRecomputeStats`
-	// for details on this.
-	//
-	// [1]: see engine.TestBatchReadLaterWrite.
-	snap := cArgs.EvalCtx.Engine().NewSnapshot()
-	defer snap.Close()
+	// Disable the assertions which check that all reads were previously declared.
+	// See the comment in `declareKeysRecomputeStats` for details on this.
+	reader = spanset.DisableReaderAssertions(reader)
 
-	actualMS, err := rditer.ComputeStatsForRange(desc, snap, cArgs.Header.Timestamp.WallTime)
+	actualMS, err := rditer.ComputeStatsForRange(desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, snap)
+	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, reader)
 	if err != nil {
 		return result.Result{}, err
 	}

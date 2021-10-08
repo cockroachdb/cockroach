@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,7 +36,7 @@ func TestRangeReport(t *testing.T) {
 	// This test uses the cluster as a recipient for a report saved from outside
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
-	ReporterInterval.Override(&st.SV, 0)
+	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	con := s.InternalExecutor().(sqlutil.InternalExecutor)
 	defer s.Stopper().Stop(ctx)
@@ -46,12 +47,36 @@ func TestRangeReport(t *testing.T) {
 
 	// Add several localities and verify the result
 	stats := make(RangeReport)
-	stats.CountRange(MakeZoneKey(1, 3), true, true, true)
-	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
-	stats.CountRange(MakeZoneKey(1, 3), false, false, true)
-	stats.CountRange(MakeZoneKey(1, 3), true, true, false)
-	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
-	stats.CountRange(MakeZoneKey(2, 4), false, true, false)
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       false,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: false,
+		OverReplicated:  true,
+	})
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       false,
+		UnderReplicated: true,
+		OverReplicated:  false,
+	})
+	stats.CountRange(MakeZoneKey(2, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: false,
+		OverReplicated:  false,
+	})
+	stats.CountRange(MakeZoneKey(2, 4), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  false,
+	})
 
 	r := makeReplicationStatsReportSaver()
 	time1 := time.Date(2001, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -69,9 +94,21 @@ func TestRangeReport(t *testing.T) {
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
 	// Add new set of localities and verify the old ones are deleted
-	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
-	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
-	stats.CountRange(MakeZoneKey(4, 4), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
+	stats.CountRange(MakeZoneKey(2, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: false,
+		OverReplicated:  false,
+	})
+	stats.CountRange(MakeZoneKey(4, 4), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
 
 	time2 := time.Date(2001, 1, 1, 11, 0, 0, 0, time.UTC)
 	require.NoError(t, r.Save(ctx, stats, time2, db, con))
@@ -107,9 +144,21 @@ func TestRangeReport(t *testing.T) {
 	require.Equal(t, 1, rows)
 
 	// Add new set of localities and verify the old ones are deleted
-	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
-	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
-	stats.CountRange(MakeZoneKey(4, 4), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
+	stats.CountRange(MakeZoneKey(2, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: false,
+		OverReplicated:  false,
+	})
+	stats.CountRange(MakeZoneKey(4, 4), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
 
 	time4 := time.Date(2001, 1, 1, 12, 0, 0, 0, time.UTC)
 	require.NoError(t, r.Save(ctx, stats, time4, db, con))
@@ -127,7 +176,11 @@ func TestRangeReport(t *testing.T) {
 
 	// A brand new report (after restart for example) - still works.
 	r = makeReplicationStatsReportSaver()
-	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), roachpb.RangeStatusReport{
+		Available:       true,
+		UnderReplicated: true,
+		OverReplicated:  true,
+	})
 
 	time5 := time.Date(2001, 1, 1, 12, 30, 0, 0, time.UTC)
 	require.NoError(t, r.Save(ctx, stats, time5, db, con))
@@ -218,20 +271,20 @@ func TestReplicationStatsReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/150", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/200", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
 					{
 						// This range is not covered by the db1's zone config; it'll be
 						// counted for the default zone.
-						key: "/Table/sentinel", stores: []int{1, 2, 3},
+						key: "/Table/sentinel", stores: "1 2 3",
 					},
 				},
 				nodes: []node{
@@ -291,26 +344,26 @@ func TestReplicationStatsReport(t *testing.T) {
 				},
 				splits: []split{
 					// No problem.
-					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
 					// Under-replicated.
-					{key: "/Table/t1/pk/101", stores: []int{1}},
+					{key: "/Table/t1/pk/101", stores: "1"},
 					// Under-replicated.
-					{key: "/Table/t1/pk/102", stores: []int{1, 2}},
+					{key: "/Table/t1/pk/102", stores: "1 2"},
 					// Under-replicated because 4 is dead.
-					{key: "/Table/t1/pk/103", stores: []int{1, 2, 4}},
+					{key: "/Table/t1/pk/103", stores: "1 2 4"},
 					// Under-replicated and unavailable.
-					{key: "/Table/t1/pk/104", stores: []int{3}},
+					{key: "/Table/t1/pk/104", stores: "3"},
 					// Over-replicated.
-					{key: "/Table/t1/pk/105", stores: []int{1, 2, 3, 4}},
+					{key: "/Table/t1/pk/105", stores: "1 2 3 4"},
 					// Under-replicated and over-replicated.
-					{key: "/Table/t1/pk/106", stores: []int{1, 2, 4, 5}},
+					{key: "/Table/t1/pk/106", stores: "1 2 4 5"},
 				},
 				nodes: []node{
 					{id: 1, stores: []store{{id: 1}}},
 					{id: 2, stores: []store{{id: 2}}},
 					{id: 3, stores: []store{{id: 3}}},
 					{id: 4, stores: []store{{id: 4}}, dead: true},
-					{id: 5, stores: []store{{id: 3}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
 				},
 			},
 			exp: []replicationStatsEntry{
@@ -325,7 +378,58 @@ func TestReplicationStatsReport(t *testing.T) {
 				},
 			},
 		},
-	}
+		{
+			name: "joint consensus",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1"},
+						},
+					},
+				},
+				splits: []split{
+					// No problem.
+					{key: "/Table/t1/pk/100", stores: "1v 2v 3v"},
+					// Under-replication in the "old group".
+					{key: "/Table/t1/pk/101", stores: "1v 2v 3i"},
+					// Under-replication in the "new group".
+					{key: "/Table/t1/pk/102", stores: "1v 2v 3o"},
+					// Under-replicated in the old group because 4 is dead.
+					{key: "/Table/t1/pk/103", stores: "1v 2v 4o 3i"},
+					// Unavailable in the new group (and also under-replicated), and also
+					// over-replicated in the new group.
+					{key: "/Table/t1/pk/104", stores: "1v 2v 3o 4i 5i"},
+					// Over-replicated in the new group.
+					{key: "/Table/t1/pk/105", stores: "1v 2v 3o 5i 6i"},
+					// Many learners. No problems, since learners don't count.
+					{key: "/Table/t1/pk/106", stores: "1v 2v 3v 4l 5l 6l"},
+					// Underreplicated. Learners don't count.
+					{key: "/Table/t1/pk/107", stores: "1v 2v 3l"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
+					{id: 6, stores: []store{{id: 6}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "default",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       8,
+						unavailable:     1,
+						underReplicated: 5,
+						overReplicated:  2,
+					},
+				},
+			},
+		}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runReplicationStatsTest(t, tc)

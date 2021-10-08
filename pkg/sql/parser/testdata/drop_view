@@ -1,0 +1,79 @@
+parse
+DROP VIEW a
+----
+DROP VIEW a
+DROP VIEW a -- fully parenthesized
+DROP VIEW a -- literals removed
+DROP VIEW _ -- identifiers removed
+
+parse
+DROP VIEW a.b
+----
+DROP VIEW a.b
+DROP VIEW a.b -- fully parenthesized
+DROP VIEW a.b -- literals removed
+DROP VIEW _._ -- identifiers removed
+
+parse
+DROP VIEW a, b
+----
+DROP VIEW a, b
+DROP VIEW a, b -- fully parenthesized
+DROP VIEW a, b -- literals removed
+DROP VIEW _, _ -- identifiers removed
+
+parse
+DROP VIEW IF EXISTS a
+----
+DROP VIEW IF EXISTS a
+DROP VIEW IF EXISTS a -- fully parenthesized
+DROP VIEW IF EXISTS a -- literals removed
+DROP VIEW IF EXISTS _ -- identifiers removed
+
+parse
+DROP VIEW a RESTRICT
+----
+DROP VIEW a RESTRICT
+DROP VIEW a RESTRICT -- fully parenthesized
+DROP VIEW a RESTRICT -- literals removed
+DROP VIEW _ RESTRICT -- identifiers removed
+
+parse
+DROP VIEW IF EXISTS a, b RESTRICT
+----
+DROP VIEW IF EXISTS a, b RESTRICT
+DROP VIEW IF EXISTS a, b RESTRICT -- fully parenthesized
+DROP VIEW IF EXISTS a, b RESTRICT -- literals removed
+DROP VIEW IF EXISTS _, _ RESTRICT -- identifiers removed
+
+parse
+DROP VIEW a.b CASCADE
+----
+DROP VIEW a.b CASCADE
+DROP VIEW a.b CASCADE -- fully parenthesized
+DROP VIEW a.b CASCADE -- literals removed
+DROP VIEW _._ CASCADE -- identifiers removed
+
+parse
+DROP VIEW a, b CASCADE
+----
+DROP VIEW a, b CASCADE
+DROP VIEW a, b CASCADE -- fully parenthesized
+DROP VIEW a, b CASCADE -- literals removed
+DROP VIEW _, _ CASCADE -- identifiers removed
+
+parse
+DROP MATERIALIZED VIEW a, b
+----
+DROP MATERIALIZED VIEW a, b
+DROP MATERIALIZED VIEW a, b -- fully parenthesized
+DROP MATERIALIZED VIEW a, b -- literals removed
+DROP MATERIALIZED VIEW _, _ -- identifiers removed
+
+parse
+DROP MATERIALIZED VIEW IF EXISTS a
+----
+DROP MATERIALIZED VIEW IF EXISTS a
+DROP MATERIALIZED VIEW IF EXISTS a -- fully parenthesized
+DROP MATERIALIZED VIEW IF EXISTS a -- literals removed
+DROP MATERIALIZED VIEW IF EXISTS _ -- identifiers removed

@@ -1,5 +1,6 @@
 # gazelle:exclude string_test.go
 
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -13,11 +14,13 @@ go_library(
         "batch.go",
         "data.go",
         "errors.go",
+        "index_usage_stats.go",
         "internal.go",
         "merge_spans.go",
         "metadata.go",
         "metadata_replicas.go",
         "method.go",
+        "span_config.go",
         "span_group.go",
         "tenant.go",
         "version.go",
@@ -44,14 +47,14 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/timetz",
         "//pkg/util/uuid",
-        "@com_github_aws_aws_sdk_go//aws",
-        "@com_github_aws_aws_sdk_go//aws/credentials",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_google_grpc//metadata",  # keep
     ],
 )
 
@@ -68,9 +71,11 @@ go_library(
         "batch_generated.go",
         "data.go",
         "errors.go",
+        "index_usage_stats.go",
         "metadata.go",
         "metadata_replicas.go",
         "method.go",
+        "span_config.go",
         "version.go",
     ],
     embed = [":roachpb_go_proto"],
@@ -104,6 +109,28 @@ go_library(
     ],
 )
 
+gomock(
+    name = "mock_roachpb",
+    out = "mocks_generated.go",
+    interfaces = [
+        "InternalClient",
+        "Internal_RangeFeedClient",
+    ],
+    library = ":roachpb",
+    package = "roachpb",
+    self_package = "github.com/cockroachdb/cockroach/pkg/roachpb",
+)
+
+go_library(
+    name = "with-mocks",
+    srcs = [":mock_roachpb"],
+    embed = [":roachpb"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
 go_test(
     name = "roachpb_test",
     size = "small",
@@ -114,6 +141,7 @@ go_test(
         "data_test.go",
         "dep_test.go",
         "errors_test.go",
+        "index_usage_stats_test.go",
         "main_test.go",
         "merge_spans_test.go",
         "metadata_replicas_test.go",
@@ -122,7 +150,7 @@ go_test(
         "tenant_test.go",
         "version_test.go",
     ],
-    embed = [":roachpb"],
+    embed = [":with-mocks"],  # keep
     deps = [
         "//pkg/cli/exit",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -162,7 +190,7 @@ go_test(
     size = "small",
     srcs = ["string_test.go"],
     deps = [
-        ":roachpb",
+        ":with-mocks",
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -181,10 +209,12 @@ proto_library(
         "app_stats.proto",
         "data.proto",
         "errors.proto",
+        "index_usage_stats.proto",
         "internal.proto",
         "internal_raft.proto",
         "io-formats.proto",
         "metadata.proto",
+        "span_config.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -235,9 +265,9 @@ stringer(
 
 genrule(
     name = "gen-batch-generated",
-    srcs = ["//pkg/roachpb/gen"],
     outs = ["batch_generated-gen.go"],
     cmd = """
      $(location //pkg/roachpb/gen) --filename=$(location batch_generated-gen.go)
        """,
+    exec_tools = ["//pkg/roachpb/gen"],
 )

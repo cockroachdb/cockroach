@@ -130,11 +130,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecop.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
-		c, err := colexec.NewBufferingColumnarizer(testAllocator, flowCtx, int32(i)+1, input)
-		if err != nil {
-			return err
-		}
-		columnarizers[i] = c
+		columnarizers[i] = colexec.NewBufferingColumnarizer(testAllocator, flowCtx, int32(i)+1, input)
 	}
 
 	constructorArgs := &colexecargs.NewColOperatorArgs{
@@ -170,17 +166,12 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		}
 	}()
 
-	outColOp, err := colexec.NewMaterializer(
+	outColOp := colexec.NewMaterializer(
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.OpWithMetaInfo,
 		args.pspec.ResultTypes,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		return err
-	}
 
 	outProc.Start(ctx)
 	outColOp.Start(ctx)

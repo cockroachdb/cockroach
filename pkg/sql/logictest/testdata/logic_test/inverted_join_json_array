@@ -191,7 +191,7 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
+SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
 ----
 1   {"a": "b"}                             1   {"a": "b"}
 1   {"a": "b"}                             17  {}
@@ -454,7 +454,7 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
 ----
 1   {"a": "b"}                             1   {"a": "b"}
 1   {"a": "b"}                             7   {"a": "b", "c": "d"}
@@ -615,7 +615,7 @@ ORDER BY j1.a, j2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1, json_tab AS j2
+SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2
 WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
@@ -678,7 +678,7 @@ ORDER BY j1.a, j2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM json_tab@primary AS j1, json_tab AS j2
+SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2
 WHERE j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
@@ -994,7 +994,7 @@ SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER 
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
+SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
 ----
 1  {}         1  {}
 2  {1}        1  {}
@@ -1053,7 +1053,7 @@ SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER 
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
 ----
 1  {}         1  {}
 1  {}         2  {1}
@@ -1108,7 +1108,7 @@ ORDER BY a1.a, a2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1, array_tab AS a2
+SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2
 WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
@@ -1159,7 +1159,7 @@ ORDER BY a1.a, a2.a
 
 # This query performs a cross join followed by a filter.
 query ITIT
-SELECT * FROM array_tab@primary AS a1, array_tab AS a2
+SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2
 WHERE a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----

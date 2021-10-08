@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,13 +40,66 @@ func TestSampledStatsCollection(t *testing.T) {
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	getStmtStats := func(t *testing.T, server serverutils.TestServerInterface, stmt string, implicitTxn bool, database string) (*stmtStats, roachpb.StmtID) {
+	getStmtStats :=
+		func(
+			t *testing.T,
+			server serverutils.TestServerInterface,
+			stmt string,
+			implicitTxn bool,
+			database string,
+		) *roachpb.CollectedStatementStatistics {
+			t.Helper()
+			key := roachpb.StatementStatisticsKey{
+				Query:       stmt,
+				ImplicitTxn: implicitTxn,
+				Database:    database,
+				Failed:      false,
+			}
+			var stats *roachpb.CollectedStatementStatistics
+			require.NoError(t, server.SQLServer().(*Server).sqlStats.
+				GetLocalMemProvider().
+				IterateStatementStats(
+					ctx,
+					&sqlstats.IteratorOptions{},
+					func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+						if statistics.Key.Query == key.Query &&
+							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
+							statistics.Key.Database == key.Database &&
+							statistics.Key.Failed == key.Failed {
+							stats = statistics
+						}
+
+						return nil
+					},
+				))
+			require.NotNil(t, stats)
+			return stats
+		}
+
+	getTxnStats := func(
+		t *testing.T,
+		server serverutils.TestServerInterface,
+		key roachpb.TransactionFingerprintID,
+	) *roachpb.CollectedTransactionStatistics {
 		t.Helper()
-		applicationStats := server.SQLServer().(*Server).sqlStats.getStatsForApplication("")
-		require.NotNil(t, applicationStats, "could not find app stats for default app")
-		stats, id := applicationStats.getStatsForStmt(stmt, implicitTxn, database, nil /* err */, false /* createIfNonexistent */)
-		require.NotNil(t, stats, "could not find stmt stats for %s", implicitTxn)
-		return stats, id
+		var stats *roachpb.CollectedTransactionStatistics
+
+		require.NoError(t, server.SQLServer().(*Server).sqlStats.
+			GetLocalMemProvider().
+			IterateTransactionStats(
+				ctx,
+				&sqlstats.IteratorOptions{},
+				func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+					if statistics.TransactionFingerprintID == key {
+						stats = statistics
+					}
+
+					return nil
+				},
+			))
+
+		require.NotNil(t, stats)
+		return stats
 	}
 
 	toggleSampling := func(enable bool) {
@@ -53,7 +107,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		if enable {
 			v = 1
 		}
-		collectTxnStatsSampleRate.Override(&st.SV, v)
+		collectTxnStatsSampleRate.Override(ctx, &st.SV, v)
 	}
 
 	type queryer interface {
@@ -73,14 +127,12 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		queryDB(t, db, selectOrderBy)
 
-		stats, _ := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
 
-		stats.mu.Lock()
-		defer stats.mu.Unlock()
-		require.Equal(t, int64(2), stats.mu.data.Count, "expected to have collected two sets of general stats")
-		require.Equal(t, int64(1), stats.mu.data.ExecStats.Count, "expected to have collected exactly one set of execution stats")
-		require.Greater(t, stats.mu.data.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
-		require.Greater(t, stats.mu.data.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
+		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(1), stats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
+		require.Greater(t, stats.Stats.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
+		require.Greater(t, stats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
 	})
 
 	t.Run("ExplicitTxn", func(t *testing.T) {
@@ -100,43 +152,54 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		doTxn(t)
 
-		aggStats, aggID := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
-		selectStats, selectID := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
+		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
+		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
 
-		aggStats.mu.Lock()
-		defer aggStats.mu.Unlock()
-		require.Equal(t, int64(2), aggStats.mu.data.Count, "expected to have collected two sets of general stats")
-		require.Equal(t, int64(1), aggStats.mu.data.ExecStats.Count, "expected to have collected exactly one set of execution stats")
-		require.Greater(t, aggStats.mu.data.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
-		require.Greater(t, aggStats.mu.data.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
+		require.Equal(t, int64(2), aggStats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(1), aggStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
+		require.Greater(t, aggStats.Stats.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
+		require.Greater(t, aggStats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
 
-		selectStats.mu.Lock()
-		defer selectStats.mu.Unlock()
-		require.Equal(t, int64(2), selectStats.mu.data.Count, "expected to have collected two sets of general stats")
-		require.Equal(t, int64(1), selectStats.mu.data.ExecStats.Count, "expected to have collected exactly one set of execution stats")
-		require.Greater(t, selectStats.mu.data.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
-		require.Greater(t, selectStats.mu.data.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
+		require.Equal(t, int64(2), selectStats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(1), selectStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
+		require.Greater(t, selectStats.Stats.RowsRead.Mean, float64(0), "expected statement to have read at least one row")
+		require.Greater(t, selectStats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected statement to have used RAM")
 
 		key := util.MakeFNV64()
-		key.Add(uint64(aggID))
-		key.Add(uint64(selectID))
+		key.Add(uint64(aggStats.ID))
+		key.Add(uint64(selectStats.ID))
+		txStats := getTxnStats(t, s, roachpb.TransactionFingerprintID(key.Sum()))
 
-		applicationStats := s.SQLServer().(*Server).sqlStats.getStatsForApplication("")
-		require.NotNil(t, applicationStats, "could not find app stats for default app")
-		txStats := applicationStats.getStatsForTxnWithKey(txnKey(key.Sum()), nil, false /* createIfNonExistent */)
-		require.NotNil(t, txStats, "could not find transaction stats for default app")
-
-		txStats.mu.Lock()
-		defer txStats.mu.Unlock()
-
-		require.Equal(t, int64(2), txStats.mu.data.Count, "expected to have collected two sets of general stats")
-		require.Equal(t, int64(1), txStats.mu.data.ExecStats.Count, "expected to have collected exactly one set of execution stats")
+		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(1), txStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
 		require.Equal(
 			t,
-			aggStats.mu.data.RowsRead.Mean+selectStats.mu.data.RowsRead.Mean,
-			txStats.mu.data.RowsRead.Mean,
+			aggStats.Stats.RowsRead.Mean+selectStats.Stats.RowsRead.Mean,
+			txStats.Stats.RowsRead.Mean,
 			"expected txn to report having read the sum of rows read in both its statements",
 		)
-		require.Greater(t, txStats.mu.data.ExecStats.MaxMemUsage.Mean, float64(0), "expected MaxMemUsage to be set on the txn")
+		require.Greater(t, txStats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected MaxMemUsage to be set on the txn")
+	})
+
+	t.Run("deallocate", func(t *testing.T) {
+		toggleSampling(false)
+		queryDB(t, db, "PREPARE abc AS SELECT 1")
+		queryDB(t, db, "PREPARE xyz AS SELECT 2 ORDER BY 1")
+		queryDB(t, db, "DEALLOCATE xyz")
+		queryDB(t, db, "DEALLOCATE abc")
+
+		// Make sure DEALLOCATE statements are grouped together rather than having
+		// one key per prepared statement name.
+		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
+
+		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(0), stats.Stats.ExecStats.Count, "expected to have collected zero execution stats")
+		require.Equal(t, stats.Stats.RowsRead.Mean, float64(0), "expected statement to have read zero rows")
+
+		// TODO(sql-observability): The PREPARE statements do not appear in the
+		// statement stats because tree.Prepare has a special case in the
+		// (*connExecutor).execStmtInOpenState function that short-circuits before
+		// stats are collected. Should we make DEALLOCATE similar to that, or
+		// should we change PREPARE so that stats are collected?
 	})
 }

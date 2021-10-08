@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -59,7 +60,7 @@ Specifying --active-store-key-id-only prints the key ID of the active store key
 and exits.
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionStatus),
+		RunE: clierrorplus.MaybeDecorateError(runEncryptionStatus),
 	}
 
 	encryptionActiveKeyCmd := &cobra.Command{
@@ -74,7 +75,7 @@ Plaintext:            # encryption not enabled
 AES128_CTR:be235...   # AES-128 encryption with store key ID
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionActiveKey),
+		RunE: clierrorplus.MaybeDecorateError(runEncryptionActiveKey),
 	}
 
 	// Add commands to the root debug command.
@@ -94,6 +95,12 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 		// storeEncryptionSpecs is in start.go.
 		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
+
+	// init has already run in cli/debug.go since this package imports it, so
+	// DebugPebbleCmd already has all its subcommands. We could traverse those
+	// here. But we don't need to by using PersistentFlags.
+	cli.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
+		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	cli.PopulateRocksDBConfigHook = fillEncryptionOptionsForStore
 }
@@ -163,7 +170,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if len(registries.FileRegistry) == 0 || len(registries.KeyRegistry) == 0 {
+	if len(registries.KeyRegistry) == 0 {
 		return nil
 	}
 
@@ -324,7 +331,7 @@ func getActiveEncryptionkey(dir string) (string, string, error) {
 
 	var setting enginepbccl.EncryptionSettings
 	if err := protoutil.Unmarshal(entry.EncryptionSettings, &setting); err != nil {
-		return "", "", fmt.Errorf("could not unmarshal encryption settings for %s: %v", keyRegistryFilename, err)
+		return "", "", errors.Wrapf(err, "could not unmarshal encryption settings for %s", keyRegistryFilename)
 	}
 
 	return setting.EncryptionType.String(), setting.KeyId, nil

@@ -22,29 +22,31 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -148,7 +150,7 @@ func init() {
 		Short: "show backup summary",
 		Long:  "Shows summary of meta information about a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runShowCmd),
+		RunE:  clierrorplus.MaybeDecorateError(runShowCmd),
 	}
 
 	listBackupsCmd := &cobra.Command{
@@ -156,7 +158,7 @@ func init() {
 		Short: "show backups in collection",
 		Long:  "Shows full backup paths in a backup collection.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runListBackupsCmd),
+		RunE:  clierrorplus.MaybeDecorateError(runListBackupsCmd),
 	}
 
 	listIncrementalCmd := &cobra.Command{
@@ -164,7 +166,7 @@ func init() {
 		Short: "show incremental backups",
 		Long:  "Shows incremental chain of a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runListIncrementalCmd),
+		RunE:  clierrorplus.MaybeDecorateError(runListIncrementalCmd),
 	}
 
 	exportDataCmd := &cobra.Command{
@@ -172,7 +174,7 @@ func init() {
 		Short: "export table data from a backup",
 		Long:  "export table data from a backup, requires specifying --table to export data from",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runExportDataCmd),
+		RunE:  clierrorplus.MaybeDecorateError(runExportDataCmd),
 	}
 
 	backupCmds := &cobra.Command{
@@ -279,14 +281,16 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 func externalStorageFromURIFactory(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
-	return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-		cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
+	defaultSettings := &cluster.Settings{}
+	defaultSettings.SV.Init(ctx, nil /* opaque */)
+	return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
+		defaultSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
 }
 
 func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
 
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
@@ -323,7 +327,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 	ctx := context.Background()
 	store, err := externalStorageFromURIFactory(ctx, path, security.RootUserName())
@@ -340,10 +344,9 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 	cols := []string{"path"}
 	rows := make([][]string, 0)
 	for _, backupPath := range backupPaths {
-		newRow := []string{"./" + backupPath}
-		rows = append(rows, newRow)
+		rows = append(rows, []string{"." + backupPath})
 	}
-	rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
+	rowSliceIter := clisqlexec.NewRowSliceIter(rows, "l" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
 }
 
@@ -351,7 +354,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 
 	uri, err := url.Parse(path)
@@ -366,7 +369,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	incPaths, err := backupccl.FindPriorBackupLocations(ctx, store)
+	incPaths, err := backupccl.FindPriorBackups(ctx, store, backupccl.OmitManifest)
 	if err != nil {
 		return err
 	}
@@ -401,7 +404,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 		rows = append(rows, newRow)
 	}
 	cols := []string{"path", "start time", "end time"}
-	rowSliceIter := cli.NewRowSliceIter(rows, "lll" /*align*/)
+	rowSliceIter := clisqlexec.NewRowSliceIter(rows, "lll" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
 }
 
@@ -461,7 +464,7 @@ func evalAsOfTimestamp(
 	}
 	var err error
 	// Attempt to parse as timestamp.
-	if ts, _, err := pgdate.ParseTimestampWithoutTimezone(timeutil.Now(), pgdate.ParseModeYMD, readTime); err == nil {
+	if ts, _, err := pgdate.ParseTimestampWithoutTimezone(timeutil.Now(), pgdate.DateStyle{Order: pgdate.Order_MDY}, readTime); err == nil {
 		readTS := hlc.Timestamp{WallTime: ts.UnixNano()}
 		return readTS, nil
 	}
@@ -517,7 +520,7 @@ func showData(
 		if err != nil {
 			return errors.Wrapf(err, "unable to open store to write files: %s", debugBackupArgs.destination)
 		}
-		if err = store.WriteFile(ctx, file, bytes.NewReader(buf.Bytes())); err != nil {
+		if err = cloud.WriteFile(ctx, store, file, bytes.NewReader(buf.Bytes())); err != nil {
 			_ = store.Close()
 			return err
 		}
@@ -534,7 +537,7 @@ func makeIters(
 	for i, file := range files {
 		var err error
 		clusterSettings := cluster.MakeClusterSettings()
-		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
+		dirStorage[i], err = cloud.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
 			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "making external storage")
@@ -600,6 +603,7 @@ func makeRowFetcher(
 		false, /*reverse*/
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		0,     /* lockTimeout */
 		false, /*isCheck*/
 		&rowenc.DatumAlloc{},
 		nil, /*mon.BytesMonitor*/
@@ -751,7 +755,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 
 	dbIDToName := make(map[descpb.ID]string)
 	schemaIDToFullyQualifiedName := make(map[descpb.ID]string)
-	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = catconstants.PublicSchemaName
 	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
 	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
 
@@ -767,7 +771,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 			schemaIDToFullyQualifiedName[id] = dbName + "." + schemaName
 		} else if typeDesc != nil {
 			parentSchema := schemaIDToFullyQualifiedName[typeDesc.GetParentSchemaID()]
-			if parentSchema == sessiondata.PublicSchemaName {
+			if parentSchema == catconstants.PublicSchemaName {
 				parentSchema = dbIDToName[typeDesc.GetParentID()] + "." + parentSchema
 			}
 			typeName := descpb.GetDescriptorName(d)
@@ -775,7 +779,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		} else if tableDesc != nil {
 			tbDesc := tabledesc.NewBuilder(tableDesc).BuildImmutable()
 			parentSchema := schemaIDToFullyQualifiedName[tbDesc.GetParentSchemaID()]
-			if parentSchema == sessiondata.PublicSchemaName {
+			if parentSchema == catconstants.PublicSchemaName {
 				parentSchema = dbIDToName[tableDesc.GetParentID()] + "." + parentSchema
 			}
 			tableName := descpb.GetDescriptorName(d)

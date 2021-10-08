@@ -5,6 +5,7 @@ package tenant
 
 import (
 	context "context"
+	encoding_binary "encoding/binary"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -27,49 +28,69 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// EventType shows the event type of the notifications that the server streams to its clients.
-type EventType int32
+// PodState gives the current state of a tenant pod, so that the proxy knows
+// how/where to route traffic.
+// NOTE: This is not the same as the Kubernetes Pod Status.
+type PodState int32
 
 const (
-	ADDED    EventType = 0
-	MODIFIED EventType = 1
-	DELETED  EventType = 2
+	// UNKNOWN indicates that the pod values being reported are from a
+	// potentially out of date source. UNKNOWN may be used to notify updates to
+	// pod values when the pod's state may be out of date by the time the update
+	// is processed.
+	UNKNOWN PodState = 0
+	// RUNNING indicates the pod may have active SQL connections and is ready to
+	// accept new SQL connections.
+	// NOTE: The proxy must still be prepared to retry connections against a
+	// running pod in case of transient failures.
+	RUNNING PodState = 1
+	// DRAINING indicates that the pod may still have active SQL connections to
+	// it, but is in the process of shedding those connections so that it can be
+	// terminated. No new connections should be routed to the pod. In addition,
+	// the proxy will begin terminating existing, less-active connections to the
+	// pod.
+	DRAINING PodState = 2
+	// DELETING indicates that the pod is being terminated. This state is only
+	// used by WatchPods.
+	DELETING PodState = 3
 )
 
-var EventType_name = map[int32]string{
-	0: "ADDED",
-	1: "MODIFIED",
-	2: "DELETED",
+var PodState_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "RUNNING",
+	2: "DRAINING",
+	3: "DELETING",
 }
 
-var EventType_value = map[string]int32{
-	"ADDED":    0,
-	"MODIFIED": 1,
-	"DELETED":  2,
+var PodState_value = map[string]int32{
+	"UNKNOWN":  0,
+	"RUNNING":  1,
+	"DRAINING": 2,
+	"DELETING": 3,
 }
 
-func (x EventType) String() string {
-	return proto.EnumName(EventType_name, int32(x))
+func (x PodState) String() string {
+	return proto.EnumName(PodState_name, int32(x))
 }
 
-func (EventType) EnumDescriptor() ([]byte, []int) {
+func (PodState) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{0}
 }
 
-// WatchEndpointsRequest is empty as we want to get all notifications.
-type WatchEndpointsRequest struct {
+// WatchPodsRequest is empty as we want to get all notifications.
+type WatchPodsRequest struct {
 }
 
-func (m *WatchEndpointsRequest) Reset()         { *m = WatchEndpointsRequest{} }
-func (m *WatchEndpointsRequest) String() string { return proto.CompactTextString(m) }
-func (*WatchEndpointsRequest) ProtoMessage()    {}
-func (*WatchEndpointsRequest) Descriptor() ([]byte, []int) {
+func (m *WatchPodsRequest) Reset()         { *m = WatchPodsRequest{} }
+func (m *WatchPodsRequest) String() string { return proto.CompactTextString(m) }
+func (*WatchPodsRequest) ProtoMessage()    {}
+func (*WatchPodsRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{0}
 }
-func (m *WatchEndpointsRequest) XXX_Unmarshal(b []byte) error {
+func (m *WatchPodsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchEndpointsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WatchPodsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -77,39 +98,43 @@ func (m *WatchEndpointsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 	}
 	return b[:n], nil
 }
-func (m *WatchEndpointsRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchEndpointsRequest.Merge(m, src)
+func (m *WatchPodsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WatchPodsRequest.Merge(m, src)
 }
-func (m *WatchEndpointsRequest) XXX_Size() int {
+func (m *WatchPodsRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchEndpointsRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchEndpointsRequest.DiscardUnknown(m)
+func (m *WatchPodsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_WatchPodsRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchEndpointsRequest proto.InternalMessageInfo
+var xxx_messageInfo_WatchPodsRequest proto.InternalMessageInfo
 
-// WatchEndpointsResponse represents the notifications that the server sends to its clients when clients
-// want to monitor the directory server activity.
-type WatchEndpointsResponse struct {
-	// EventType is the type of the notifications - added, modified, deleted.
-	Typ EventType `protobuf:"varint,1,opt,name=typ,proto3,enum=cockroach.ccl.sqlproxyccl.tenant.EventType" json:"typ,omitempty"`
-	// IP is the endpoint that this notification applies to.
-	IP string `protobuf:"bytes,2,opt,name=ip,proto3" json:"ip,omitempty"`
-	// TenantID is the tenant that owns the endpoint.
-	TenantID uint64 `protobuf:"varint,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+// Pod contains information about a tenant pod, such as its tenant owner,
+// location, and state.
+type Pod struct {
+	// TenantID is the tenant that owns the pod.
+	TenantID uint64 `protobuf:"varint,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Addr is the ip and port combo identifying the tenant pod, (e.g.
+	// 132.130.1.11:34576).
+	Addr string `protobuf:"bytes,1,opt,name=Addr,proto3" json:"Addr,omitempty"`
+	// PodState gives the current status of the tenant pod.
+	State PodState `protobuf:"varint,3,opt,name=State,proto3,enum=cockroach.ccl.sqlproxyccl.tenant.PodState" json:"State,omitempty"`
+	// Load is a number in the range [0, 1] indicating the current amount of load
+	// experienced by this tenant pod.
+	Load float32 `protobuf:"fixed32,4,opt,name=Load,proto3" json:"Load,omitempty"`
 }
 
-func (m *WatchEndpointsResponse) Reset()         { *m = WatchEndpointsResponse{} }
-func (m *WatchEndpointsResponse) String() string { return proto.CompactTextString(m) }
-func (*WatchEndpointsResponse) ProtoMessage()    {}
-func (*WatchEndpointsResponse) Descriptor() ([]byte, []int) {
+func (m *Pod) Reset()         { *m = Pod{} }
+func (m *Pod) String() string { return proto.CompactTextString(m) }
+func (*Pod) ProtoMessage()    {}
+func (*Pod) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{1}
 }
-func (m *WatchEndpointsResponse) XXX_Unmarshal(b []byte) error {
+func (m *Pod) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchEndpointsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *Pod) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -117,34 +142,35 @@ func (m *WatchEndpointsResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 	}
 	return b[:n], nil
 }
-func (m *WatchEndpointsResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchEndpointsResponse.Merge(m, src)
+func (m *Pod) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Pod.Merge(m, src)
 }
-func (m *WatchEndpointsResponse) XXX_Size() int {
+func (m *Pod) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchEndpointsResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchEndpointsResponse.DiscardUnknown(m)
+func (m *Pod) XXX_DiscardUnknown() {
+	xxx_messageInfo_Pod.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchEndpointsResponse proto.InternalMessageInfo
+var xxx_messageInfo_Pod proto.InternalMessageInfo
 
-// ListEndpointsRequest is used to query the server for the list of current endpoints of a given tenant.
-type ListEndpointsRequest struct {
-	// TenantID identifies the tenant for which the client is requesting a list of the endpoints.
-	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+// WatchPodsResponse represents the notifications that the server sends to
+// its clients when clients want to monitor the directory server activity.
+type WatchPodsResponse struct {
+	// Pod describes the tenant pod which has been added, modified, or deleted.
+	Pod *Pod `protobuf:"bytes,1,opt,name=pod,proto3" json:"pod,omitempty"`
 }
 
-func (m *ListEndpointsRequest) Reset()         { *m = ListEndpointsRequest{} }
-func (m *ListEndpointsRequest) String() string { return proto.CompactTextString(m) }
-func (*ListEndpointsRequest) ProtoMessage()    {}
-func (*ListEndpointsRequest) Descriptor() ([]byte, []int) {
+func (m *WatchPodsResponse) Reset()         { *m = WatchPodsResponse{} }
+func (m *WatchPodsResponse) String() string { return proto.CompactTextString(m) }
+func (*WatchPodsResponse) ProtoMessage()    {}
+func (*WatchPodsResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{2}
 }
-func (m *ListEndpointsRequest) XXX_Unmarshal(b []byte) error {
+func (m *WatchPodsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ListEndpointsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WatchPodsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -152,35 +178,36 @@ func (m *ListEndpointsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte
 	}
 	return b[:n], nil
 }
-func (m *ListEndpointsRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListEndpointsRequest.Merge(m, src)
+func (m *WatchPodsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WatchPodsResponse.Merge(m, src)
 }
-func (m *ListEndpointsRequest) XXX_Size() int {
+func (m *WatchPodsResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *ListEndpointsRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListEndpointsRequest.DiscardUnknown(m)
+func (m *WatchPodsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_WatchPodsResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ListEndpointsRequest proto.InternalMessageInfo
+var xxx_messageInfo_WatchPodsResponse proto.InternalMessageInfo
 
-// EnsureEndpointRequest is used to ensure that a tenant's backend is active. If there is an active backend then the
-// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
-type EnsureEndpointRequest struct {
-	// TenantID is the id of the tenant for which an active backend is requested.
+// ListPodsRequest is used to query the server for the list of current
+// pods of a given tenant.
+type ListPodsRequest struct {
+	// TenantID identifies the tenant for which the client is requesting a list of
+	// the pods.
 	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 }
 
-func (m *EnsureEndpointRequest) Reset()         { *m = EnsureEndpointRequest{} }
-func (m *EnsureEndpointRequest) String() string { return proto.CompactTextString(m) }
-func (*EnsureEndpointRequest) ProtoMessage()    {}
-func (*EnsureEndpointRequest) Descriptor() ([]byte, []int) {
+func (m *ListPodsRequest) Reset()         { *m = ListPodsRequest{} }
+func (m *ListPodsRequest) String() string { return proto.CompactTextString(m) }
+func (*ListPodsRequest) ProtoMessage()    {}
+func (*ListPodsRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{3}
 }
-func (m *EnsureEndpointRequest) XXX_Unmarshal(b []byte) error {
+func (m *ListPodsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *EnsureEndpointRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ListPodsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -188,32 +215,35 @@ func (m *EnsureEndpointRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 	}
 	return b[:n], nil
 }
-func (m *EnsureEndpointRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_EnsureEndpointRequest.Merge(m, src)
+func (m *ListPodsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListPodsRequest.Merge(m, src)
 }
-func (m *EnsureEndpointRequest) XXX_Size() int {
+func (m *ListPodsRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *EnsureEndpointRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_EnsureEndpointRequest.DiscardUnknown(m)
+func (m *ListPodsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListPodsRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_EnsureEndpointRequest proto.InternalMessageInfo
+var xxx_messageInfo_ListPodsRequest proto.InternalMessageInfo
 
-// EnsureEndpointResponse is empty and indicates that the server processed the request.
-type EnsureEndpointResponse struct {
+// EnsurePodRequest is used to ensure that at least one tenant pod is in the
+// RUNNING state.
+type EnsurePodRequest struct {
+	// TenantID is the id of the tenant for which a RUNNING pod is requested.
+	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 }
 
-func (m *EnsureEndpointResponse) Reset()         { *m = EnsureEndpointResponse{} }
-func (m *EnsureEndpointResponse) String() string { return proto.CompactTextString(m) }
-func (*EnsureEndpointResponse) ProtoMessage()    {}
-func (*EnsureEndpointResponse) Descriptor() ([]byte, []int) {
+func (m *EnsurePodRequest) Reset()         { *m = EnsurePodRequest{} }
+func (m *EnsurePodRequest) String() string { return proto.CompactTextString(m) }
+func (*EnsurePodRequest) ProtoMessage()    {}
+func (*EnsurePodRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{4}
 }
-func (m *EnsureEndpointResponse) XXX_Unmarshal(b []byte) error {
+func (m *EnsurePodRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *EnsureEndpointResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *EnsurePodRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -221,35 +251,33 @@ func (m *EnsureEndpointResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 	}
 	return b[:n], nil
 }
-func (m *EnsureEndpointResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_EnsureEndpointResponse.Merge(m, src)
+func (m *EnsurePodRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EnsurePodRequest.Merge(m, src)
 }
-func (m *EnsureEndpointResponse) XXX_Size() int {
+func (m *EnsurePodRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *EnsureEndpointResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_EnsureEndpointResponse.DiscardUnknown(m)
+func (m *EnsurePodRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_EnsurePodRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_EnsureEndpointResponse proto.InternalMessageInfo
+var xxx_messageInfo_EnsurePodRequest proto.InternalMessageInfo
 
-// Endpoint contains the information about a tenant endpoint. Most often it is a combination of an ip address and port.
-// i.e. 132.130.1.11:34576
-type Endpoint struct {
-	// IP is the ip and port combo identifying the tenant endpoint.
-	IP string `protobuf:"bytes,1,opt,name=IP,proto3" json:"IP,omitempty"`
+// EnsurePodResponse is empty and indicates that the server processed the
+// request.
+type EnsurePodResponse struct {
 }
 
-func (m *Endpoint) Reset()         { *m = Endpoint{} }
-func (m *Endpoint) String() string { return proto.CompactTextString(m) }
-func (*Endpoint) ProtoMessage()    {}
-func (*Endpoint) Descriptor() ([]byte, []int) {
+func (m *EnsurePodResponse) Reset()         { *m = EnsurePodResponse{} }
+func (m *EnsurePodResponse) String() string { return proto.CompactTextString(m) }
+func (*EnsurePodResponse) ProtoMessage()    {}
+func (*EnsurePodResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{5}
 }
-func (m *Endpoint) XXX_Unmarshal(b []byte) error {
+func (m *EnsurePodResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Endpoint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *EnsurePodResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -257,34 +285,36 @@ func (m *Endpoint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	}
 	return b[:n], nil
 }
-func (m *Endpoint) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Endpoint.Merge(m, src)
+func (m *EnsurePodResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EnsurePodResponse.Merge(m, src)
 }
-func (m *Endpoint) XXX_Size() int {
+func (m *EnsurePodResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *Endpoint) XXX_DiscardUnknown() {
-	xxx_messageInfo_Endpoint.DiscardUnknown(m)
+func (m *EnsurePodResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_EnsurePodResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Endpoint proto.InternalMessageInfo
+var xxx_messageInfo_EnsurePodResponse proto.InternalMessageInfo
 
-// ListEndpointsResponse is sent back as a result of requesting the list of endpoints for a given tenant.
-type ListEndpointsResponse struct {
-	// Endpoints is the list of endpoints currently active for the requested tenant.
-	Endpoints []*Endpoint `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+// ListPodsResponse is sent back as a result of requesting the list of pods for
+// a given tenant.
+type ListPodsResponse struct {
+	// Pods is the list of RUNNING and/or DRAINING pods for the requested tenant.
+	// It does not include DELETING pods.
+	Pods []*Pod `protobuf:"bytes,1,rep,name=pods,proto3" json:"pods,omitempty"`
 }
 
-func (m *ListEndpointsResponse) Reset()         { *m = ListEndpointsResponse{} }
-func (m *ListEndpointsResponse) String() string { return proto.CompactTextString(m) }
-func (*ListEndpointsResponse) ProtoMessage()    {}
-func (*ListEndpointsResponse) Descriptor() ([]byte, []int) {
+func (m *ListPodsResponse) Reset()         { *m = ListPodsResponse{} }
+func (m *ListPodsResponse) String() string { return proto.CompactTextString(m) }
+func (*ListPodsResponse) ProtoMessage()    {}
+func (*ListPodsResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ec8b5028e8f2b222, []int{6}
 }
-func (m *ListEndpointsResponse) XXX_Unmarshal(b []byte) error {
+func (m *ListPodsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ListEndpointsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ListPodsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -292,19 +322,20 @@ func (m *ListEndpointsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byt
 	}
 	return b[:n], nil
 }
-func (m *ListEndpointsResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListEndpointsResponse.Merge(m, src)
+func (m *ListPodsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListPodsResponse.Merge(m, src)
 }
-func (m *ListEndpointsResponse) XXX_Size() int {
+func (m *ListPodsResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *ListEndpointsResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListEndpointsResponse.DiscardUnknown(m)
+func (m *ListPodsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListPodsResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ListEndpointsResponse proto.InternalMessageInfo
+var xxx_messageInfo_ListPodsResponse proto.InternalMessageInfo
 
-// GetTenantRequest is used by a client to request from the sever metadata related to a given tenant.
+// GetTenantRequest is used by a client to request from the sever metadata
+// related to a given tenant.
 type GetTenantRequest struct {
 	// TenantID identifies the tenant for which the metadata is being requested.
 	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -375,14 +406,14 @@ func (m *GetTenantResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_GetTenantResponse proto.InternalMessageInfo
 
 func init() {
-	proto.RegisterEnum("cockroach.ccl.sqlproxyccl.tenant.EventType", EventType_name, EventType_value)
-	proto.RegisterType((*WatchEndpointsRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.WatchEndpointsRequest")
-	proto.RegisterType((*WatchEndpointsResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.WatchEndpointsResponse")
-	proto.RegisterType((*ListEndpointsRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.ListEndpointsRequest")
-	proto.RegisterType((*EnsureEndpointRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.EnsureEndpointRequest")
-	proto.RegisterType((*EnsureEndpointResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.EnsureEndpointResponse")
-	proto.RegisterType((*Endpoint)(nil), "cockroach.ccl.sqlproxyccl.tenant.Endpoint")
-	proto.RegisterType((*ListEndpointsResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.ListEndpointsResponse")
+	proto.RegisterEnum("cockroach.ccl.sqlproxyccl.tenant.PodState", PodState_name, PodState_value)
+	proto.RegisterType((*WatchPodsRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.WatchPodsRequest")
+	proto.RegisterType((*Pod)(nil), "cockroach.ccl.sqlproxyccl.tenant.Pod")
+	proto.RegisterType((*WatchPodsResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.WatchPodsResponse")
+	proto.RegisterType((*ListPodsRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.ListPodsRequest")
+	proto.RegisterType((*EnsurePodRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.EnsurePodRequest")
+	proto.RegisterType((*EnsurePodResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.EnsurePodResponse")
+	proto.RegisterType((*ListPodsResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.ListPodsResponse")
 	proto.RegisterType((*GetTenantRequest)(nil), "cockroach.ccl.sqlproxyccl.tenant.GetTenantRequest")
 	proto.RegisterType((*GetTenantResponse)(nil), "cockroach.ccl.sqlproxyccl.tenant.GetTenantResponse")
 }
@@ -392,40 +423,40 @@ func init() {
 }
 
 var fileDescriptor_ec8b5028e8f2b222 = []byte{
-	// 523 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x94, 0xc1, 0x8b, 0xd3, 0x40,
-	0x14, 0xc6, 0x33, 0x6d, 0xad, 0xcd, 0x6b, 0x2d, 0x75, 0xd8, 0xd6, 0x92, 0x43, 0x36, 0xe6, 0x20,
-	0x71, 0x85, 0x54, 0xba, 0xb0, 0xeb, 0x65, 0x0f, 0x5b, 0x12, 0x35, 0xb0, 0x6a, 0x09, 0x05, 0xc1,
-	0xcb, 0x12, 0xa7, 0xc3, 0x6e, 0xb0, 0x9b, 0xc9, 0x26, 0x53, 0xb1, 0x37, 0x41, 0x04, 0x8f, 0xe2,
-	0xd1, 0xab, 0xff, 0xcc, 0x1e, 0xf7, 0xb8, 0xa7, 0x45, 0xd3, 0x7f, 0x44, 0xda, 0x69, 0xd6, 0x36,
-	0x14, 0xdb, 0xee, 0x6d, 0x78, 0x93, 0xdf, 0x37, 0xdf, 0x7b, 0xf9, 0x66, 0xe0, 0x11, 0x21, 0x83,
-	0x56, 0x7c, 0x3e, 0x08, 0x23, 0xf6, 0x69, 0x34, 0x59, 0x73, 0x1a, 0x78, 0x01, 0x6f, 0xf5, 0xfd,
-	0x88, 0x12, 0xce, 0xa2, 0x91, 0x19, 0x46, 0x8c, 0x33, 0xac, 0x11, 0x46, 0x3e, 0x44, 0xcc, 0x23,
-	0xa7, 0x26, 0x21, 0x03, 0x73, 0x8e, 0x30, 0x05, 0xa1, 0x6c, 0x9d, 0xb0, 0x13, 0x36, 0xfd, 0xb8,
-	0x35, 0x59, 0x09, 0x4e, 0x7f, 0x00, 0xf5, 0xb7, 0x1e, 0x27, 0xa7, 0x76, 0xd0, 0x0f, 0x99, 0x1f,
-	0xf0, 0xd8, 0xa5, 0xe7, 0x43, 0x1a, 0x73, 0xfd, 0x27, 0x82, 0x46, 0x76, 0x27, 0x0e, 0x59, 0x10,
-	0x53, 0x7c, 0x00, 0x79, 0x3e, 0x0a, 0x9b, 0x48, 0x43, 0x46, 0xb5, 0xfd, 0xc4, 0x5c, 0x75, 0xb2,
-	0x69, 0x7f, 0xa4, 0x01, 0xef, 0x8d, 0x42, 0xea, 0x4e, 0x38, 0xdc, 0x80, 0x9c, 0x1f, 0x36, 0x73,
-	0x1a, 0x32, 0xe4, 0x4e, 0x31, 0xb9, 0xde, 0xce, 0x39, 0x5d, 0x37, 0xe7, 0x87, 0xf8, 0x31, 0xc8,
-	0x02, 0x38, 0xf6, 0xfb, 0xcd, 0xbc, 0x86, 0x8c, 0x42, 0xa7, 0x92, 0x5c, 0x6f, 0x97, 0x7a, 0xd3,
-	0xa2, 0x63, 0xb9, 0x25, 0xb1, 0xed, 0xf4, 0xf5, 0x43, 0xd8, 0x3a, 0xf2, 0x63, 0x9e, 0x35, 0xbd,
-	0x28, 0x81, 0xfe, 0x2b, 0xd1, 0x81, 0xba, 0x1d, 0xc4, 0xc3, 0x88, 0xa6, 0x22, 0xb7, 0xd0, 0x68,
-	0x42, 0x23, 0xab, 0x21, 0x46, 0xa4, 0xeb, 0x50, 0x4a, 0x6b, 0x93, 0x7e, 0x9d, 0xee, 0x54, 0x69,
-	0xae, 0x5f, 0xa7, 0xab, 0x7b, 0x50, 0xcf, 0x34, 0x31, 0x9b, 0xef, 0x4b, 0x90, 0x69, 0x5a, 0x6c,
-	0x22, 0x2d, 0x6f, 0x94, 0xdb, 0x3b, 0x6b, 0x4c, 0x39, 0xf5, 0xf0, 0x0f, 0xd6, 0x0f, 0xa0, 0xf6,
-	0x82, 0x72, 0xe1, 0xfc, 0x16, 0xfd, 0xed, 0xc1, 0xfd, 0x39, 0x7c, 0xe6, 0xee, 0x21, 0x54, 0xc8,
-	0x60, 0x18, 0x73, 0x1a, 0x1d, 0x07, 0xde, 0x19, 0x15, 0x8d, 0xb9, 0xe5, 0x59, 0xed, 0xb5, 0x77,
-	0x46, 0x77, 0xf6, 0x41, 0xbe, 0xf9, 0xe7, 0x58, 0x86, 0x3b, 0x87, 0x96, 0x65, 0x5b, 0x35, 0x09,
-	0x57, 0xa0, 0xf4, 0xea, 0x8d, 0xe5, 0x3c, 0x77, 0x6c, 0xab, 0x86, 0x70, 0x19, 0xee, 0x5a, 0xf6,
-	0x91, 0xdd, 0xb3, 0xad, 0x5a, 0x4e, 0x29, 0x7c, 0xfb, 0xa5, 0x4a, 0xed, 0x1f, 0x05, 0x90, 0xad,
-	0x34, 0xd9, 0xf8, 0x33, 0x82, 0x7b, 0x0b, 0x13, 0xc2, 0x7b, 0xab, 0xc7, 0xb0, 0x2c, 0x17, 0xca,
-	0xfe, 0xc6, 0xdc, 0xac, 0xd9, 0xaf, 0x08, 0xaa, 0x8b, 0xb7, 0x00, 0xaf, 0xa1, 0xb5, 0xf4, 0x46,
-	0x29, 0xcf, 0x36, 0x07, 0x85, 0x8b, 0xa7, 0x08, 0x7f, 0x41, 0x50, 0x5d, 0x8c, 0xda, 0x3a, 0x3e,
-	0x96, 0x06, 0x7c, 0x1d, 0x1f, 0xcb, 0x53, 0x8d, 0x39, 0xc8, 0x37, 0x79, 0xc0, 0xed, 0xd5, 0x32,
-	0xd9, 0xec, 0x29, 0xbb, 0x1b, 0x31, 0xe2, 0xd4, 0x8e, 0x71, 0xf1, 0x47, 0x95, 0x2e, 0x12, 0x15,
-	0x5d, 0x26, 0x2a, 0xba, 0x4a, 0x54, 0xf4, 0x3b, 0x51, 0xd1, 0xf7, 0xb1, 0x2a, 0x5d, 0x8e, 0x55,
-	0xe9, 0x6a, 0xac, 0x4a, 0xef, 0x8a, 0x82, 0x7d, 0x5f, 0x9c, 0xbe, 0x69, 0xbb, 0x7f, 0x03, 0x00,
-	0x00, 0xff, 0xff, 0xba, 0xed, 0x85, 0x11, 0x35, 0x05, 0x00, 0x00,
+	// 517 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x94, 0xc1, 0x6e, 0xd3, 0x40,
+	0x10, 0x86, 0xbd, 0x71, 0x28, 0xc9, 0x24, 0x02, 0x67, 0xe1, 0x60, 0xe5, 0x60, 0x8c, 0x25, 0x90,
+	0xe9, 0xc1, 0x81, 0x54, 0x02, 0x21, 0x81, 0x44, 0xab, 0x84, 0x2a, 0x22, 0x98, 0xc8, 0xb4, 0xaa,
+	0xc4, 0xa5, 0x32, 0xbb, 0xab, 0x36, 0x22, 0xf5, 0x3a, 0xf6, 0x06, 0xd1, 0x37, 0xe0, 0xc8, 0x99,
+	0x2b, 0x2f, 0xd3, 0x63, 0x8f, 0x3d, 0x21, 0x70, 0x5e, 0x04, 0x79, 0xed, 0x04, 0x93, 0x4a, 0xd4,
+	0xe9, 0x6d, 0x66, 0x93, 0x6f, 0xff, 0xf9, 0x77, 0xfe, 0x04, 0x1e, 0x12, 0x32, 0xe9, 0xc4, 0xd3,
+	0x49, 0x18, 0xf1, 0x2f, 0xa7, 0x69, 0x2d, 0x58, 0xe0, 0x07, 0xa2, 0x43, 0xc7, 0x11, 0x23, 0x82,
+	0x47, 0xa7, 0x4e, 0x18, 0x71, 0xc1, 0xb1, 0x49, 0x38, 0xf9, 0x14, 0x71, 0x9f, 0x1c, 0x3b, 0x84,
+	0x4c, 0x9c, 0x02, 0xe1, 0x64, 0x44, 0xfb, 0xee, 0x11, 0x3f, 0xe2, 0xf2, 0xcb, 0x9d, 0xb4, 0xca,
+	0x38, 0x0b, 0x83, 0x76, 0xe0, 0x0b, 0x72, 0x3c, 0xe2, 0x34, 0xf6, 0xd8, 0x74, 0xc6, 0x62, 0x61,
+	0x7d, 0x47, 0xa0, 0x8e, 0x38, 0xc5, 0x8f, 0xa0, 0x9e, 0xb1, 0x87, 0x63, 0xaa, 0x57, 0x4c, 0x64,
+	0x57, 0x77, 0x9a, 0xc9, 0xcf, 0x7b, 0xb5, 0x3d, 0x79, 0x38, 0xe8, 0x79, 0xb5, 0xec, 0xe3, 0x01,
+	0xc5, 0x18, 0xaa, 0xdb, 0x94, 0x46, 0x3a, 0x32, 0x91, 0x5d, 0xf7, 0x64, 0x8d, 0x5f, 0xc1, 0x8d,
+	0xf7, 0xc2, 0x17, 0x4c, 0x57, 0x4d, 0x64, 0xdf, 0xea, 0x6e, 0x3a, 0x57, 0x8d, 0xe8, 0x8c, 0x38,
+	0x95, 0x84, 0x97, 0x81, 0xe9, 0xad, 0x43, 0xee, 0x53, 0xbd, 0x6a, 0x22, 0xbb, 0xe2, 0xc9, 0xda,
+	0x1a, 0x42, 0xab, 0x30, 0x70, 0x1c, 0xf2, 0x20, 0x66, 0xf8, 0x19, 0xa8, 0x21, 0xa7, 0x52, 0xbd,
+	0xd1, 0x7d, 0x50, 0x4a, 0xc8, 0x4b, 0x09, 0xeb, 0x05, 0xdc, 0x1e, 0x8e, 0x63, 0x51, 0x70, 0xff,
+	0xaf, 0x6b, 0xf4, 0x3f, 0xd7, 0xd6, 0x4b, 0xd0, 0xfa, 0x41, 0x3c, 0x8b, 0x58, 0x7a, 0xdf, 0xfa,
+	0xf8, 0x1d, 0x68, 0x15, 0xf0, 0xcc, 0x8a, 0xf5, 0x16, 0xb4, 0xbf, 0x13, 0xe5, 0xf6, 0x9e, 0x43,
+	0x35, 0xe4, 0x34, 0xd6, 0x91, 0xa9, 0x96, 0xf7, 0x27, 0x91, 0x74, 0xc4, 0x5d, 0x26, 0x32, 0xf1,
+	0x6b, 0x8c, 0xf8, 0x14, 0x5a, 0x05, 0x3c, 0x1f, 0xe7, 0x3e, 0x34, 0xc9, 0x64, 0x16, 0x0b, 0x16,
+	0x1d, 0x06, 0xfe, 0x09, 0xcb, 0x97, 0xde, 0xc8, 0xcf, 0x5c, 0xff, 0x84, 0x6d, 0xbe, 0x86, 0xda,
+	0x62, 0x99, 0xb8, 0x01, 0x37, 0xf7, 0xdd, 0x37, 0xee, 0xbb, 0x03, 0x57, 0x53, 0xd2, 0xc6, 0xdb,
+	0x77, 0xdd, 0x81, 0xbb, 0xab, 0x21, 0xdc, 0x84, 0x5a, 0xcf, 0xdb, 0x1e, 0xc8, 0xae, 0x22, 0xbb,
+	0xfe, 0xb0, 0xbf, 0x97, 0x76, 0x6a, 0xbb, 0xfa, 0xf5, 0x87, 0xa1, 0x74, 0x13, 0x15, 0xea, 0xbd,
+	0x45, 0xd4, 0xf1, 0x14, 0x6a, 0x8b, 0xb7, 0xc1, 0x4f, 0xae, 0x7e, 0x85, 0x95, 0xcd, 0xb6, 0xbb,
+	0xeb, 0x20, 0xb9, 0xd7, 0xcf, 0x50, 0x5f, 0xc6, 0x0d, 0x97, 0xb8, 0x60, 0xf5, 0xc7, 0xd4, 0xde,
+	0x5a, 0x8b, 0xc9, 0x54, 0x1f, 0x23, 0x2c, 0xa0, 0xbe, 0xcc, 0x46, 0x19, 0xdd, 0xd5, 0x1c, 0x96,
+	0xd1, 0xbd, 0x14, 0xbe, 0x54, 0x75, 0xb9, 0xee, 0x32, 0xaa, 0xab, 0xd1, 0x2a, 0xa3, 0x7a, 0x29,
+	0x4f, 0x3b, 0xf6, 0xd9, 0x6f, 0x43, 0x39, 0x4b, 0x0c, 0x74, 0x9e, 0x18, 0xe8, 0x22, 0x31, 0xd0,
+	0xaf, 0xc4, 0x40, 0xdf, 0xe6, 0x86, 0x72, 0x3e, 0x37, 0x94, 0x8b, 0xb9, 0xa1, 0x7c, 0xd8, 0xc8,
+	0xd8, 0x8f, 0x1b, 0xf2, 0x4f, 0x6b, 0xeb, 0x4f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xf6, 0x08, 0xdf,
+	0xa3, 0x16, 0x05, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -440,15 +471,22 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type DirectoryClient interface {
-	// ListEndpoints is used to query the server for the list of current endpoints of a given tenant.
-	ListEndpoints(ctx context.Context, in *ListEndpointsRequest, opts ...grpc.CallOption) (*ListEndpointsResponse, error)
-	// WatchEndpoints is used to get a stream, that is used to receive notifications about changes in tenant
-	// backend's state - added, modified and deleted.
-	WatchEndpoints(ctx context.Context, in *WatchEndpointsRequest, opts ...grpc.CallOption) (Directory_WatchEndpointsClient, error)
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there is an active backend then the
-	// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
-	EnsureEndpoint(ctx context.Context, in *EnsureEndpointRequest, opts ...grpc.CallOption) (*EnsureEndpointResponse, error)
-	// GetTenant is used to fetch the metadata of a specific tenant.
+	// ListPods is used to query the server for the list of all RUNNING and/or
+	// DRAINING pods of a given tenant.
+	ListPods(ctx context.Context, in *ListPodsRequest, opts ...grpc.CallOption) (*ListPodsResponse, error)
+	// WatchPods gets a stream of tenant pod change notifications. Notifications
+	// are sent when a tenant pod is created, destroyed, or modified. When
+	// WatchPods is first called, it returns notifications for all existing pods.
+	WatchPods(ctx context.Context, in *WatchPodsRequest, opts ...grpc.CallOption) (Directory_WatchPodsClient, error)
+	// EnsurePod ensures that at least one of the given tenant's pod is in the
+	// RUNNING state. If there is already a RUNNING pod, then the server doesn't
+	// have to do anything. If there isn't a RUNNING pod, then the server must
+	// either convert an existing DRAINING pod to a RUNNING pod, or else bring new
+	// RUNNING pod up. If the requested tenant does not exist, EnsurePod returns a
+	// GRPC NotFound error.
+	EnsurePod(ctx context.Context, in *EnsurePodRequest, opts ...grpc.CallOption) (*EnsurePodResponse, error)
+	// GetTenant is used to fetch the metadata of a specific tenant. If the tenant
+	// does not exist, GetTenant returns a GRPC NotFound error.
 	GetTenant(ctx context.Context, in *GetTenantRequest, opts ...grpc.CallOption) (*GetTenantResponse, error)
 }
 
@@ -460,21 +498,21 @@ func NewDirectoryClient(cc *grpc.ClientConn) DirectoryClient {
 	return &directoryClient{cc}
 }
 
-func (c *directoryClient) ListEndpoints(ctx context.Context, in *ListEndpointsRequest, opts ...grpc.CallOption) (*ListEndpointsResponse, error) {
-	out := new(ListEndpointsResponse)
-	err := c.cc.Invoke(ctx, "/cockroach.ccl.sqlproxyccl.tenant.Directory/ListEndpoints", in, out, opts...)
+func (c *directoryClient) ListPods(ctx context.Context, in *ListPodsRequest, opts ...grpc.CallOption) (*ListPodsResponse, error) {
+	out := new(ListPodsResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.ccl.sqlproxyccl.tenant.Directory/ListPods", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *directoryClient) WatchEndpoints(ctx context.Context, in *WatchEndpointsRequest, opts ...grpc.CallOption) (Directory_WatchEndpointsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Directory_serviceDesc.Streams[0], "/cockroach.ccl.sqlproxyccl.tenant.Directory/WatchEndpoints", opts...)
+func (c *directoryClient) WatchPods(ctx context.Context, in *WatchPodsRequest, opts ...grpc.CallOption) (Directory_WatchPodsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Directory_serviceDesc.Streams[0], "/cockroach.ccl.sqlproxyccl.tenant.Directory/WatchPods", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &directoryWatchEndpointsClient{stream}
+	x := &directoryWatchPodsClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -484,26 +522,26 @@ func (c *directoryClient) WatchEndpoints(ctx context.Context, in *WatchEndpoints
 	return x, nil
 }
 
-type Directory_WatchEndpointsClient interface {
-	Recv() (*WatchEndpointsResponse, error)
+type Directory_WatchPodsClient interface {
+	Recv() (*WatchPodsResponse, error)
 	grpc.ClientStream
 }
 
-type directoryWatchEndpointsClient struct {
+type directoryWatchPodsClient struct {
 	grpc.ClientStream
 }
 
-func (x *directoryWatchEndpointsClient) Recv() (*WatchEndpointsResponse, error) {
-	m := new(WatchEndpointsResponse)
+func (x *directoryWatchPodsClient) Recv() (*WatchPodsResponse, error) {
+	m := new(WatchPodsResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *directoryClient) EnsureEndpoint(ctx context.Context, in *EnsureEndpointRequest, opts ...grpc.CallOption) (*EnsureEndpointResponse, error) {
-	out := new(EnsureEndpointResponse)
-	err := c.cc.Invoke(ctx, "/cockroach.ccl.sqlproxyccl.tenant.Directory/EnsureEndpoint", in, out, opts...)
+func (c *directoryClient) EnsurePod(ctx context.Context, in *EnsurePodRequest, opts ...grpc.CallOption) (*EnsurePodResponse, error) {
+	out := new(EnsurePodResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.ccl.sqlproxyccl.tenant.Directory/EnsurePod", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -521,15 +559,22 @@ func (c *directoryClient) GetTenant(ctx context.Context, in *GetTenantRequest, o
 
 // DirectoryServer is the server API for Directory service.
 type DirectoryServer interface {
-	// ListEndpoints is used to query the server for the list of current endpoints of a given tenant.
-	ListEndpoints(context.Context, *ListEndpointsRequest) (*ListEndpointsResponse, error)
-	// WatchEndpoints is used to get a stream, that is used to receive notifications about changes in tenant
-	// backend's state - added, modified and deleted.
-	WatchEndpoints(*WatchEndpointsRequest, Directory_WatchEndpointsServer) error
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there is an active backend then the
-	// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
-	EnsureEndpoint(context.Context, *EnsureEndpointRequest) (*EnsureEndpointResponse, error)
-	// GetTenant is used to fetch the metadata of a specific tenant.
+	// ListPods is used to query the server for the list of all RUNNING and/or
+	// DRAINING pods of a given tenant.
+	ListPods(context.Context, *ListPodsRequest) (*ListPodsResponse, error)
+	// WatchPods gets a stream of tenant pod change notifications. Notifications
+	// are sent when a tenant pod is created, destroyed, or modified. When
+	// WatchPods is first called, it returns notifications for all existing pods.
+	WatchPods(*WatchPodsRequest, Directory_WatchPodsServer) error
+	// EnsurePod ensures that at least one of the given tenant's pod is in the
+	// RUNNING state. If there is already a RUNNING pod, then the server doesn't
+	// have to do anything. If there isn't a RUNNING pod, then the server must
+	// either convert an existing DRAINING pod to a RUNNING pod, or else bring new
+	// RUNNING pod up. If the requested tenant does not exist, EnsurePod returns a
+	// GRPC NotFound error.
+	EnsurePod(context.Context, *EnsurePodRequest) (*EnsurePodResponse, error)
+	// GetTenant is used to fetch the metadata of a specific tenant. If the tenant
+	// does not exist, GetTenant returns a GRPC NotFound error.
 	GetTenant(context.Context, *GetTenantRequest) (*GetTenantResponse, error)
 }
 
@@ -537,14 +582,14 @@ type DirectoryServer interface {
 type UnimplementedDirectoryServer struct {
 }
 
-func (*UnimplementedDirectoryServer) ListEndpoints(ctx context.Context, req *ListEndpointsRequest) (*ListEndpointsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListEndpoints not implemented")
+func (*UnimplementedDirectoryServer) ListPods(ctx context.Context, req *ListPodsRequest) (*ListPodsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListPods not implemented")
 }
-func (*UnimplementedDirectoryServer) WatchEndpoints(req *WatchEndpointsRequest, srv Directory_WatchEndpointsServer) error {
-	return status.Errorf(codes.Unimplemented, "method WatchEndpoints not implemented")
+func (*UnimplementedDirectoryServer) WatchPods(req *WatchPodsRequest, srv Directory_WatchPodsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchPods not implemented")
 }
-func (*UnimplementedDirectoryServer) EnsureEndpoint(ctx context.Context, req *EnsureEndpointRequest) (*EnsureEndpointResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method EnsureEndpoint not implemented")
+func (*UnimplementedDirectoryServer) EnsurePod(ctx context.Context, req *EnsurePodRequest) (*EnsurePodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EnsurePod not implemented")
 }
 func (*UnimplementedDirectoryServer) GetTenant(ctx context.Context, req *GetTenantRequest) (*GetTenantResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTenant not implemented")
@@ -554,59 +599,59 @@ func RegisterDirectoryServer(s *grpc.Server, srv DirectoryServer) {
 	s.RegisterService(&_Directory_serviceDesc, srv)
 }
 
-func _Directory_ListEndpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListEndpointsRequest)
+func _Directory_ListPods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPodsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DirectoryServer).ListEndpoints(ctx, in)
+		return srv.(DirectoryServer).ListPods(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/cockroach.ccl.sqlproxyccl.tenant.Directory/ListEndpoints",
+		FullMethod: "/cockroach.ccl.sqlproxyccl.tenant.Directory/ListPods",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DirectoryServer).ListEndpoints(ctx, req.(*ListEndpointsRequest))
+		return srv.(DirectoryServer).ListPods(ctx, req.(*ListPodsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Directory_WatchEndpoints_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(WatchEndpointsRequest)
+func _Directory_WatchPods_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchPodsRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(DirectoryServer).WatchEndpoints(m, &directoryWatchEndpointsServer{stream})
+	return srv.(DirectoryServer).WatchPods(m, &directoryWatchPodsServer{stream})
 }
 
-type Directory_WatchEndpointsServer interface {
-	Send(*WatchEndpointsResponse) error
+type Directory_WatchPodsServer interface {
+	Send(*WatchPodsResponse) error
 	grpc.ServerStream
 }
 
-type directoryWatchEndpointsServer struct {
+type directoryWatchPodsServer struct {
 	grpc.ServerStream
 }
 
-func (x *directoryWatchEndpointsServer) Send(m *WatchEndpointsResponse) error {
+func (x *directoryWatchPodsServer) Send(m *WatchPodsResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Directory_EnsureEndpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EnsureEndpointRequest)
+func _Directory_EnsurePod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnsurePodRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DirectoryServer).EnsureEndpoint(ctx, in)
+		return srv.(DirectoryServer).EnsurePod(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/cockroach.ccl.sqlproxyccl.tenant.Directory/EnsureEndpoint",
+		FullMethod: "/cockroach.ccl.sqlproxyccl.tenant.Directory/EnsurePod",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DirectoryServer).EnsureEndpoint(ctx, req.(*EnsureEndpointRequest))
+		return srv.(DirectoryServer).EnsurePod(ctx, req.(*EnsurePodRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -634,12 +679,12 @@ var _Directory_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*DirectoryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ListEndpoints",
-			Handler:    _Directory_ListEndpoints_Handler,
+			MethodName: "ListPods",
+			Handler:    _Directory_ListPods_Handler,
 		},
 		{
-			MethodName: "EnsureEndpoint",
-			Handler:    _Directory_EnsureEndpoint_Handler,
+			MethodName: "EnsurePod",
+			Handler:    _Directory_EnsurePod_Handler,
 		},
 		{
 			MethodName: "GetTenant",
@@ -648,15 +693,15 @@ var _Directory_serviceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "WatchEndpoints",
-			Handler:       _Directory_WatchEndpoints_Handler,
+			StreamName:    "WatchPods",
+			Handler:       _Directory_WatchPods_Handler,
 			ServerStreams: true,
 		},
 	},
 	Metadata: "ccl/sqlproxyccl/tenant/directory.proto",
 }
 
-func (m *WatchEndpointsRequest) Marshal() (dAtA []byte, err error) {
+func (m *WatchPodsRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -666,12 +711,12 @@ func (m *WatchEndpointsRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WatchEndpointsRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchPodsRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchEndpointsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchPodsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -679,7 +724,7 @@ func (m *WatchEndpointsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *WatchEndpointsResponse) Marshal() (dAtA []byte, err error) {
+func (m *Pod) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -689,146 +734,43 @@ func (m *WatchEndpointsResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WatchEndpointsResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *Pod) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchEndpointsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *Pod) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.TenantID != 0 {
-		i = encodeVarintDirectory(dAtA, i, uint64(m.TenantID))
+	if m.Load != 0 {
+		i -= 4
+		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Load))))
+		i--
+		dAtA[i] = 0x25
+	}
+	if m.State != 0 {
+		i = encodeVarintDirectory(dAtA, i, uint64(m.State))
 		i--
 		dAtA[i] = 0x18
 	}
-	if len(m.IP) > 0 {
-		i -= len(m.IP)
-		copy(dAtA[i:], m.IP)
-		i = encodeVarintDirectory(dAtA, i, uint64(len(m.IP)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Typ != 0 {
-		i = encodeVarintDirectory(dAtA, i, uint64(m.Typ))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListEndpointsRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListEndpointsRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListEndpointsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
 	if m.TenantID != 0 {
 		i = encodeVarintDirectory(dAtA, i, uint64(m.TenantID))
 		i--
-		dAtA[i] = 0x8
+		dAtA[i] = 0x10
 	}
-	return len(dAtA) - i, nil
-}
-
-func (m *EnsureEndpointRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *EnsureEndpointRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *EnsureEndpointRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.TenantID != 0 {
-		i = encodeVarintDirectory(dAtA, i, uint64(m.TenantID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *EnsureEndpointResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *EnsureEndpointResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *EnsureEndpointResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	return len(dAtA) - i, nil
-}
-
-func (m *Endpoint) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Endpoint) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Endpoint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.IP) > 0 {
-		i -= len(m.IP)
-		copy(dAtA[i:], m.IP)
-		i = encodeVarintDirectory(dAtA, i, uint64(len(m.IP)))
+	if len(m.Addr) > 0 {
+		i -= len(m.Addr)
+		copy(dAtA[i:], m.Addr)
+		i = encodeVarintDirectory(dAtA, i, uint64(len(m.Addr)))
 		i--
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
 
-func (m *ListEndpointsResponse) Marshal() (dAtA []byte, err error) {
+func (m *WatchPodsResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -838,20 +780,134 @@ func (m *ListEndpointsResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ListEndpointsResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchPodsResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ListEndpointsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchPodsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Endpoints) > 0 {
-		for iNdEx := len(m.Endpoints) - 1; iNdEx >= 0; iNdEx-- {
+	if m.Pod != nil {
+		{
+			size, err := m.Pod.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintDirectory(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ListPodsRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ListPodsRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ListPodsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.TenantID != 0 {
+		i = encodeVarintDirectory(dAtA, i, uint64(m.TenantID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *EnsurePodRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *EnsurePodRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnsurePodRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.TenantID != 0 {
+		i = encodeVarintDirectory(dAtA, i, uint64(m.TenantID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *EnsurePodResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *EnsurePodResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnsurePodResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *ListPodsResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ListPodsResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ListPodsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Pods) > 0 {
+		for iNdEx := len(m.Pods) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size, err := m.Endpoints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				size, err := m.Pods[iNdEx].MarshalToSizedBuffer(dAtA[:i])
 				if err != nil {
 					return 0, err
 				}
@@ -934,7 +990,7 @@ func encodeVarintDirectory(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *WatchEndpointsRequest) Size() (n int) {
+func (m *WatchPodsRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -943,79 +999,82 @@ func (m *WatchEndpointsRequest) Size() (n int) {
 	return n
 }
 
-func (m *WatchEndpointsResponse) Size() (n int) {
+func (m *Pod) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Typ != 0 {
-		n += 1 + sovDirectory(uint64(m.Typ))
-	}
-	l = len(m.IP)
+	l = len(m.Addr)
 	if l > 0 {
 		n += 1 + l + sovDirectory(uint64(l))
 	}
 	if m.TenantID != 0 {
 		n += 1 + sovDirectory(uint64(m.TenantID))
 	}
+	if m.State != 0 {
+		n += 1 + sovDirectory(uint64(m.State))
+	}
+	if m.Load != 0 {
+		n += 5
+	}
 	return n
 }
 
-func (m *ListEndpointsRequest) Size() (n int) {
+func (m *WatchPodsResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.TenantID != 0 {
-		n += 1 + sovDirectory(uint64(m.TenantID))
-	}
-	return n
-}
-
-func (m *EnsureEndpointRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.TenantID != 0 {
-		n += 1 + sovDirectory(uint64(m.TenantID))
-	}
-	return n
-}
-
-func (m *EnsureEndpointResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	return n
-}
-
-func (m *Endpoint) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.IP)
-	if l > 0 {
+	if m.Pod != nil {
+		l = m.Pod.Size()
 		n += 1 + l + sovDirectory(uint64(l))
 	}
 	return n
 }
 
-func (m *ListEndpointsResponse) Size() (n int) {
+func (m *ListPodsRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if len(m.Endpoints) > 0 {
-		for _, e := range m.Endpoints {
+	if m.TenantID != 0 {
+		n += 1 + sovDirectory(uint64(m.TenantID))
+	}
+	return n
+}
+
+func (m *EnsurePodRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TenantID != 0 {
+		n += 1 + sovDirectory(uint64(m.TenantID))
+	}
+	return n
+}
+
+func (m *EnsurePodResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ListPodsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Pods) > 0 {
+		for _, e := range m.Pods {
 			l = e.Size()
 			n += 1 + l + sovDirectory(uint64(l))
 		}
@@ -1054,7 +1113,7 @@ func sovDirectory(x uint64) (n int) {
 func sozDirectory(x uint64) (n int) {
 	return sovDirectory(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *WatchEndpointsRequest) Unmarshal(dAtA []byte) error {
+func (m *WatchPodsRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1077,10 +1136,10 @@ func (m *WatchEndpointsRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WatchEndpointsRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: WatchPodsRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchEndpointsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: WatchPodsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -1104,7 +1163,7 @@ func (m *WatchEndpointsRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WatchEndpointsResponse) Unmarshal(dAtA []byte) error {
+func (m *Pod) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1127,34 +1186,15 @@ func (m *WatchEndpointsResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WatchEndpointsResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: Pod: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchEndpointsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Pod: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Typ", wireType)
-			}
-			m.Typ = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDirectory
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Typ |= EventType(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IP", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Addr", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1182,13 +1222,32 @@ func (m *WatchEndpointsResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IP = string(dAtA[iNdEx:postIndex])
+			m.Addr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
+			}
+			m.TenantID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDirectory
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TenantID |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
 			}
-			m.TenantID = 0
+			m.State = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDirectory
@@ -1198,11 +1257,22 @@ func (m *WatchEndpointsResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TenantID |= uint64(b&0x7F) << shift
+				m.State |= PodState(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+		case 4:
+			if wireType != 5 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Load", wireType)
+			}
+			var v uint32
+			if (iNdEx + 4) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.Load = float32(math.Float32frombits(v))
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDirectory(dAtA[iNdEx:])
@@ -1224,7 +1294,7 @@ func (m *WatchEndpointsResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ListEndpointsRequest) Unmarshal(dAtA []byte) error {
+func (m *WatchPodsResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1247,285 +1317,15 @@ func (m *ListEndpointsRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ListEndpointsRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: WatchPodsResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListEndpointsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
-			}
-			m.TenantID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDirectory
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TenantID |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipDirectory(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *EnsureEndpointRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowDirectory
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: EnsureEndpointRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: EnsureEndpointRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
-			}
-			m.TenantID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDirectory
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TenantID |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipDirectory(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *EnsureEndpointResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowDirectory
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: EnsureEndpointResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: EnsureEndpointResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		default:
-			iNdEx = preIndex
-			skippy, err := skipDirectory(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Endpoint) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowDirectory
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Endpoint: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Endpoint: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: WatchPodsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IP", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDirectory
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.IP = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipDirectory(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthDirectory
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListEndpointsResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowDirectory
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListEndpointsResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListEndpointsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Endpoints", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Pod", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1552,8 +1352,282 @@ func (m *ListEndpointsResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Endpoints = append(m.Endpoints, &Endpoint{})
-			if err := m.Endpoints[len(m.Endpoints)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if m.Pod == nil {
+				m.Pod = &Pod{}
+			}
+			if err := m.Pod.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDirectory(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ListPodsRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDirectory
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ListPodsRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ListPodsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
+			}
+			m.TenantID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDirectory
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TenantID |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDirectory(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *EnsurePodRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDirectory
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: EnsurePodRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: EnsurePodRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TenantID", wireType)
+			}
+			m.TenantID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDirectory
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TenantID |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDirectory(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *EnsurePodResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDirectory
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: EnsurePodResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: EnsurePodResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDirectory(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ListPodsResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDirectory
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ListPodsResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ListPodsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pods", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDirectory
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthDirectory
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Pods = append(m.Pods, &Pod{})
+			if err := m.Pods[len(m.Pods)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

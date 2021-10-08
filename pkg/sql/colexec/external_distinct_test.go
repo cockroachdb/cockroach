@@ -79,31 +79,29 @@ func TestExternalDistinct(t *testing.T) {
 				// Closer.
 				numExpectedClosers++
 			}
-			colexectestutils.RunTestsWithTyps(
-				t,
-				testAllocator,
-				[]colexectestutils.Tuples{tc.tuples},
-				[][]*types.T{tc.typs},
-				tc.expected,
-				verifier,
-				func(input []colexecop.Operator) (colexecop.Operator, error) {
-					// A sorter should never exceed ExternalSorterMinPartitions, even
-					// during repartitioning. A panic will happen if a sorter requests
-					// more than this number of file descriptors.
-					sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
-					semsToCheck = append(semsToCheck, sem)
-					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering,
-						queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
-					)
-					require.Equal(t, numExpectedClosers, len(closers))
-					accounts = append(accounts, newAccounts...)
-					monitors = append(monitors, newMonitors...)
-					return distinct, err
-				},
-			)
-			for i, sem := range semsToCheck {
-				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				// A sorter should never exceed ExternalSorterMinPartitions, even
+				// during repartitioning. A panic will happen if a sorter requests
+				// more than this number of file descriptors.
+				sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
+				semsToCheck = append(semsToCheck, sem)
+				distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
+					ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct, tc.errorOnDup,
+					outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
+				)
+				require.Equal(t, numExpectedClosers, len(closers))
+				accounts = append(accounts, newAccounts...)
+				monitors = append(monitors, newMonitors...)
+				return distinct, err
+			})
+			if tc.errorOnDup == "" || tc.noError {
+				// We don't check that all FDs were released if an error is
+				// expected to be returned because our utility closeIfCloser()
+				// doesn't handle multiple closers (which is always the case for
+				// the external distinct).
+				for i, sem := range semsToCheck {
+					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				}
 			}
 		}
 	}
@@ -154,18 +152,18 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	// Set the memory limit in such a manner that at least 2 batches of distinct
 	// tuples are emitted by the in-memory unordered distinct before the
 	// spilling occurs.
-	nBatchesOutputByInMemoryOp := 2 + rng.Intn(2)
-	memoryLimitBytes := int64(nBatchesOutputByInMemoryOp * batchMemEstimate)
+	nBatchesOutputByInMemoryOp := 2 + rng.Int63n(2)
+	memoryLimitBytes := nBatchesOutputByInMemoryOp * batchMemEstimate
 	if memoryLimitBytes < mon.DefaultPoolAllocationSize {
 		memoryLimitBytes = mon.DefaultPoolAllocationSize
-		nBatchesOutputByInMemoryOp = int(memoryLimitBytes) / batchMemEstimate
+		nBatchesOutputByInMemoryOp = memoryLimitBytes / batchMemEstimate
 	}
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimitBytes
 
 	// Calculate the total number of distinct batches at least twice as large
 	// as for the in-memory operator in order to make sure that the external
 	// distinct has enough work to do.
-	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(2))
+	nDistinctBatches := int(nBatchesOutputByInMemoryOp * (2 + rng.Int63n(2)))
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
 	const maxNumTuples = 25000
@@ -205,8 +203,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-				ctx, flowCtx, input, typs, distinctCols, outputOrdering, queueCfg,
-				sem, func() { numSpills++ }, numForcedRepartitions,
+				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
+				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
 			)
 			require.NoError(t, err)
 			// Check that the external distinct and the disk-backed sort
@@ -223,7 +221,11 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 	}
 	if !spillingMightNotHappen {
-		require.Equal(t, numRuns, numSpills, "the spilling didn't occur in all cases")
+		// The "randomNullsInjection" subtest might not spill to disk when a
+		// large portion of rows is made NULL, so we allow two cases:
+		// - numSpills == numRuns
+		// - numSpills == numRuns - 1.
+		require.GreaterOrEqual(t, numSpills, numRuns-1, "the spilling didn't occur in all cases")
 	}
 
 	for _, acc := range accounts {
@@ -322,7 +324,8 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					}
 					op, accs, mons, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
+						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
+						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
 					)
 					memAccounts = append(memAccounts, accs...)
@@ -355,6 +358,8 @@ func createExternalDistinct(
 	sources []colexecop.Operator,
 	typs []*types.T,
 	distinctCols []uint32,
+	nullsAreDistinct bool,
+	errorOnDup string,
 	outputOrdering execinfrapb.Ordering,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
@@ -362,8 +367,10 @@ func createExternalDistinct(
 	numForcedRepartitions int,
 ) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
-		DistinctColumns: distinctCols,
-		OutputOrdering:  outputOrdering,
+		DistinctColumns:  distinctCols,
+		NullsAreDistinct: nullsAreDistinct,
+		ErrorOnDup:       errorOnDup,
+		OutputOrdering:   outputOrdering,
 	}
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},

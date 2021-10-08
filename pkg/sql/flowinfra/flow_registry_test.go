@@ -74,7 +74,7 @@ func lookupStreamInfo(
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	reg := NewFlowRegistry(0)
+	reg := NewFlowRegistry()
 
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &FlowBase{}
@@ -214,7 +214,7 @@ func TestFlowRegistry(t *testing.T) {
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	reg := NewFlowRegistry(0)
+	reg := NewFlowRegistry()
 
 	jiffy := time.Nanosecond
 
@@ -283,7 +283,7 @@ func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	reg := NewFlowRegistry(0)
+	reg := NewFlowRegistry()
 
 	tests := []struct {
 		name                   string
@@ -383,7 +383,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	reg := NewFlowRegistry(0)
+	reg := NewFlowRegistry()
 
 	flow := &FlowBase{}
 	id := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -529,7 +529,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	fr := NewFlowRegistry(0)
+	fr := NewFlowRegistry()
 	wg := sync.WaitGroup{}
 	rc := &execinfra.RowChannel{}
 	rc.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
@@ -560,7 +560,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	fr := NewFlowRegistry(0)
+	fr := NewFlowRegistry()
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
 	pushChan := make(chan *execinfrapb.ProducerMetadata)
@@ -616,7 +616,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	fr := NewFlowRegistry(0)
+	fr := NewFlowRegistry()
 	left := &execinfra.RowChannel{}
 	left.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
 	right := &execinfra.RowChannel{}

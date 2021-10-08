@@ -1,0 +1,43 @@
+@import '../core/index.module.scss';
+
+.text {
+  letter-spacing: $letter-spacing--compact;
+}
+
+.text--heading-1 {
+  @include text--heading-1;
+}
+
+.text--heading-2 {
+  @include text--heading-2;
+}
+
+.text--heading-3 {
+  @include text--heading-3;
+}
+
+.text--heading-5 {
+  @include text--heading-5;
+}
+
+.text--body {
+  @include text--body;
+}
+
+.text--body-strong {
+  @include text--body-strong;
+}
+
+.text--code {
+  @include text--code;
+}
+
+.text--disabled {
+  color: $colors--disabled;
+}
+
+.text--no-wrap {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}

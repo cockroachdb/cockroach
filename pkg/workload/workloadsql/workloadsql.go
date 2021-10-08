@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -36,6 +36,17 @@ import (
 func Setup(
 	ctx context.Context, db *gosql.DB, gen workload.Generator, l workload.InitialDataLoader,
 ) (int64, error) {
+	var hooks workload.Hooks
+	if h, ok := gen.(workload.Hookser); ok {
+		hooks = h.Hooks()
+	}
+
+	if hooks.PreCreate != nil {
+		if err := hooks.PreCreate(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not pre-create")
+		}
+	}
+
 	bytes, err := l.InitialDataLoad(ctx, db, gen)
 	if err != nil {
 		return 0, err
@@ -48,10 +59,6 @@ func Setup(
 		}
 	}
 
-	var hooks workload.Hooks
-	if h, ok := gen.(workload.Hookser); ok {
-		hooks = h.Hooks()
-	}
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
@@ -207,12 +214,12 @@ func StringTuple(datums []interface{}) []string {
 		case uint64:
 			s[i] = strconv.FormatUint(x, 10)
 		case string:
-			s[i] = lex.EscapeSQLString(x)
+			s[i] = lexbase.EscapeSQLString(x)
 		case float64:
 			s[i] = fmt.Sprintf(`%f`, x)
 		case []byte:
 			// See the HACK comment in ColBatchToRows.
-			s[i] = lex.EscapeSQLString(string(x))
+			s[i] = lexbase.EscapeSQLString(string(x))
 		default:
 			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}

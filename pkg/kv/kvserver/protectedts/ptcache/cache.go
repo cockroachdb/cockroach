@@ -46,7 +46,7 @@ type Cache struct {
 		state      ptpb.State
 
 		// Updated in doUpdate but mutable. The records in the map are not mutated
-		// and should not be by any client.
+		// and should not be modified by any client.
 		recordsByID map[uuid.UUID]*ptpb.Record
 
 		// TODO(ajwerner): add a more efficient lookup structure such as an
@@ -143,7 +143,7 @@ func (c *Cache) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 	settingChanged := make(chan struct{}, 1)
-	protectedts.PollInterval.SetOnChange(&c.settings.SV, func() {
+	protectedts.PollInterval.SetOnChange(&c.settings.SV, func(ctx context.Context) {
 		select {
 		case settingChanged <- struct{}{}:
 		default:

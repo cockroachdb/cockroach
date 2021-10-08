@@ -12,15 +12,15 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"strconv"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -90,7 +89,6 @@ type kafkaSink struct {
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
 		syncutil.Mutex
-		mem      mon.BoundAccount
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
@@ -108,29 +106,42 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	RequiredAcks string `json:",omitempty"`
+
+	Version string `json:",omitempty"`
 }
 
-var defaultSaramaConfig = func() *saramaConfig {
+func (c saramaConfig) Validate() error {
+	// If Flush.Bytes > 0 or Flush.Messages > 1 without
+	// Flush.Frequency, sarama may wait forever to flush the
+	// messages to Kafka.  We want to guard against such
+	// configurations to ensure that we don't get into a situation
+	// where our call to Flush() would block forever.
+	if (c.Flush.Bytes > 0 || c.Flush.Messages > 1) && c.Flush.Frequency == 0 {
+		return errors.New("Flush.Frequency must be > 0 when Flush.Bytes > 0 or Flush.Messages > 1")
+	}
+	return nil
+}
+
+func defaultSaramaConfig() *saramaConfig {
 	config := &saramaConfig{}
 
-	// When we emit messages to sarama, they're placed in a queue (as does any
-	// reasonable kafka producer client). When our sink's Flush is called, we
-	// have to wait for all buffered and inflight requests to be sent and then
-	// acknowledged. Quite unfortunately, we have no way to hint to the producer
-	// that it should immediately send out whatever is buffered. This
-	// configuration can have a dramatic impact on how quickly this happens
-	// naturally (and some configurations will block forever!).
+	// When we emit messages to sarama, they're placed in a queue
+	// (as does any reasonable kafka producer client). When our
+	// sink's Flush is called, we have to wait for all buffered
+	// and inflight requests to be sent and then
+	// acknowledged. Quite unfortunately, we have no way to hint
+	// to the producer that it should immediately send out
+	// whatever is buffered. This configuration can have a
+	// dramatic impact on how quickly this happens naturally (and
+	// some configurations will block forever!).
 	//
-	// We can configure the producer to send out its batches based on number of
-	// messages and/or total buffered message size and/or time. If none of them
-	// are set, it uses some defaults, but if any of the three are set, it does
-	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
-	// nothing else is set, then 9/10 times `Flush` will block forever. We can
-	// work around this by also setting `Flush.Frequency` but a cleaner way is
-	// to set `Flush.Messages` to 1. In the steady state, this sends a request
-	// with some messages, buffers any messages that come in while it is in
-	// flight, then sends those out.
-	config.Flush.Messages = 1
+	// The default configuration of all 0 values will send
+	// messages as quickly as possible.
+	config.Flush.Messages = 0
+	config.Flush.Frequency = jsonDuration(0)
+	config.Flush.Bytes = 0
 
 	// This works around what seems to be a bug in sarama where it isn't
 	// computing the right value to compare against `Producer.MaxMessageBytes`
@@ -144,12 +155,8 @@ var defaultSaramaConfig = func() *saramaConfig {
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
 
-	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
-	// sarama prints scary things to the logs if we don't.
-	config.Flush.Frequency = jsonDuration(time.Hour)
-
 	return config
-}()
+}
 
 func (s *kafkaSink) start() {
 	s.stopWorkerCh = make(chan struct{})
@@ -176,12 +183,6 @@ func (s *kafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
-	defer func() {
-		s.mu.Lock()
-		s.mu.mem.Close(s.ctx)
-		s.mu.Unlock()
-	}()
-
 	close(s.stopWorkerCh)
 	s.worker.Wait()
 	// If we're shutting down, we don't care what happens to the outstanding
@@ -196,7 +197,11 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
 	topic, isKnownTopic := s.topics[topicDescr.GetID()]
 	if !isKnownTopic {
@@ -204,9 +209,10 @@ func (s *kafkaSink) EmitRow(
 	}
 
 	msg := &sarama.ProducerMessage{
-		Topic: topic,
-		Key:   sarama.ByteEncoder(key),
-		Value: sarama.ByteEncoder(value),
+		Topic:    topic,
+		Key:      sarama.ByteEncoder(key),
+		Value:    sarama.ByteEncoder(value),
+		Metadata: alloc,
 	}
 	return s.emitMessage(ctx, msg)
 }
@@ -297,25 +303,11 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 }
 
-func kafkaMessageBytes(m *sarama.ProducerMessage) (s int64) {
-	if m.Key != nil {
-		s += int64(m.Key.Length())
-	}
-	if m.Value != nil {
-		s += int64(m.Value.Length())
-	}
-	return
-}
-
-func (s *kafkaSink) startInflightMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.mu.mem.Grow(ctx, kafkaMessageBytes(msg)); err != nil {
-		return err
-	}
 
 	s.mu.inflight++
-
 	if log.V(2) {
 		log.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
 	}
@@ -323,7 +315,7 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context, msg *sarama.Produc
 }
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
-	if err := s.startInflightMessage(ctx, msg); err != nil {
+	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
 
@@ -352,9 +344,12 @@ func (s *kafkaSink) workerLoop() {
 			ackMsg, ackError = err.Msg, err.Err
 		}
 
+		if r, ok := ackMsg.Metadata.(kvevent.Alloc); ok {
+			r.Release(s.ctx)
+		}
+
 		s.mu.Lock()
 		s.mu.inflight--
-		s.mu.mem.Shrink(s.ctx, kafkaMessageBytes(ackMsg))
 		if s.mu.flushErr == nil && ackError != nil {
 			s.mu.flushErr = ackError
 		}
@@ -424,19 +419,46 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 }
 
 // Apply configures provided kafka configuration struct based on this config.
-func (c *saramaConfig) Apply(kafka *sarama.Config) {
+func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+	if c.Version != "" {
+		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
+		if err != nil {
+			return err
+		}
+		kafka.Version = parsedVersion
+	}
+	if c.RequiredAcks != "" {
+		parsedAcks, err := parseRequiredAcks(c.RequiredAcks)
+		if err != nil {
+			return err
+		}
+		kafka.Producer.RequiredAcks = parsedAcks
+	}
+	return nil
+}
+
+func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
+	switch a {
+	case "0", "NONE":
+		return sarama.NoResponse, nil
+	case "1", "ONE":
+		return sarama.WaitForLocal, nil
+	case "-1", "ALL":
+		return sarama.WaitForAll, nil
+	default:
+		return sarama.WaitForLocal,
+			fmt.Errorf(`invalid acks value "%s", must be "NONE"/"0", "ONE"/"1", or "ALL"/"-1"`, a)
+	}
 }
 
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+	config = defaultSaramaConfig()
 	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
-		config = &saramaConfig{}
 		err = json.Unmarshal([]byte(configStr), config)
-	} else {
-		config = defaultSaramaConfig
 	}
 	return
 }
@@ -455,57 +477,27 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		saslMechanism string
 	}{}
 
-	consumeBool := func(param string, dest *bool) (wasSet bool, err error) {
-		if paramVal := u.consumeParam(param); paramVal != "" {
-			b, err := strconv.ParseBool(paramVal)
-			if err != nil {
-				return false, errors.Wrapf(err, "param %s must be a bool", param)
-			}
-			*dest = b
-			return true, nil
-		}
-		return false, nil
-	}
-
-	decodeBase64 := func(param string, dest *[]byte) error {
-		// TODO(dan): There's a straightforward and unambiguous transformation
-		//  between the base 64 encoding defined in RFC 4648 and the URL variant
-		//  defined in the same RFC: simply replace all `+` with `-` and `/` with
-		//  `_`. Consider always doing this for the user and accepting either
-		//  variant.
-		val := u.consumeParam(param)
-		if val == `` {
-			return nil
-		}
-		decoded, err := base64.StdEncoding.DecodeString(val)
-		if err != nil {
-			return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
-		}
-		*dest = decoded
-		return nil
-	}
-
-	if _, err := consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
 		return nil, err
 	}
-	if _, err := consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
 		return nil, err
 	}
 
-	if _, err := consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
 		return nil, err
 	}
 
-	if wasSet, err := consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
+	if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
 		dialConfig.saslHandshake = true
 	} else {
 		if err != nil {
@@ -608,16 +600,19 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
-	saramaCfg.Apply(config)
+
+	if err := saramaCfg.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid sarama configuration")
+	}
+
+	if err := saramaCfg.Apply(config); err != nil {
+		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
 	return config, nil
 }
 
 func makeKafkaSink(
-	ctx context.Context,
-	u sinkURL,
-	targets jobspb.ChangefeedTargets,
-	opts map[string]string,
-	acc mon.BoundAccount,
+	ctx context.Context, u sinkURL, targets jobspb.ChangefeedTargets, opts map[string]string,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -636,7 +631,6 @@ func makeKafkaSink(
 		bootstrapAddrs: u.Host,
 		topics:         makeTopicsMap(kafkaTopicPrefix, kafkaTopicName, targets),
 	}
-	sink.mu.mem = acc
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(

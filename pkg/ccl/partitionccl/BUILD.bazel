@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
-        "//pkg/clusterversion",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -22,6 +21,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -49,7 +49,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

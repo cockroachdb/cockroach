@@ -10,27 +10,27 @@ norm expect=ReduceWindowPartitionCols
 SELECT rank() OVER (PARTITION BY k, i) FROM a
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  └── window partition=(1)
-      ├── columns: k:1!null rank:7
+      ├── columns: k:1!null rank:8
       ├── key: (1)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm expect=ReduceWindowPartitionCols
 SELECT rank() OVER (PARTITION BY i, i+1) FROM a
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  └── window partition=(2)
-      ├── columns: i:2 rank:7
+      ├── columns: i:2 rank:8
       ├── scan a
       │    └── columns: i:2
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 # --------------------------------------------------
 # SimplifyWindowOrdering
@@ -40,15 +40,15 @@ norm expect=SimplifyWindowOrdering
 SELECT rank() OVER (ORDER BY k, i) FROM a
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  └── window partition=() ordering=+1
-      ├── columns: k:1!null rank:7
+      ├── columns: k:1!null rank:8
       ├── key: (1)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 # We can simplify the ordering with the knowledge that within any partition
 # the set of partition cols is held constant.
@@ -58,39 +58,39 @@ norm
 SELECT rank() OVER (PARTITION BY k ORDER BY i) FROM a
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  └── window partition=(1)
-      ├── columns: k:1!null rank:7
+      ├── columns: k:1!null rank:8
       ├── key: (1)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm expect=SimplifyWindowOrdering
 SELECT rank() OVER (PARTITION BY i ORDER BY f, i+1) FROM a
 ----
 project
- ├── columns: rank:7
- └── window partition=(2) ordering=+3 opt(2,8)
-      ├── columns: i:2 f:3 rank:7
+ ├── columns: rank:8
+ └── window partition=(2) ordering=+3 opt(2,9)
+      ├── columns: i:2 f:3 rank:8
       ├── scan a
       │    └── columns: i:2 f:3
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm expect=SimplifyWindowOrdering
 SELECT rank() OVER (PARTITION BY f ORDER BY i) FROM a
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  └── window partition=(3) ordering=+2 opt(3)
-      ├── columns: i:2 f:3 rank:7
+      ├── columns: i:2 f:3 rank:8
       ├── scan a
       │    └── columns: i:2 f:3
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 # Do not simplify ordering column when in RANGE mode with an offset boundary of
 # PRECEDING, because execution requires a column in this case.
@@ -98,10 +98,10 @@ norm expect-not=SimplifyWindowOrdering
 SELECT rank() OVER (ORDER BY k RANGE 1 PRECEDING) FROM a WHERE false
 ----
 values
- ├── columns: rank:7!null
+ ├── columns: rank:8!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(7)
+ └── fd: ()-->(8)
 
 # Do not simplify ordering column when in RANGE mode with an offset boundary of
 # FOLLOWING, because execution requires a column in this case.
@@ -109,10 +109,10 @@ norm expect-not=SimplifyWindowOrdering
 SELECT rank() OVER (ORDER BY k RANGE BETWEEN 1 FOLLOWING AND 3 FOLLOWING) FROM a WHERE false
 ----
 values
- ├── columns: rank:7!null
+ ├── columns: rank:8!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(7)
+ └── fd: ()-->(8)
 
 # PushSelectIntoWindow
 
@@ -120,7 +120,7 @@ norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, rank() OVER (PARTITION BY i) FROM a) WHERE i > 4
 ----
 window partition=(2)
- ├── columns: i:2!null rank:7
+ ├── columns: i:2!null rank:8
  ├── select
  │    ├── columns: i:2!null
  │    ├── scan a
@@ -128,17 +128,17 @@ window partition=(2)
  │    └── filters
  │         └── i:2 > 4 [outer=(2), constraints=(/2: [/5 - ]; tight)]
  └── windows
-      └── rank [as=rank:7]
+      └── rank [as=rank:8]
 
 # Only push down filters bound by the partition cols.
 norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, s, rank() OVER (PARTITION BY i) FROM a) WHERE i > 4 AND s = 'foo'
 ----
 select
- ├── columns: i:2!null s:4!null rank:7
+ ├── columns: i:2!null s:4!null rank:8
  ├── fd: ()-->(4)
  ├── window partition=(2)
- │    ├── columns: i:2!null s:4 rank:7
+ │    ├── columns: i:2!null s:4 rank:8
  │    ├── select
  │    │    ├── columns: i:2!null s:4
  │    │    ├── scan a
@@ -146,7 +146,7 @@ select
  │    │    └── filters
  │    │         └── i:2 > 4 [outer=(2), constraints=(/2: [/5 - ]; tight)]
  │    └── windows
- │         └── rank [as=rank:7]
+ │         └── rank [as=rank:8]
  └── filters
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -155,10 +155,10 @@ norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, s, f, rank() OVER (PARTITION BY i, f) FROM a) WHERE i > 4 AND f = 3.0 AND s = 'foo'
 ----
 select
- ├── columns: i:2!null s:4!null f:3!null rank:7
+ ├── columns: i:2!null s:4!null f:3!null rank:8
  ├── fd: ()-->(3,4)
  ├── window partition=(2)
- │    ├── columns: i:2!null f:3!null s:4 rank:7
+ │    ├── columns: i:2!null f:3!null s:4 rank:8
  │    ├── fd: ()-->(3)
  │    ├── select
  │    │    ├── columns: i:2!null f:3!null s:4
@@ -169,7 +169,7 @@ select
  │    │         ├── i:2 > 4 [outer=(2), constraints=(/2: [/5 - ]; tight)]
  │    │         └── f:3 = 3.0 [outer=(3), constraints=(/3: [/3.0 - /3.0]; tight), fd=()-->(3)]
  │    └── windows
- │         └── rank [as=rank:7]
+ │         └── rank [as=rank:8]
  └── filters
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -179,7 +179,7 @@ norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, s, f, rank() OVER (PARTITION BY i, f) FROM a) WHERE random() < 0.5
 ----
 window partition=(2,3)
- ├── columns: i:2 s:4 f:3 rank:7
+ ├── columns: i:2 s:4 f:3 rank:8
  ├── volatile
  ├── select
  │    ├── columns: i:2 f:3 s:4
@@ -189,22 +189,22 @@ window partition=(2,3)
  │    └── filters
  │         └── random() < 0.5 [volatile]
  └── windows
-      └── rank [as=rank:7]
+      └── rank [as=rank:8]
 
 # Can't push down a filter on an ordering column.
 norm expect-not=PushSelectIntoWindow
 SELECT * FROM (SELECT f, rank() OVER (PARTITION BY i ORDER BY f) FROM a) WHERE f > 4
 ----
 project
- ├── columns: f:3!null rank:7
+ ├── columns: f:3!null rank:8
  └── select
-      ├── columns: i:2 f:3!null rank:7
+      ├── columns: i:2 f:3!null rank:8
       ├── window partition=(2) ordering=+3 opt(2)
-      │    ├── columns: i:2 f:3 rank:7
+      │    ├── columns: i:2 f:3 rank:8
       │    ├── scan a
       │    │    └── columns: i:2 f:3
       │    └── windows
-      │         └── rank [as=rank:7]
+      │         └── rank [as=rank:8]
       └── filters
            └── f:3 > 4.0 [outer=(3), constraints=(/3: [/4.000000000000001 - ]; tight)]
 
@@ -213,17 +213,17 @@ norm expect-not=PushSelectIntoWindow
 SELECT * FROM (SELECT s, rank() OVER (PARTITION BY i ORDER BY f) FROM a) WHERE s = 'foo'
 ----
 project
- ├── columns: s:4!null rank:7
+ ├── columns: s:4!null rank:8
  ├── fd: ()-->(4)
  └── select
-      ├── columns: i:2 f:3 s:4!null rank:7
+      ├── columns: i:2 f:3 s:4!null rank:8
       ├── fd: ()-->(4)
       ├── window partition=(2) ordering=+3 opt(2)
-      │    ├── columns: i:2 f:3 s:4 rank:7
+      │    ├── columns: i:2 f:3 s:4 rank:8
       │    ├── scan a
       │    │    └── columns: i:2 f:3 s:4
       │    └── windows
-      │         └── rank [as=rank:7]
+      │         └── rank [as=rank:8]
       └── filters
            └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -232,10 +232,10 @@ norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i = 3
 ----
 project
- ├── columns: i:2!null rank:7
+ ├── columns: i:2!null rank:8
  ├── fd: ()-->(2)
  └── window partition=(1)
-      ├── columns: k:1!null i:2!null rank:7
+      ├── columns: k:1!null i:2!null rank:8
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── select
@@ -249,16 +249,16 @@ project
       │    └── filters
       │         └── i:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i*f::int = 3
 ----
 project
- ├── columns: i:2 f:3 rank:7
+ ├── columns: i:2 f:3 rank:8
  ├── immutable
  └── window partition=(1)
-      ├── columns: k:1!null i:2 f:3 rank:7
+      ├── columns: k:1!null i:2 f:3 rank:8
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,3)
@@ -274,20 +274,20 @@ project
       │    └── filters
       │         └── (i:2 * f:3::INT8) = 3 [outer=(2,3), immutable]
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm expect-not=PushSelectIntoWindow
 SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) AS rnk FROM a) WHERE rnk = 3
 ----
 project
- ├── columns: i:2 f:3 rnk:7!null
- ├── fd: ()-->(7)
+ ├── columns: i:2 f:3 rnk:8!null
+ ├── fd: ()-->(8)
  └── select
-      ├── columns: k:1!null i:2 f:3 rank:7!null
+      ├── columns: k:1!null i:2 f:3 rank:8!null
       ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(2,3)
+      ├── fd: ()-->(8), (1)-->(2,3)
       ├── window partition=(1)
-      │    ├── columns: k:1!null i:2 f:3 rank:7
+      │    ├── columns: k:1!null i:2 f:3 rank:8
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    ├── scan a
@@ -295,9 +295,9 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
       │    └── windows
-      │         └── rank [as=rank:7]
+      │         └── rank [as=rank:8]
       └── filters
-           └── rank:7 = 3 [outer=(7), constraints=(/7: [/3 - /3]; tight), fd=()-->(7)]
+           └── rank:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
 
 # --------------------------------------------------
 # PushLimitIntoWindow
@@ -307,7 +307,7 @@ norm
 SELECT rank() OVER () FROM a LIMIT 10
 ----
 window partition=()
- ├── columns: rank:7
+ ├── columns: rank:8
  ├── cardinality: [0 - 10]
  ├── limit
  │    ├── cardinality: [0 - 10]
@@ -315,16 +315,16 @@ window partition=()
  │    │    └── limit hint: 10.00
  │    └── 10
  └── windows
-      └── rank [as=rank:7]
+      └── rank [as=rank:8]
 
 norm
 SELECT rank() OVER (PARTITION BY i) FROM a LIMIT 10
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  ├── cardinality: [0 - 10]
  └── window partition=(2)
-      ├── columns: i:2 rank:7
+      ├── columns: i:2 rank:8
       ├── cardinality: [0 - 10]
       ├── limit
       │    ├── columns: i:2
@@ -338,16 +338,16 @@ project
       │    │         └── columns: i:2
       │    └── 10
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm
 SELECT rank() OVER (PARTITION BY i ORDER BY f) FROM a LIMIT 10
 ----
 project
- ├── columns: rank:7
+ ├── columns: rank:8
  ├── cardinality: [0 - 10]
  └── window partition=(2) ordering=+3 opt(2)
-      ├── columns: i:2 f:3 rank:7
+      ├── columns: i:2 f:3 rank:8
       ├── cardinality: [0 - 10]
       ├── limit
       │    ├── columns: i:2 f:3
@@ -361,7 +361,7 @@ project
       │    │         └── columns: i:2 f:3
       │    └── 10
       └── windows
-           └── rank [as=rank:7]
+           └── rank [as=rank:8]
 
 norm
 SELECT
@@ -370,10 +370,10 @@ SELECT
 FROM a LIMIT 10
 ----
 project
- ├── columns: rank:7 dense_rank:8
+ ├── columns: rank:8 dense_rank:9
  ├── cardinality: [0 - 10]
  └── window partition=(2) ordering=+3 opt(2)
-      ├── columns: i:2 f:3 rank:7 dense_rank:8
+      ├── columns: i:2 f:3 rank:8 dense_rank:9
       ├── cardinality: [0 - 10]
       ├── limit
       │    ├── columns: i:2 f:3
@@ -387,8 +387,8 @@ project
       │    │         └── columns: i:2 f:3
       │    └── 10
       └── windows
-           ├── rank [as=rank:7]
-           └── dense-rank [as=dense_rank:8]
+           ├── rank [as=rank:8]
+           └── dense-rank [as=dense_rank:9]
 
 # Can't push the limit down, because the window function used is not
 # "prefix-safe".
@@ -396,21 +396,21 @@ norm expect-not=PushLimitIntoWindow
 SELECT avg(k) OVER () FROM a LIMIT 10
 ----
 project
- ├── columns: avg:7
+ ├── columns: avg:8
  ├── cardinality: [0 - 10]
  └── limit
-      ├── columns: k:1!null avg:7
+      ├── columns: k:1!null avg:8
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── window partition=()
-      │    ├── columns: k:1!null avg:7
+      │    ├── columns: k:1!null avg:8
       │    ├── key: (1)
       │    ├── limit hint: 10.00
       │    ├── scan a
       │    │    ├── columns: k:1!null
       │    │    └── key: (1)
       │    └── windows
-      │         └── avg [as=avg:7, outer=(1)]
+      │         └── avg [as=avg:8, outer=(1)]
       │              └── k:1
       └── 10
 
@@ -420,24 +420,24 @@ norm expect-not=PushLimitIntoWindow
 SELECT rank() OVER (ORDER BY i) FROM a ORDER BY f LIMIT 10
 ----
 project
- ├── columns: rank:7  [hidden: f:3]
+ ├── columns: rank:8  [hidden: f:3]
  ├── cardinality: [0 - 10]
  ├── ordering: +3
  └── limit
-      ├── columns: i:2 f:3 rank:7
+      ├── columns: i:2 f:3 rank:8
       ├── internal-ordering: +3
       ├── cardinality: [0 - 10]
       ├── ordering: +3
       ├── sort
-      │    ├── columns: i:2 f:3 rank:7
+      │    ├── columns: i:2 f:3 rank:8
       │    ├── ordering: +3
       │    ├── limit hint: 10.00
       │    └── window partition=() ordering=+2
-      │         ├── columns: i:2 f:3 rank:7
+      │         ├── columns: i:2 f:3 rank:8
       │         ├── scan a
       │         │    └── columns: i:2 f:3
       │         └── windows
-      │              └── rank [as=rank:7]
+      │              └── rank [as=rank:8]
       └── 10
 
 # The limit should become stronger as it gets pushed down (going from +f to
@@ -447,14 +447,14 @@ norm
 SELECT rank() OVER (ORDER BY f, i) FROM a ORDER BY f LIMIT 10
 ----
 sort
- ├── columns: rank:7  [hidden: f:3]
+ ├── columns: rank:8  [hidden: f:3]
  ├── cardinality: [0 - 10]
  ├── ordering: +3
  └── project
-      ├── columns: f:3 rank:7
+      ├── columns: f:3 rank:8
       ├── cardinality: [0 - 10]
       └── window partition=() ordering=+3,+2
-           ├── columns: i:2 f:3 rank:7
+           ├── columns: i:2 f:3 rank:8
            ├── cardinality: [0 - 10]
            ├── limit
            │    ├── columns: i:2 f:3
@@ -468,7 +468,7 @@ sort
            │    │         └── columns: i:2 f:3
            │    └── 10
            └── windows
-                └── rank [as=rank:7]
+                └── rank [as=rank:8]
 
 # Here we would only be able to push below the rank(), and not the avg(k). This
 # is not profitable because we still have to do the partitioning and ordering
@@ -484,15 +484,15 @@ LIMIT
     10
 ----
 project
- ├── columns: rank:7 avg:8
+ ├── columns: rank:8 avg:9
  ├── cardinality: [0 - 10]
  └── limit
-      ├── columns: k:1!null i:2 f:3 rank:7 avg:8
+      ├── columns: k:1!null i:2 f:3 rank:8 avg:9
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── window partition=(2) ordering=+3 opt(2)
-      │    ├── columns: k:1!null i:2 f:3 rank:7 avg:8
+      │    ├── columns: k:1!null i:2 f:3 rank:8 avg:9
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    ├── limit hint: 10.00
@@ -501,8 +501,8 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
       │    └── windows
-      │         ├── rank [as=rank:7]
-      │         └── avg [as=avg:8, outer=(1)]
+      │         ├── rank [as=rank:8]
+      │         └── avg [as=avg:9, outer=(1)]
       │              └── k:1
       └── 10
 
@@ -514,20 +514,20 @@ norm expect-not=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
 limit
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── internal-ordering: +3
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +3
  ├── sort
- │    ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ │    ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
  │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
- │         ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ │         ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4)
  │         ├── scan wxyz
@@ -535,20 +535,20 @@ limit
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-4)
  │         └── windows
- │              └── rank [as=rank:6]
+ │              └── rank [as=rank:7]
  └── 2
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +3
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -570,19 +570,19 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -600,19 +600,19 @@ sort
       │    │    └── limit hint: 2.00
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -630,19 +630,19 @@ sort
       │    │    └── limit hint: 2.00
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y, w LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +3,+1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -664,19 +664,19 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -694,19 +694,19 @@ sort
       │    │    └── limit hint: 2.00
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm
 SELECT *, rank() OVER (PARTITION BY x, z ORDER BY y) FROM wxyz ORDER BY z, x LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +4,+2
  └── window partition=(2,4) ordering=+3 opt(2,4)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -728,19 +728,19 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY z, y LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +4,+3
  └── window partition=(4) ordering=+3 opt(4)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -762,26 +762,26 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm expect-not=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
 limit
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── internal-ordering: +3
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +3
  ├── sort
- │    ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ │    ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
  │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
- │         ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ │         ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4)
  │         ├── scan wxyz
@@ -789,20 +789,20 @@ limit
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-4)
  │         └── windows
- │              └── rank [as=rank:6]
+ │              └── rank [as=rank:7]
  └── 2
 
 norm expect=PushLimitIntoWindow
 SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z, y LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -820,19 +820,19 @@ sort
       │    │    └── limit hint: 2.00
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm
 SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +4,+1
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -854,19 +854,19 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]
 
 norm
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY z LIMIT 2
 ----
 sort
- ├── columns: w:1!null x:2 y:3 z:4 rank:6
+ ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +4
  └── window partition=(1)
-      ├── columns: w:1!null x:2 y:3 z:4 rank:6
+      ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
       ├── fd: (1)-->(2-4)
@@ -888,4 +888,4 @@ sort
       │    │         └── fd: (1)-->(2-4)
       │    └── 2
       └── windows
-           └── rank [as=rank:6]
+           └── rank [as=rank:7]

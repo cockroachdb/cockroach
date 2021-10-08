@@ -20,15 +20,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
-const OwnerUnitTest Owner = `unittest`
+const OwnerUnitTest registry.Owner = `unowned`
 
 const defaultParallelism = 10
+
+func mkReg(t *testing.T) testRegistryImpl {
+	t.Helper()
+	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+	require.NoError(t, err)
+	return r
+}
 
 func TestMatchOrSkip(t *testing.T) {
 	testCases := []struct {
@@ -51,9 +65,9 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			f := newFilter(c.filter)
-			spec := &testSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.matchOrSkip(f); c.expected != value {
+			f := registry.NewTestFilter(c.filter)
+			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
+			if value := spec.MatchOrSkip(f); c.expected != value {
 				t.Fatalf("expected %t, but found %t", c.expected, value)
 			} else if value && c.expectedSkip != spec.Skip {
 				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
@@ -62,12 +76,12 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 }
 
-func nilLogger() *logger {
-	lcfg := loggerConfig{
-		stdout: ioutil.Discard,
-		stderr: ioutil.Discard,
+func nilLogger() *logger.Logger {
+	lcfg := logger.Config{
+		Stdout: ioutil.Discard,
+		Stderr: ioutil.Discard,
 	}
-	l, err := lcfg.newLogger("" /* path */)
+	l, err := lcfg.NewLogger("" /* path */)
 	if err != nil {
 		panic(err)
 	}
@@ -76,23 +90,20 @@ func nilLogger() *logger {
 
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
-	r, err := makeTestRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.Add(testSpec{
+	r := mkReg(t)
+	r.Add(registry.TestSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t *test, c *cluster) {},
-		Cluster: makeClusterSpec(0),
+		Run:     func(ctx context.Context, t test.Test, c cluster.Cluster) {},
+		Cluster: r.MakeClusterSpec(0),
 	})
-	r.Add(testSpec{
+	r.Add(registry.TestSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal("failed")
 		},
-		Cluster: makeClusterSpec(0),
+		Cluster: r.MakeClusterSpec(0),
 	})
 
 	testCases := []struct {
@@ -108,13 +119,13 @@ func TestRunnerRun(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			tests := testsToRun(ctx, r, newFilter(c.filters))
+			tests := testsToRun(ctx, r, registry.NewTestFilter(c.filters))
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
 
 			lopt := loggingOpt{
 				l:            nilLogger(),
-				tee:          noTee,
+				tee:          logger.NoTee,
 				stdout:       ioutil.Discard,
 				stderr:       ioutil.Discard,
 				artifactsDir: "",
@@ -161,7 +172,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	var buf syncedBuffer
 	lopt := loggingOpt{
 		l:            nilLogger(),
-		tee:          noTee,
+		tee:          logger.NoTee,
 		stdout:       &buf,
 		stderr:       &buf,
 		artifactsDir: "",
@@ -172,16 +183,16 @@ func TestRunnerTestTimeout(t *testing.T) {
 		cpuQuota:                  1000,
 		keepClustersOnTestFailure: false,
 	}
-	test := testSpec{
+	test := registry.TestSpec{
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
-		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			<-ctx.Done()
 		},
 	}
-	err := runner.Run(ctx, []testSpec{test}, 1, /* count */
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
 		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
@@ -195,53 +206,41 @@ func TestRunnerTestTimeout(t *testing.T) {
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
-	dummyRun := func(context.Context, *test, *cluster) {}
+	dummyRun := func(context.Context, test.Test, cluster.Cluster) {}
 
-	var listTests = func(t *testSpec) []string {
+	var listTests = func(t *registry.TestSpec) []string {
 		return []string{t.Name}
 	}
 
 	testCases := []struct {
-		spec          testSpec
+		spec          registry.TestSpec
 		expectedErr   string
 		expectedTests []string
 	}{
 		{
-			testSpec{
+			registry.TestSpec{
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: makeClusterSpec(0),
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
 		},
 		{
-			testSpec{
-				Name:       "a",
-				Owner:      OwnerUnitTest,
-				MinVersion: "v2.1.0",
-				Run:        dummyRun,
-				Cluster:    makeClusterSpec(0),
+			registry.TestSpec{
+				Name:    "illegal *[]",
+				Owner:   OwnerUnitTest,
+				Run:     dummyRun,
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
-			"",
-			[]string{"a"},
-		},
-		{
-			testSpec{
-				Name:       "a",
-				Owner:      OwnerUnitTest,
-				MinVersion: "foo",
-				Run:        dummyRun,
-				Cluster:    makeClusterSpec(0),
-			},
-			"a: unable to parse min-version: invalid version string 'foo'",
+			`illegal \*\[\]: Name must match this regexp: `,
 			nil,
 		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry()
+			r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -260,74 +259,35 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 }
 
-func TestRegistryMinVersion(t *testing.T) {
+func runExitCodeTest(t *testing.T, injectedError error) error {
 	ctx := context.Background()
-	testCases := []struct {
-		buildVersion string
-		expectedA    bool
-		expectedB    bool
-		expErr       string
-	}{
-		{"v1.1.0", false, false, "no test matched filters"},
-		{"v2.0.0", true, false, ""},
-		{"v2.1.0", true, true, ""},
+	t.Helper()
+	cr := newClusterRegistry()
+	runner := newTestRunner(cr, version.Version{})
+	r := mkReg(t)
+	r.Add(registry.TestSpec{
+		Name:    "boom",
+		Owner:   OwnerUnitTest,
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if injectedError != nil {
+				t.Fatal(injectedError)
+			}
+		},
+	})
+	tests := testsToRun(ctx, r, registry.NewTestFilter(nil))
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          logger.NoTee,
+		stdout:       ioutil.Discard,
+		stderr:       ioutil.Discard,
+		artifactsDir: "",
 	}
-	for _, c := range testCases {
-		t.Run(c.buildVersion, func(t *testing.T) {
-			var runA, runB bool
-			r, err := makeTestRegistry()
-			if err != nil {
-				t.Fatal(err)
-			}
-			r.Add(testSpec{
-				Name:       "a",
-				Owner:      OwnerUnitTest,
-				MinVersion: "v2.0.0",
-				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runA = true
-				},
-			})
-			r.Add(testSpec{
-				Name:       "b",
-				Owner:      OwnerUnitTest,
-				MinVersion: "v2.1.0",
-				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runB = true
-				},
-			})
-			if err := r.setBuildVersion(c.buildVersion); err != nil {
-				t.Fatal(err)
-			}
-			tests := testsToRun(ctx, r, newFilter(nil))
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
+}
 
-			var buf syncedBuffer
-			lopt := loggingOpt{
-				l:            nilLogger(),
-				tee:          noTee,
-				stdout:       &buf,
-				stderr:       &buf,
-				artifactsDir: "",
-			}
-			copt := clustersOpt{
-				typ:                       roachprodCluster,
-				user:                      "test_user",
-				cpuQuota:                  1000,
-				keepClustersOnTestFailure: false,
-			}
-			cr := newClusterRegistry()
-			runner := newTestRunner(cr, r.buildVersion)
-			err = runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, testOpts{}, lopt)
-			if !testutils.IsError(err, c.expErr) {
-				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
-			}
-
-			if c.expectedA != runA || c.expectedB != runB {
-				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
-					c.expectedA, c.expectedB, runA, runB, buf.String())
-			}
-		})
-	}
+func TestExitCode(t *testing.T) {
+	require.NoError(t, runExitCodeTest(t, nil /* test passes */))
+	err := runExitCodeTest(t, errors.New("boom"))
+	require.True(t, errors.Is(err, errTestsFailed))
 }

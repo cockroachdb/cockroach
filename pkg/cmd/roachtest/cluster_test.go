@@ -18,20 +18,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &cluster{spec: makeClusterSpec(10)}
-	opts := func(opts ...option) []option {
+	c := &clusterImpl{spec: spec.MakeClusterSpec(spec.GCE, "", 10)}
+	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
 	testCases := []struct {
-		opts     []option
+		opts     []option.Option
 		expected string
 	}{
 		{opts(), ""},
@@ -46,7 +51,7 @@ func TestClusterNodes(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			nodes := c.makeNodes(tc.opts...)
+			nodes := c.MakeNodes(tc.opts...)
 			if tc.expected != nodes {
 				t.Fatalf("expected %s, but found %s", tc.expected, nodes)
 			}
@@ -56,26 +61,67 @@ func TestClusterNodes(t *testing.T) {
 
 type testWrapper struct {
 	*testing.T
+	l *logger.Logger
 }
 
-var _ testI = testWrapper{}
+func (t testWrapper) BuildVersion() *version.Version {
+	panic("implement me")
+}
 
-// ArtifactsDir is part of the testI interface.
+func (t testWrapper) Cockroach() string {
+	return "./dummy-path/to/cockroach"
+}
+
+func (t testWrapper) DeprecatedWorkload() string {
+	return "./dummy-path/to/workload"
+}
+
+func (t testWrapper) IsBuildVersion(s string) bool {
+	panic("implement me")
+}
+
+func (t testWrapper) Spec() interface{} {
+	panic("implement me")
+}
+
+func (t testWrapper) VersionsBinaryOverride() map[string]string {
+	panic("implement me")
+}
+
+func (t testWrapper) Progress(f float64) {
+	panic("implement me")
+}
+
+func (t testWrapper) WorkerStatus(args ...interface{}) {
+}
+
+func (t testWrapper) WorkerProgress(f float64) {
+	panic("implement me")
+}
+
+var _ test2.Test = testWrapper{}
+
+// ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
 	return ""
 }
 
+// PerfArtifactsDir is part of the test.Test interface.
+func (t testWrapper) PerfArtifactsDir() string {
+	return ""
+}
+
 // logger is part of the testI interface.
-func (t testWrapper) logger() *logger {
-	return nil
+func (t testWrapper) L() *logger.Logger {
+	return t.l
 }
 
 // Status is part of the testI interface.
 func (t testWrapper) Status(args ...interface{}) {}
 
 func TestExecCmd(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
+	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	logger, err := cfg.NewLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,15 +169,15 @@ func TestExecCmd(t *testing.T) {
 }
 
 func TestClusterMonitor(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
+	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	logger, err := cfg.NewLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run(`success`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(context.Context) error { return nil })
 		if err := m.wait(`echo`, `1`); err != nil {
 			t.Fatal(err)
@@ -139,8 +185,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`dead`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			fmt.Printf("worker done\n")
@@ -155,8 +201,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`worker-fail`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(context.Context) error {
 			return errors.New(`worker-fail`)
 		})
@@ -173,8 +219,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-fail`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
@@ -193,8 +239,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-ok`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
@@ -215,8 +261,8 @@ func TestClusterMonitor(t *testing.T) {
 	// them finish pretty soon (think stress testing). As a matter of fact, `make test` waits
 	// for these child goroutines to finish (so these tests take seconds).
 	t.Run(`worker-fd-error`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			defer func() {
 				fmt.Println("sleep returns")
@@ -237,8 +283,8 @@ func TestClusterMonitor(t *testing.T) {
 		}
 	})
 	t.Run(`worker-fd-fatal`, func(t *testing.T) {
-		c := &cluster{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			err := execCmd(ctx, logger, "/bin/bash", "-c", "echo foo && sleep 3& wait")
 			return err
@@ -303,83 +349,11 @@ func TestClusterMachineType(t *testing.T) {
 	}
 }
 
-func TestLoadGroups(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		numZones, numRoachNodes, numLoadNodes int
-		loadGroups                            loadGroupList
-	}{
-		{
-			3, 9, 3,
-			loadGroupList{
-				{
-					nodeListOption{1, 2, 3},
-					nodeListOption{4},
-				},
-				{
-					nodeListOption{5, 6, 7},
-					nodeListOption{8},
-				},
-				{
-					nodeListOption{9, 10, 11},
-					nodeListOption{12},
-				},
-			},
-		},
-		{
-			3, 9, 1,
-			loadGroupList{
-				{
-					nodeListOption{1, 2, 3, 4, 5, 6, 7, 8, 9},
-					nodeListOption{10},
-				},
-			},
-		},
-		{
-			4, 8, 2,
-			loadGroupList{
-				{
-					nodeListOption{1, 2, 3, 4},
-					nodeListOption{9},
-				},
-				{
-					nodeListOption{5, 6, 7, 8},
-					nodeListOption{10},
-				},
-			},
-		},
-	} {
-		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
-			func(t *testing.T) {
-				c := &cluster{t: testWrapper{t}, l: logger, spec: makeClusterSpec(tc.numRoachNodes + tc.numLoadNodes)}
-				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
-				require.EqualValues(t, lg, tc.loadGroups)
-			})
-	}
-	t.Run("panics with too many load nodes", func(t *testing.T) {
-		require.Panics(t, func() {
-
-			numZones, numRoachNodes, numLoadNodes := 2, 4, 3
-			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
-		}, "Failed to panic when number of load nodes exceeded number of zones")
-	})
-	t.Run("panics with unequal zones per load node", func(t *testing.T) {
-		require.Panics(t, func() {
-			numZones, numRoachNodes, numLoadNodes := 4, 4, 3
-			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
-		}, "Failed to panic when number of zones is not divisible by number of load nodes")
-	})
-}
-
 func TestCmdLogFileName(t *testing.T) {
 	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
 
-	const exp = `run_150412.000_n1,3-4,9_cockroach_bla`
-	nodes := nodeListOption{1, 3, 4, 9}
+	const exp = `run_150412.000000000_n1,3-4,9_cockroach_bla`
+	nodes := option.NodeListOption{1, 3, 4, 9}
 	assert.Equal(t,
 		exp,
 		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),

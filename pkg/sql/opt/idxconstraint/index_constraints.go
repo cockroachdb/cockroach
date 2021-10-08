@@ -311,6 +311,28 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 				return false
 			}
 		}
+
+	case opt.RegMatchOp:
+		// As opposed to LIKE or SIMILAR TO, the match can be a substring (unless we
+		// specifically anchor with ^ and $). For example, (x ~ 'foo') is true for
+		// x='abcfooxyz'. We can only constrain an index if the regexp is anchored
+		// at the beginning, e.g. (x ~ '^foo'). So we check for ^ at the beginning
+		// of the pattern.
+		if pattern, ok := tree.AsDString(datum); ok && len(pattern) > 0 &&
+			pattern[0] == '^' {
+			if re, err := regexp.Compile(string(pattern[1:])); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				// If complete is true, we have a case like (x ~ `^foo`) which is true
+				// iff the prefix of the string is `foo`; so the span is tight.
+				//
+				// Note that <complete> is not true for `^foo$` (which is good - the
+				// span would not be tight in that case; we would need an eqSpan). We
+				// can't easily detect this case by just checking if the last character
+				// is $ - it could be part of an escape.
+				c.makeStringPrefixSpan(offset, prefix, out)
+				return complete
+			}
+		}
 	}
 	c.unconstrained(offset, out)
 	return false

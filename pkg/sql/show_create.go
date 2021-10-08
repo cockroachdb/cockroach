@@ -74,7 +74,7 @@ func ShowCreateTable(
 ) (string, error) {
 	a := &rowenc.DatumAlloc{}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
 	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
@@ -82,7 +82,8 @@ func ShowCreateTable(
 	f.WriteString("TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i, col := range desc.PublicColumns() {
+	// Inaccessible columns are not displayed in SHOW CREATE TABLE.
+	for i, col := range desc.AccessibleColumns() {
 		if i != 0 {
 			f.WriteString(",")
 		}
@@ -155,7 +156,7 @@ func ShowCreateTable(
 			// Build the PARTITION BY clause.
 			var partitionBuf bytes.Buffer
 			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, &idx.IndexDesc().Partitioning, &partitionBuf, 1 /* indent */, 0, /* colOffset */
+				a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -199,7 +200,7 @@ func ShowCreateTable(
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}

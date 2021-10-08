@@ -14,10 +14,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -67,6 +69,7 @@ var debugZipTablesPerNode = []string{
 
 	"crdb_internal.node_build_info",
 	"crdb_internal.node_contention_events",
+	"crdb_internal.node_distsql_flows",
 	"crdb_internal.node_inflight_trace_spans",
 	"crdb_internal.node_metrics",
 	"crdb_internal.node_queries",
@@ -76,6 +79,7 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_transaction_statistics",
 	"crdb_internal.node_transactions",
 	"crdb_internal.node_txn_stats",
+	"crdb_internal.active_range_feeds",
 }
 
 // collectCPUProfiles collects CPU profiles in parallel over all nodes
@@ -125,6 +129,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 					NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
 					Type:    serverpb.ProfileRequest_CPU,
 					Seconds: secs,
+					Labels:  true,
 				})
 				if err != nil {
 					return err
@@ -201,8 +206,8 @@ func (zc *debugZipContext) collectPerNodeData(
 	// used anyway so that anything that does *not* need it will
 	// still happen.
 	sqlAddr := node.Desc.CheckedSQLAddress()
-	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.url, sqlAddr.AddressField)
-	nodePrinter.info("using SQL connection URL: %s", curSQLConn.url)
+	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
+	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
 	for _, table := range debugZipTablesPerNode {
 		query := fmt.Sprintf(`SELECT * FROM %s`, table)
@@ -236,23 +241,6 @@ func (zc *debugZipContext) collectPerNodeData(
 			return err
 		})
 	if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
-		return err
-	}
-
-	var threadData []byte
-	s = nodePrinter.start("requesting threads")
-	requestErr = zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			threads, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-				NodeId: id,
-				Type:   serverpb.StacksType_THREAD_STACKS,
-			})
-			if err == nil {
-				threadData = threads.Data
-			}
-			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/threads.txt", threadData, requestErr); err != nil {
 		return err
 	}
 
@@ -547,11 +535,11 @@ func (zc *debugZipContext) collectPerNodeData(
 	return nil
 }
 
-func guessNodeURL(workingURL string, hostport string) *sqlConn {
+func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
 	u, err := url.Parse(workingURL)
 	if err != nil {
 		u = &url.URL{Host: "invalid"}
 	}
 	u.Host = hostport
-	return makeSQLConn(u.String())
+	return sqlConnCtx.MakeSQLConn(os.Stdout, stderr, u.String())
 }

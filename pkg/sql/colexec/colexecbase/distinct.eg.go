@@ -30,7 +30,7 @@ import (
 )
 
 func newSingleDistinct(
-	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
 ) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
@@ -38,9 +38,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctBoolOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.BytesFamily:
@@ -48,9 +49,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctBytesOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.DecimalFamily:
@@ -58,31 +60,35 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDecimalOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
 			return &distinctInt16Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		case 32:
 			return &distinctInt32Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		case -1:
 		default:
 			return &distinctInt64Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.FloatFamily:
@@ -90,9 +96,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctFloat64Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.TimestampTZFamily:
@@ -100,9 +107,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctTimestampOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.IntervalFamily:
@@ -110,9 +118,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctIntervalOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.JsonFamily:
@@ -120,9 +129,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctJSONOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -130,9 +140,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDatumOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	}
@@ -161,6 +172,8 @@ type distinctBoolOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctBoolOp{}
@@ -216,19 +229,24 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -300,7 +318,6 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -310,19 +327,27 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -342,6 +367,7 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -363,6 +389,7 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -380,6 +407,7 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -423,6 +451,8 @@ type distinctBytesOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctBytesOp{}
@@ -478,19 +508,24 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -544,9 +579,6 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 	} else {
 		// Eliminate bounds checks for outputCol[idx].
 		_ = outputCol[n-1]
-		// Eliminate bounds checks for col[idx].
-		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -556,19 +588,26 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -580,6 +619,7 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -610,6 +650,7 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -653,6 +694,8 @@ type distinctDecimalOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctDecimalOp{}
@@ -708,19 +751,24 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -776,7 +824,6 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -786,19 +833,27 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -810,6 +865,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -831,6 +887,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -840,6 +897,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -883,6 +941,8 @@ type distinctInt16Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt16Op{}
@@ -938,19 +998,24 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1028,7 +1093,6 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1038,19 +1102,27 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1073,6 +1145,7 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -1094,6 +1167,7 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -1114,6 +1188,7 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -1157,6 +1232,8 @@ type distinctInt32Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt32Op{}
@@ -1212,19 +1289,24 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1302,7 +1384,6 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1312,19 +1393,27 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1347,6 +1436,7 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -1368,6 +1458,7 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -1388,6 +1479,7 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -1431,6 +1523,8 @@ type distinctInt64Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt64Op{}
@@ -1486,19 +1580,24 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1576,7 +1675,6 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1586,19 +1684,27 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1621,6 +1727,7 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -1642,6 +1749,7 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -1662,6 +1770,7 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -1705,6 +1814,8 @@ type distinctFloat64Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctFloat64Op{}
@@ -1760,19 +1871,24 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1866,7 +1982,6 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1876,19 +1991,27 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -1919,6 +2042,7 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -1940,6 +2064,7 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -1968,6 +2093,7 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -2011,6 +2137,8 @@ type distinctTimestampOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctTimestampOp{}
@@ -2066,19 +2194,24 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2148,7 +2281,6 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2158,19 +2290,27 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2189,6 +2329,7 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -2210,6 +2351,7 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -2226,6 +2368,7 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -2269,6 +2412,8 @@ type distinctIntervalOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctIntervalOp{}
@@ -2324,19 +2469,24 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2392,7 +2542,6 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 		_ = outputCol[n-1]
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2402,19 +2551,27 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
+							//gcassert:bce
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2426,6 +2583,7 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -2447,6 +2605,7 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						var unique bool
 
@@ -2456,6 +2615,7 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -2499,6 +2659,8 @@ type distinctJSONOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctJSONOp{}
@@ -2554,19 +2716,24 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2632,9 +2799,6 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 	} else {
 		// Eliminate bounds checks for outputCol[idx].
 		_ = outputCol[n-1]
-		// Eliminate bounds checks for col[idx].
-		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2644,19 +2808,26 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2674,6 +2845,7 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -2710,6 +2882,7 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v
@@ -2764,6 +2937,8 @@ type distinctDatumOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctDatumOp{}
@@ -2819,19 +2994,24 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2840,7 +3020,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 								{
 									var cmpResult int
 
-									cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+									cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 									unique = cmpResult != 0
 								}
@@ -2872,7 +3052,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+							cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 							unique = cmpResult != 0
 						}
@@ -2889,9 +3069,6 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 	} else {
 		// Eliminate bounds checks for outputCol[idx].
 		_ = outputCol[n-1]
-		// Eliminate bounds checks for col[idx].
-		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2901,19 +3078,26 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							}
 						} else {
 							v := col.Get(checkIdx)
 							if lastValNull {
 								// The previous value was null while the current is not.
+								_ = true
+								//gcassert:bce
 								outputCol[outputIdx] = true
 							} else {
 								// Neither value is null, so we must compare.
@@ -2922,11 +3106,12 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 								{
 									var cmpResult int
 
-									cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+									cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 									unique = cmpResult != 0
 								}
 
+								//gcassert:bce
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
 							lastVal = v
@@ -2954,11 +3139,12 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+							cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 							unique = cmpResult != 0
 						}
 
+						//gcassert:bce
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						{
 							__retval_0 = v

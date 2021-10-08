@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -126,13 +127,15 @@ func TestTableReader(t *testing.T) {
 				ts := c.spec
 				ts.Table = *td.TableDesc()
 
-				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+				st := s.ClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg: &execinfra.ServerConfig{
-						Settings:   s.ClusterSettings(),
-						RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+						Settings: st,
+						RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+							func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
 					},
 					Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					NodeID: evalCtx.NodeID,
@@ -371,13 +374,15 @@ func TestLimitScans(t *testing.T) {
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:   s.ClusterSettings(),
-			RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+			Settings: st,
+			RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
 		},
 		Txn:    kv.NewTxn(ctx, kvDB, s.NodeID()),
 		NodeID: evalCtx.NodeID,
@@ -438,7 +443,7 @@ func TestLimitScans(t *testing.T) {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
 			stats := execinfrapb.ComponentStats{}
-			span.Structured(func(item *types.Any) {
+			span.Structured(func(item *types.Any, _ time.Time) {
 				if !types.Is(item, &stats) {
 					return
 				}
@@ -452,13 +457,11 @@ func TestLimitScans(t *testing.T) {
 			}
 		}
 		for _, l := range span.Logs {
-			for _, f := range l.Fields {
-				match := re.FindStringSubmatch(f.Value)
-				if match == nil {
-					continue
-				}
-				ranges[match[1]] = struct{}{}
+			match := re.FindStringSubmatch(l.Msg().StripMarkers())
+			if match == nil {
+				continue
 			}
+			ranges[match[1]] = struct{}{}
 		}
 	}
 	if len(ranges) != 1 {
@@ -475,7 +478,8 @@ func BenchmarkTableReader(b *testing.B) {
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	const numCols = 2
@@ -491,8 +495,9 @@ func BenchmarkTableReader(b *testing.B) {
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
-				Settings:   s.ClusterSettings(),
-				RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+				Settings: st,
+				RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
+					func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
 			},
 			Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 			NodeID: evalCtx.NodeID,

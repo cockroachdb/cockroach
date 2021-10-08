@@ -20,30 +20,32 @@ import (
 )
 
 // MakeWindowIntoBatch updates windowedBatch so that it provides a "window"
-// into inputBatch starting at tuple index startIdx. It handles selection
-// vectors on inputBatch as well (in which case windowedBatch will also have a
-// "windowed" selection vector).
+// into inputBatch that contains tuples in [startIdx, endIdx) range. It handles
+// selection vectors on inputBatch as well (in which case windowedBatch will
+// also have a "windowed" selection vector).
+//
+// Note: this method assumes that startIdx < endIdx.
 func MakeWindowIntoBatch(
-	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []*types.T,
+	windowedBatch, inputBatch coldata.Batch, startIdx, endIdx int, inputTypes []*types.T,
 ) {
-	inputBatchLen := inputBatch.Length()
 	windowStart := startIdx
-	windowEnd := inputBatchLen
+	windowEnd := endIdx
 	if sel := inputBatch.Selection(); sel != nil {
 		// We have a selection vector on the input batch, and in order to avoid
 		// deselecting (i.e. moving the data over), we will provide an adjusted
 		// selection vector to the windowed batch as well.
 		windowedBatch.SetSelection(true)
-		windowIntoSel := sel[startIdx:inputBatchLen]
+		windowIntoSel := sel[startIdx:endIdx]
 		copy(windowedBatch.Selection(), windowIntoSel)
-		maxSelIdx := 0
-		for _, selIdx := range windowIntoSel {
-			if selIdx > maxSelIdx {
-				maxSelIdx = selIdx
-			}
-		}
+		// We have to adjust the indices of our window based on the selection
+		// vector. The window needs to start from the zeroth tuple (even if it
+		// is not included in the selection vector) so that we don't have to
+		// shift the selection vector on the windowed batch.
 		windowStart = 0
-		windowEnd = maxSelIdx + 1
+		// The window also needs to include the very last tuple that is selected
+		// to be in the window. Here we rely on the invariant that the selection
+		// vectors are increasing sequences.
+		windowEnd = windowIntoSel[len(windowIntoSel)-1] + 1
 	} else {
 		windowedBatch.SetSelection(false)
 	}
@@ -51,7 +53,7 @@ func MakeWindowIntoBatch(
 		window := inputBatch.ColVec(i).Window(windowStart, windowEnd)
 		windowedBatch.ReplaceCol(window, i)
 	}
-	windowedBatch.SetLength(inputBatchLen - startIdx)
+	windowedBatch.SetLength(endIdx - startIdx)
 }
 
 // NewAppendOnlyBufferedBatch returns a new AppendOnlyBufferedBatch that has
@@ -76,6 +78,7 @@ func NewAppendOnlyBufferedBatch(
 	batch := allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
 	return &AppendOnlyBufferedBatch{
 		batch:       batch,
+		allocator:   allocator,
 		colVecs:     batch.ColVecs(),
 		colsToStore: colsToStore,
 	}
@@ -97,6 +100,7 @@ type AppendOnlyBufferedBatch struct {
 	// through the implementation of each method of coldata.Batch interface.
 	batch coldata.Batch
 
+	allocator   *colmem.Allocator
 	length      int
 	colVecs     []coldata.Vec
 	colsToStore []int
@@ -194,22 +198,24 @@ func (b *AppendOnlyBufferedBatch) String() string {
 
 // AppendTuples is a helper method that appends all tuples with indices in range
 // [startIdx, endIdx) from batch (paying attention to the selection vector)
-// into b.
-// NOTE: this does *not* perform memory accounting.
+// into b. The newly allocated memory is registered with the allocator used to
+// create this AppendOnlyBufferedBatch.
 // NOTE: batch must be of non-zero length.
 func (b *AppendOnlyBufferedBatch) AppendTuples(batch coldata.Batch, startIdx, endIdx int) {
-	for _, colIdx := range b.colsToStore {
-		b.colVecs[colIdx].Append(
-			coldata.SliceArgs{
-				Src:         batch.ColVec(colIdx),
-				Sel:         batch.Selection(),
-				DestIdx:     b.length,
-				SrcStartIdx: startIdx,
-				SrcEndIdx:   endIdx,
-			},
-		)
-	}
-	b.length += endIdx - startIdx
+	b.allocator.PerformAppend(b, func() {
+		for _, colIdx := range b.colsToStore {
+			b.colVecs[colIdx].Append(
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					Sel:         batch.Selection(),
+					DestIdx:     b.length,
+					SrcStartIdx: startIdx,
+					SrcEndIdx:   endIdx,
+				},
+			)
+		}
+		b.length += endIdx - startIdx
+	})
 }
 
 // MaybeAllocateUint64Array makes sure that the passed in array is allocated, of
@@ -289,4 +295,18 @@ func EnsureSelectionVectorLength(old []int, length int) []int {
 		return old[:length]
 	}
 	return make([]int, length)
+}
+
+// UpdateBatchState updates batch to have the specified length and the selection
+// vector. If usesSel is true, then sel must be non-nil; otherwise, sel is
+// ignored.
+func UpdateBatchState(batch coldata.Batch, length int, usesSel bool, sel []int) {
+	batch.SetSelection(usesSel)
+	if usesSel {
+		copy(batch.Selection()[:length], sel[:length])
+	}
+	// Note: when usesSel is true, we have to set the length on the batch
+	// **after** setting the selection vector because we might use the values
+	// in the selection vector to maintain invariants (like for flat bytes).
+	batch.SetLength(length)
 }

@@ -26,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -138,11 +138,23 @@ func NewSchemaChangerForTesting(
 	}
 }
 
-// isPermanentSchemaChangeError returns true if the error results in
+// IsConstraintError returns true if the error is considered as
+// an error introduced by the user. For example a constraint
+// violation.
+func IsConstraintError(err error) bool {
+	pgCode := pgerror.GetPGCode(err)
+	return pgCode == pgcode.CheckViolation ||
+		pgCode == pgcode.UniqueViolation ||
+		pgCode == pgcode.ForeignKeyViolation ||
+		pgCode == pgcode.NotNullViolation ||
+		pgCode == pgcode.IntegrityConstraintViolation
+}
+
+// IsPermanentSchemaChangeError returns true if the error results in
 // a permanent failure of a schema change. This function is a allowlist
 // instead of a blocklist: only known safe errors are confirmed to not be
 // permanent errors. Anything unknown is assumed to be permanent.
-func isPermanentSchemaChangeError(err error) bool {
+func IsPermanentSchemaChangeError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -248,7 +260,9 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	}
 
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, ts)
+		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
 
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
@@ -330,7 +344,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 			isLocal := !getPlanDistribution(
 				ctx, localPlanner, localPlanner.execCfg.NodeID,
-				localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
+				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
 				localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
@@ -386,13 +400,6 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 	log.Info(ctx, "making table public")
 
-	fks := table.AllActiveAndInactiveForeignKeys()
-	for _, fk := range fks {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
-			return err
-		}
-	}
-
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
 		if err != nil {
@@ -413,11 +420,10 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 // If there are no draining names, this call will not update any descriptors.
 func drainNamesForDescriptor(
 	ctx context.Context,
-	settings *cluster.Settings,
 	descID descpb.ID,
+	cf *descs.CollectionFactory,
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
-	leaseMgr *lease.Manager,
 	codec keys.SQLCodec,
 	beforeDrainNames func(),
 ) error {
@@ -444,9 +450,7 @@ func drainNamesForDescriptor(
 
 		// Reclaim all old names.
 		for _, drain := range namesToReclaim {
-			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-				ctx, b, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
-			)
+			b.Del(catalogkeys.EncodeNameKey(codec, drain))
 		}
 
 		// If the descriptor to drain is a schema, then we need to delete the
@@ -473,7 +477,7 @@ func drainNamesForDescriptor(
 		}
 		return txn.Run(ctx, b)
 	}
-	return descs.Txn(ctx, settings, leaseMgr, ie, db, run)
+	return cf.Txn(ctx, ie, db, run)
 }
 
 func startGCJob(
@@ -587,7 +591,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// If there are any names to drain, then drain them.
 	if len(desc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
-			ctx, sc.settings, desc.GetID(), sc.db, sc.execCfg.InternalExecutor, sc.leaseMgr,
+			ctx, desc.GetID(), sc.execCfg.CollectionFactory, sc.db, sc.execCfg.InternalExecutor,
 			sc.execCfg.Codec, sc.testingKnobs.OldNamesDrainedNotification,
 		); err != nil {
 			return err
@@ -598,7 +602,8 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
+		latestDesc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
@@ -610,7 +615,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats()
+			sc.refreshStats(latestDesc)
 		}
 		return nil
 	}
@@ -735,7 +740,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// than tables. For jobs intended to drop other types of descriptors, we do
 		// nothing.
 		if _, ok := desc.(catalog.TableDescriptor); !ok {
-			return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
+			return jobs.MarkAsPermanentJobError(errors.Newf("schema change jobs on databases and schemas cannot be reverted"))
 		}
 
 		// Check that we aren't queued behind another schema changer.
@@ -757,7 +762,8 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
+		desc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
@@ -769,7 +775,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats()
+			sc.refreshStats(desc)
 		}
 		return nil
 	}
@@ -861,15 +867,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
 			return err
 		}
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			sc.execCfg.Codec,
-			scTable.GetParentID(),
-			scTable.GetParentSchemaID(),
-			scTable.GetName(),
-			false, /* kvTrace */
-		)
+		b.Del(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
 
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(
@@ -985,9 +983,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	}
 
 	log.Info(ctx, "finished stepping through state machine")
-
-	// wait for the state change to propagate to all leases.
-	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+	return nil
 }
 
 func (sc *SchemaChanger) createIndexGCJob(
@@ -1015,7 +1011,9 @@ func (sc *SchemaChanger) createIndexGCJob(
 
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
 // version of the descriptor.
-func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID) error {
+func WaitToUpdateLeases(
+	ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID,
+) (catalog.Descriptor, error) {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -1024,22 +1022,13 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 		Multiplier:     1.5,
 	}
 	log.Infof(ctx, "waiting for a single version...")
-	version, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
-	log.Infof(ctx, "waiting for a single version... done (at v %d)", version)
-	return err
-}
-
-// WaitToUpdateLeasesMultiple waits until the entire cluster has been updated to
-// the latest versions of all the specified descriptors.
-func WaitToUpdateLeasesMultiple(
-	ctx context.Context, leaseMgr *lease.Manager, ids []lease.IDVersion,
-) error {
-	for _, idVer := range ids {
-		if err := WaitToUpdateLeases(ctx, leaseMgr, idVer.ID); err != nil {
-			return err
-		}
+	desc, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
+	var version descpb.DescriptorVersion
+	if desc != nil {
+		version = desc.GetVersion()
 	}
-	return nil
+	log.Infof(ctx, "waiting for a single version... done (at v %d)", version)
+	return desc, err
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
@@ -1054,7 +1043,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	modified, err := sc.txnWithModified(ctx, func(
+	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1072,7 +1061,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		referencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+		referencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
@@ -1124,8 +1113,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey())
-					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
-						return err
+					if backrefTable != scTable {
+						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
+							return err
+						}
 					}
 				}
 			}
@@ -1322,7 +1313,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+			newReferencedTypeIDs, _, err := scTable.GetAllReferencedTypeIDs(dbDesc,
 				func(id descpb.ID) (catalog.TypeDescriptor, error) {
 					typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
 					if err != nil {
@@ -1385,17 +1376,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Wait for the modified versions of tables other than the table we're
-	// updating to have their leases updated.
-	for _, desc := range modified {
-		// sc.descID gets waited for above this call in sc.exec().
-		if desc.ID == sc.descID {
-			continue
-		}
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, desc.ID); err != nil {
-			return err
-		}
-	}
 	// Notify the job registry to start jobs, in case we started any.
 	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
 		return err
@@ -1421,11 +1401,12 @@ func maybeUpdateZoneConfigsForPKChange(
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		// Tenants are agnostic to zone configs.
+	if !ZonesTableExists(ctx, execCfg.Codec, execCfg.Settings.Version) {
+		// Tenants are agnostic to zone configs if they don't have a zones table.
 		return nil
 	}
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, table.ID)
+
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
 	if err != nil {
 		return err
 	}
@@ -1493,11 +1474,13 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 	return sc.done(ctx)
 }
 
-func (sc *SchemaChanger) refreshStats() {
+func (sc *SchemaChanger) refreshStats(desc catalog.Descriptor) {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
-	sc.execCfg.StatsRefresher.NotifyMutation(sc.descID, math.MaxInt32 /* rowsAffected */)
+	if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
+		sc.execCfg.StatsRefresher.NotifyMutation(tableDesc, math.MaxInt32 /* rowsAffected */)
+	}
 }
 
 // maybeReverseMutations reverses the direction of all the mutations with the
@@ -1678,16 +1661,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	if err != nil || alreadyReversed {
 		return err
 	}
-
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -1792,7 +1765,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				if idx := mutation.GetIndex(); idx != nil {
-					for _, name := range idx.ColumnNames {
+					for _, name := range idx.KeyColumnNames {
 						if _, ok := columns[name]; ok {
 							// Such an index mutation has to be with direction ADD and
 							// in the DELETE_ONLY state. Live indexes referencing live
@@ -2003,28 +1976,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	_, err := sc.txnWithModified(ctx, f)
-	return err
-}
-
-// txnWithModified is a convenient wrapper around descs.Txn() which additionally
-// returns the set of modified descriptors.
-func (sc *SchemaChanger) txnWithModified(
-	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
-) (descsWithNewVersions []lease.IDVersion, _ error) {
-	ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
-	if err := descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
-		if err := f(ctx, txn, descsCol); err != nil {
-			return err
-		}
-		descsWithNewVersions = descsCol.GetDescriptorsWithNewVersion()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return descsWithNewVersions, nil
+	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2052,7 +2004,7 @@ func createSchemaChangeEvalCtx(
 		ExecCfg: execCfg,
 		Descs:   descriptors,
 		EvalContext: tree.EvalContext{
-			SessionData:      sd,
+			SessionDataStack: sessiondata.NewStack(sd),
 			InternalExecutor: ieFactory(ctx, sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.
@@ -2063,6 +2015,7 @@ func createSchemaChangeEvalCtx(
 			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 			Sequence:           &faketreeeval.DummySequenceOperators{},
 			Tenant:             &faketreeeval.DummyTenantOperator{},
+			Regions:            &faketreeeval.DummyRegionOperator{},
 			Settings:           execCfg.Settings,
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
 			ClusterID:          execCfg.ClusterID(),
@@ -2070,6 +2023,7 @@ func createSchemaChangeEvalCtx(
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
+			Tracer:             execCfg.AmbientCtx.Tracer,
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
@@ -2103,9 +2057,10 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			Database:      "",
 			UserProto:     security.NodeUserName().EncodeProto(),
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
+			Internal:      true,
 		},
-		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
-			DistSQLMode: sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+			DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
@@ -2181,14 +2136,24 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					descID, mutationID,
 				)
 				return nil
-			case !isPermanentSchemaChangeError(scErr):
+			case !IsPermanentSchemaChangeError(scErr):
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
 				sc.metrics.RetryErrors.Inc(1)
+				if IsConstraintError(scErr) {
+					telemetry.Inc(sc.metrics.ConstraintErrors)
+				} else {
+					telemetry.Inc(sc.metrics.UncategorizedErrors)
+				}
 			default:
 				if ctx.Err() == nil {
 					sc.metrics.PermanentErrors.Inc(1)
+				}
+				if IsConstraintError(scErr) {
+					telemetry.Inc(sc.metrics.ConstraintErrors)
+				} else {
+					telemetry.Inc(sc.metrics.UncategorizedErrors)
 				}
 				// All other errors lead to a failed job.
 				return scErr
@@ -2240,13 +2205,17 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return err
 			}
 			// If there are no tables to GC, the zone config needs to be deleted now.
-			if p.ExecCfg().Codec.ForSystemTenant() && len(details.DroppedTables) == 0 {
-				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(dbID))
+			//
+			// NB: Secondary tenants prior to the introduction of system.zones could
+			// not set zone configurations, so there's nothing to do for them.
+			if ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) &&
+				len(details.DroppedTables) == 0 {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(p.ExecCfg().Codec, dbID)
 				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
 				// Delete the zone config entry for this database.
-				if err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd()); err != nil {
+				if _, err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */); err != nil {
 					return err
 				}
 			}
@@ -2293,6 +2262,12 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 
+	if fn := p.ExecCfg().SchemaChangerTestingKnobs.RunBeforeOnFailOrCancel; fn != nil {
+		if err := fn(r.job.ID()); err != nil {
+			return err
+		}
+	}
+
 	// If this is a schema change to drop a database or schema, DescID will be
 	// unset. We cannot revert such schema changes, so just exit early with an
 	// error.
@@ -2318,12 +2293,6 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		},
 	}
 
-	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
-		if err := fn(r.job.ID()); err != nil {
-			return err
-		}
-	}
-
 	if r.job.Payload().FinalResumeError == nil {
 		return errors.AssertionFailedf("job failed but had no recorded error")
 	}
@@ -2346,10 +2315,10 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 			// We check for this case so that we can just return the error without
 			// wrapping it in a retry error.
 			return rollbackErr
-		case !isPermanentSchemaChangeError(rollbackErr):
+		case !IsPermanentSchemaChangeError(rollbackErr):
 			// Check if the error is on a allowlist of errors we should retry on, and
 			// have the job registry retry.
-			return jobs.NewRetryJobError(rollbackErr.Error())
+			return jobs.MarkAsRetryJobError(rollbackErr)
 		default:
 			// All other errors lead to a failed job.
 			//
@@ -2553,7 +2522,7 @@ func DeleteTableDescAndZoneConfig(
 		b.Del(descKey)
 		// Delete the zone config entry for this table, if necessary.
 		if codec.ForSystemTenant() {
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.GetID()))
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
 			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}
 		return txn.Run(ctx, b)

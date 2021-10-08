@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,7 +47,7 @@ The addresses used are those advertised by the nodes themselves. Make sure hapro
 can resolve the hostnames in the configuration file, either by using full-qualified names, or
 running haproxy in the same network.
 
-Notes that have been decommissioned are excluded from the generated configuration.
+Nodes that have been decommissioned are excluded from the generated configuration.
 
 Nodes to include can be filtered by localities matching the '--locality' regular expression. eg:
   --locality=region=us-east                  # Nodes in region "us-east"
@@ -58,7 +59,7 @@ The key (eg: 'region') must be fully specified, only values (eg: 'us-east1') can
 An error is returned if no nodes match the locality filter.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
+	RunE: clierrorplus.MaybeDecorateError(runGenHAProxyCmd),
 }
 
 type haProxyNodeInfo struct {

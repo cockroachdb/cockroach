@@ -4,9 +4,9 @@ go_library(
     name = "sqlutils",
     srcs = [
         "inject.go",
-        "name_resolution_testutils.go",
         "pg_url.go",
         "pretty.go",
+        "rows.go",
         "scrub.go",
         "sql_runner.go",
         "table_gen.go",
@@ -21,14 +21,15 @@ go_library(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/fileutil",
         "//pkg/util/protoutil",
-        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

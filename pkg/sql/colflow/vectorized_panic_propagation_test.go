@@ -50,23 +50,14 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	typs := types.OneIntCol
 	input := execinfra.NewRepeatableRowSource(typs, randgen.MakeIntRows(nRows, nCols))
 
-	col, err := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
 	vee := newTestVectorizedInternalPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: vee},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mat.Start(ctx)
 
 	var meta *execinfrapb.ProducerMetadata
@@ -94,23 +85,14 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	typs := types.OneIntCol
 	input := execinfra.NewRepeatableRowSource(typs, randgen.MakeIntRows(nRows, nCols))
 
-	col, err := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
 	nvee := newTestNonVectorizedPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: nvee},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mat.Start(ctx)
 
 	require.Panics(t, func() { mat.Next() }, "NonVectorizedPanic was caught by the operators")

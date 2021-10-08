@@ -98,8 +98,12 @@ func TestCatchupScanOrdering(t *testing.T) {
 			}
 		})
 	}
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	// Tenant tests skipped because of:
+	// validations_test.go:40: executing ALTER TABLE bank SPLIT AT
+	// VALUES (5): pq: unimplemented: operation is unsupported in
+	// multi-tenancy mode
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
 }
 
 // TODO(dan): This bit is copied from the bank workload. It's

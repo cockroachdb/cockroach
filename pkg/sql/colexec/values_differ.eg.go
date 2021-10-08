@@ -26,14 +26,15 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
 // valuesDiffer takes in two ColVecs as well as values indices to check whether
-// the values differ. This function pays attention to NULLs, and two NULL
-// values do *not* differ.
-func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int) bool {
+// the values differ. This function pays attention to NULLs.
+func valuesDiffer(
+	aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int, nullsAreDistinct bool,
+) bool {
 	switch aColVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
 		switch aColVec.Type().Width() {
@@ -46,7 +47,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -81,7 +82,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -108,7 +109,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -134,7 +135,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -168,7 +169,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -203,7 +204,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -241,7 +242,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -287,7 +288,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -321,7 +322,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -348,7 +349,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -381,7 +382,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}
@@ -392,7 +393,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			{
 				var cmpResult int
 
-				cmpResult = arg1.(*coldataext.Datum).CompareDatum(aCol, arg2)
+				cmpResult = coldataext.CompareDatum(arg1, aCol, arg2)
 
 				unique = cmpResult != 0
 			}

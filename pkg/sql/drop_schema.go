@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -63,35 +65,41 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		}
 		scName := schema.Schema()
 
-		_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+		db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 			tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return nil, err
 		}
 
-		found, sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
+		sc, err := p.Descriptors().GetSchemaByName(
+			ctx, p.txn, db, scName, tree.SchemaLookupFlags{
+				Required:       false,
+				RequireMutable: true,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
+		if sc == nil {
 			if n.IfExists {
 				continue
 			}
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName)
 		}
-		switch sc.Kind {
+		switch sc.SchemaKind() {
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
 		case catalog.SchemaUserDefined:
-			hasOwnership, err := p.HasOwnership(ctx, sc.Desc)
+			hasOwnership, err := p.HasOwnership(ctx, sc)
 			if err != nil {
 				return nil, err
 			}
 			if !(isAdmin || hasOwnership) {
-				return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "permission denied to drop schema %q", sc.Name)
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"permission denied to drop schema %q", sc.GetName())
 			}
 			namesBefore := len(d.objectNamesToDelete)
-			if err := d.collectObjectsInSchema(ctx, p, db, &sc); err != nil {
+			if err := d.collectObjectsInSchema(ctx, p, db, sc); err != nil {
 				return nil, err
 			}
 			// We added some new objects to delete. Ensure that we have the correct
@@ -102,7 +110,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			}
 			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaDrop)
 		default:
-			return nil, errors.AssertionFailedf("unknown schema kind %d", sc.Kind)
+			return nil, errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind())
 		}
 
 	}
@@ -134,10 +142,10 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	schemaIDs := make([]descpb.ID, len(n.d.schemasToDelete))
 	for i := range n.d.schemasToDelete {
 		sc := n.d.schemasToDelete[i].schema
-		schemaIDs[i] = sc.ID
+		schemaIDs[i] = sc.GetID()
 		db := n.d.schemasToDelete[i].dbDesc
 
-		mutDesc := sc.Desc.(*schemadesc.Mutable)
+		mutDesc := sc.(*schemadesc.Mutable)
 		if err := p.dropSchemaImpl(ctx, db, mutDesc); err != nil {
 			return err
 		}
@@ -149,7 +157,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		db := n.d.schemasToDelete[i].dbDesc
 		if err := p.writeNonDropDatabaseChange(
 			ctx, db,
-			fmt.Sprintf("updating parent database %s for %s", db.GetName(), sc.Name),
+			fmt.Sprintf("updating parent database %s for %s", db.GetName(), sc.GetName()),
 		); err != nil {
 			return err
 		}
@@ -169,13 +177,13 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	// in the same transaction as table descriptor update.
 	for _, schemaToDelete := range n.d.schemasToDelete {
 		sc := schemaToDelete.schema
-		qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, sc.Desc)
+		qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, sc)
 		if err != nil {
 			return err
 		}
 
 		if err := params.p.logEvent(params.ctx,
-			sc.ID,
+			sc.GetID(),
 			&eventpb.DropSchema{
 				SchemaName: qualifiedSchemaName.String(),
 			}); err != nil {
@@ -206,6 +214,9 @@ func (p *planner) dropSchemaImpl(
 	}
 	// Mark the descriptor as dropped.
 	sc.State = descpb.DescriptorState_DROP
+	if err := p.removeSchemaComment(ctx, sc.GetID()); err != nil {
+		return err
+	}
 	return p.writeSchemaDesc(ctx, sc)
 }
 
@@ -236,6 +247,19 @@ func (p *planner) createDropSchemaJob(
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	})
+	return err
+}
+
+func (p *planner) removeSchemaComment(ctx context.Context, schemaID descpb.ID) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"delete-schema-comment",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.SchemaCommentType,
+		schemaID)
+
 	return err
 }
 

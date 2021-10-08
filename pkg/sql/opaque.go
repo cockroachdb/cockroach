@@ -84,8 +84,12 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseDropRegion(ctx, n)
 	case *tree.AlterDatabasePrimaryRegion:
 		return p.AlterDatabasePrimaryRegion(ctx, n)
+	case *tree.AlterDatabasePlacement:
+		return p.AlterDatabasePlacement(ctx, n)
 	case *tree.AlterDatabaseSurvivalGoal:
 		return p.AlterDatabaseSurvivalGoal(ctx, n)
+	case *tree.AlterDefaultPrivileges:
+		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterIndex:
 		return p.AlterIndex(ctx, n)
 	case *tree.AlterSchema:
@@ -102,12 +106,18 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterType(ctx, n)
 	case *tree.AlterRole:
 		return p.AlterRole(ctx, n)
+	case *tree.AlterRoleSet:
+		return p.AlterRoleSet(ctx, n)
 	case *tree.AlterSequence:
 		return p.AlterSequence(ctx, n)
 	case *tree.CommentOnColumn:
 		return p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnConstraint:
+		return p.CommentOnConstraint(ctx, n)
 	case *tree.CommentOnDatabase:
 		return p.CommentOnDatabase(ctx, n)
+	case *tree.CommentOnSchema:
+		return p.CommentOnSchema(ctx, n)
 	case *tree.CommentOnIndex:
 		return p.CommentOnIndex(ctx, n)
 	case *tree.CommentOnTable:
@@ -188,6 +198,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
+	case *tree.ShowCreateSchedules:
+		return p.ShowCreateSchedule(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowTableStats:
@@ -218,7 +230,9 @@ func init() {
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
 		&tree.AlterDatabasePrimaryRegion{},
+		&tree.AlterDatabasePlacement{},
 		&tree.AlterDatabaseSurvivalGoal{},
+		&tree.AlterDefaultPrivileges{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
@@ -228,9 +242,12 @@ func init() {
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
+		&tree.AlterRoleSet{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
+		&tree.CommentOnSchema{},
 		&tree.CommentOnIndex{},
+		&tree.CommentOnConstraint{},
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
@@ -270,6 +287,7 @@ func init() {
 		&tree.SetSessionAuthorizationDefault{},
 		&tree.SetSessionCharacteristics{},
 		&tree.ShowClusterSetting{},
+		&tree.ShowCreateSchedules{},
 		&tree.ShowHistogram{},
 		&tree.ShowTableStats{},
 		&tree.ShowTraceForSession{},

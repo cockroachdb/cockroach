@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -161,7 +160,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	log.TestingClearServerIdentifiers()
 
 	tt.tenant, tt.tenantDB = serverutils.StartTenant(tt.t, tt.server, base.TestTenantArgs{
-		TenantID:                    roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+		TenantID:                    serverutils.TestTenantID(),
 		AllowSettingClusterSettings: true,
 		TestingKnobs:                mapServerArgs[0].Knobs,
 	})
@@ -247,7 +246,7 @@ func (tt *telemetryTest) RunTest(
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
-		sqlServer.ResetSQLStats(ctx)
+		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 
 		_, err := db.Exec(td.Input)
@@ -255,7 +254,7 @@ func (tt *telemetryTest) RunTest(
 		if err != nil {
 			fmt.Fprintf(&buf, "error: %v\n", err)
 		}
-		sqlServer.ResetSQLStats(ctx)
+		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 		last := tt.diagSrv.LastRequestData()
 		buf.WriteString(formatSQLStats(last.SqlStats))

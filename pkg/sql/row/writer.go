@@ -154,6 +154,9 @@ func prepareInsertOrUpdateBatch(
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
+				if err := helper.checkRowSize(ctx, kvKey, &marshaledValues[idx], family.ID); err != nil {
+					return nil, err
+				}
 				putFn(ctx, batch, kvKey, &marshaledValues[idx], traceKV)
 			}
 
@@ -174,7 +177,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip, err := helper.skipColumnInPK(colID, values[idx]); err != nil {
+			if skip, err := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); err != nil {
 				return nil, err
 			} else if skip {
 				continue
@@ -204,6 +207,9 @@ func prepareInsertOrUpdateBatch(
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
 			kvValue.SetTuple(rawValueBuf)
+			if err := helper.checkRowSize(ctx, kvKey, kvValue, family.ID); err != nil {
+				return nil, err
+			}
 			putFn(ctx, batch, kvKey, kvValue, traceKV)
 		}
 

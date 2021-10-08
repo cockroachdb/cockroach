@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,6 +107,18 @@ var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var telemetryLoggingEnabled = settings.RegisterBoolSetting(
+	"sql.telemetry.query_sampling.enabled",
+	"when set to true, executed queries will emit an event on the telemetry logging channel",
+	// Note: Usage of an env var here makes it possible to set a default without
+	// the execution of a cluster setting SQL query. This is particularly advantageous
+	// when cluster setting queries would be too inefficient or to slow to use. For
+	// example, in multi-tenant setups in CC, it is impractical to enable this
+	// setting directly after tenant creation without significant overhead in terms
+	// of time and code.
+	envutil.EnvOrDefaultBool("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_ENABLED", false),
+).WithPublic()
+
 type executorType int
 
 const (
@@ -133,8 +147,9 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryLoggingMetrics *TelemetryLoggingMetrics,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +159,7 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryMetrics *TelemetryLoggingMetrics,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -157,6 +173,10 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	maxEventFrequency := telemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
+
+	// We only consider non-internal SQL statements for telemetry logging.
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -166,7 +186,7 @@ func (p *planner) maybeLogStatementInternal(
 	// member of the admin role).
 
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
-		!shouldLogToAdminAuditLog {
+		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -175,7 +195,7 @@ func (p *planner) maybeLogStatementInternal(
 	// Compute the pieces of data that are going to be included in logged events.
 
 	// The session's application_name.
-	appName := p.EvalContext().SessionData.ApplicationName
+	appName := p.EvalContext().SessionData().ApplicationName
 	// The duration of the query so far. Age is the duration expressed in milliseconds.
 	queryDuration := timeutil.Now().Sub(startTime)
 	age := float32(queryDuration.Nanoseconds()) / 1e6
@@ -276,14 +296,10 @@ func (p *planner) maybeLogStatementInternal(
 		TxnCounter:    uint32(txnCounter),
 	}
 
-	if logV {
-		// Copy to the debug log / trace.
-		log.VEventf(ctx, execType.vLevel(), "%+v", execDetails)
-	}
-
 	if auditEventsDetected {
 		// TODO(knz): re-add the placeholders and age into the logging event.
-		for _, ev := range p.curPlan.auditEvents {
+		entries := make([]eventLogEntry, len(p.curPlan.auditEvents))
+		for i, ev := range p.curPlan.auditEvents {
 			mode := "r"
 			if ev.writing {
 				mode = "rw"
@@ -303,15 +319,18 @@ func (p *planner) maybeLogStatementInternal(
 					tableName = tn.FQString()
 				}
 			}
-
-			p.logEventOnlyExternally(ctx, ev.desc.GetID(),
-				&eventpb.SensitiveTableAccess{
+			entries[i] = eventLogEntry{
+				targetID: int32(ev.desc.GetID()),
+				event: &eventpb.SensitiveTableAccess{
 					CommonSQLExecDetails: execDetails,
 					TableName:            tableName,
 					AccessMode:           mode,
-				})
+				},
+			}
 		}
+		p.logEventsOnlyExternally(ctx, entries...)
 	}
+
 	if slowQueryLogEnabled && (
 	// Did the user request pumping queries into the slow query log when
 	// the logical plan has full scans?
@@ -321,26 +340,60 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-				&eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQuery{CommonSQLExecDetails: execDetails}})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-				&eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails}})
 		}
 	}
 
-	if logExecuteEnabled {
-		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
+	if logExecuteEnabled || logV {
+		// The API contract for logEventsWithOptions() is that it returns
+		// no error when system.eventlog is not written to.
+		_ = p.logEventsWithOptions(ctx,
+			1, /* depth */
+			eventLogOptions{
+				// We pass LogToDevChannelIfVerbose because we have a log.V
+				// request for this file, which means the operator wants to
+				// see a copy of the execution on the DEV Channel.
+				dst:               LogExternally | LogToDevChannelIfVerbose,
+				verboseTraceLevel: execType.vLevel(),
+			},
+			eventLogEntry{event: &eventpb.QueryExecute{CommonSQLExecDetails: execDetails}})
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-			&eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
 	}
+
+	if telemetryLoggingEnabled {
+		// We only log to the telemetry channel if enough time has elapsed from
+		// the last event emission.
+		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
+		if p.stmt.AST.StatementType() != tree.TypeDML {
+			requiredTimeElapsed = 0
+		}
+		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+				CommonSQLExecDetails: execDetails,
+				SkippedQueries:       skippedQueries,
+			}})
+		} else {
+			telemetryMetrics.incSkippedQueryCount()
+		}
+	}
+}
+
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
+	// The API contract for logEventsWithOptions() is that it returns
+	// no error when system.eventlog is not written to.
+	_ = p.logEventsWithOptions(ctx,
+		2, /* depth: we want to use the caller location */
+		eventLogOptions{dst: LogExternally},
+		entries...)
 }
 
 // maybeAudit marks the current plan being constructed as flagged

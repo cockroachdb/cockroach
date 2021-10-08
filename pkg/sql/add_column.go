@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -31,10 +30,13 @@ func (p *planner) addColumnImpl(
 	tn *tree.TableName,
 	desc *tabledesc.Mutable,
 	t *tree.AlterTableAddColumn,
-	sessionData *sessiondata.SessionData,
 ) error {
 	d := t.ColumnDef
-	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+
+	if d.IsComputed() {
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, params.SessionData())
+	}
+
 	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
@@ -46,25 +48,20 @@ func (p *planner) addColumnImpl(
 			"VECTOR column types are unsupported",
 		)
 	}
-	if supported, err := isTypeSupportedInVersion(version, toType); err != nil {
+
+	if err := checkTypeIsSupported(params.ctx, params.ExecCfg().Settings, toType); err != nil {
 		return err
-	} else if !supported {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized",
-			toType.SQLString(),
-		)
 	}
 
-	newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
+	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, tn)
 	if err != nil {
 		return err
 	}
 	if seqName != nil {
 		if err := doCreateSequence(
 			params,
-			seqDbDesc,
-			n.tableDesc.GetParentSchemaID(),
+			seqPrefix.Database,
+			seqPrefix.Schema,
 			seqName,
 			n.tableDesc.Persistence(),
 			seqOpts,
@@ -157,17 +154,42 @@ func (p *planner) addColumnImpl(
 	}
 
 	if d.IsComputed() {
-		computedColValidator := schemaexpr.MakeComputedColumnValidator(
-			params.ctx,
-			n.tableDesc,
-			&params.p.semaCtx,
-			tn,
+		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+			params.ctx, n.tableDesc, d, tn, "computed column", params.p.SemaCtx(),
 		)
-		serializedExpr, err := computedColValidator.Validate(d)
 		if err != nil {
 			return err
 		}
 		col.ComputeExpr = &serializedExpr
+	}
+
+	if !col.Virtual {
+		// Add non-virtual column name and ID to primary index.
+		primaryIndex := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, col.Name)
+		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, col.ID)
+		n.tableDesc.SetPrimaryIndex(primaryIndex)
+	}
+
+	// Zone configuration logic is only required for REGIONAL BY ROW tables
+	// with newly created indexes.
+	if n.tableDesc.IsLocalityRegionalByRow() && idx != nil {
+		// We need to allocate new IDs for the created columns and indexes
+		// in case we need to configure their zone partitioning.
+		// This must be done after every object is created.
+		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+			return err
+		}
+
+		// Configure zone configuration if required. This must happen after
+		// all the IDs have been allocated.
+		if err := p.configureZoneConfigForNewIndexPartitioning(
+			params.ctx,
+			n.tableDesc,
+			*idx,
+		); err != nil {
+			return err
+		}
 	}
 
 	return nil

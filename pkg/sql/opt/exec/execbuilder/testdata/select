@@ -538,6 +538,9 @@ t           c_idx       false       2             b            N/A        true  
 t           c_idx       false       3             d            N/A        true     false
 t           c_idx       false       4             a            ASC        false    true
 t           primary     false       1             a            ASC        false    false
+t           primary     false       2             b            N/A        true     false
+t           primary     false       3             c            N/A        true     false
+t           primary     false       4             d            N/A        true     false
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -1762,7 +1765,11 @@ SELECT * FROM a
 statement ok
 SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
 
-# The span "sending partial batch" means that the scan was parallelized.
+# The span "sending partial batch" means that the scan was parallelized. We're
+# seeing duplicate "querying next range" entries because we first use the range
+# cache to try to partition the spans in order to have parallel TableReaders (we
+# end up with a single partition though), and then we have a single TableReader
+# performing the scan of two spans in parallel.
 # If this test is failing and doesn't have that span, it means that the scanNode
 # was improperly configured to add a limit to the ScanRequest batch.
 # See #30943 for more details.
@@ -1772,6 +1779,9 @@ WHERE message LIKE 'querying next range at /Table/74/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
 querying next range at /Table/74/1/0/0
+querying next range at /Table/74/1/10/0
+querying next range at /Table/74/1/0/0
+=== SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/74/1/10/0
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
@@ -1785,23 +1795,70 @@ EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e
 distribution: local
 vectorized: true
 ·
-• limit
-│ count: 10
+• top-k
+│ order: +z
+│ k: 10
 │
-└── • sort
-    │ order: +z
+└── • project set
     │
-    └── • project set
+    └── • hash join
+        │ equality: (y) = (y)
         │
-        └── • hash join
-            │ equality: (y) = (y)
-            │
-            ├── • scan
-            │     missing stats
-            │     table: e@primary
-            │     spans: FULL SCAN
-            │
-            └── • scan
-                  missing stats
-                  table: s@primary
-                  spans: FULL SCAN
+        ├── • scan
+        │     missing stats
+        │     table: e@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              missing stats
+              table: s@primary
+              spans: FULL SCAN
+
+# Check that we have a sane row count estimate when there are a lot of null
+# values.
+statement ok
+CREATE TABLE nulls (x INT, y INT);
+ALTER TABLE nulls INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-15 02:06:48.036389",
+        "distinct_count": 3000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 11100000,
+        "row_count": 11110000
+    }
+]'
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM nulls WHERE x IS NULL
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (x, y)
+│ estimated row count: 11,100,000
+│ filter: x IS NULL
+│
+└── • scan
+      columns: (x, y)
+      estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
+      table: nulls@primary
+      spans: FULL SCAN

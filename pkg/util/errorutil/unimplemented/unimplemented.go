@@ -14,6 +14,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,5 +98,8 @@ func unimplementedInternal(
 		// perform telemetry.
 		err = errors.WithTelemetry(err, detail)
 	}
+
+	// Wrap with the corresponding PG error for unimplemented.
+	err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 	return err
 }

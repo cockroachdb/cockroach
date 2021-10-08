@@ -10,10 +10,10 @@
 {"Action":"output","Output":"awk -f ./pkg/sql/parser/replace_help_rules.awk \u003e pkg/sql/parser/gen/sql.y\n"}
 {"Action":"output","Output":"awk -f ./pkg/sql/parser/reserved_keywords.awk \u003c pkg/sql/parser/sql.y \u003e pkg/sql/lexbase/reserved_keywords.go.tmp || rm pkg/sql/lexbase/reserved_keywords.go.tmp\n"}
 {"Action":"output","Output":"mv -f pkg/sql/parser/help_messages.go.tmp pkg/sql/parser/help_messages.go\n"}
-{"Action":"output","Output":"mv -f pkg/sql/lex/keywords.go.tmp pkg/sql/lex/keywords.go\n"}
+{"Action":"output","Output":"mv -f pkg/sql/lexbase/keywords.go.tmp pkg/sql/lexbase/keywords.go\n"}
 {"Action":"output","Output":"mv -f pkg/sql/lexbase/reserved_keywords.go.tmp pkg/sql/lexbase/reserved_keywords.go\n"}
 {"Action":"output","Output":"gofmt -s -w pkg/sql/parser/help_messages.go\n"}
-{"Action":"output","Output":"gofmt -s -w pkg/sql/lex/keywords.go\n"}
+{"Action":"output","Output":"gofmt -s -w pkg/sql/lexbase/keywords.go\n"}
 {"Action":"output","Output":"gofmt -s -w pkg/sql/lexbase/reserved_keywords.go\n"}
 {"Action":"output","Output":"mv -f pkg/sql/parser/helpmap_test.go.tmp pkg/sql/parser/helpmap_test.go\n"}
 {"Action":"output","Output":"gofmt -s -w pkg/sql/parser/helpmap_test.go\n"}

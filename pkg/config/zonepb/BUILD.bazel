@@ -14,9 +14,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/opt/cat",
         "//pkg/sql/sem/tree",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@in_gopkg_yaml_v2//:yaml_v2",
@@ -30,6 +31,7 @@ go_test(
     embed = [":zonepb"],
     deps = [
         "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/leaktest",

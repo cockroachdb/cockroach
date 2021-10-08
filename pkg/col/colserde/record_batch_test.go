@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -186,7 +186,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	case types.IntervalFamily:
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
-		sizeOfInt64 := int(unsafe.Sizeof(int64(0)))
+		sizeOfInt64 := int(memsize.Int64)
 		for i := range data {
 			data[i] = make([]byte, sizeOfInt64*3)
 			binary.LittleEndian.PutUint64(data[i][0:sizeOfInt64], rng.Uint64())
@@ -279,7 +279,8 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	// Run Serialize/Deserialize in a loop to test reuse.
 	for i := 0; i < 2; i++ {
 		buf.Reset()
-		_, _, err := s.Serialize(&buf, data, dataLen)
+		dataCopy := append([]*array.Data{}, data...)
+		_, _, err := s.Serialize(&buf, dataCopy, dataLen)
 		require.NoError(t, err)
 		if buf.Len()%8 != 0 {
 			t.Fatal("message length must align to 8 byte boundary")

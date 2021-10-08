@@ -12,7 +12,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -353,8 +356,8 @@ GRANT UPDATE ON top_secret TO agent_bond;
 				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
 				`GRANT ALL ON locator TO root; `, `root`},
-			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT ALL ON continent TO root; `, `root`},
-			{`_continent`, `type`, `GRANT ALL ON _continent TO admin; GRANT ALL ON _continent TO root; `, `root`},
+			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT USAGE ON continent TO public; GRANT ALL ON continent TO root; `, `root`},
+			{`_continent`, `type`, `GRANT ALL ON _continent TO admin; GRANT USAGE ON _continent TO public; GRANT ALL ON _continent TO root; `, `root`},
 			{`agent_locations`, `table`, `GRANT ALL ON agent_locations TO admin; ` +
 				`GRANT SELECT ON agent_locations TO agent_bond; GRANT UPDATE ON agent_locations TO agents; ` +
 				`GRANT ALL ON agent_locations TO m; GRANT ALL ON agent_locations TO root; `, `root`},
@@ -476,6 +479,11 @@ func TestShowBackupTenants(t *testing.T) {
 	require.Equal(t, [][]string{
 		{"/Tenant/10", "/Tenant/11"},
 	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP 'nodelocal://1/t10' WITH debug_ids]`)
+	require.Equal(t, [][]string{
+		{"NULL", "NULL", "10"},
+	}, res)
 }
 
 func TestShowBackupPrivileges(t *testing.T) {
@@ -521,4 +529,143 @@ func TestShowBackupPrivileges(t *testing.T) {
 
 	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
 	require.NoError(t, err)
+}
+
+func TestShowUpgradedForeignKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		testdataBase = "testdata/restore_old_versions"
+		fkRevDirs    = testdataBase + "/fk-rev-history"
+	)
+
+	dirs, err := ioutil.ReadDir(fkRevDirs)
+	require.NoError(t, err)
+	for _, dir := range dirs {
+		require.True(t, dir.IsDir())
+		exportDir, err := filepath.Abs(filepath.Join(fkRevDirs, dir.Name()))
+		require.NoError(t, err)
+		t.Run(dir.Name(), showUpgradedForeignKeysTest(exportDir))
+	}
+}
+
+func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		params := base.TestServerArgs{}
+		const numAccounts = 1000
+		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
+		require.NoError(t, err)
+
+		type testCase struct {
+			table                     string
+			expectedForeignKeyPattern string
+		}
+		for _, tc := range []testCase{
+			{
+				"circular",
+				"CONSTRAINT self_fk FOREIGN KEY \\(selfid\\) REFERENCES public\\.circular\\(selfid\\) NOT VALID,",
+			},
+			{
+				"child",
+				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\),",
+			},
+			{
+				"child_pk",
+				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\),",
+			},
+		} {
+			results := sqlDB.QueryStr(t, `
+				SELECT
+					create_statement
+				FROM
+					[SHOW BACKUP SCHEMAS $1]
+				WHERE
+					object_type = 'table' AND object_name = $2
+				`, LocalFoo, tc.table)
+			require.NotEmpty(t, results)
+			require.Regexp(t, regexp.MustCompile(tc.expectedForeignKeyPattern), results[0][0])
+		}
+	}
+}
+
+func TestShowBackupWithDebugIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	// Create test database with bank table
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// add 1 type, 1 schema, and 2 tables to the database
+	sqlDB.Exec(t, `
+		SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+		CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
+		USE data; CREATE SCHEMA sc;
+		CREATE TABLE data.sc.t1 (a INT);
+		CREATE TABLE data.sc.t2 (a data.welcome);
+  `)
+
+	const full = LocalFoo + "/full"
+
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+
+	// extract the object IDs for the database and public schema
+	databaseRow := sqlDB.QueryStr(t, `
+		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
+		FROM [SHOW BACKUP $1 WITH debug_ids]
+		WHERE object_name = 'bank'`, full)
+	require.NotEmpty(t, databaseRow)
+	dbID, err := strconv.Atoi(databaseRow[0][1])
+	require.NoError(t, err)
+	publicID, err := strconv.Atoi(databaseRow[0][3])
+	require.NoError(t, err)
+
+	require.Greater(t, dbID, 0)
+	require.Greater(t, publicID, 0)
+
+	res := sqlDB.QueryStr(t, `
+		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
+		FROM [SHOW BACKUP $1 WITH debug_ids]
+		ORDER BY object_id`, full)
+
+	dbIDStr := strconv.Itoa(dbID)
+	publicIDStr := strconv.Itoa(publicID)
+	schemaIDStr := strconv.Itoa(dbID + 4)
+
+	expectedObjects := [][]string{
+		{"NULL", "NULL", "NULL", "NULL", "data", dbIDStr, "database"},
+		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 1), "table"},
+		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 2), "type"},
+		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 3), "type"},
+		{"data", dbIDStr, "NULL", "NULL", "sc", schemaIDStr, "schema"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t1", strconv.Itoa(dbID + 5), "table"},
+		{"data", dbIDStr, "sc", schemaIDStr, "t2", strconv.Itoa(dbID + 6), "table"},
+	}
+
+	require.Equal(t, expectedObjects, res)
+
+}
+
+func TestShowBackupPathIsCollectionRoot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+
+	// Create test database with bank table.
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, LocalFoo)
+
+	// Ensure proper error gets returned from back SHOW BACKUP Path
+	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
+		"SHOW BACKUP $1", LocalFoo)
 }

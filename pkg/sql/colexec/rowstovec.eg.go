@@ -72,7 +72,7 @@ func EncDatumRowsToColVec(
 								v = bool(*datum.(*tree.DBool))
 								castV := v.(bool)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -99,7 +99,7 @@ func EncDatumRowsToColVec(
 								v = int16(*datum.(*tree.DInt))
 								castV := v.(int16)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -123,7 +123,7 @@ func EncDatumRowsToColVec(
 								v = int32(*datum.(*tree.DInt))
 								castV := v.(int32)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -148,7 +148,7 @@ func EncDatumRowsToColVec(
 								v = int64(*datum.(*tree.DInt))
 								castV := v.(int64)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -176,7 +176,7 @@ func EncDatumRowsToColVec(
 								v = float64(*datum.(*tree.DFloat))
 								castV := v.(float64)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -203,7 +203,7 @@ func EncDatumRowsToColVec(
 
 								v = datum.(*tree.DDecimal).Decimal
 								castV := v.(apd.Decimal)
-								col[i].Set(&castV)
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -231,7 +231,7 @@ func EncDatumRowsToColVec(
 								v = datum.(*tree.DDate).UnixEpochDaysWithOrig()
 								castV := v.(int64)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -259,7 +259,7 @@ func EncDatumRowsToColVec(
 								v = datum.(*tree.DTimestamp).Time
 								castV := v.(time.Time)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -287,7 +287,7 @@ func EncDatumRowsToColVec(
 								v = datum.(*tree.DInterval).Duration
 								castV := v.(duration.Duration)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}
@@ -373,7 +373,7 @@ func EncDatumRowsToColVec(
 								v = datum.(*tree.DTimestampTZ).Time
 								castV := v.(time.Time)
 								//gcassert:bce
-								col[i] = castV
+								col.Set(i, castV)
 							}
 						}
 					}

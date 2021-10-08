@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -42,8 +43,8 @@ type loggingT struct {
 	// allocation pool for slices of buffer pointers.
 	bufSlicePool sync.Pool
 
-	// interceptor is the configured InterceptorFn callback, if any.
-	interceptor atomic.Value
+	// interceptor contains the configured InterceptorFn callbacks, if any.
+	interceptor interceptorSink
 
 	// vmoduleConfig maintains the configuration for the log.V and vmodule
 	// facilities.
@@ -105,6 +106,9 @@ type loggingT struct {
 		syncutil.RWMutex
 		idPayload
 	}
+
+	allSinkInfos sinkInfoRegistry
+	allLoggers   loggerRegistry
 }
 
 type idPayload struct {
@@ -133,8 +137,9 @@ type sinkInfo struct {
 	// sink is where the log entries should be written.
 	sink logSink
 
-	// Level at or beyond which entries are output to this sink.
-	threshold Severity
+	// Levels at or beyond which entries are output to this sink.
+	// There is one entry per channel.
+	threshold channelThresholds
 
 	// editor is the optional step that occurs prior to emitting the log
 	// entry.
@@ -156,6 +161,28 @@ type sinkInfo struct {
 	// redact and redactable memorize the input configuration
 	// that was used to create the editor above.
 	redact, redactable bool
+}
+
+type channelThresholds struct {
+	sevPerChannel [logpb.Channel_CHANNEL_MAX]Severity
+}
+
+func (c *channelThresholds) get(ch logpb.Channel) Severity {
+	return c.sevPerChannel[int(ch)]
+}
+
+// set modifies the threshold for the given channel, assuming
+// there is no concurrent access.
+func (c *channelThresholds) set(ch logpb.Channel, threshold Severity) {
+	c.sevPerChannel[int(ch)] = threshold
+}
+
+// setAll modifies the threshold for all channels, assuming
+// there is no concurrent access.
+func (c *channelThresholds) setAll(sev Severity) {
+	for i := 0; i < int(logpb.Channel_CHANNEL_MAX); i++ {
+		c.sevPerChannel[i] = sev
+	}
 }
 
 // loggerT represents the logging source for a given log channel.
@@ -257,11 +284,6 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggerT) outputLogEntry(entry logEntry) {
-	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		f(entry.convertToLegacy())
-		return
-	}
-
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.
 	setActive()
@@ -338,13 +360,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	// not eliminate the event.
 	someSinkActive := false
 	for i, s := range l.sinkInfos {
-		// Note: we need to use the .Get() method instead of reading the
-		// severity threshold directly, because some tests are unruly and
-		// let goroutines live and perform log calls beyond their
-		// Stopper's Stop() call (e.g. the pgwire async processing
-		// goroutine). These asynchronous log calls are concurrent with
-		// the stderrSinkInfo update in (*TestLogScope).Close().
-		if entry.sev < s.threshold.Get() || !s.sink.active() {
+		if entry.sev < s.threshold.get(entry.ch) || !s.sink.active() {
 			continue
 		}
 		editedEntry := entry
@@ -354,7 +370,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		// the formatter.
 		editedEntry.counter = atomic.AddUint64(&s.msgCount, 1)
 
-		// Process the redation spec.
+		// Process the redaction spec.
 		editedEntry.payload = maybeRedactEntry(editedEntry.payload, s.editor)
 
 		// Format the entry for this sink.

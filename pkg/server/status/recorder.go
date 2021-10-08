@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -446,7 +446,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
 		Metrics:           make(map[string]float64, lastNodeMetricCount),
 		Args:              os.Args,
-		Env:               envutil.GetEnvVarsUsed(),
+		Env:               flattenStrings(envutil.GetEnvVarsUsed()),
 		Activity:          activity,
 		NumCpus:           int32(system.NumCPU()),
 		TotalSystemMemory: systemMemory,
@@ -488,6 +488,14 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	return nodeStat
 }
 
+func flattenStrings(s []redact.RedactableString) []string {
+	res := make([]string, len(s))
+	for i, v := range s {
+		res[i] = v.StripMarkers()
+	}
+	return res
+}
+
 // WriteNodeStatus writes the supplied summary to the given client. If mustExist
 // is true, the key must already exist and must not change while being updated,
 // otherwise an error is returned -- if false, the status is always written.
@@ -503,7 +511,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 	// of the build info in the node status, writing one of these every 10s
 	// will generate more versions than will easily fit into a range over
 	// the course of a day.
-	if mustExist && mr.settings.Version.IsActive(ctx, clusterversion.CPutInline) {
+	if mustExist {
 		entry, err := db.Get(ctx, key)
 		if err != nil {
 			return err
@@ -511,7 +519,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 		if entry.Value == nil {
 			return errors.New("status entry not found, node may have been decommissioned")
 		}
-		err = db.CPutInline(kv.CtxForCPutInline(ctx), key, &nodeStatus, entry.Value.TagAndDataBytes())
+		err = db.CPutInline(ctx, key, &nodeStatus, entry.Value.TagAndDataBytes())
 		if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 			if detail.ActualValue == nil {
 				return errors.New("status entry not found, node may have been decommissioned")

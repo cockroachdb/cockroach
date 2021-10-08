@@ -24,12 +24,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var modes = []pgdate.ParseMode{
-	pgdate.ParseModeDMY,
-	pgdate.ParseModeMDY,
-	pgdate.ParseModeYMD,
-}
-
 var db *gosql.DB
 var dbString string
 
@@ -57,10 +51,10 @@ type timeData struct {
 	// This text contains a timezone, so we wouldn't expect to be
 	// able to combine it with another timezone-containing value.
 	hasTimezone bool
-	// Override the expected value for a given ParseMode.
-	modeExp map[pgdate.ParseMode]time.Time
-	// Override the expected error for a given ParseMode.
-	modeErr map[pgdate.ParseMode]bool
+	// Override the expected value for a given Order.
+	orderExp map[pgdate.Order]time.Time
+	// Override the expected error for a given Order.
+	orderErr map[pgdate.Order]bool
 	// Indicates that we don't implement a feature in PostgreSQL.
 	unimplemented bool
 }
@@ -84,11 +78,11 @@ func (td timeData) concatTime(other timeData) timeData {
 
 	concatErr := other.err || td.expectConcatErr || other.expectConcatErr || (td.hasTimezone && other.hasTimezone)
 
-	var concatModeExp map[pgdate.ParseMode]time.Time
-	if td.modeExp != nil && !concatErr {
-		concatModeExp = make(map[pgdate.ParseMode]time.Time, len(td.modeExp))
-		for mode, date := range td.modeExp {
-			concatModeExp[mode] = add(date, other.exp)
+	var concatOrderExp map[pgdate.Order]time.Time
+	if td.orderExp != nil && !concatErr {
+		concatOrderExp = make(map[pgdate.Order]time.Time, len(td.orderExp))
+		for order, date := range td.orderExp {
+			concatOrderExp[order] = add(date, other.exp)
 		}
 	}
 
@@ -105,27 +99,27 @@ func (td timeData) concatTime(other timeData) timeData {
 		expectCrossErr:  td.expectCrossErr || other.expectCrossErr,
 		hasTimezone:     td.hasTimezone || other.hasTimezone,
 		isRolloverTime:  td.isRolloverTime || other.isRolloverTime,
-		modeExp:         concatModeExp,
-		modeErr:         td.modeErr,
+		orderExp:        concatOrderExp,
+		orderErr:        td.orderErr,
 		unimplemented:   td.unimplemented || other.unimplemented,
 	}
 }
 
-// expected returns the expected time or expected error condition for the mode.
-func (td timeData) expected(mode pgdate.ParseMode) (time.Time, bool) {
-	if t, ok := td.modeExp[mode]; ok {
+// expected returns the expected time or expected error condition for the order.
+func (td timeData) expected(order pgdate.Order) (time.Time, bool) {
+	if t, ok := td.orderExp[order]; ok {
 		return t, false
 	}
-	if _, ok := td.modeErr[mode]; ok {
+	if _, ok := td.orderErr[order]; ok {
 		return pgdate.TimeEpoch, true
 	}
 	return td.exp, td.err
 }
 
-func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMode) {
+func (td timeData) testParseDate(t *testing.T, info string, order pgdate.Order) {
 	info = fmt.Sprintf("%s ParseDate", info)
-	exp, expErr := td.expected(mode)
-	dt, _, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+	exp, expErr := td.expected(order)
+	dt, _, err := pgdate.ParseDate(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
 	res, _ := dt.ToTime()
 
 	// HACK: This is a format that parses as a date and timestamp,
@@ -141,18 +135,18 @@ func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMod
 
 	check(t, info, exp, expErr, res, err)
 
-	td.crossCheck(t, info, "date", td.s, mode, exp, expErr)
+	td.crossCheck(t, info, "date", td.s, order, exp, expErr)
 }
 
-func (td timeData) testParseTime(t *testing.T, info string, mode pgdate.ParseMode) {
+func (td timeData) testParseTime(t *testing.T, info string, order pgdate.Order) {
 	info = fmt.Sprintf("%s ParseTime", info)
-	exp, expErr := td.expected(mode)
-	res, _, err := pgdate.ParseTime(time.Time{}, mode, td.s)
+	exp, expErr := td.expected(order)
+	res, _, err := pgdate.ParseTime(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
 
 	// Weird times like 24:00:00 or 23:59:60 aren't allowed,
 	// unless there's also a date.
 	if td.isRolloverTime {
-		_, _, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+		_, _, err := pgdate.ParseDate(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
 		expErr = err != nil
 	}
 
@@ -161,13 +155,13 @@ func (td timeData) testParseTime(t *testing.T, info string, mode pgdate.ParseMod
 	exp = time.Date(0, 1, 1, h, m, sec, td.exp.Nanosecond(), td.exp.Location())
 
 	check(t, info, exp, expErr, res, err)
-	td.crossCheck(t, info, "timetz", td.s, mode, exp, expErr)
+	td.crossCheck(t, info, "timetz", td.s, order, exp, expErr)
 }
 
-func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.ParseMode) {
+func (td timeData) testParseTimestamp(t *testing.T, info string, order pgdate.Order) {
 	info = fmt.Sprintf("%s ParseTimestamp", info)
-	exp, expErr := td.expected(mode)
-	res, _, err := pgdate.ParseTimestamp(time.Time{}, mode, td.s)
+	exp, expErr := td.expected(order)
+	res, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -181,15 +175,15 @@ func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.Par
 	}
 
 	check(t, info, exp, expErr, res, err)
-	td.crossCheck(t, info, "timestamptz", td.s, mode, exp, expErr)
+	td.crossCheck(t, info, "timestamptz", td.s, order, exp, expErr)
 }
 
 func (td timeData) testParseTimestampWithoutTimezone(
-	t *testing.T, info string, mode pgdate.ParseMode,
+	t *testing.T, info string, order pgdate.Order,
 ) {
 	info = fmt.Sprintf("%s ParseTimestampWithoutTimezone", info)
-	exp, expErr := td.expected(mode)
-	res, _, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, mode, td.s)
+	exp, expErr := td.expected(order)
+	res, _, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, pgdate.DateStyle{Order: order}, td.s)
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -206,7 +200,7 @@ func (td timeData) testParseTimestampWithoutTimezone(
 	exp = exp.Add(time.Duration(offset) * time.Second).UTC()
 
 	check(t, info, exp, expErr, res, err)
-	td.crossCheck(t, info, "timestamp", td.s, mode, exp, expErr)
+	td.crossCheck(t, info, "timestamp", td.s, order, exp, expErr)
 }
 
 var dateTestData = []timeData{
@@ -215,61 +209,61 @@ var dateTestData = []timeData{
 	// and with comments from
 	// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-DATE-TABLE
 	{
-		//January 8, 1999	unambiguous in any datestyle input mode
+		//January 8, 1999	unambiguous in any datestyle input order
 		s:   "January 8, 1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		//1999-01-08	ISO 8601; January 8 in any mode (recommended format)
+		//1999-01-08	ISO 8601; January 8 in any order (recommended format)
 		s:   "1999-01-08",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		//1999-01-18	ISO 8601; January 18 in any mode (recommended format)
+		//1999-01-18	ISO 8601; January 18 in any order (recommended format)
 		s:   "1999-01-18",
 		exp: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		//1/8/1999	January 8 in MDY mode; August 1 in DMY mode
+		//1/8/1999	January 8 in MDY order; August 1 in DMY order
 		s:   "1/8/1999",
 		err: true,
-		modeExp: map[pgdate.ParseMode]time.Time{
-			pgdate.ParseModeDMY: time.Date(1999, time.August, 1, 0, 0, 0, 0, time.UTC),
-			pgdate.ParseModeMDY: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
+		orderExp: map[pgdate.Order]time.Time{
+			pgdate.Order_DMY: time.Date(1999, time.August, 1, 0, 0, 0, 0, time.UTC),
+			pgdate.Order_MDY: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 		},
 	},
 	{
-		// 1/18/1999 January 18 in MDY mode; rejected in other modes
+		// 1/18/1999 January 18 in MDY order; rejected in other orders
 		s:   "1/18/1999",
 		err: true,
-		modeExp: map[pgdate.ParseMode]time.Time{
-			pgdate.ParseModeMDY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
+		orderExp: map[pgdate.Order]time.Time{
+			pgdate.Order_MDY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 		},
 	},
 	{
-		// 18/1/1999 January 18 in DMY mode; rejected in other modes
+		// 18/1/1999 January 18 in DMY order; rejected in other orders
 		s:   "18/1/1999",
 		err: true,
-		modeExp: map[pgdate.ParseMode]time.Time{
-			pgdate.ParseModeDMY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
+		orderExp: map[pgdate.Order]time.Time{
+			pgdate.Order_DMY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 		},
 	},
 	{
-		// 01/02/03	January 2, 2003 in MDY mode; February 1, 2003 in DMY mode; February 3, 2001 in YMD mode
+		// 01/02/03	January 2, 2003 in MDY order; February 1, 2003 in DMY order; February 3, 2001 in YMD order
 		s: "01/02/03",
-		modeExp: map[pgdate.ParseMode]time.Time{
-			pgdate.ParseModeYMD: time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC),
-			pgdate.ParseModeDMY: time.Date(2003, time.February, 1, 0, 0, 0, 0, time.UTC),
-			pgdate.ParseModeMDY: time.Date(2003, time.January, 2, 0, 0, 0, 0, time.UTC),
+		orderExp: map[pgdate.Order]time.Time{
+			pgdate.Order_YMD: time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC),
+			pgdate.Order_DMY: time.Date(2003, time.February, 1, 0, 0, 0, 0, time.UTC),
+			pgdate.Order_MDY: time.Date(2003, time.January, 2, 0, 0, 0, 0, time.UTC),
 		},
 	},
 	{
-		// 19990108	ISO 8601; January 8, 1999 in any mode
+		// 19990108	ISO 8601; January 8, 1999 in any order
 		s:   "19990108",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		// 990108	ISO 8601; January 8, 1999 in any mode
+		// 990108	ISO 8601; January 8, 1999 in any order
 		s:   "990108",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
@@ -290,53 +284,53 @@ var dateTestData = []timeData{
 		exp: time.Date(-98, time.January, 8, 0, 0, 0, 0, time.UTC),
 		// Failure confirmed in pg 10.5:
 		// https://github.com/postgres/postgres/blob/REL_10_5/src/test/regress/expected/date.out#L135
-		modeErr: map[pgdate.ParseMode]bool{
-			pgdate.ParseModeYMD: true,
+		orderErr: map[pgdate.Order]bool{
+			pgdate.Order_YMD: true,
 		},
 	},
 
 	{
-		// 99-Jan-08	January 8 in YMD mode, else error
+		// 99-Jan-08	January 8 in YMD order, else error
 		s:   "99-Jan-08",
 		err: true,
-		modeExp: map[pgdate.ParseMode]time.Time{
-			pgdate.ParseModeYMD: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
+		orderExp: map[pgdate.Order]time.Time{
+			pgdate.Order_YMD: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 		},
 	},
 	{
-		// 1999-Jan-08	January 8 in any mode
+		// 1999-Jan-08	January 8 in any order
 		s:   "1999-Jan-08",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		// 08-Jan-99	January 8, except error in YMD mode
+		// 08-Jan-99	January 8, except error in YMD order
 		s:   "08-Jan-99",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
-		modeErr: map[pgdate.ParseMode]bool{
-			pgdate.ParseModeYMD: true,
+		orderErr: map[pgdate.Order]bool{
+			pgdate.Order_YMD: true,
 		},
 	},
 	{
-		// 08-Jan-1999	January 8 in any mode
+		// 08-Jan-1999	January 8 in any order
 		s:   "08-Jan-1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		// Jan-08-99	January 8, except error in YMD mode
+		// Jan-08-99	January 8, except error in YMD order
 		s:   "Jan-08-99",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
-		modeErr: map[pgdate.ParseMode]bool{
-			pgdate.ParseModeYMD: true,
+		orderErr: map[pgdate.Order]bool{
+			pgdate.Order_YMD: true,
 		},
 	},
 	{
-		// Jan-08-1999	January 8 in any mode
+		// Jan-08-1999	January 8 in any order
 		s:   "Jan-08-1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
 	{
-		// 99-08-Jan Error in all modes, because 99 isn't obviously a year
-		// and there's no YDM parse mode.
+		// 99-08-Jan Error in all orders, because 99 isn't obviously a year
+		// and there's no YDM parse order.
 		s:   "99-08-Jan",
 		err: true,
 	},
@@ -754,7 +748,7 @@ func TestMain(m *testing.M) {
 }
 
 // TestParse does the following:
-// * For each parsing mode:
+// * For each parsing order:
 //   * Pick an example date input: 2018-01-01
 //   * Test ParseDate()
 //   * Pick an example time input: 12:34:56
@@ -766,33 +760,37 @@ func TestMain(m *testing.M) {
 // * Pick an example time input:
 //   * Test ParseTime()
 func TestParse(t *testing.T) {
-	for _, mode := range modes {
-		t.Run(mode.String(), func(t *testing.T) {
+	for _, order := range []pgdate.Order{
+		pgdate.Order_YMD,
+		pgdate.Order_DMY,
+		pgdate.Order_MDY,
+	} {
+		t.Run(order.String(), func(t *testing.T) {
 			for _, dtc := range dateTestData {
-				dtc.testParseDate(t, dtc.s, mode)
+				dtc.testParseDate(t, dtc.s, order)
 
 				// Combine times with dates to create timestamps.
 				for _, ttc := range timeTestData {
 					info := fmt.Sprintf("%s %s", dtc.s, ttc.s)
 					tstc := dtc.concatTime(ttc)
-					tstc.testParseDate(t, info, mode)
-					tstc.testParseTime(t, info, mode)
-					tstc.testParseTimestamp(t, info, mode)
-					tstc.testParseTimestampWithoutTimezone(t, info, mode)
+					tstc.testParseDate(t, info, order)
+					tstc.testParseTime(t, info, order)
+					tstc.testParseTimestamp(t, info, order)
+					tstc.testParseTimestampWithoutTimezone(t, info, order)
 				}
 			}
 
 			// Test some other timestamps formats we can't create
 			// by just concatenating a date + time string.
 			for _, ttc := range timestampTestData {
-				ttc.testParseTime(t, ttc.s, mode)
+				ttc.testParseTime(t, ttc.s, order)
 			}
 		})
 	}
 
 	t.Run("ParseTime", func(t *testing.T) {
 		for _, ttc := range timeTestData {
-			ttc.testParseTime(t, ttc.s, 0 /* mode */)
+			ttc.testParseTime(t, ttc.s, 0 /* order */)
 		}
 	})
 }
@@ -836,7 +834,7 @@ func bench(b *testing.B, layout string, s string, locationName string) {
 
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					if _, _, err := pgdate.ParseTimestamp(time.Time{}, 0, benchS); err != nil {
+					if _, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DateStyle{Order: pgdate.Order_MDY}, benchS); err != nil {
 						b.Fatal(err)
 					}
 					b.SetBytes(bytes)
@@ -884,7 +882,7 @@ func check(t testing.TB, info string, expTime time.Time, expErr bool, res time.T
 
 // crossCheck executes the parsing on a remote sql connection.
 func (td timeData) crossCheck(
-	t *testing.T, info string, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool,
+	t *testing.T, info string, kind, s string, order pgdate.Order, expTime time.Time, expErr bool,
 ) {
 	if db == nil {
 		return
@@ -916,12 +914,12 @@ func (td timeData) crossCheck(
 	}
 
 	var style string
-	switch mode {
-	case pgdate.ParseModeMDY:
+	switch order {
+	case pgdate.Order_MDY:
 		style = "MDY"
-	case pgdate.ParseModeDMY:
+	case pgdate.Order_DMY:
 		style = "DMY"
-	case pgdate.ParseModeYMD:
+	case pgdate.Order_YMD:
 		style = "YMD"
 	}
 	if _, err := db.Exec(fmt.Sprintf("set datestyle='%s'", style)); err != nil {
@@ -1040,7 +1038,7 @@ func TestDependsOnContext(t *testing.T) {
 	}
 
 	now := time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", 18000))
-	mode := pgdate.ParseModeYMD
+	order := pgdate.Order_YMD
 	for _, tc := range testCases {
 		t.Run(tc.s, func(t *testing.T) {
 			toStr := func(result interface{}, depOnCtx bool, err error) string {
@@ -1059,15 +1057,15 @@ func TestDependsOnContext(t *testing.T) {
 					t.Errorf("%s: expected '%s', got '%s'", what, expected, actual)
 				}
 			}
-			check("ParseDate", tc.date, toStr(pgdate.ParseDate(now, mode, tc.s)))
-			check("ParseTime", tc.time, toStr(pgdate.ParseTime(now, mode, tc.s)))
+			check("ParseDate", tc.date, toStr(pgdate.ParseDate(now, pgdate.DateStyle{Order: order}, tc.s)))
+			check("ParseTime", tc.time, toStr(pgdate.ParseTime(now, pgdate.DateStyle{Order: order}, tc.s)))
 			check(
 				"ParseTimeWithoutTimezone", tc.timeNoTZ,
-				toStr(pgdate.ParseTimeWithoutTimezone(now, mode, tc.s)),
+				toStr(pgdate.ParseTimeWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s)),
 			)
-			check("ParseTimestamp", tc.timestamp, toStr(pgdate.ParseTimestamp(now, mode, tc.s)))
+			check("ParseTimestamp", tc.timestamp, toStr(pgdate.ParseTimestamp(now, pgdate.DateStyle{Order: order}, tc.s)))
 			check("ParseTimestampWithoutTimezone",
-				tc.timestampNoTZ, toStr(pgdate.ParseTimestampWithoutTimezone(now, mode, tc.s)),
+				tc.timestampNoTZ, toStr(pgdate.ParseTimestampWithoutTimezone(now, pgdate.DateStyle{Order: order}, tc.s)),
 			)
 		})
 	}

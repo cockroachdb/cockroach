@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -46,12 +45,14 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	base := flowinfra.NewFlowBase(
 		flowCtx,
 		nil, /* flowReg */
-		nil, /* syncFlowConsumer */
+		nil, /* rowSyncFlowConsumer */
+		nil, /* batchSyncFlowConsumer */
 		nil, /* localProcessors */
+		nil, /* onFlowCleanup */
 	)
 	flow := colflow.NewVectorizedFlow(base)
 
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: &colexecop.CallbackOperator{
@@ -60,14 +61,9 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 			},
 		}},
 		nil, /* typs */
-		&distsqlutils.RowBuffer{},
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	ctx, _, err = base.Setup(ctx, nil, flowinfra.FuseAggressively)
+	ctx, _, err := base.Setup(ctx, nil, flowinfra.FuseAggressively)
 	require.NoError(t, err)
 
 	base.SetProcessors([]execinfra.Processor{mat})
@@ -85,5 +81,5 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		}),
 	)
 
-	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
+	require.Panics(t, func() { flow.Run(ctx, nil) })
 }

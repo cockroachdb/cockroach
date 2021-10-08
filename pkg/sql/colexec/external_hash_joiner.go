@@ -110,7 +110,7 @@ func NewExternalHashJoiner(
 			unlimitedAllocator, unlimitedAllocator, spec, partitionedInputs[0], partitionedInputs[1],
 			// We start with relatively large initial number of buckets since we
 			// expect each partition to be of significant size.
-			uint64(coldata.BatchSize()), memoryLimit,
+			uint64(coldata.BatchSize()),
 		)
 	}
 	diskBackedFallbackOpConstructor := func(
@@ -133,7 +133,7 @@ func NewExternalHashJoiner(
 		diskBackedSortMerge, err := colexecjoin.NewMergeJoinOp(
 			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
-			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc,
+			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, flowCtx.EvalCtx,
 		)
 		if err != nil {
 			colexecerror.InternalError(err)

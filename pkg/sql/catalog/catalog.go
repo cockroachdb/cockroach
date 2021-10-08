@@ -44,16 +44,21 @@ type MutableDescriptor interface {
 	SetDropped()
 	// SetOffline sets the descriptor's state to offline, with the provided reason.
 	SetOffline(reason string)
+	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+	// RunPostDeserializationChanges.
+	HasPostDeserializationChanges() bool
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.
 type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
+	GetVirtualSchemaByID(id descpb.ID) (VirtualSchema, bool)
+	GetVirtualObjectByID(id descpb.ID) (VirtualObject, bool)
 }
 
 // VirtualSchema represents a collection of VirtualObjects.
 type VirtualSchema interface {
-	Desc() Descriptor
+	Desc() SchemaDescriptor
 	NumTables() int
 	VisitTables(func(object VirtualObject))
 	GetObjectByName(name string, flags tree.ObjectLookupFlags) (VirtualObject, error)
@@ -67,43 +72,27 @@ type VirtualObject interface {
 // ResolvedObjectPrefix represents the resolved components of an object name
 // prefix. It contains the parent database and schema.
 type ResolvedObjectPrefix struct {
+	// ExplicitDatabase and ExplicitSchema configure what is returned
+	// in the NamePrefix call.
+	ExplicitDatabase, ExplicitSchema bool
+
 	// Database is the parent database descriptor.
 	Database DatabaseDescriptor
 	// Schema is the parent schema.
-	Schema ResolvedSchema
+	Schema SchemaDescriptor
 }
 
-// SchemaMeta implements the SchemaMeta interface.
-func (*ResolvedObjectPrefix) SchemaMeta() {}
-
-// ResolvedSchemaKind is an enum that represents what kind of schema
-// has been resolved.
-type ResolvedSchemaKind int
-
-const (
-	// SchemaPublic represents the public schema.
-	SchemaPublic ResolvedSchemaKind = iota
-	// SchemaVirtual represents a virtual schema.
-	SchemaVirtual
-	// SchemaTemporary represents a temporary schema.
-	SchemaTemporary
-	// SchemaUserDefined represents a user defined schema.
-	SchemaUserDefined
-)
-
-// ResolvedSchema represents the result of resolving a schema name, or an
-// object prefix of <db>.<schema>. Due to historical reasons, some schemas
-// don't have unique IDs (public and virtual schemas), and others aren't backed
-// by descriptors. The ResolvedSchema struct encapsulates the different cases.
-type ResolvedSchema struct {
-	// Marks what kind of schema this is. It is always set.
-	Kind ResolvedSchemaKind
-	// Name of the resolved schema. It is always set.
-	Name string
-	// The ID of the resolved schema. This field is only set for schema kinds
-	// SchemaPublic, SchemaUserDefined and SchemaTemporary.
-	ID descpb.ID
-	// The descriptor backing the resolved schema. It is only set for
-	// SchemaUserDefined.
-	Desc SchemaDescriptor
+// NamePrefix returns the tree.ObjectNamePrefix with the appropriate names
+// and indications about which of those names were provided explicitly.
+func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
+	var n tree.ObjectNamePrefix
+	n.ExplicitCatalog = p.ExplicitDatabase
+	n.ExplicitSchema = p.ExplicitSchema
+	if p.Database != nil {
+		n.CatalogName = tree.Name(p.Database.GetName())
+	}
+	if p.Schema != nil {
+		n.SchemaName = tree.Name(p.Schema.GetName())
+	}
+	return n
 }

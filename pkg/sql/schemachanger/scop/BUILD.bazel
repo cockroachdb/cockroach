@@ -24,7 +24,7 @@ go_library(
 go_binary(
     name = "gen-visitors",
     srcs = ["generate_visitor.go"],
-    gotags = ["ignore"],
+    gotags = ["generator"],
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",

@@ -13,13 +13,13 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/errors"
@@ -35,6 +35,7 @@ type csvInputReader struct {
 var _ inputConverter = &csvInputReader{}
 
 func newCSVInputReader(
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
 	walltime int64,
@@ -51,6 +52,7 @@ func newCSVInputReader(
 
 	return &csvInputReader{
 		importCtx: &parallelImportContext{
+			semaCtx:          semaCtx,
 			walltime:         walltime,
 			numWorkers:       parallelism,
 			evalCtx:          evalCtx,

@@ -128,11 +128,11 @@ func MakeDiskRowContainer(
 	}
 	d.valueIdxs = make([]int, 0, len(d.types))
 	for i := range d.types {
-		// TODO(asubiotto): A datum of a type for which HasCompositeKeyEncoding
+		// TODO(asubiotto): A datum of a type for which CanHaveCompositeKeyEncoding
 		// returns true may not necessarily need to be encoded in the value, so
 		// make this more fine-grained. See IsComposite() methods in
 		// pkg/sql/parser/datum.go.
-		if _, ok := orderingIdxs[i]; !ok || colinfo.HasCompositeKeyEncoding(d.types[i]) {
+		if _, ok := orderingIdxs[i]; !ok || colinfo.CanHaveCompositeKeyEncoding(d.types[i]) {
 			d.valueIdxs = append(d.valueIdxs, i)
 		}
 	}
@@ -302,7 +302,7 @@ func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow
 		// Add the row id to the value. Note that in this de-duping case the
 		// row id is the only thing in the value since the whole row is encoded
 		// into the key. Note that the key could have types for which
-		// HasCompositeKeyEncoding() returns true and we do not encode them
+		// CanHaveCompositeKeyEncoding() returns true and we do not encode them
 		// into the value (only in the key) for this DeDupingRowContainer. This
 		// is ok since:
 		// - The DeDupingRowContainer never needs to return the original row
@@ -398,7 +398,7 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
 		// Types with composite key encodings are decoded from the value.
-		if colinfo.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
+		if colinfo.CanHaveCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
 			// Skip over the encoded key.
 			encLen, err := encoding.PeekLength(k)
 			if err != nil {

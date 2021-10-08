@@ -77,7 +77,7 @@ func TestValidateExpr(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			deqExpr, _, err := schemaexpr.DequalifyAndValidateExpr(
+			deqExpr, _, _, err := schemaexpr.DequalifyAndValidateExpr(
 				ctx,
 				desc,
 				expr,

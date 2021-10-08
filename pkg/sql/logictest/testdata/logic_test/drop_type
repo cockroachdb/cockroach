@@ -327,17 +327,17 @@ SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
 # Create a database with a large number of types.
 statement ok
 CREATE DATABASE d;
-CREATE TYPE d.d_t_1 AS ENUM ('hello');
-CREATE TYPE d.d_t_2 AS ENUM ('hello');
-CREATE TYPE d.d_t_3 AS ENUM ('hello');
-CREATE TYPE d.d_t_4 AS ENUM ('hello');
-CREATE TYPE d.d_t_5 AS ENUM ('hello')
+CREATE TYPE d.d_type_1 AS ENUM ('hello');
+CREATE TYPE d.d_type_2 AS ENUM ('hello');
+CREATE TYPE d.d_type_3 AS ENUM ('hello');
+CREATE TYPE d.d_type_4 AS ENUM ('hello');
+CREATE TYPE d.d_type_5 AS ENUM ('hello')
 
 statement ok
 DROP DATABASE d
 
 query I
-SELECT id FROM system.namespace WHERE name LIKE 'd_t%'
+SELECT id FROM system.namespace WHERE name LIKE 'd_type%'
 
 subtest regression_57187
 

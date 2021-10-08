@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -44,7 +43,6 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ colexecerror.StorageError
-	_ coldataext.Datum
 )
 
 // {{/*
@@ -89,7 +87,7 @@ type anyNotNull_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	col                         _GOTYPESLICE
 	curAgg                      _GOTYPE
@@ -102,13 +100,13 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec.TemplateType()
 }
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// {{if eq "_AGGKIND" "Hash"}}
 	if a.foundNonNullForCurrentGroup {
@@ -134,21 +132,21 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// sel to specify the tuples to be aggregated.
 		// */}}
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true, false)
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false, false)
 				}
 			}
 		} else
 		// {{end}}
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true, true)
@@ -179,7 +177,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
 	// Release the reference to curAgg eagerly.
@@ -246,9 +244,7 @@ func _FIND_ANY_NOT_NULL(
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			a.foundNonNullForCurrentGroup = false
@@ -270,8 +266,8 @@ func _FIND_ANY_NOT_NULL(
 		// {{if and (.Sliceable) (not .HasSel)}}
 		//gcassert:bce
 		// {{end}}
-		// {{with .Global}}
 		val := col.Get(i)
+		// {{with .Global}}
 		execgen.COPYVAL(a.curAgg, val)
 		// {{end}}
 		a.foundNonNullForCurrentGroup = true

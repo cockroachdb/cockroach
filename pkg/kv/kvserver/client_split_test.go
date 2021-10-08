@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -2010,6 +2011,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 66480, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
@@ -2407,7 +2409,7 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	}
 
 	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin))
-	if !rhsRepl.GetConcurrencyManager().TxnWaitQueue().IsEnabled() {
+	if !rhsRepl.GetConcurrencyManager().TestingTxnWaitQueue().IsEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
 }
@@ -2562,7 +2564,7 @@ func TestUnsplittableRange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add a single large row to /Table/14.
-	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.UITableID))
+	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(uint32(systemschema.UITable.GetID())))
 	row1Key := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
 	valueLen := 0.9 * maxBytes
@@ -3308,7 +3310,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// second node).
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddVoters(k, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, k, tc.LookupRangeOrFatal(t, k), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		return err
 	})
 
@@ -3343,7 +3347,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
 	add := func() {
-		_, err := tc.AddVoters(kRHS, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, kRHS, tc.LookupRangeOrFatal(t, kRHS), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		// The "snapshot intersects existing range" error is expected if the store
 		// has not heard a raft message addressed to a later replica ID while the
 		// "was not found on" error is expected if the store has heard that it has

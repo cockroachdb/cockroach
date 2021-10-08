@@ -10,7 +10,11 @@
 
 package settings
 
-import "github.com/cockroachdb/errors"
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
 
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -69,29 +73,29 @@ func (i *IntSetting) Validate(v int64) error {
 // default value.
 //
 // For testing usage only.
-func (i *IntSetting) Override(sv *Values, v int64) {
-	sv.setInt64(i.slotIdx, v)
+func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
+	sv.setInt64(ctx, i.slotIdx, v)
 	sv.setDefaultOverrideInt64(i.slotIdx, v)
 }
 
-func (i *IntSetting) set(sv *Values, v int64) error {
+func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(i.slotIdx, v)
+	sv.setInt64(ctx, i.slotIdx, v)
 	return nil
 }
 
-func (i *IntSetting) setToDefault(sv *Values) {
+func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(i.slotIdx)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = i.set(sv, val)
+		_ = i.set(ctx, sv, val)
 		return
 	}
-	if err := i.set(sv, i.defaultValue); err != nil {
+	if err := i.set(ctx, sv, i.defaultValue); err != nil {
 		panic(err)
 	}
 }

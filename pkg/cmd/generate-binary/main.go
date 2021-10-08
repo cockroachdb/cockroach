@@ -93,10 +93,11 @@ func main() {
 			log.Fatalf("oid: %s: %v", sql, err)
 		}
 		data = append(data, entry{
-			SQL:    expr,
-			Oid:    string(id),
-			Text:   text,
-			Binary: binary,
+			SQL:          expr,
+			Oid:          string(id),
+			Text:         string(text),
+			TextAsBinary: text,
+			Binary:       binary,
 		})
 	}
 
@@ -110,10 +111,11 @@ func main() {
 }
 
 type entry struct {
-	SQL    string
-	Oid    string
-	Text   []byte
-	Binary []byte
+	SQL          string
+	Oid          string
+	Text         string
+	TextAsBinary []byte
+	Binary       []byte
 }
 
 func toString(b []byte) string {
@@ -135,8 +137,8 @@ const outputJSON = `[
 	{
 		"SQL": {{.SQL | json}},
 		"Oid": {{.Oid}},
-		"Text": {{printf "%q" .Text}},
-		"TextAsBinary": {{.Text | binary}},
+		"Text": {{.Text | json}},
+		"TextAsBinary": {{.TextAsBinary | binary}},
 		"Binary": {{.Binary | binary}}
 	}
 {{- end}}
@@ -302,7 +304,6 @@ var inputs = map[string][]string{
 		"9004-10-19 10:23:54",
 	},
 
-	/* TODO(mjibson): fix these; there's a slight timezone display difference
 	"'%s'::timestamptz": {
 		"1999-01-08 04:05:06+00",
 		"1999-01-08 04:05:06+00:00",
@@ -317,7 +318,22 @@ var inputs = map[string][]string{
 		"4004-10-19 10:23:54",
 		"9004-10-19 10:23:54",
 	},
-	*/
+
+	"'%s'::timetz": {
+		"04:05:06+00",
+		"04:05:06+00:00",
+		"04:05:06+10",
+		"04:05:06+10:00",
+		"04:05:06+10:30",
+		"04:05:06",
+		"10:23:54",
+		"00:00:00",
+		"10:23:54",
+		"10:23:54 BC",
+		"10:23:54",
+		"10:23:54+1:2:3",
+		"10:23:54+1:2",
+	},
 
 	"'%s'::date": {
 		"1999-01-08",
@@ -530,5 +546,23 @@ var inputs = map[string][]string{
 		`1::char(1) COLLATE "en_US"`,
 		`1::varchar(4) COLLATE "en_US"`,
 		`1::text COLLATE "en_US"`,
+		`1::int8,(2::int8,3::int8)`,
+		`1::int8,('hi'::TEXT,3::int2)`,
+	},
+
+	`%s::"char"`: {
+		`(-128)`,
+		`(-32)`,
+		`(-1)`,
+		`0`,
+		`1`,
+		`32`,
+		`97`,
+		`127`,
+		`''`,
+	},
+
+	`%s::text`: {
+		`''`,
 	},
 }

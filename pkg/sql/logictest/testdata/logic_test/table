@@ -52,7 +52,7 @@ CREATE TABLE b (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE c (
   id INT PRIMARY KEY,
-  foo INT,
+  foo INT CONSTRAINT foo_positive CHECK (foo > 0),
   bar INT,
   INDEX c_foo_idx (foo),
   INDEX (foo),
@@ -77,6 +77,8 @@ c           c_foo_idx      true        2             id           ASC        fal
 c           c_foo_idx1     true        1             foo          ASC        false    false
 c           c_foo_idx1     true        2             id           ASC        false    true
 c           primary        false       1             id           ASC        false    false
+c           primary        false       2             foo          N/A        true     false
+c           primary        false       3             bar          N/A        true     false
 
 query TTBITTBBT colnames
 SHOW INDEXES FROM c WITH COMMENT
@@ -92,8 +94,18 @@ c           c_foo_idx      true        2             id           ASC        fal
 c           c_foo_idx1     true        1             foo          ASC        false    false     NULL
 c           c_foo_idx1     true        2             id           ASC        false    true      NULL
 c           primary        false       1             id           ASC        false    false     NULL
+c           primary        false       2             foo          N/A        true     false     NULL
+c           primary        false       3             bar          N/A        true     false     NULL
 
 # primary keys can never be null
+
+query TTTTBT colnames
+SHOW CONSTRAINTS FROM c WITH COMMENT
+----
+table_name  constraint_name  constraint_type  details               validated  comment
+c           c_bar_key        UNIQUE           UNIQUE (bar ASC)      true       NULL
+c           foo_positive     CHECK            CHECK ((foo > 0))     true       NULL
+c           primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true       NULL
 
 statement ok
 CREATE TABLE d (
@@ -181,11 +193,11 @@ SHOW COLUMNS FROM test.users
 ----
 column_name  data_type     is_nullable  column_default  generation_expression  indices            is_hidden
 id           INT8          false        NULL            ·                      {bar,foo,primary}  false
-name         VARCHAR       false        NULL            ·                      {bar,foo}          false
-title        VARCHAR       true         NULL            ·                      {}                 false
-nickname     STRING        true         NULL            ·                      {}                 false
-username     STRING(10)    true         NULL            ·                      {}                 false
-email        VARCHAR(100)  true         NULL            ·                      {}                 false
+name         VARCHAR       false        NULL            ·                      {bar,foo,primary}  false
+title        VARCHAR       true         NULL            ·                      {primary}          false
+nickname     STRING        true         NULL            ·                      {primary}          false
+username     STRING(10)    true         NULL            ·                      {primary}          false
+email        VARCHAR(100)  true         NULL            ·                      {primary}          false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM test.users
@@ -196,6 +208,11 @@ users       bar         false       2             name         ASC        false 
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
+users       primary     false       4             nickname     N/A        true     false
+users       primary     false       5             username     N/A        true     false
+users       primary     false       6             email        N/A        true     false
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
@@ -381,52 +398,52 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM alltypes
 ----
 column_name       data_type     is_nullable  column_default  generation_expression  indices    is_hidden
-cbigint           INT8          true         NULL            ·                      {}         false
-cbigserial        INT8          false        unique_rowid()  ·                      {}         false
-cblob             BYTES         true         NULL            ·                      {}         false
-cbool             BOOL          true         NULL            ·                      {}         false
-cbit              BIT           true         NULL            ·                      {}         false
-cbit12            BIT(12)       true         NULL            ·                      {}         false
-cvarbit           VARBIT        true         NULL            ·                      {}         false
-cvarbit12         VARBIT(12)    true         NULL            ·                      {}         false
-cbytea            BYTES         true         NULL            ·                      {}         false
-cbytes            BYTES         true         NULL            ·                      {}         false
-cchar             CHAR          true         NULL            ·                      {}         false
-cchar12           CHAR(12)      true         NULL            ·                      {}         false
-cdate             DATE          true         NULL            ·                      {}         false
-cdec              DECIMAL       true         NULL            ·                      {}         false
-cdec1             DECIMAL(1)    true         NULL            ·                      {}         false
-cdec21            DECIMAL(2,1)  true         NULL            ·                      {}         false
-cdecimal          DECIMAL       true         NULL            ·                      {}         false
-cdecimal1         DECIMAL(1)    true         NULL            ·                      {}         false
-cdecimal21        DECIMAL(2,1)  true         NULL            ·                      {}         false
-cdoubleprecision  FLOAT8        true         NULL            ·                      {}         false
-cfloat            FLOAT8        true         NULL            ·                      {}         false
-cfloat4           FLOAT4        true         NULL            ·                      {}         false
-cfloat8           FLOAT8        true         NULL            ·                      {}         false
-cint              INT8          true         NULL            ·                      {}         false
-cint2             INT2          true         NULL            ·                      {}         false
-cint4             INT4          true         NULL            ·                      {}         false
-cint64            INT8          true         NULL            ·                      {}         false
-cint8             INT8          true         NULL            ·                      {}         false
-cinteger          INT8          true         NULL            ·                      {}         false
-cinterval         INTERVAL      true         NULL            ·                      {}         false
-cjson             JSONB         true         NULL            ·                      {}         false
-cnumeric          DECIMAL       true         NULL            ·                      {}         false
-cnumeric1         DECIMAL(1)    true         NULL            ·                      {}         false
-cnumeric21        DECIMAL(2,1)  true         NULL            ·                      {}         false
-cqchar            "char"        true         NULL            ·                      {}         false
-creal             FLOAT4        true         NULL            ·                      {}         false
-cserial           INT8          false        unique_rowid()  ·                      {}         false
-csmallint         INT2          true         NULL            ·                      {}         false
-csmallserial      INT8          false        unique_rowid()  ·                      {}         false
-cstring           STRING        true         NULL            ·                      {}         false
-cstring12         STRING(12)    true         NULL            ·                      {}         false
-ctext             STRING        true         NULL            ·                      {}         false
-ctimestamp        TIMESTAMP     true         NULL            ·                      {}         false
-ctimestampwtz     TIMESTAMPTZ   true         NULL            ·                      {}         false
-cvarchar          VARCHAR       true         NULL            ·                      {}         false
-cvarchar12        VARCHAR(12)   true         NULL            ·                      {}         false
+cbigint           INT8          true         NULL            ·                      {primary}  false
+cbigserial        INT8          false        unique_rowid()  ·                      {primary}  false
+cblob             BYTES         true         NULL            ·                      {primary}  false
+cbool             BOOL          true         NULL            ·                      {primary}  false
+cbit              BIT           true         NULL            ·                      {primary}  false
+cbit12            BIT(12)       true         NULL            ·                      {primary}  false
+cvarbit           VARBIT        true         NULL            ·                      {primary}  false
+cvarbit12         VARBIT(12)    true         NULL            ·                      {primary}  false
+cbytea            BYTES         true         NULL            ·                      {primary}  false
+cbytes            BYTES         true         NULL            ·                      {primary}  false
+cchar             CHAR          true         NULL            ·                      {primary}  false
+cchar12           CHAR(12)      true         NULL            ·                      {primary}  false
+cdate             DATE          true         NULL            ·                      {primary}  false
+cdec              DECIMAL       true         NULL            ·                      {primary}  false
+cdec1             DECIMAL(1)    true         NULL            ·                      {primary}  false
+cdec21            DECIMAL(2,1)  true         NULL            ·                      {primary}  false
+cdecimal          DECIMAL       true         NULL            ·                      {primary}  false
+cdecimal1         DECIMAL(1)    true         NULL            ·                      {primary}  false
+cdecimal21        DECIMAL(2,1)  true         NULL            ·                      {primary}  false
+cdoubleprecision  FLOAT8        true         NULL            ·                      {primary}  false
+cfloat            FLOAT8        true         NULL            ·                      {primary}  false
+cfloat4           FLOAT4        true         NULL            ·                      {primary}  false
+cfloat8           FLOAT8        true         NULL            ·                      {primary}  false
+cint              INT8          true         NULL            ·                      {primary}  false
+cint2             INT2          true         NULL            ·                      {primary}  false
+cint4             INT4          true         NULL            ·                      {primary}  false
+cint64            INT8          true         NULL            ·                      {primary}  false
+cint8             INT8          true         NULL            ·                      {primary}  false
+cinteger          INT8          true         NULL            ·                      {primary}  false
+cinterval         INTERVAL      true         NULL            ·                      {primary}  false
+cjson             JSONB         true         NULL            ·                      {primary}  false
+cnumeric          DECIMAL       true         NULL            ·                      {primary}  false
+cnumeric1         DECIMAL(1)    true         NULL            ·                      {primary}  false
+cnumeric21        DECIMAL(2,1)  true         NULL            ·                      {primary}  false
+cqchar            "char"        true         NULL            ·                      {primary}  false
+creal             FLOAT4        true         NULL            ·                      {primary}  false
+cserial           INT8          false        unique_rowid()  ·                      {primary}  false
+csmallint         INT2          true         NULL            ·                      {primary}  false
+csmallserial      INT8          false        unique_rowid()  ·                      {primary}  false
+cstring           STRING        true         NULL            ·                      {primary}  false
+cstring12         STRING(12)    true         NULL            ·                      {primary}  false
+ctext             STRING        true         NULL            ·                      {primary}  false
+ctimestamp        TIMESTAMP     true         NULL            ·                      {primary}  false
+ctimestampwtz     TIMESTAMPTZ   true         NULL            ·                      {primary}  false
+cvarchar          VARCHAR       true         NULL            ·                      {primary}  false
+cvarchar12        VARCHAR(12)   true         NULL            ·                      {primary}  false
 rowid             INT8          false        unique_rowid()  ·                      {primary}  true
 
 statement ok
@@ -535,10 +552,16 @@ public  t1  table  testuser  0  NULL
 query TI rowsort
 select table_name, estimated_row_count from crdb_internal.table_row_statistics;
 ----
+active_range_feeds                     NULL
 backward_dependencies                  NULL
 builtin_functions                      NULL
+cluster_contended_indexes              NULL
+cluster_contended_keys                 NULL
+cluster_contended_tables               NULL
 cluster_contention_events              NULL
 cluster_database_privileges            NULL
+cluster_distsql_flows                  NULL
+cluster_inflight_traces                NULL
 cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
@@ -547,6 +570,7 @@ create_statements                      NULL
 create_type_statements                 NULL
 cross_db_references                    NULL
 databases                              NULL
+default_privileges                     NULL
 feature_usage                          NULL
 forward_dependencies                   NULL
 gossip_alerts                          NULL
@@ -554,15 +578,18 @@ gossip_liveness                        NULL
 gossip_network                         NULL
 gossip_nodes                           NULL
 index_columns                          NULL
+index_usage_statistics                 NULL
 interleaved                            NULL
 invalid_objects                        NULL
 jobs                                   NULL
+kv_node_liveness                       NULL
 kv_node_status                         NULL
 kv_store_status                        NULL
 leases                                 NULL
 lost_descriptors_with_data             NULL
 node_build_info                        NULL
 node_contention_events                 NULL
+node_distsql_flows                     NULL
 node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL
@@ -576,40 +603,103 @@ partitions                             NULL
 predefined_comments                    NULL
 ranges                                 NULL
 ranges_no_leases                       NULL
+regions                                NULL
 schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
+statement_statistics                   NULL
 table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL
 tables                                 NULL
+tenant_usage_details                   NULL
+transaction_statistics                 NULL
 zones                                  NULL
 administrable_role_authorizations      NULL
 applicable_roles                       NULL
+attributes                             NULL
 character_sets                         NULL
+check_constraint_routine_usage         NULL
 check_constraints                      NULL
 collation_character_set_applicability  NULL
 collations                             NULL
+column_column_usage                    NULL
+column_domain_usage                    NULL
+column_options                         NULL
 column_privileges                      NULL
+column_statistics                      NULL
 column_udt_usage                       NULL
 columns                                NULL
+columns_extensions                     NULL
 constraint_column_usage                NULL
+constraint_table_usage                 NULL
+data_type_privileges                   NULL
+domain_constraints                     NULL
+domain_udt_usage                       NULL
+domains                                NULL
+element_types                          NULL
 enabled_roles                          NULL
+engines                                NULL
+events                                 NULL
+files                                  NULL
+foreign_data_wrapper_options           NULL
+foreign_data_wrappers                  NULL
+foreign_server_options                 NULL
+foreign_servers                        NULL
+foreign_table_options                  NULL
+foreign_tables                         NULL
+information_schema_catalog_name        NULL
 key_column_usage                       NULL
+keywords                               NULL
+optimizer_trace                        NULL
 parameters                             NULL
+partitions                             NULL
+plugins                                NULL
+processlist                            NULL
+profiling                              NULL
 referential_constraints                NULL
+resource_groups                        NULL
+role_column_grants                     NULL
+role_routine_grants                    NULL
 role_table_grants                      NULL
+role_udt_grants                        NULL
+role_usage_grants                      NULL
+routine_privileges                     NULL
 routines                               NULL
 schema_privileges                      NULL
 schemata                               NULL
+schemata_extensions                    NULL
 sequences                              NULL
 session_variables                      NULL
+sql_features                           NULL
+sql_implementation_info                NULL
+sql_parts                              NULL
+sql_sizing                             NULL
+st_geometry_columns                    NULL
+st_spatial_reference_systems           NULL
+st_units_of_measure                    NULL
 statistics                             NULL
 table_constraints                      NULL
+table_constraints_extensions           NULL
 table_privileges                       NULL
 tables                                 NULL
+tables_extensions                      NULL
+tablespaces                            NULL
+tablespaces_extensions                 NULL
+transforms                             NULL
+triggered_update_columns               NULL
+triggers                               NULL
 type_privileges                        NULL
+udt_privileges                         NULL
+usage_privileges                       NULL
+user_attributes                        NULL
+user_defined_types                     NULL
+user_mapping_options                   NULL
+user_mappings                          NULL
 user_privileges                        NULL
+view_column_usage                      NULL
+view_routine_usage                     NULL
+view_table_usage                       NULL
 views                                  NULL
 pg_aggregate                           NULL
 pg_am                                  NULL
@@ -682,7 +772,46 @@ pg_shdescription                       NULL
 pg_shmem_allocations                   NULL
 pg_shseclabel                          NULL
 pg_stat_activity                       NULL
+pg_stat_all_indexes                    NULL
+pg_stat_all_tables                     NULL
+pg_stat_archiver                       NULL
+pg_stat_bgwriter                       NULL
+pg_stat_database                       NULL
+pg_stat_database_conflicts             NULL
+pg_stat_gssapi                         NULL
+pg_stat_progress_analyze               NULL
+pg_stat_progress_basebackup            NULL
+pg_stat_progress_cluster               NULL
+pg_stat_progress_create_index          NULL
+pg_stat_progress_vacuum                NULL
+pg_stat_replication                    NULL
+pg_stat_slru                           NULL
+pg_stat_ssl                            NULL
+pg_stat_subscription                   NULL
+pg_stat_sys_indexes                    NULL
+pg_stat_sys_tables                     NULL
+pg_stat_user_functions                 NULL
+pg_stat_user_indexes                   NULL
+pg_stat_user_tables                    NULL
+pg_stat_wal_receiver                   NULL
+pg_stat_xact_all_tables                NULL
+pg_stat_xact_sys_tables                NULL
+pg_stat_xact_user_functions            NULL
+pg_stat_xact_user_tables               NULL
+pg_statio_all_indexes                  NULL
+pg_statio_all_sequences                NULL
+pg_statio_all_tables                   NULL
+pg_statio_sys_indexes                  NULL
+pg_statio_sys_sequences                NULL
+pg_statio_sys_tables                   NULL
+pg_statio_user_indexes                 NULL
+pg_statio_user_sequences               NULL
+pg_statio_user_tables                  NULL
+pg_statistic                           NULL
 pg_statistic_ext                       NULL
+pg_statistic_ext_data                  NULL
+pg_stats                               NULL
+pg_stats_ext                           NULL
 pg_subscription                        NULL
 pg_subscription_rel                    NULL
 pg_tables                              NULL

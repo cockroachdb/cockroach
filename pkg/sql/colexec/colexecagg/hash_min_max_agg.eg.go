@@ -35,7 +35,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 )
 
 // Remove unused warning.
@@ -111,44 +111,43 @@ func newMinHashAggAlloc(
 }
 
 type minBoolHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Bools
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBoolHashAgg{}
 
 func (a *minBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bool()
 }
 
 func (a *minBoolHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -171,6 +170,7 @@ func (a *minBoolHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -179,10 +179,9 @@ func (a *minBoolHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -205,6 +204,7 @@ func (a *minBoolHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -221,15 +221,15 @@ func (a *minBoolHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minBoolHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minBoolHashAggAlloc struct {
@@ -254,44 +254,43 @@ func (a *minBoolHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minBytesHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minBytesHashAgg{}
 
 func (a *minBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
 }
 
 func (a *minBytesHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -306,6 +305,7 @@ func (a *minBytesHashAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -314,10 +314,9 @@ func (a *minBytesHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -332,6 +331,7 @@ func (a *minBytesHashAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -348,19 +348,24 @@ func (a *minBytesHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *minBytesHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minBytesHashAggAlloc struct {
@@ -385,44 +390,43 @@ func (a *minBytesHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minDecimalHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Decimals
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDecimalHashAgg{}
 
 func (a *minDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *minDecimalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -437,6 +441,7 @@ func (a *minDecimalHashAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -445,10 +450,9 @@ func (a *minDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -463,6 +467,7 @@ func (a *minDecimalHashAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -479,15 +484,15 @@ func (a *minDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minDecimalHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minDecimalHashAggAlloc struct {
@@ -512,44 +517,43 @@ func (a *minDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt16HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int16s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt16HashAgg{}
 
 func (a *minInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int16()
 }
 
 func (a *minInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -575,6 +579,7 @@ func (a *minInt16HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -583,10 +588,9 @@ func (a *minInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -612,6 +616,7 @@ func (a *minInt16HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -628,15 +633,15 @@ func (a *minInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt16HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt16HashAggAlloc struct {
@@ -661,44 +666,43 @@ func (a *minInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt32HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int32s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt32HashAgg{}
 
 func (a *minInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int32()
 }
 
 func (a *minInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -724,6 +728,7 @@ func (a *minInt32HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -732,10 +737,9 @@ func (a *minInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -761,6 +765,7 @@ func (a *minInt32HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -777,15 +782,15 @@ func (a *minInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt32HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt32HashAggAlloc struct {
@@ -810,44 +815,43 @@ func (a *minInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt64HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int64s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minInt64HashAgg{}
 
 func (a *minInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
 func (a *minInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -873,6 +877,7 @@ func (a *minInt64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -881,10 +886,9 @@ func (a *minInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -910,6 +914,7 @@ func (a *minInt64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -926,15 +931,15 @@ func (a *minInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minInt64HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minInt64HashAggAlloc struct {
@@ -959,44 +964,43 @@ func (a *minInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minFloat64HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Float64s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minFloat64HashAgg{}
 
 func (a *minFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
 func (a *minFloat64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1030,6 +1034,7 @@ func (a *minFloat64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1038,10 +1043,9 @@ func (a *minFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1075,6 +1079,7 @@ func (a *minFloat64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1091,15 +1096,15 @@ func (a *minFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minFloat64HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minFloat64HashAggAlloc struct {
@@ -1124,44 +1129,43 @@ func (a *minFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minTimestampHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Times
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minTimestampHashAgg{}
 
 func (a *minTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Timestamp()
 }
 
 func (a *minTimestampHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1183,6 +1187,7 @@ func (a *minTimestampHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1191,10 +1196,9 @@ func (a *minTimestampHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1216,6 +1220,7 @@ func (a *minTimestampHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1232,15 +1237,15 @@ func (a *minTimestampHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minTimestampHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minTimestampHashAggAlloc struct {
@@ -1265,44 +1270,43 @@ func (a *minTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minIntervalHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Durations
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minIntervalHashAgg{}
 
 func (a *minIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 
 func (a *minIntervalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1317,6 +1321,7 @@ func (a *minIntervalHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1325,10 +1330,9 @@ func (a *minIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1343,6 +1347,7 @@ func (a *minIntervalHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1359,15 +1364,15 @@ func (a *minIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *minIntervalHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type minIntervalHashAggAlloc struct {
@@ -1392,27 +1397,27 @@ func (a *minIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minJSONHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.JSONs
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minJSONHashAgg{}
 
 func (a *minJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.JSON()
 }
 
 func (a *minJSONHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -1422,14 +1427,14 @@ func (a *minJSONHashAgg) Compute(
 	col, nulls := vec.JSON(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -1443,7 +1448,6 @@ func (a *minJSONHashAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1475,6 +1479,7 @@ func (a *minJSONHashAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1483,7 +1488,7 @@ func (a *minJSONHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -1497,7 +1502,6 @@ func (a *minJSONHashAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1529,6 +1533,7 @@ func (a *minJSONHashAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1548,7 +1553,7 @@ func (a *minJSONHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -1557,13 +1562,21 @@ func (a *minJSONHashAgg) Flush(outputIdx int) {
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *minJSONHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minJSONHashAggAlloc struct {
@@ -1588,48 +1601,47 @@ func (a *minJSONHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minDatumHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &minDatumHashAgg{}
 
 func (a *minDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Datum()
 }
 
 func (a *minDatumHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1637,7 +1649,7 @@ func (a *minDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult < 0
 							}
@@ -1646,6 +1658,7 @@ func (a *minDatumHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1654,10 +1667,9 @@ func (a *minDatumHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1665,7 +1677,7 @@ func (a *minDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult < 0
 							}
@@ -1674,6 +1686,7 @@ func (a *minDatumHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1683,7 +1696,7 @@ func (a *minDatumHashAgg) Compute(
 
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		newCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -1694,7 +1707,7 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -1702,15 +1715,24 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *minDatumHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type minDatumHashAggAlloc struct {
@@ -1804,44 +1826,43 @@ func newMaxHashAggAlloc(
 }
 
 type maxBoolHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Bools
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg bool
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBoolHashAgg{}
 
 func (a *maxBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bool()
 }
 
 func (a *maxBoolHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1864,6 +1885,7 @@ func (a *maxBoolHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1872,10 +1894,9 @@ func (a *maxBoolHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1898,6 +1919,7 @@ func (a *maxBoolHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -1914,15 +1936,15 @@ func (a *maxBoolHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxBoolHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxBoolHashAggAlloc struct {
@@ -1947,44 +1969,43 @@ func (a *maxBoolHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxBytesHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg []byte
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxBytesHashAgg{}
 
 func (a *maxBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
 }
 
 func (a *maxBytesHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -1999,6 +2020,7 @@ func (a *maxBytesHashAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2007,10 +2029,9 @@ func (a *maxBytesHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2025,6 +2046,7 @@ func (a *maxBytesHashAgg) Compute(
 								a.curAgg = append(a.curAgg[:0], candidate...)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2041,19 +2063,24 @@ func (a *maxBytesHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *maxBytesHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	oldCurAggSize := len(a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxBytesHashAggAlloc struct {
@@ -2078,44 +2105,43 @@ func (a *maxBytesHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxDecimalHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Decimals
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDecimalHashAgg{}
 
 func (a *maxDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *maxDecimalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2130,6 +2156,7 @@ func (a *maxDecimalHashAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2138,10 +2165,9 @@ func (a *maxDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2156,6 +2182,7 @@ func (a *maxDecimalHashAgg) Compute(
 								a.curAgg.Set(&candidate)
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2172,15 +2199,15 @@ func (a *maxDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxDecimalHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxDecimalHashAggAlloc struct {
@@ -2205,44 +2232,43 @@ func (a *maxDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt16HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int16s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int16
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt16HashAgg{}
 
 func (a *maxInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int16()
 }
 
 func (a *maxInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2268,6 +2294,7 @@ func (a *maxInt16HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2276,10 +2303,9 @@ func (a *maxInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2305,6 +2331,7 @@ func (a *maxInt16HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2321,15 +2348,15 @@ func (a *maxInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt16HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt16HashAggAlloc struct {
@@ -2354,44 +2381,43 @@ func (a *maxInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt32HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int32s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int32
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt32HashAgg{}
 
 func (a *maxInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int32()
 }
 
 func (a *maxInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2417,6 +2443,7 @@ func (a *maxInt32HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2425,10 +2452,9 @@ func (a *maxInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2454,6 +2480,7 @@ func (a *maxInt32HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2470,15 +2497,15 @@ func (a *maxInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt32HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt32HashAggAlloc struct {
@@ -2503,44 +2530,43 @@ func (a *maxInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt64HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Int64s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxInt64HashAgg{}
 
 func (a *maxInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
 func (a *maxInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2566,6 +2592,7 @@ func (a *maxInt64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2574,10 +2601,9 @@ func (a *maxInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2603,6 +2629,7 @@ func (a *maxInt64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2619,15 +2646,15 @@ func (a *maxInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxInt64HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxInt64HashAggAlloc struct {
@@ -2652,44 +2679,43 @@ func (a *maxInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxFloat64HashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Float64s
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxFloat64HashAgg{}
 
 func (a *maxFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
 func (a *maxFloat64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2723,6 +2749,7 @@ func (a *maxFloat64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2731,10 +2758,9 @@ func (a *maxFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2768,6 +2794,7 @@ func (a *maxFloat64HashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2784,15 +2811,15 @@ func (a *maxFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxFloat64HashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxFloat64HashAggAlloc struct {
@@ -2817,44 +2844,43 @@ func (a *maxFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxTimestampHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Times
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg time.Time
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxTimestampHashAgg{}
 
 func (a *maxTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Timestamp()
 }
 
 func (a *maxTimestampHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2876,6 +2902,7 @@ func (a *maxTimestampHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -2884,10 +2911,9 @@ func (a *maxTimestampHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -2909,6 +2935,7 @@ func (a *maxTimestampHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -2925,15 +2952,15 @@ func (a *maxTimestampHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxTimestampHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxTimestampHashAggAlloc struct {
@@ -2958,44 +2985,43 @@ func (a *maxTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxIntervalHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.Durations
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxIntervalHashAgg{}
 
 func (a *maxIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 
 func (a *maxIntervalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3010,6 +3036,7 @@ func (a *maxIntervalHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3018,10 +3045,9 @@ func (a *maxIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3036,6 +3062,7 @@ func (a *maxIntervalHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3052,15 +3079,15 @@ func (a *maxIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *maxIntervalHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type maxIntervalHashAggAlloc struct {
@@ -3085,27 +3112,27 @@ func (a *maxIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxJSONHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col *coldata.JSONs
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg json.JSON
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxJSONHashAgg{}
 
 func (a *maxJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.JSON()
 }
 
 func (a *maxJSONHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -3115,14 +3142,14 @@ func (a *maxJSONHashAgg) Compute(
 	col, nulls := vec.JSON(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -3136,7 +3163,6 @@ func (a *maxJSONHashAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3168,6 +3194,7 @@ func (a *maxJSONHashAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3176,7 +3203,7 @@ func (a *maxJSONHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 
 							var _err error
@@ -3190,7 +3217,6 @@ func (a *maxJSONHashAgg) Compute(
 								colexecerror.ExpectedError(_err)
 							}
 
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3222,6 +3248,7 @@ func (a *maxJSONHashAgg) Compute(
 
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3241,7 +3268,7 @@ func (a *maxJSONHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3250,13 +3277,21 @@ func (a *maxJSONHashAgg) Flush(outputIdx int) {
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *maxJSONHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxJSONHashAggAlloc struct {
@@ -3281,48 +3316,47 @@ func (a *maxJSONHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxDatumHashAgg struct {
+	unorderedAggregateFuncBase
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
-	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg interface{}
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &maxDatumHashAgg{}
 
 func (a *maxDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Datum()
 }
 
 func (a *maxDatumHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3330,7 +3364,7 @@ func (a *maxDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult > 0
 							}
@@ -3339,6 +3373,7 @@ func (a *maxDatumHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -3347,10 +3382,9 @@ func (a *maxDatumHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						if !a.foundNonNullForCurrentGroup {
+						if a.numNonNull == 0 {
 							val := col.Get(i)
 							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
 							candidate := col.Get(i)
@@ -3358,7 +3392,7 @@ func (a *maxDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult > 0
 							}
@@ -3367,6 +3401,7 @@ func (a *maxDatumHashAgg) Compute(
 								a.curAgg = candidate
 							}
 						}
+						a.numNonNull++
 					}
 				}
 			}
@@ -3376,7 +3411,7 @@ func (a *maxDatumHashAgg) Compute(
 
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		newCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -3387,7 +3422,7 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
@@ -3395,15 +3430,24 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
 func (a *maxDatumHashAgg) Reset() {
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
+	}
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
 }
 
 type maxDatumHashAggAlloc struct {

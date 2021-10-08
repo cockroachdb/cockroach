@@ -22,7 +22,7 @@ import (
 // dropOwnedByNode represents a DROP OWNED BY <role(s)> statement.
 type dropOwnedByNode struct {
 	// TODO(angelaw): Uncomment when implementing - commenting out due to linting error.
-	// n *tree.DropOwnedBy
+	//n *tree.DropOwnedBy
 }
 
 func (p *planner) DropOwnedBy(ctx context.Context) (planNode, error) {

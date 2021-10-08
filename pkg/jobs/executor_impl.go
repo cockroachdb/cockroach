@@ -92,6 +92,16 @@ func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (e *inlineScheduledJobExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
 func init() {
 	RegisterScheduledJobExecutorFactory(
 		InlineExecutorName,

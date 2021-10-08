@@ -16,7 +16,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -46,7 +45,7 @@ const (
 	storeDrainingMsg        = "store is draining"
 
 	// IntersectingSnapshotMsg is part of the error message returned from
-	// canApplySnapshotLocked and is exposed here so testing can rely on it.
+	// canAcceptSnapshotLocked and is exposed here so testing can rely on it.
 	IntersectingSnapshotMsg = "snapshot intersects existing range"
 )
 
@@ -382,52 +381,16 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	// Iterate over the specified range of Raft entries and send them all out
 	// together.
+	rangeID := header.State.Desc.RangeID
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
-	preallocSize := endIndex - firstIndex
-	const maxPreallocSize = 1000
-	if preallocSize > maxPreallocSize {
-		// It's possible for the raft log to become enormous in certain
-		// sustained failure conditions. We may bail out of the snapshot
-		// process early in scanFunc, but in the worst case this
-		// preallocation is enough to run the server out of memory. Limit
-		// the size of the buffer we will preallocate.
-		preallocSize = maxPreallocSize
+	logEntries := make([]raftpb.Entry, 0, endIndex-firstIndex)
+	scanFunc := func(ent raftpb.Entry) error {
+		logEntries = append(logEntries, ent)
+		return nil
 	}
-	logEntries := make([][]byte, 0, preallocSize)
-
-	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) error {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			logEntries = append(logEntries, bytes)
-			raftLogBytes += int64(len(bytes))
-		}
-		return err
-	}
-
-	rangeID := header.State.Desc.RangeID
-
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return 0, err
-	}
-
-	// The difference between the snapshot index (applied index at the time of
-	// snapshot) and the truncated index should equal the number of log entries
-	// shipped over.
-	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
-		// We've generated a botched snapshot. We could fatal right here but opt
-		// to warn loudly instead, and fatal at the caller to capture a checkpoint
-		// of the underlying storage engine.
-		entriesRange, err := extractRangeFromEntries(logEntries)
-		if err != nil {
-			return 0, err
-		}
-		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
-			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
-			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return 0, errMalformedSnapshot
 	}
 
 	// Inline the payloads for all sideloaded proposals.
@@ -437,11 +400,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// solution, but let's see if it ever becomes relevant. Snapshots with
 	// inlined proposals are hopefully the exception.
 	{
-		var ent raftpb.Entry
-		for i := range logEntries {
-			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return 0, err
-			}
+		for i, ent := range logEntries {
 			if !sniffSideloadedRaftCommand(ent.Data) {
 				continue
 			}
@@ -453,7 +412,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					return err
 				}
 				if newEnt != nil {
-					ent = *newEnt
+					logEntries[i] = *newEnt
 				}
 				return nil
 			}); err != nil {
@@ -479,15 +438,39 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				}
 				return 0, err
 			}
-			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
-			var err error
-			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return 0, err
-			}
 		}
 	}
+
+	// Marshal each of the log entries.
+	logEntriesRaw := make([][]byte, len(logEntries))
+	for i := range logEntries {
+		entRaw, err := protoutil.Marshal(&logEntries[i])
+		if err != nil {
+			return 0, err
+		}
+		logEntriesRaw[i] = entRaw
+	}
+
+	// The difference between the snapshot index (applied index at the time of
+	// snapshot) and the truncated index should equal the number of log entries
+	// shipped over.
+	expLen := endIndex - firstIndex
+	if expLen != uint64(len(logEntries)) {
+		// We've generated a botched snapshot. We could fatal right here but opt
+		// to warn loudly instead, and fatal at the caller to capture a checkpoint
+		// of the underlying storage engine.
+		entriesRange, err := extractRangeFromEntries(logEntriesRaw)
+		if err != nil {
+			return 0, err
+		}
+		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
+			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
+			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
+		return 0, errMalformedSnapshot
+	}
+
 	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", kvs, len(logEntries))
-	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntriesRaw}); err != nil {
 		return 0, err
 	}
 	return bytesSent, nil
@@ -581,14 +564,14 @@ func (s *Store) reserveSnapshot(
 	}, "", nil
 }
 
-// canApplySnapshotLocked returns (_, nil) if the snapshot can be applied to
+// canAcceptSnapshotLocked returns (_, nil) if the snapshot can be applied to
 // this store's replica (i.e. the snapshot is not from an older incarnation of
-// the replica) and a placeholder can be added to the replicasByKey map (if
-// necessary). If a placeholder is required, it is returned as the first value.
+// the replica) and a placeholder that can be (but is not yet) added to the
+// replicasByKey map (if necessary).
 //
-// Both the store mu (and the raft mu for an existing replica if there is one)
+// Both the store mu and the raft mu for the existing replica (which must exist)
 // must be held.
-func (s *Store) canApplySnapshotLocked(
+func (s *Store) canAcceptSnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	if snapHeader.IsPreemptive() {
@@ -604,7 +587,7 @@ func (s *Store) canApplySnapshotLocked(
 		int64(desc.RangeID),
 	)
 	if !ok {
-		return nil, errors.Errorf("canApplySnapshotLocked requires a replica present")
+		return nil, errors.Errorf("canAcceptSnapshotLocked requires a replica present")
 	}
 	existingRepl := (*Replica)(v)
 	// The raftMu is held which allows us to use the existing replica as a
@@ -662,7 +645,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 	// NB: this check seems redundant since placeholders are also represented in
 	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
-		return errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s %v", s, exRng, snapHeader.RaftMessageRequest.FromReplica)
+		return errors.Errorf("%s: canAcceptSnapshotLocked: cannot add placeholder, have an existing placeholder %s %v", s, exRng, snapHeader.RaftMessageRequest.FromReplica)
 	}
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
@@ -712,37 +695,6 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
-// shouldAcceptSnapshotData is an optimization to check whether we should even
-// bother to read the data for an incoming snapshot. If the snapshot overlaps an
-// existing replica or placeholder, we'd error during application anyway, so do
-// it before transferring all the data. This method is a guess and may have
-// false positives. If the snapshot should be rejected, an error is returned
-// with a description of why. Otherwise, nil means we should accept the
-// snapshot.
-func (s *Store) shouldAcceptSnapshotData(
-	ctx context.Context, snapHeader *SnapshotRequest_Header,
-) error {
-	if snapHeader.IsPreemptive() {
-		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
-	}
-	pErr := s.withReplicaForRequest(
-		ctx, &snapHeader.RaftMessageRequest, func(ctx context.Context, r *Replica) *roachpb.Error {
-			ctx = r.AnnotateCtx(ctx)
-			// If the current replica is not initialized then we should accept this
-			// snapshot if it doesn't overlap existing ranges.
-			if !r.IsInitialized() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				return roachpb.NewError(s.checkSnapshotOverlapLocked(ctx, snapHeader))
-			}
-			// If the current range is initialized then we need to accept this
-			// snapshot.
-			return nil
-		},
-	)
-	return pErr.GoError()
-}
-
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header, stream incomingSnapshotStream,
@@ -777,16 +729,40 @@ func (s *Store) receiveSnapshot(
 	}
 	defer cleanup()
 
-	// Check to see if the snapshot can be applied but don't attempt to add
-	// a placeholder here, because we're not holding the replica's raftMu.
-	// We'll perform this check again later after receiving the rest of the
-	// snapshot data - this is purely an optimization to prevent downloading
-	// a snapshot that we know we won't be able to apply.
-	if err := s.shouldAcceptSnapshotData(ctx, header); err != nil {
-		return sendSnapshotError(stream,
-			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
-		)
+	// The comment on ReplicaPlaceholder motivates and documents
+	// ReplicaPlaceholder semantics. Please be familiar with them
+	// before making any changes.
+	var placeholder *ReplicaPlaceholder
+	if pErr := s.withReplicaForRequest(
+		ctx, &header.RaftMessageRequest, func(ctx context.Context, r *Replica,
+		) *roachpb.Error {
+			var err error
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			placeholder, err = s.canAcceptSnapshotLocked(ctx, header)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			if placeholder != nil {
+				if err := s.addPlaceholderLocked(placeholder); err != nil {
+					return roachpb.NewError(err)
+				}
+			}
+			return nil
+		}); pErr != nil {
+		log.Infof(ctx, "cannot accept snapshot: %s", pErr)
+		return pErr.GoError()
 	}
+
+	defer func() {
+		if placeholder != nil {
+			// Remove the placeholder, if it's still there. Most of the time it will
+			// have been filled and this is a no-op.
+			if _, err := s.removePlaceholder(ctx, placeholder, removePlaceholderFailed); err != nil {
+				log.Fatalf(ctx, "unable to remove placeholder: %s", err)
+			}
+		}
+	}()
 
 	// Determine which snapshot strategy the sender is using to send this
 	// snapshot. If we don't know how to handle the specified strategy, return
@@ -823,10 +799,10 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
+	inSnap.placeholder = placeholder
 	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
-
 	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
 }
 
@@ -929,13 +905,14 @@ func SendEmptySnapshot(
 	to roachpb.ReplicaDescriptor,
 ) error {
 	// Create an engine to use as a buffer for the empty snapshot.
-	eng := storage.NewInMem(
+	eng, err := storage.Open(
 		context.Background(),
-		roachpb.Attributes{},
-		1<<20,   /* cacheSize 1MiB */
-		512<<20, /* storeSize 512 MiB */
-		nil,     /* settings */
-	)
+		storage.InMemory(),
+		storage.CacheSize(1<<20 /* 1 MiB */),
+		storage.MaxSize(512<<20 /* 512 MiB */))
+	if err != nil {
+		return err
+	}
 	defer eng.Close()
 
 	var ms enginepb.MVCCStats
@@ -946,11 +923,7 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	var replicaVersion roachpb.Version
-	if st.Version.IsActive(ctx, clusterversion.ReplicaVersions) {
-		replicaVersion = st.Version.ActiveVersionOrEmpty(ctx).Version
-	}
-	ms, err := stateloader.WriteInitialReplicaState(
+	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
 		ms,
@@ -958,7 +931,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		stateloader.TruncatedStateUnreplicated,
-		replicaVersion,
+		st.Version.ActiveVersionOrEmpty(ctx).Version,
 	)
 	if err != nil {
 		return err
@@ -1177,7 +1150,10 @@ func sendSnapshot(
 	// completed (such as defers that might be run after the previous message was
 	// received).
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
-		return errors.Errorf("%s: expected EOF, got resp=%v err=%v", to, unexpectedResp, err)
+		if err != nil {
+			return errors.Wrapf(err, "%s: expected EOF, got resp=%v with error", to, unexpectedResp)
+		}
+		return errors.Newf("%s: expected EOF, got resp=%v", to, unexpectedResp)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:

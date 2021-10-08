@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DequalifyAndValidateExpr validates that an expression has the given type
-// and contains no functions with a volatility greater than maxVolatility. The
-// type-checked and constant-folded expression and the set of column IDs within
-// the expression are returned, if valid.
+// DequalifyAndValidateExpr validates that an expression has the given type and
+// contains no functions with a volatility greater than maxVolatility. The
+// type-checked and constant-folded expression, the type of the expression, and
+// the set of column IDs within the expression are returned, if valid.
 //
 // The serialized expression is returned because returning the created
 // tree.TypedExpr would be dangerous. It contains dummyColumns which do not
@@ -39,11 +39,11 @@ func DequalifyAndValidateExpr(
 	desc catalog.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
-	op string,
+	context string,
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (string, catalog.TableColSet, error) {
+) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	nonDropColumns := desc.NonDropColumns()
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
@@ -51,30 +51,30 @@ func DequalifyAndValidateExpr(
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
 	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	typedExpr, err := SanitizeVarFreeExpr(
 		ctx,
 		replacedExpr,
 		typ,
-		op,
+		context,
 		semaCtx,
 		maxVolatility,
 	)
 
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
-	return tree.Serialize(typedExpr), colIDs, nil
+	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
@@ -162,6 +162,45 @@ func FormatExprForDisplay(
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (string, error) {
+	return formatExprForDisplayImpl(
+		ctx,
+		desc,
+		exprStr,
+		semaCtx,
+		fmtFlags,
+		false, /* wrapNonFuncExprs */
+	)
+}
+
+// FormatExprForExpressionIndexDisplay formats an expression index's expression
+// element string for display. It is similar to FormatExprForDisplay. The only
+// difference is that non-function expressions will be wrapped in parentheses to
+// match the parsing requirements for expression indexes.
+func FormatExprForExpressionIndexDisplay(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+) (string, error) {
+	return formatExprForDisplayImpl(
+		ctx,
+		desc,
+		exprStr,
+		semaCtx,
+		fmtFlags,
+		true, /* wrapNonFuncExprs */
+	)
+}
+
+func formatExprForDisplayImpl(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+	wrapNonFuncExprs bool,
+) (string, error) {
 	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx, fmtFlags)
 	if err != nil {
 		return "", err
@@ -171,7 +210,16 @@ func FormatExprForDisplay(
 	if err != nil {
 		return "", err
 	}
-	return tree.AsStringWithFlags(replacedExpr, fmtFlags), nil
+	f := tree.NewFmtCtx(fmtFlags)
+	_, isFunc := expr.(*tree.FuncExpr)
+	if wrapNonFuncExprs && !isFunc {
+		f.WriteByte('(')
+	}
+	f.FormatNode(replacedExpr)
+	if wrapNonFuncExprs && !isFunc {
+		f.WriteByte(')')
+	}
+	return f.CloseAndGetString(), nil
 }
 
 func deserializeExprForFormatting(
@@ -255,7 +303,7 @@ func newNameResolver(
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData().SearchPath)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in

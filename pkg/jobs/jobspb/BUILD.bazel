@@ -9,9 +9,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/cloud",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/stats",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
     ],
 )
 
@@ -43,7 +45,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",

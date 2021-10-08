@@ -771,7 +771,7 @@ such as "node" or "root"). If multiple mappings are provided for the same
 principal not specified in the map is passed through as-is via the identity
 function. A cert is allowed to authenticate a DB principal if the DB principal
 name is contained in the mapped CommonName or DNS-type SubjectAlternateName
-fields.
+fields. It is permissible for the <cert-principal> string to contain colons.
 `,
 	}
 
@@ -1030,6 +1030,14 @@ long and not particularly human-readable.`,
 Base64-encoded Descriptor to use as the table when decoding KVs.`,
 	}
 
+	FilterKeys = FlagInfo{
+		Name: "type",
+		Description: `
+Only show certain types of keys: values, intents, txns. If omitted all keys
+types are shown. Showing transactions will also implicitly limit key range
+to local keys if keys are not specified explicitly.`,
+	}
+
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `
@@ -1159,6 +1167,11 @@ can also be specified (e.g. .25).`,
 	RunDemoWorkload = FlagInfo{
 		Name:        "with-load",
 		Description: `Run a demo workload against the pre-loaded database.`,
+	}
+
+	DemoWorkloadMaxQPS = FlagInfo{
+		Name:        "workload-max-qps",
+		Description: "The maximum QPS when a workload is running.",
 	}
 
 	DemoNodeLocality = FlagInfo{
@@ -1524,21 +1537,6 @@ without any other details.
 `,
 	}
 
-	IdleExitAfter = FlagInfo{
-		Name: "idle-exit-after",
-		Description: `
-If nonzero, will cause the server to run normally for the 
-indicated amount of time, wait for all SQL connections to terminate, 
-start a 30s countdown and exit upon countdown reaching zero if no new 
-connections occur. New connections will be accepted at all times and 
-will effectively delay the exit (indefinitely if there is always at least 
-one connection or there are no connection for less than 30 sec.
-A new 30s countdown will start when no more SQL connections 
-exist. The interval is specified with a suffix of 's' for seconds, 
-'m' for minutes, and 'h' for hours.
-`,
-	}
-
 	ExportTableTarget = FlagInfo{
 		Name:        "table",
 		Description: `Select the table to export data from.`,
@@ -1588,5 +1586,47 @@ The bytekey format does not require table-key prefix.`,
 	ExportRevisionsUpTo = FlagInfo{
 		Name:        "up-to",
 		Description: `Export revisions of data from a backup table up to a specific timestamp.`,
+	}
+
+	Recursive = FlagInfo{
+		Name:      "recursive",
+		Shorthand: "r",
+		Description: `
+When set, the entire subtree rooted at the source directory will be uploaded to
+the destination. Every file in the subtree will be uploaded to the corresponding
+path under the destination; i.e. the relative path will be maintained. À la
+rsync, a trailing slash in the source will avoid creating an additional
+directory level under the destination. The destination can be expressed one of
+four ways: empty (not specified), a relative path, a well-formed URI with no
+host, or a full well-formed URI.
+<PRE>
+
+</PRE>
+If a destination is not specified, the default URI scheme and host will be used,
+and the basename from the source will be used as the destination directory.
+For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory' 
+<PRE>
+
+</PRE>
+If the destination is a relative path such as 'path/to/dir', the default
+userfile URI schema and host will be used
+('userfile://defaultdb.public.userfiles_$user/'), and the relative path will be
+appended to it.
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a well-formed URI with no host, such as
+'userfile:///path/to/dir/', the default userfile URI schema and host will be
+used ('userfile://defaultdb.public.userfiles_$user/').
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a full well-formed URI, such as
+'userfile://db.schema.tablename_prefix/path/to/dir', then it will be used
+verbatim.
+For example: 'userfile://foo.bar.baz_root/path/to/dir'
+`,
 	}
 )

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -68,7 +69,7 @@ func (n *createSequenceNode) ReadingOwnWrites() {}
 func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 
-	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Name,
+	schemaDesc, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Name,
 		tree.ResolveRequireSequenceDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
@@ -78,7 +79,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	return doCreateSequence(
-		params, n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
+		params, n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }
@@ -88,7 +89,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 func doCreateSequence(
 	params runParams,
 	dbDesc catalog.DatabaseDescriptor,
-	schemaID descpb.ID,
+	scDesc catalog.SchemaDescriptor,
 	name *tree.TableName,
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
@@ -99,7 +100,10 @@ func doCreateSequence(
 		return err
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User())
+	privs := dbDesc.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetID(),
+		params.SessionData().User(), tree.Sequences, dbDesc.GetPrivileges(),
+	)
 
 	if persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)
@@ -116,7 +120,7 @@ func doCreateSequence(
 		name.Object(),
 		opts,
 		dbDesc.GetID(),
-		schemaID,
+		scDesc.GetID(),
 		id,
 		creationTime,
 		privs,
@@ -131,13 +135,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateSelf() needed here.
 
-	key := catalogkv.MakeObjectNameKey(
-		params.ctx,
-		params.ExecCfg().Settings,
-		dbDesc.GetID(),
-		schemaID,
-		name.Object(),
-	).Key(params.ExecCfg().Codec)
+	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {
@@ -202,11 +200,13 @@ func NewSequenceTableDesc(
 		},
 	}
 	desc.SetPrimaryIndex(descpb.IndexDescriptor{
-		ID:               keys.SequenceIndexID,
-		Name:             tabledesc.PrimaryKeyIndexName,
-		ColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
-		ColumnNames:      []string{tabledesc.SequenceColumnName},
-		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+		ID:                  keys.SequenceIndexID,
+		Name:                tabledesc.PrimaryKeyIndexName,
+		KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+		KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+		EncodingType:        descpb.PrimaryIndexEncoding,
+		Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 	})
 	desc.Families = []descpb.ColumnFamilyDescriptor{
 		{

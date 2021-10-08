@@ -14,12 +14,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -29,10 +32,10 @@ import (
 func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Force separated intents for writing.
-	settings := makeSettingsForSeparatedIntents(
-		false /* oldClusterVersion */, true /* enabled */)
-	eng := createTestPebbleEngineWithSettings(settings)
+	// We default to separated intents enabled.
+	eng, err := Open(context.Background(), InMemory(),
+		CacheSize(1<<20))
+	require.NoError(t, err)
 	defer eng.Close()
 
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
@@ -90,7 +93,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		failOnMoreRecent: false,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err = mvccScanner.scan()
+	_, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -149,7 +152,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		ts:      ts,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err := mvccScanner.scan()
+	_, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -164,4 +167,107 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	require.Equal(t, 32, cap(kvData[2]))
 	require.Equal(t, 157286419, len(kvData[3]))
 	require.Equal(t, 157286419, cap(kvData[3]))
+}
+
+func scannerWithAccount(
+	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
+) (cleanup func()) {
+	m := mon.NewMonitor("test", mon.MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	m.Start(ctx, nil, mon.MakeStandaloneBudget(limitBytes))
+	ba := m.MakeBoundAccount()
+	scanner.memAccount = &ba
+	return func() {
+		ba.Close(ctx)
+		m.Stop(ctx)
+	}
+}
+
+func TestMVCCScanWithMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	// Write 10 key-value pairs of 1000 bytes each.
+	txnID1 := uuid.FromUint128(uint128.FromInts(0, 1))
+	ts1 := hlc.Timestamp{WallTime: 50}
+	txn1 := roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			ID:             txnID1,
+			Key:            []byte("foo"),
+			WriteTimestamp: ts1,
+			MinTimestamp:   ts1,
+		},
+		Status:                 roachpb.PENDING,
+		ReadTimestamp:          ts1,
+		GlobalUncertaintyLimit: ts1,
+	}
+	val := roachpb.Value{RawBytes: bytes.Repeat([]byte("v"), 1000)}
+	func() {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < 10; i++ {
+			key := makeKey(nil, i)
+			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
+		}
+		require.NoError(t, batch.Commit(true))
+	}()
+
+	// iterator that can span over all the written keys.
+	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	defer iter.Close()
+
+	// Narrow scan succeeds with a budget of 6000.
+	scanner := &pebbleMVCCScanner{
+		parent: iter,
+		start:  makeKey(nil, 9),
+		end:    makeKey(nil, 11),
+		ts:     hlc.Timestamp{WallTime: 50},
+	}
+	scanner.init(&txn1, hlc.Timestamp{})
+	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
+	resumeSpan, resumeReason, err := scanner.scan(ctx)
+	require.Nil(t, resumeSpan)
+	require.Zero(t, resumeReason)
+	require.Nil(t, err)
+	cleanup()
+
+	// Wider scan fails with a budget of 6000.
+	scanner = &pebbleMVCCScanner{
+		parent: iter,
+		start:  makeKey(nil, 0),
+		end:    makeKey(nil, 11),
+		ts:     hlc.Timestamp{WallTime: 50},
+	}
+	scanner.init(&txn1, hlc.Timestamp{})
+	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
+	resumeSpan, resumeReason, err = scanner.scan(ctx)
+	require.Nil(t, resumeSpan)
+	require.Zero(t, resumeReason)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "memory budget exceeded")
+	cleanup()
+
+	// Inconsistent and consistent scans that see intents fails with a budget of 200 (each
+	// intent causes 57 bytes to be reserved).
+	for _, inconsistent := range []bool{false, true} {
+		scanner = &pebbleMVCCScanner{
+			parent:       iter,
+			start:        makeKey(nil, 0),
+			end:          makeKey(nil, 11),
+			ts:           hlc.Timestamp{WallTime: 50},
+			inconsistent: inconsistent,
+		}
+		scanner.init(nil, hlc.Timestamp{})
+		cleanup = scannerWithAccount(ctx, st, scanner, 100)
+		resumeSpan, resumeReason, err = scanner.scan(ctx)
+		require.Nil(t, resumeSpan)
+		require.Zero(t, resumeReason)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "memory budget exceeded")
+		cleanup()
+	}
 }

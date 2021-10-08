@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -83,15 +83,8 @@ func AlterColumnType(
 		return err
 	}
 
-	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-	if supported, err := isTypeSupportedInVersion(version, typ); err != nil {
+	if err := checkTypeIsSupported(ctx, params.ExecCfg().Settings, typ); err != nil {
 		return err
-	} else if !supported {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized",
-			typ.SQLString(),
-		)
 	}
 
 	// Special handling for STRING COLLATE xy to verify that we recognize the language.
@@ -100,6 +93,14 @@ func AlterColumnType(
 			typ = types.MakeCollatedString(typ, t.Collation)
 		} else {
 			return pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
+		}
+	}
+
+	// Special handling for IDENTITY column to make sure it cannot be altered into
+	// a non-integer type.
+	if col.IsGeneratedAsIdentity() {
+		if typ.InternalType.Family != types.IntFamily {
+			return sqlerrors.NewIdentityColumnTypeError()
 		}
 	}
 
@@ -159,16 +160,6 @@ func alterColumnTypeGeneral(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
-	// Make sure that all nodes in the cluster are able to perform
-	// general alter column type conversions.
-	if !params.p.ExecCfg().Settings.Version.IsActive(
-		params.ctx,
-		clusterversion.AlterColumnTypeGeneral,
-	) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to run this alter column type",
-			clusterversion.AlterColumnTypeGeneral)
-	}
 	if !params.SessionData().AlterColumnTypeGeneralEnabled {
 		return pgerror.WithCandidateCode(
 			errors.WithHint(
@@ -212,9 +203,18 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
-			if col.GetID() == id {
-				return colWithConstraintNotSupportedErr
+		if fk.OriginTableID == tableDesc.GetID() {
+			for _, id := range fk.OriginColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
+			}
+		}
+		if fk.ReferencedTableID == tableDesc.GetID() {
+			for _, id := range fk.ReferencedColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
 			}
 		}
 	}
@@ -222,13 +222,13 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that are
 	// part of indexes.
 	for _, idx := range tableDesc.NonDropIndexes() {
-		for i := 0; i < idx.NumColumns(); i++ {
-			if idx.GetColumnID(i) == col.GetID() {
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			if idx.GetKeyColumnID(i) == col.GetID() {
 				return colInIndexNotSupportedErr
 			}
 		}
-		for i := 0; i < idx.NumExtraColumns(); i++ {
-			if idx.GetExtraColumnID(i) == col.GetID() {
+		for i := 0; i < idx.NumKeySuffixColumns(); i++ {
+			if idx.GetKeySuffixColumnID(i) == col.GetID() {
 				return colInIndexNotSupportedErr
 			}
 		}
@@ -259,7 +259,7 @@ func alterColumnTypeGeneral(
 		return err == nil
 	}
 
-	shadowColName := tabledesc.GenerateUniqueConstraintName(col.GetName(), nameExists)
+	shadowColName := tabledesc.GenerateUniqueName(col.GetName(), nameExists)
 
 	var newColComputeExpr *string
 	// oldCol still needs to have values written to it in case nodes read it from
@@ -273,7 +273,7 @@ func alterColumnTypeGeneral(
 	var inverseExpr string
 	if using != nil {
 		// Validate the provided using expr and ensure it has the correct type.
-		expr, _, err := schemaexpr.DequalifyAndValidateExpr(
+		expr, _, _, err := schemaexpr.DequalifyAndValidateExpr(
 			ctx,
 			tableDesc,
 			using,
@@ -384,6 +384,13 @@ func alterColumnTypeGeneral(
 	}
 
 	tableDesc.AddColumnMutation(&newCol, descpb.DescriptorMutation_ADD)
+	if !newCol.Virtual {
+		// Add non-virtual column name and ID to primary index.
+		primaryIndex := tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, newCol.Name)
+		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, newCol.ID)
+		tableDesc.SetPrimaryIndex(primaryIndex)
+	}
 
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err

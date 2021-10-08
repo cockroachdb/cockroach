@@ -17,11 +17,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -30,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,6 +61,7 @@ var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
@@ -73,8 +76,9 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
-			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */)
+		conv, err := row.NewDatumRowConverter(ctx, semaCtx, tabledesc.NewBuilder(table.Desc).
+			BuildImmutableTable(), nil /* targetColNames */, evalCtx, kvCh,
+			nil /* seqChunkProvider */, nil /* metrics */)
 		if err != nil {
 			return nil, err
 		}
@@ -294,7 +298,8 @@ func readMysqlCreateTable(
 	input io.Reader,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
-	startingID, parentID descpb.ID,
+	startingID descpb.ID,
+	parentDB catalog.DatabaseDescriptor,
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
@@ -331,7 +336,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals, owner, walltime)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, id, name, i.TableSpec, fks, seqVals, owner, walltime)
 			if err != nil {
 				return nil, err
 			}
@@ -372,7 +377,8 @@ func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
-	parentID, id descpb.ID,
+	parentDB catalog.DatabaseDescriptor,
+	id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
@@ -419,39 +425,21 @@ func mysqlTableToCockroach(
 			seqVals[id] = startingValue
 		}
 		var err error
-		if p != nil {
-			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			seqDesc, err = sql.NewSequenceTableDesc(
-				ctx,
-				seqName,
-				opts,
-				parentID,
-				keys.PublicSchemaID,
-				id,
-				time,
-				priv,
-				tree.PersistencePermanent,
-				nil, /* params */
-				// If this is multi-region, this will get added by WriteDescriptors.
-				false, /* isMultiRegion */
-			)
-		} else {
-			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			seqDesc, err = sql.NewSequenceTableDesc(
-				ctx,
-				seqName,
-				opts,
-				parentID,
-				keys.PublicSchemaID,
-				id,
-				time,
-				priv,
-				tree.PersistencePermanent,
-				nil, /* params */
-				// If this is multi-region, this will get added by WriteDescriptors.
-				false, /* isMultiRegion */
-			)
-		}
+		privilegeDesc := descpb.NewDefaultPrivilegeDescriptor(owner)
+		seqDesc, err = sql.NewSequenceTableDesc(
+			ctx,
+			seqName,
+			opts,
+			parentDB.GetID(),
+			keys.PublicSchemaID,
+			id,
+			time,
+			privilegeDesc,
+			tree.PersistencePermanent,
+			nil, /* params */
+			// If this is multi-region, this will get added by WriteDescriptors.
+			false, /* isMultiRegion */
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -475,6 +463,13 @@ func mysqlTableToCockroach(
 				return nil, nil, err
 			}
 			def.DefaultExpr.Expr = expr
+		}
+		// If the target table columns have data type INT or INTEGER, they need to
+		// be updated to conform to the session variable `default_int_size`.
+		if dType, ok := def.Type.(*types.T); ok {
+			if dType.Equivalent(types.Int) && p != nil {
+				def.Type = parser.NakedIntTypeFromDefaultIntSize(p.SessionData().DefaultIntSize)
+			}
 		}
 		stmt.Defs = append(stmt.Defs, def)
 	}
@@ -504,7 +499,14 @@ func mysqlTableToCockroach(
 	if p != nil {
 		semaCtxPtr = p.SemaCtx()
 	}
-	desc, err := MakeSimpleTableDescriptor(ctx, semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
+
+	// Bundle imports do not support user defined types, and so we nil out the
+	// type resolver to protect against unexpected behavior on UDT resolution.
+	semaCtxPtr = makeSemaCtxWithoutTypeResolver(semaCtxPtr)
+	desc, err := MakeSimpleTableDescriptor(
+		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
+		schemadesc.GetPublicSchema(), id, fks, time.WallTime,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -540,7 +542,12 @@ func mysqlTableToCockroach(
 			}
 
 			d.Table = toTable
-			fkDefs = append(fkDefs, delayedFK{desc, d})
+			fkDefs = append(fkDefs, delayedFK{
+				db:  parentDB,
+				sc:  schemadesc.GetPublicSchema(),
+				tbl: desc,
+				def: d,
+			})
 		}
 	}
 	fks.resolver.tableNameToDesc[desc.Name] = desc
@@ -565,6 +572,8 @@ func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
 }
 
 type delayedFK struct {
+	db  catalog.DatabaseDescriptor
+	sc  catalog.SchemaDescriptor
 	tbl *tabledesc.Mutable
 	def *tree.ForeignKeyConstraintTableDef
 }
@@ -573,8 +582,10 @@ func addDelayedFKs(
 	ctx context.Context, defs []delayedFK, resolver fkResolver, evalCtx *tree.EvalContext,
 ) error {
 	for _, def := range defs {
+		backrefs := map[descpb.ID]*tabledesc.Mutable{}
 		if err := sql.ResolveFK(
-			ctx, nil, &resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.Mutable{}, sql.NewTable,
+			ctx, nil, &resolver, def.db, def.sc, def.tbl, def.def,
+			backrefs, sql.NewTable,
 			tree.ValidationDefault, evalCtx,
 		); err != nil {
 			return err

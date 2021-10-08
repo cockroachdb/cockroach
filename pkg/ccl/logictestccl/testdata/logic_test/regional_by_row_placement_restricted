@@ -1,0 +1,173 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant
+
+statement ok
+SET enable_multiregion_placement_policy = true;
+
+statement ok
+CREATE DATABASE testdb PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE testdb
+
+statement ok
+CREATE TABLE test () LOCALITY REGIONAL BY ROW
+
+query TT
+SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
+ORDER BY partition_name
+----
+ap-southeast-2  range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+us-east-1                                       range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+
+# Alter to RESTRICTED and see that we have no non-voter constraints.
+statement ok
+ALTER DATABASE testdb PLACEMENT RESTRICTED
+
+query TT
+SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
+ORDER BY partition_name
+----
+ap-southeast-2  range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+us-east-1                                       range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+
+# Make sure placement restricted doesn't invalidate zone configs.
+statement ok
+SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+ALTER DATABASE testdb DROP REGION "us-east-1"
+
+query TT
+SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
+ORDER BY partition_name
+----
+ap-southeast-2  range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE testdb ADD REGION "us-east-1"
+
+query TT
+SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
+ORDER BY partition_name
+----
+ap-southeast-2  range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+us-east-1                                       range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 3,
+num_voters = 3,
+constraints = '[]',
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+
+# Alter to DEFAULT and see that our constraints are back.
+statement ok
+ALTER DATABASE testdb PLACEMENT DEFAULT
+
+# Check that coming back from placement restricted results in a valid zone
+# config.
+statement ok
+SELECT * FROM crdb_internal.validate_multi_region_zone_configs()
+
+query TT
+SELECT partition_name, full_zone_config FROM [SHOW PARTITIONS FROM TABLE test]
+ORDER BY partition_name
+----
+ap-southeast-2  range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+us-east-1                                       range_min_bytes = 134217728,
+range_max_bytes = 536870912,
+gc.ttlseconds = 90000,
+num_replicas = 5,
+num_voters = 3,
+constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'

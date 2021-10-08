@@ -28,7 +28,7 @@ const (
 
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
-	SlowRequestThreshold = 60 * time.Second
+	SlowRequestThreshold = 15 * time.Second
 
 	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
 	// to chunk or otherwise limit commands being sent to Raft.
@@ -45,6 +45,10 @@ const (
 	// CPUProfileDir is the directory name where the CPU profile dumper
 	// stores profiles when the periodic CPU profile dump is enabled.
 	CPUProfileDir = "pprof_dump"
+
+	// InflightTraceDir is the directory name where the job trace dumper stores traces
+	// when a job opts in to dumping its execution traces.
+	InflightTraceDir = "inflight_trace_dump"
 
 	// MinRangeMaxBytes is the minimum value for range max bytes.
 	MinRangeMaxBytes = 64 << 10 // 64 KB

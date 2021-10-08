@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,8 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -52,29 +50,22 @@ func runImport(
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
-	// Install type metadata in all of the import tables. The DB is nil in some
-	// tests, so check first here.
-	if flowCtx.Cfg.DB != nil {
-		if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
-			for _, table := range spec.Tables {
-				if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, resolver); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
+	// Install type metadata in all of the import tables.
+	importResolver := newImportTypeResolver(spec.Types)
+	for _, table := range spec.Tables {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, importResolver); err != nil {
 			return nil, err
 		}
-		// Release leases on any accessed types now that type metadata is installed.
-		flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()
 	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
 	// assignment.
 	evalCtx.DB = flowCtx.Cfg.DB
-	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, seqChunkProvider)
+	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.TypeResolver = importResolver
+	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +80,7 @@ func runImport(
 	// Read input files into kvs
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
-		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
+		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
 		defer span.Finish()
 		var inputs map[int32]string
 		if spec.ResumePos != nil {
@@ -163,7 +154,7 @@ func readInputFiles(
 
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
+		conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
 		if err != nil {
 			return err
 		}
@@ -188,7 +179,7 @@ func readInputFiles(
 		default:
 		}
 		if err := func() error {
-			conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
+			conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
 			if err != nil {
 				return err
 			}
@@ -241,7 +232,7 @@ func readInputFiles(
 					if err != nil {
 						return err
 					}
-					conf, err := cloudimpl.ExternalStorageConfFromURI(rejFn, user)
+					conf, err := cloud.ExternalStorageConfFromURI(rejFn, user)
 					if err != nil {
 						return err
 					}
@@ -250,7 +241,7 @@ func readInputFiles(
 						return err
 					}
 					defer rejectedStorage.Close()
-					if err := rejectedStorage.WriteFile(ctx, "", bytes.NewReader(buf)); err != nil {
+					if err := cloud.WriteFile(ctx, rejectedStorage, "", bytes.NewReader(buf)); err != nil {
 						return err
 					}
 					return nil
@@ -415,6 +406,7 @@ type parallelImportContext struct {
 	walltime         int64                   // Import time stamp.
 	numWorkers       int                     // Parallelism.
 	batchSize        int                     // Number of records to batch.
+	semaCtx          *tree.SemaContext       // Semantic analysis context.
 	evalCtx          *tree.EvalContext       // Evaluation context.
 	tableDesc        catalog.TableDescriptor // Table descriptor we're importing into.
 	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
@@ -447,8 +439,8 @@ func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh,
-		importCtx.seqChunkProvider)
+		ctx, importCtx.semaCtx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx,
+		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
@@ -547,7 +539,8 @@ func runParallelImport(
 
 	minEmited := make([]int64, parallelism)
 	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, "import-rows-to-datums")
 		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
 			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
@@ -557,6 +550,9 @@ func runParallelImport(
 	// Read data from producer and send it to consumers.
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(importer.recordCh)
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")
+		defer span.Finish()
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
@@ -654,7 +650,7 @@ func (p *parallelImporter) importWorker(
 	if err != nil {
 		return err
 	}
-	if conv.EvalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData() == nil {
 		panic("uninitialized session data")
 	}
 

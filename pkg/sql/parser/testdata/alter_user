@@ -1,0 +1,314 @@
+parse
+ALTER USER foo PASSWORD bar
+----
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER '_' WITH PASSWORD '*****' -- literals removed
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+ALTER USER foo WITH PASSWORD bar
+----
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER '_' WITH PASSWORD '*****' -- literals removed
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+ALTER USER foo WITH PASSWORD NULL
+----
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER '_' WITH PASSWORD '*****' -- literals removed
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD NULL -- passwords exposed
+
+parse
+ALTER ROLE foo WITH CREATEDB
+----
+ALTER ROLE 'foo' WITH CREATEDB -- normalized!
+ALTER ROLE ('foo') WITH CREATEDB -- fully parenthesized
+ALTER ROLE '_' WITH CREATEDB -- literals removed
+ALTER ROLE 'foo' WITH CREATEDB -- identifiers removed
+
+parse
+ALTER ROLE foo CREATEDB
+----
+ALTER ROLE 'foo' WITH CREATEDB -- normalized!
+ALTER ROLE ('foo') WITH CREATEDB -- fully parenthesized
+ALTER ROLE '_' WITH CREATEDB -- literals removed
+ALTER ROLE 'foo' WITH CREATEDB -- identifiers removed
+
+parse
+ALTER ROLE foo WITH CREATEROLE
+----
+ALTER ROLE 'foo' WITH CREATEROLE -- normalized!
+ALTER ROLE ('foo') WITH CREATEROLE -- fully parenthesized
+ALTER ROLE '_' WITH CREATEROLE -- literals removed
+ALTER ROLE 'foo' WITH CREATEROLE -- identifiers removed
+
+parse
+ALTER ROLE foo CREATEROLE
+----
+ALTER ROLE 'foo' WITH CREATEROLE -- normalized!
+ALTER ROLE ('foo') WITH CREATEROLE -- fully parenthesized
+ALTER ROLE '_' WITH CREATEROLE -- literals removed
+ALTER ROLE 'foo' WITH CREATEROLE -- identifiers removed
+
+parse
+ALTER ROLE foo CREATELOGIN
+----
+ALTER ROLE 'foo' WITH CREATELOGIN -- normalized!
+ALTER ROLE ('foo') WITH CREATELOGIN -- fully parenthesized
+ALTER ROLE '_' WITH CREATELOGIN -- literals removed
+ALTER ROLE 'foo' WITH CREATELOGIN -- identifiers removed
+
+parse
+ALTER ROLE foo NOCREATELOGIN
+----
+ALTER ROLE 'foo' WITH NOCREATELOGIN -- normalized!
+ALTER ROLE ('foo') WITH NOCREATELOGIN -- fully parenthesized
+ALTER ROLE '_' WITH NOCREATELOGIN -- literals removed
+ALTER ROLE 'foo' WITH NOCREATELOGIN -- identifiers removed
+
+parse
+ALTER USER foo SET search_path = 'abc'
+----
+ALTER USER 'foo' SET search_path = 'abc' -- normalized!
+ALTER USER ('foo') SET search_path = ('abc') -- fully parenthesized
+ALTER USER '_' SET search_path = '_' -- literals removed
+ALTER USER 'foo' SET search_path = 'abc' -- identifiers removed
+
+parse
+ALTER USER foo SET application_name TO DEFAULT
+----
+ALTER USER 'foo' SET application_name = DEFAULT -- normalized!
+ALTER USER ('foo') SET application_name = (DEFAULT) -- fully parenthesized
+ALTER USER '_' SET application_name = DEFAULT -- literals removed
+ALTER USER 'foo' SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER USER foo RESET server_encoding
+----
+ALTER USER 'foo' SET server_encoding = DEFAULT -- normalized!
+ALTER USER ('foo') SET server_encoding = (DEFAULT) -- fully parenthesized
+ALTER USER '_' SET server_encoding = DEFAULT -- literals removed
+ALTER USER 'foo' SET server_encoding = DEFAULT -- identifiers removed
+
+parse
+ALTER USER foo RESET ALL
+----
+ALTER USER 'foo' RESET ALL -- normalized!
+ALTER USER ('foo') RESET ALL -- fully parenthesized
+ALTER USER '_' RESET ALL -- literals removed
+ALTER USER 'foo' RESET ALL -- identifiers removed
+
+parse
+ALTER USER foo IN DATABASE d SET search_path = 'abc'
+----
+ALTER USER 'foo' IN DATABASE d SET search_path = 'abc' -- normalized!
+ALTER USER ('foo') IN DATABASE d SET search_path = ('abc') -- fully parenthesized
+ALTER USER '_' IN DATABASE d SET search_path = '_' -- literals removed
+ALTER USER 'foo' IN DATABASE _ SET search_path = 'abc' -- identifiers removed
+
+parse
+ALTER USER foo IN DATABASE d SET application_name = DEFAULT
+----
+ALTER USER 'foo' IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER USER ('foo') IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER USER '_' IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER USER 'foo' IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER USER foo IN DATABASE d RESET server_encoding
+----
+ALTER USER 'foo' IN DATABASE d SET server_encoding = DEFAULT -- normalized!
+ALTER USER ('foo') IN DATABASE d SET server_encoding = (DEFAULT) -- fully parenthesized
+ALTER USER '_' IN DATABASE d SET server_encoding = DEFAULT -- literals removed
+ALTER USER 'foo' IN DATABASE _ SET server_encoding = DEFAULT -- identifiers removed
+
+parse
+ALTER USER foo IN DATABASE d RESET ALL
+----
+ALTER USER 'foo' IN DATABASE d RESET ALL -- normalized!
+ALTER USER ('foo') IN DATABASE d RESET ALL -- fully parenthesized
+ALTER USER '_' IN DATABASE d RESET ALL -- literals removed
+ALTER USER 'foo' IN DATABASE _ RESET ALL -- identifiers removed
+
+parse
+ALTER ROLE foo SET search_path = 'abc'
+----
+ALTER ROLE 'foo' SET search_path = 'abc' -- normalized!
+ALTER ROLE ('foo') SET search_path = ('abc') -- fully parenthesized
+ALTER ROLE '_' SET search_path = '_' -- literals removed
+ALTER ROLE 'foo' SET search_path = 'abc' -- identifiers removed
+
+parse
+ALTER ROLE foo SET application_name = DEFAULT
+----
+ALTER ROLE 'foo' SET application_name = DEFAULT -- normalized!
+ALTER ROLE ('foo') SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE '_' SET application_name = DEFAULT -- literals removed
+ALTER ROLE 'foo' SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE foo RESET server_encoding
+----
+ALTER ROLE 'foo' SET server_encoding = DEFAULT -- normalized!
+ALTER ROLE ('foo') SET server_encoding = (DEFAULT) -- fully parenthesized
+ALTER ROLE '_' SET server_encoding = DEFAULT -- literals removed
+ALTER ROLE 'foo' SET server_encoding = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE foo RESET ALL
+----
+ALTER ROLE 'foo' RESET ALL -- normalized!
+ALTER ROLE ('foo') RESET ALL -- fully parenthesized
+ALTER ROLE '_' RESET ALL -- literals removed
+ALTER ROLE 'foo' RESET ALL -- identifiers removed
+
+parse
+ALTER ROLE foo IN DATABASE d SET search_path = 'abc'
+----
+ALTER ROLE 'foo' IN DATABASE d SET search_path = 'abc' -- normalized!
+ALTER ROLE ('foo') IN DATABASE d SET search_path = ('abc') -- fully parenthesized
+ALTER ROLE '_' IN DATABASE d SET search_path = '_' -- literals removed
+ALTER ROLE 'foo' IN DATABASE _ SET search_path = 'abc' -- identifiers removed
+
+parse
+ALTER ROLE foo IN DATABASE d SET application_name TO DEFAULT
+----
+ALTER ROLE 'foo' IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER ROLE ('foo') IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE '_' IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER ROLE 'foo' IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE foo IN DATABASE d RESET server_encoding
+----
+ALTER ROLE 'foo' IN DATABASE d SET server_encoding = DEFAULT -- normalized!
+ALTER ROLE ('foo') IN DATABASE d SET server_encoding = (DEFAULT) -- fully parenthesized
+ALTER ROLE '_' IN DATABASE d SET server_encoding = DEFAULT -- literals removed
+ALTER ROLE 'foo' IN DATABASE _ SET server_encoding = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE foo IN DATABASE d RESET ALL
+----
+ALTER ROLE 'foo' IN DATABASE d RESET ALL -- normalized!
+ALTER ROLE ('foo') IN DATABASE d RESET ALL -- fully parenthesized
+ALTER ROLE '_' IN DATABASE d RESET ALL -- literals removed
+ALTER ROLE 'foo' IN DATABASE _ RESET ALL -- identifiers removed
+
+parse
+ALTER ROLE IF EXISTS foo IN DATABASE d SET search_path = 'abc'
+----
+ALTER ROLE IF EXISTS 'foo' IN DATABASE d SET search_path = 'abc' -- normalized!
+ALTER ROLE IF EXISTS ('foo') IN DATABASE d SET search_path = ('abc') -- fully parenthesized
+ALTER ROLE IF EXISTS '_' IN DATABASE d SET search_path = '_' -- literals removed
+ALTER ROLE IF EXISTS 'foo' IN DATABASE _ SET search_path = 'abc' -- identifiers removed
+
+parse
+ALTER USER IF EXISTS foo SET application_name TO DEFAULT
+----
+ALTER USER IF EXISTS 'foo' SET application_name = DEFAULT -- normalized!
+ALTER USER IF EXISTS ('foo') SET application_name = (DEFAULT) -- fully parenthesized
+ALTER USER IF EXISTS '_' SET application_name = DEFAULT -- literals removed
+ALTER USER IF EXISTS 'foo' SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE IF EXISTS foo IN DATABASE d SET TIME ZONE 'UTC'
+----
+ALTER ROLE IF EXISTS 'foo' IN DATABASE d SET timezone = 'UTC' -- normalized!
+ALTER ROLE IF EXISTS ('foo') IN DATABASE d SET timezone = ('UTC') -- fully parenthesized
+ALTER ROLE IF EXISTS '_' IN DATABASE d SET timezone = '_' -- literals removed
+ALTER ROLE IF EXISTS 'foo' IN DATABASE _ SET timezone = 'UTC' -- identifiers removed
+
+parse
+ALTER USER IF EXISTS foo SET SCHEMA DEFAULT
+----
+ALTER USER IF EXISTS 'foo' SET search_path = DEFAULT -- normalized!
+ALTER USER IF EXISTS ('foo') SET search_path = (DEFAULT) -- fully parenthesized
+ALTER USER IF EXISTS '_' SET search_path = DEFAULT -- literals removed
+ALTER USER IF EXISTS 'foo' SET search_path = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE IF EXISTS foo IN DATABASE d RESET TIME ZONE
+----
+ALTER ROLE IF EXISTS 'foo' IN DATABASE d SET timezone = DEFAULT -- normalized!
+ALTER ROLE IF EXISTS ('foo') IN DATABASE d SET timezone = (DEFAULT) -- fully parenthesized
+ALTER ROLE IF EXISTS '_' IN DATABASE d SET timezone = DEFAULT -- literals removed
+ALTER ROLE IF EXISTS 'foo' IN DATABASE _ SET timezone = DEFAULT -- identifiers removed
+
+parse
+ALTER USER ALL SET application_name = 'app'
+----
+ALTER USER ALL SET application_name = 'app'
+ALTER USER ALL SET application_name = ('app') -- fully parenthesized
+ALTER USER ALL SET application_name = '_' -- literals removed
+ALTER USER ALL SET application_name = 'app' -- identifiers removed
+
+parse
+ALTER USER ALL IN DATABASE d SET application_name = DEFAULT
+----
+ALTER USER ALL IN DATABASE d SET application_name = DEFAULT
+ALTER USER ALL IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER USER ALL IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER USER ALL IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app'
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app'
+ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = '_' -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed
+
+parse
+ALTER ROLE ALL RESET ALL
+----
+ALTER ROLE ALL RESET ALL
+ALTER ROLE ALL RESET ALL -- fully parenthesized
+ALTER ROLE ALL RESET ALL -- literals removed
+ALTER ROLE ALL RESET ALL -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name = 'app'
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = '_' -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed
+
+parse
+ALTER DATABASE d RESET application_name
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER DATABASE d RESET ALL
+----
+ALTER ROLE ALL IN DATABASE d RESET ALL -- normalized!
+ALTER ROLE ALL IN DATABASE d RESET ALL -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d RESET ALL -- literals removed
+ALTER ROLE ALL IN DATABASE _ RESET ALL -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name TO DEFAULT
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = (DEFAULT) -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = DEFAULT -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = DEFAULT -- identifiers removed
+
+parse
+ALTER DATABASE d SET application_name TO 'app'
+----
+ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
+ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
+ALTER ROLE ALL IN DATABASE d SET application_name = '_' -- literals removed
+ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed

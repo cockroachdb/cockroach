@@ -156,7 +156,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 		database, tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		objDesc, err := p.Accessor().GetObjectDesc(
+		_, objDesc, err := p.Accessor().GetObjectDesc(
 			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 		)
@@ -280,8 +280,8 @@ func (n *scrubNode) startScrubTable(
 func getPrimaryColIdxs(
 	tableDesc catalog.TableDescriptor, columns []catalog.Column,
 ) (primaryColIdxs []int, err error) {
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		rowIdx := -1
 		for idx, col := range columns {
 			if col.GetID() == colID {
@@ -293,7 +293,7 @@ func getPrimaryColIdxs(
 			return nil, errors.Errorf(
 				"could not find primary index column in projection: columnID=%d columnName=%s",
 				colID,
-				tableDesc.GetPrimaryIndex().GetColumnName(i))
+				tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
 		}
 		primaryColIdxs = append(primaryColIdxs, rowIdx)
 	}

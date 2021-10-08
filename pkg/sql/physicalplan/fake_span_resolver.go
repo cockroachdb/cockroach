@@ -24,7 +24,7 @@ import (
 
 const avgRangesPerNode = 5
 
-// fakeSpanResolver is a SpanResovler which splits spans and distributes them to
+// fakeSpanResolver is a SpanResolver which splits spans and distributes them to
 // nodes randomly. Each Seek() call generates a random distribution with
 // expected avgRangesPerNode ranges for each node.
 type fakeSpanResolver struct {
@@ -51,10 +51,9 @@ type fakeRange struct {
 type fakeSpanResolverIterator struct {
 	fsr *fakeSpanResolver
 	// the fake span resolver needs to perform scans as part of Seek(); these
-	// scans are performed in the context of this txn - the same one using the
-	// results of the resolver - so that using the resolver doesn't introduce
-	// conflicts.
-	txn *kv.Txn
+	// scans are performed outside of the context of a txn and with a weak
+	// isolation so that using the resolver doesn't introduce conflicts.
+	db  *kv.DB
 	err error
 
 	// ranges are ordered by the key; the start key of the first one is the
@@ -65,7 +64,7 @@ type fakeSpanResolverIterator struct {
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
 func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
-	return &fakeSpanResolverIterator{fsr: fsr, txn: txn}
+	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB()}
 }
 
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates
@@ -79,19 +78,19 @@ func (fit *fakeSpanResolverIterator) Seek(
 		prevRange = fit.ranges[len(fit.ranges)-1]
 	}
 
-	// Scan the range and keep a list of all potential split keys.
-	// TODO(asubiotto): this scan can have undesired side effects. For example,
-	// it can change when contention occurs and swallows tracing payloads, leading
-	// to unexpected test outcomes as observed in:
-	//
-	// https://github.com/cockroachdb/cockroach/pull/61438
-	// This should use an inconsistent span outside of the txn instead.
-	kvs, err := fit.txn.Scan(ctx, span.Key, span.EndKey, 0)
+	// Scan the range and keep a list of all potential split keys. Do so using a
+	// read_uncommitted scan outside of the txn to avoid undesired side effects
+	// like breaking tracing and blocking on locks.
+	var b kv.Batch
+	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	b.Scan(span.Key, span.EndKey)
+	err := fit.db.Run(ctx, &b)
 	if err != nil {
 		log.Errorf(ctx, "error in fake span resolver scan: %s", err)
 		fit.err = err
 		return
 	}
+	kvs := b.Results[0].Rows
 
 	// Populate splitKeys with potential split keys; all keys are strictly
 	// between span.Key and span.EndKey.

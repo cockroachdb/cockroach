@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -34,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
-	"github.com/rcrowley/go-metrics"
+	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
@@ -66,7 +67,9 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
+func NewServer(
+	st *cluster.Settings, hbaConfDebugFn http.HandlerFunc, profiler pprofui.Profiler,
+) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -104,39 +107,19 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	// Register the stopper endpoint, which lists all active tasks.
 	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
 
+	// Set up the vmodule endpoint.
+	vsrv := &vmoduleServer{}
+	mux.HandleFunc("/debug/vmodule", vsrv.vmoduleHandleDebug)
+
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
 	// verbosity.
 	spy := logSpy{
-		setIntercept: log.Intercept,
+		vsrv:         vsrv,
+		setIntercept: log.InterceptWith,
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
-		ctx := context.Background()
-		tBegin := timeutil.Now()
-
-		if profile != "profile" {
-			do()
-			return
-		}
-
-		if err := CPUProfileDo(st, CPUProfileOptions{WithLabels: labels}.Type(), func() error {
-			var extra string
-			if labels {
-				extra = " (enabling profiler labels)"
-			}
-			log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
-			do()
-			return nil
-		}); err != nil {
-			// NB: we don't have good error handling here. Could be changed if we find
-			// this problematic. In practice, `do()` wraps the pprof handler which will
-			// return an error if there's already a profile going on just the same.
-			log.Warningf(ctx, "unable to start CPU profile: %s", err)
-			return
-		}
-		log.Infof(ctx, "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
-	})
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), profiler)
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
 
 	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
@@ -151,11 +134,6 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 		default:
 		}
 		_ = dump.HTML(w)
-	})
-
-	mux.HandleFunc("/debug/threads", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Add("Content-type", "text/plain")
-		fmt.Fprint(w, storage.ThreadStacks())
 	})
 
 	return &Server{
@@ -197,25 +175,32 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
 		return errors.New("number of store specs must match number of engines")
 	}
+
+	storeIDs := make([]roachpb.StoreIdent, len(engines))
+	for i := range engines {
+		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		if err != nil {
+			return err
+		}
+		storeIDs[i] = id
+	}
+
+	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
+		for i := range engines {
+			fmt.Fprintf(w, "Store %d:\n", storeIDs[i].StoreID)
+			_, _ = io.WriteString(w, engines[i].GetMetrics().String())
+			fmt.Fprintln(w)
+		}
+	})
+
 	for i := 0; i < len(specs); i++ {
 		if specs[i].InMemory {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
-		if err != nil {
-			return err
-		}
-
-		eng := engines[i]
-		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm/%d", id.StoreID),
-			func(w http.ResponseWriter, req *http.Request) {
-				_, _ = io.WriteString(w, eng.GetCompactionStats())
-			})
-
 		dir := specs[i].Path
-		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", id.StoreID),
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeIDs[i].StoreID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)

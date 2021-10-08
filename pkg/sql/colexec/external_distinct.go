@@ -44,7 +44,8 @@ func NewExternalDistinct(
 		// limit, so we use an unlimited allocator.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
 		return NewUnorderedDistinct(
-			unlimitedAllocator, partitionedInputs[0], distinctCols, inputTypes,
+			unlimitedAllocator, partitionedInputs[0], distinctCols,
+			inputTypes, distinctSpec.NullsAreDistinct, distinctSpec.ErrorOnDup,
 		)
 	}
 	diskBackedFallbackOpConstructor := func(
@@ -73,7 +74,10 @@ func NewExternalDistinct(
 			projection[i] = uint32(i)
 		}
 		diskBackedWithoutOrdinality := colexecbase.NewSimpleProjectOp(diskBackedSorter, len(sortTypes), projection)
-		diskBackedFallbackOp, err := colexecbase.NewOrderedDistinct(diskBackedWithoutOrdinality, distinctCols, inputTypes)
+		diskBackedFallbackOp, err := colexecbase.NewOrderedDistinct(
+			diskBackedWithoutOrdinality, distinctCols, inputTypes,
+			distinctSpec.NullsAreDistinct, distinctSpec.ErrorOnDup,
+		)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}

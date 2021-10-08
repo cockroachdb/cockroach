@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "resolver",
@@ -19,7 +19,28 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "resolver_test",
+    srcs = ["resolver_test.go"],
+    deps = [
+        ":resolver",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
     ],
 )

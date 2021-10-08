@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -257,8 +259,9 @@ func startConnExecutor(
 		return nil, nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
+	ambientCtx := testutils.MakeAmbientCtx()
 	cfg := &ExecutorConfig{
-		AmbientCtx:      testutils.MakeAmbientCtx(),
+		AmbientCtx:      ambientCtx,
 		Settings:        st,
 		Clock:           clock,
 		DB:              db,
@@ -272,25 +275,31 @@ func startConnExecutor(
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, execinfra.Version, st, roachpb.NodeID(1),
 			nil, /* rpcCtx */
-			distsql.NewServer(ctx, execinfra.ServerConfig{
-				AmbientContext:    testutils.MakeAmbientCtx(),
-				Settings:          st,
-				Stopper:           stopper,
-				Metrics:           &distSQLMetrics,
-				NodeID:            nodeID,
-				TempFS:            tempFS,
-				ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
-			}),
+			distsql.NewServer(
+				ctx,
+				execinfra.ServerConfig{
+					AmbientContext:    ambientCtx,
+					Settings:          st,
+					Stopper:           stopper,
+					Metrics:           &distSQLMetrics,
+					NodeID:            nodeID,
+					TempFS:            tempFS,
+					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+				},
+				flowinfra.NewFlowScheduler(ambientCtx, stopper, st),
+			),
 			nil, /* distSender */
 			nil, /* nodeDescs */
 			gw,
 			stopper,
-			func(roachpb.NodeID) (bool, error) { return true, nil }, // everybody is live
+			func(roachpb.NodeID) bool { return true }, // everybody is available
 			nil, /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
+		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
+		CollectionFactory:       descs.NewCollectionFactory(st, nil, nil, nil),
 	}
 	pool := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
@@ -311,7 +320,8 @@ func startConnExecutor(
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
-	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics)
+	onDefaultIntSizeChange := func(int32) {}
+	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics, onDefaultIntSizeChange)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -346,7 +356,8 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 			flushed <- res
 		},
 	}
-	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{})
+	onDefaultIntSizeChange := func(int32) {}
+	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{}, onDefaultIntSizeChange)
 	require.NoError(t, err)
 
 	stmts, err := parser.Parse(`

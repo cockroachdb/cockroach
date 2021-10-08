@@ -10,23 +10,31 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
+[cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.txt... done
 [cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
 [cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
-[cluster] retrieving SQL data for system.namespace2... writing output: debug/system.namespace2.txt... done
 [cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
+[cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
+[cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt... done
+[cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
 [cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
 [cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.txt... done
 [cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
 [cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
+[cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
+[cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
 [cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
 [cluster] requesting liveness... received response... converting to JSON... writing binary output: debug/liveness.json... done
 [cluster] requesting CPU profiles
@@ -42,6 +50,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done
@@ -51,20 +60,20 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
+[node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
 [node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... converting to JSON... writing binary output: debug/nodes/1/gossip.json... done
 [node 1] requesting data for debug/nodes/1/enginestats... received response... converting to JSON... writing binary output: debug/nodes/1/enginestats.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
-[node 1] requesting threads... received response... writing binary output: debug/nodes/1/threads.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting heap file list... received response... done
-[node 1] 0 heap profiles found
+[node ?] ? heap profiles found
 [node 1] requesting goroutine dump list... received response... done
 [node 1] 0 goroutine dumps found
 [node 1] requesting log file ...
 [node 1] 0 log file ...
 [node 1] requesting ranges... received response... done
-[node 1] 37 ranges found
+[node 1] 43 ranges found
 [node 1] writing range 1... converting to JSON... writing binary output: debug/nodes/1/ranges/1.json... done
 [node 1] writing range 2... converting to JSON... writing binary output: debug/nodes/1/ranges/2.json... done
 [node 1] writing range 3... converting to JSON... writing binary output: debug/nodes/1/ranges/3.json... done
@@ -102,45 +111,11 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] writing range 35... converting to JSON... writing binary output: debug/nodes/1/ranges/35.json... done
 [node 1] writing range 36... converting to JSON... writing binary output: debug/nodes/1/ranges/36.json... done
 [node 1] writing range 37... converting to JSON... writing binary output: debug/nodes/1/ranges/37.json... done
-[cluster] doctor examining cluster...... writing binary output: debug/reports/doctor.txt... done
-[cluster] requesting list of SQL databases... received response... done
-[cluster] 3 databases found
-[cluster] [database: defaultdb] requesting database details... received response... converting to JSON... writing binary output: debug/schema/defaultdb@details.json... done
-[cluster] [database: defaultdb] 0 tables found
-[cluster] [database: postgres] requesting database details... received response... converting to JSON... writing binary output: debug/schema/postgres@details.json... done
-[cluster] [database: postgres] 0 tables found
-[cluster] [database: system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system@details.json... done
-[cluster] [database: system] 31 tables found
-[cluster] [database: system] [table: public.comments] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_comments.json... done
-[cluster] [database: system] [table: public.descriptor] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_descriptor.json... done
-[cluster] [database: system] [table: public.eventlog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_eventlog.json... done
-[cluster] [database: system] [table: public.jobs] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_jobs.json... done
-[cluster] [database: system] [table: public.join_tokens] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_join_tokens.json... done
-[cluster] [database: system] [table: public.lease] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_lease.json... done
-[cluster] [database: system] [table: public.locations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_locations.json... done
-[cluster] [database: system] [table: public.migrations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_migrations.json... done
-[cluster] [database: system] [table: public.namespace] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_namespace.json... done
-[cluster] [database: system] [table: public.namespace2] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_namespace2.json... done
-[cluster] [database: system] [table: public.protected_ts_meta] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_protected_ts_meta.json... done
-[cluster] [database: system] [table: public.protected_ts_records] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_protected_ts_records.json... done
-[cluster] [database: system] [table: public.rangelog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_rangelog.json... done
-[cluster] [database: system] [table: public.replication_constraint_stats] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_replication_constraint_stats.json... done
-[cluster] [database: system] [table: public.replication_critical_localities] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_replication_critical_localities.json... done
-[cluster] [database: system] [table: public.replication_stats] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_replication_stats.json... done
-[cluster] [database: system] [table: public.reports_meta] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_reports_meta.json... done
-[cluster] [database: system] [table: public.role_members] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_role_members.json... done
-[cluster] [database: system] [table: public.role_options] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_role_options.json... done
-[cluster] [database: system] [table: public.scheduled_jobs] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_scheduled_jobs.json... done
-[cluster] [database: system] [table: public.settings] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_settings.json... done
-[cluster] [database: system] [table: public.sqlliveness] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_sqlliveness.json... done
-[cluster] [database: system] [table: public.statement_bundle_chunks] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_statement_bundle_chunks.json... done
-[cluster] [database: system] [table: public.statement_diagnostics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_statement_diagnostics.json... done
-[cluster] [database: system] [table: public.statement_diagnostics_requests] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_statement_diagnostics_requests.json... done
-[cluster] [database: system] [table: public.table_statistics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_table_statistics.json... done
-[cluster] [database: system] [table: public.tenants] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_tenants.json... done
-[cluster] [database: system] [table: public.ui] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_ui.json... done
-[cluster] [database: system] [table: public.users] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_users.json... done
-[cluster] [database: system] [table: public.web_sessions] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_web_sessions.json... done
-[cluster] [database: system] [table: public.zones] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_zones.json... done
+[node 1] writing range 38... converting to JSON... writing binary output: debug/nodes/1/ranges/38.json... done
+[node 1] writing range 39... converting to JSON... writing binary output: debug/nodes/1/ranges/39.json... done
+[node 1] writing range 40... converting to JSON... writing binary output: debug/nodes/1/ranges/40.json... done
+[node 1] writing range 41... converting to JSON... writing binary output: debug/nodes/1/ranges/41.json... done
+[node 1] writing range 42... converting to JSON... writing binary output: debug/nodes/1/ranges/42.json... done
+[node 1] writing range 43... converting to JSON... writing binary output: debug/nodes/1/ranges/43.json... done
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done

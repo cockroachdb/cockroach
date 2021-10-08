@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -62,7 +63,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		mustGenerateMergeJoin = true
 	}
 
-	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
+	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
@@ -231,13 +232,94 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
+	c.generateLookupJoinsImpl(
+		grp, joinType,
+		input,
+		scanPrivate.Cols,
+		opt.ColSet{}, /* projectedVirtualCols */
+		scanPrivate,
+		on,
+		joinPrivate,
+	)
+}
+
+// GenerateLookupJoinsWithVirtualCols is similar to GenerateLookupJoins but
+// generates lookup joins into indexes that contain virtual columns.
+//
+// In a canonical plan a virtual column is produced with a Project expression on
+// top of a Scan. This is necessary because virtual columns aren't stored in the
+// primary index. When a virtual column is indexed, a lookup join can be
+// generated that both uses the virtual column as a lookup column and produces
+// the column directly from the index without a Project.
+//
+// For example:
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Project                   Input
+//               |
+//               |
+//             Scan(t)
+//
+// This function and its associated rule currently require that:
+//
+//   1. The join is an inner join.
+//   2. The right side projects only virtual computed columns.
+//   3. All the projected virtual columns are covered by a single index.
+//
+// It should be possible to support semi- and anti- joins. Left joins may be
+// possible with additional complexity.
+//
+// It should also be possible to support cases where all the virtual columns are
+// not covered by a single index by wrapping the lookup join in a Project that
+// produces the non-covered virtual columns.
+func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	rightCols opt.ColSet,
+	projectedVirtualCols opt.ColSet,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
+) {
+	c.generateLookupJoinsImpl(
+		grp, joinType,
+		input,
+		rightCols,
+		projectedVirtualCols,
+		scanPrivate,
+		on,
+		joinPrivate,
+	)
+}
+
+// generateLookupJoinsImpl is the general implementation for generating lookup
+// joins. The rightCols argument must be the columns output by the right side of
+// matched join expression. projectedVirtualCols is the set of virtual columns
+// projected on the right side of the matched join expression.
+//
+// See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
+// more details.
+func (c *CustomFuncs) generateLookupJoinsImpl(
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	rightCols opt.ColSet,
+	projectedVirtualCols opt.ColSet,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
+) {
+
 	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 	md := c.e.mem.Metadata()
 	inputProps := input.Relational()
 
-	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, rightCols, on)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -252,7 +334,18 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+		// Skip indexes that do no cover all virtual projection columns, if
+		// there are any. This can happen when there are multiple virtual
+		// columns indexed in different indexes.
+		//
+		// TODO(mgartner): It should be possible to plan a lookup join in this
+		// case by producing the covered virtual columns from the lookup join
+		// and producing the rest in a Project that wraps the join.
+		if !projectedVirtualCols.SubsetOf(indexCols) {
+			return
+		}
+
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
@@ -297,16 +390,39 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
 			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
+			var foundRange bool
 			if !ok {
-				break
+				// Also allow a limited form of range condition filters.
+				allIdx, foundRange = c.findJoinFilterRange(allFilters, idxCol)
+				if !foundRange {
+					break
+				}
 			}
 
-			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
-				// We cannot use the method constructJoinWithConstants to create a cross
-				// join for left or anti joins, because constructing a cross join with
-				// foundVals will increase the size of the input. As a result,
-				// non-matching input rows will show up more than once in the output,
-				// which is incorrect (see #59615).
+			if len(foundVals) > 1 {
+				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+					// We cannot use the method constructJoinWithConstants to create a cross
+					// join for left or anti joins, because constructing a cross join with
+					// foundVals will increase the size of the input. As a result,
+					// non-matching input rows will show up more than once in the output,
+					// which is incorrect (see #59615).
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
+				if j == 0 && projectedVirtualCols.Empty() && index.PartitionCount() > 1 {
+					// If this is the first index column and there is more than one
+					// partition, we may be able to build a locality optimized lookup
+					// join. This requires a multi-span lookup join as a starting point.
+					// See GenerateLocalityOptimizedLookupJoin for details.
+					//
+					// Note that we do not currently support locality optimized
+					// lookup joins for indexes on virtual columns.
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
+			}
+
+			if foundRange {
 				shouldBuildMultiSpanLookupJoin = true
 				break
 			}
@@ -333,10 +449,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		if shouldBuildMultiSpanLookupJoin {
-			// Some of the index columns were constrained to multiple constant values,
-			// and this is a left or anti join. As described above, we cannot use the
-			// method constructJoinWithConstants to create a cross join as the input
-			// for left or anti joins, since it would produce incorrect results.
+			// Some of the index columns were constrained to multiple constant values
+			// or a range expression, and we did not use the method
+			// constructJoinWithConstants to create a cross join as the input (either
+			// because it would have been incorrect or because it would have
+			// eliminated the opportunity to apply other optimizations such as
+			// locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -349,7 +467,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			var eqFilters memo.FiltersExpr
 			extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 				return memo.ExtractJoinEqualityFilter(
-					leftCol, rightCol, inputProps.OutputCols, scanPrivate.Cols, on,
+					leftCol, rightCol, inputProps.OutputCols, rightCols, on,
 				)
 			}
 			eqFilters, constFilters, rightSideCols = c.findFiltersForIndexLookup(
@@ -386,19 +504,35 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
-		// TODO(mgartner): The right side of the join can "produce" columns held
-		// constant by a partial index predicate, but the lookup joiner does not
-		// currently support this. For now, if constProj is non-empty we
-		// consider the index non-covering.
-		if isCovering && len(constProj) == 0 {
-			// Case 1 (see function comment).
-			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
+		// At this point the filter may have been reduced by partial index
+		// predicate implication and by removing parts of the filter that are
+		// represented by the key columns. If there are any outer columns of the
+		// filter that are not output columns of the right side of the join, we
+		// skip this index.
+		//
+		// This is possible when GenerateLookupJoinsWithVirtualColsAndFilter
+		// matches an expression on the right side of the join in the form
+		// (Project (Select (Scan))). The Select's filters may reference columns
+		// that are not passed through in the Project.
+		//
+		// TODO(mgartner): We could handle this by wrapping the lookup join in
+		// an index join to fetch these columns and filter by them, then
+		// wrapping the index join in a project that removes the columns.
+		filterColsFromRight := lookupJoin.On.OuterCols().Difference(inputProps.OutputCols)
+		if !filterColsFromRight.SubsetOf(rightCols) {
+			return
+		}
 
-			// If some optional filters were used to build the lookup expression, we may
-			// need to wrap the final expression with a project. We only need to do this
-			// for left joins, since anti joins have an implicit projection that removes
-			// all right-side columns.
-			needsProject := joinType == opt.LeftJoinOp &&
+		isCovering := rightCols.SubsetOf(indexCols)
+		if isCovering {
+			// Case 1 (see function comment).
+			lookupJoin.Cols.UnionWith(rightCols)
+
+			// If some optional filters were used to build the lookup expression, we
+			// may need to wrap the final expression with a project. We don't need to
+			// do this for semi or anti joins, since they have an implicit projection
+			// that removes all right-side columns.
+			needsProject := joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp &&
 				!lookupJoin.Cols.SubsetOf(grp.Relational().OutputCols)
 			if !needsProject {
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -417,7 +551,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		_, isPartial := index.Predicate()
 		if isPartial && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
-			// Typically, the index must cover all columns in the scanPrivate in
+			// Typically, the index must cover all columns from the right in
 			// order to generate a lookup join without an additional index join
 			// (case 1, see function comment). However, if the index is a
 			// partial index, the filters remaining after proving
@@ -443,7 +577,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// right side in their output columns, so even if the ON filters no
 			// longer reference an un-covered column, they must be fetched (case
 			// 2, see function comment).
-			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols())
+			filterColsFromRight := rightCols.Intersection(onFilters.OuterCols())
 			if filterColsFromRight.SubsetOf(indexCols) {
 				lookupJoin.Cols.UnionWith(filterColsFromRight)
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -474,7 +608,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		// The lower LookupJoin must return all PK columns (they are needed as key
 		// columns for the index join).
-		lookupJoin.Cols.UnionWith(scanPrivate.Cols.Intersection(indexCols))
+		lookupJoin.Cols.UnionWith(rightCols.Intersection(indexCols))
 		for i := range pkCols {
 			lookupJoin.Cols.Add(pkCols[i])
 		}
@@ -523,7 +657,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexJoin.Table = scanPrivate.Table
 		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
-		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+		indexJoin.Cols = rightCols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
 
 		// Create the LookupJoin for the index join in the same group.
@@ -555,27 +689,41 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			continue
 		}
 
+		var foundRange bool
 		// Try to find a filter that constrains this column to non-NULL
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
 		values, allIdx, ok := c.findJoinFilterConstants(filters, idxCol)
 		if !ok {
-			break
+			// If there's no const filters look for an inequality range.
+			allIdx, foundRange = c.findJoinFilterRange(filters, idxCol)
+			if !foundRange {
+				break
+			}
 		}
 
 		if constFilters == nil {
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
 
-		// Ensure that the constant filter is either an equality or an IN expression.
-		// These are the only two types of expressions currently supported by the
-		// lookupJoiner for building lookup spans.
+		// Ensure that the constant filter is an equality, IN or inequality
+		// expression.   These are the only types of expressions currently supported
+		// by the lookupJoiner for building lookup spans.
 		constFilter := filters[allIdx]
-		if !c.isCanonicalConstFilter(constFilter) {
-			constFilter = c.makeConstFilter(idxCol, values)
+		if !c.isCanonicalLookupJoinFilter(constFilter) {
+			if len(values) > 0 {
+				constFilter = c.makeConstFilter(idxCol, values)
+			} else if foundRange {
+				constFilter = c.makeRangeFilter(idxCol, constFilter)
+			}
 		}
 		constFilters = append(constFilters, constFilter)
+
+		// Generating additional columns after a range isn't helpful so stop here.
+		if foundRange {
+			break
+		}
 	}
 
 	if len(eqFilters) == 0 {
@@ -586,24 +734,34 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 	return eqFilters, constFilters, rightSideCols
 }
 
-// isCanonicalConstFilter checks that the given filter is a constant filter in
-// one of two possible canonical formats:
-//  1. It is an equality between a variable and a constant.
-//  2. It is an IN expression between a variable and a tuple of constants.
-// Returns true if the filter matches one of these two formats. Otherwise
-// returns false.
-func (c *CustomFuncs) isCanonicalConstFilter(filter memo.FiltersItem) bool {
-	switch t := filter.Condition.(type) {
-	case *memo.EqExpr:
-		if t.Left.Op() == opt.VariableOp && opt.IsConstValueOp(t.Right) {
+// isCanonicalLookupJoinFilter returns true for the limited set of expr's that are
+// supported by the lookup joiner at execution time.
+func (c *CustomFuncs) isCanonicalLookupJoinFilter(filter memo.FiltersItem) bool {
+	var checkExpr func(expr opt.Expr) bool
+	checkExpr = func(expr opt.Expr) bool {
+		switch t := expr.(type) {
+		case *memo.RangeExpr:
+			return checkExpr(t.And)
+		case *memo.AndExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.GeExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.GtExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.LeExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.LtExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.VariableExpr:
 			return true
+		case *memo.EqExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.InExpr:
+			return checkExpr(t.Left) && memo.CanExtractConstTuple(t.Right)
 		}
-	case *memo.InExpr:
-		if t.Left.Op() == opt.VariableOp && memo.CanExtractConstTuple(t.Right) {
-			return true
-		}
+		return opt.IsConstValueOp(expr)
 	}
-	return false
+	return checkExpr(filter.Condition)
 }
 
 // makeConstFilter builds a filter that constrains the given column to the given
@@ -627,6 +785,59 @@ func (c *CustomFuncs) makeConstFilter(col opt.ColumnID, values tree.Datums) memo
 		c.e.f.ConstructVariable(col),
 		c.e.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
 	))
+}
+
+// makeRangeFilter builds a filter from a constrained column, we assume the
+// column is constrained by at least 1 tight constraint. This code doesn't
+// handle descending columns.
+func (c *CustomFuncs) makeRangeFilter(col opt.ColumnID, filter memo.FiltersItem) memo.FiltersItem {
+	props := filter.ScalarProps()
+	if props.Constraints.Length() == 0 ||
+		props.Constraints.Constraint(0).Spans.Count() != 1 ||
+		props.Constraints.Constraint(0).Columns.Get(0).Descending() {
+		panic(errors.AssertionFailedf("makeRangeFilter needs at least one ascending constraint with one span"))
+	}
+	span := props.Constraints.Constraint(0).Spans.Get(0)
+	return c.makeRangeFilterFromSpan(col, span)
+}
+
+// makeRangeFilterFromSpan constructs a filter from a constraint.Span.
+func (c *CustomFuncs) makeRangeFilterFromSpan(
+	col opt.ColumnID, span *constraint.Span,
+) memo.FiltersItem {
+	variable := c.e.f.ConstructVariable(col)
+	var left, right opt.ScalarExpr
+
+	// Here and below we need to check for IsEmpty and IsNull because sometimes
+	// Null is used for unbounded spans.  Found empirically by forcing
+	// findFiltersForIndexLookup to always wrap the filters with makeRangeFilter.
+	if !span.StartKey().IsEmpty() && !span.StartKey().IsNull() {
+		val := span.StartKey().Value(0)
+		if span.StartBoundary() == constraint.IncludeBoundary {
+			left = c.e.f.ConstructGe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		} else {
+			left = c.e.f.ConstructGt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		}
+	}
+
+	if !span.EndKey().IsEmpty() && !span.EndKey().IsNull() {
+		val := span.EndKey().Value(0)
+		if span.EndBoundary() == constraint.IncludeBoundary {
+			right = c.e.f.ConstructLe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		} else {
+			right = c.e.f.ConstructLt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		}
+	}
+
+	if left != nil && right != nil {
+		return c.e.f.ConstructFiltersItem(c.e.f.ConstructRange(c.e.f.ConstructAnd(right, left)))
+	} else if left != nil {
+		return c.e.f.ConstructFiltersItem(left)
+	} else if right != nil {
+		return c.e.f.ConstructFiltersItem(right)
+	}
+
+	panic(errors.AssertionFailedf("Constraint needs a valid start or end key"))
 }
 
 // constructContinuationColumnForPairedJoin constructs a continuation column
@@ -914,7 +1125,7 @@ func (c *CustomFuncs) mapInvertedJoin(
 	// columns, which will be used in the invertedExpr.
 	srcCols := indexCols.Copy()
 	dstCols := newIndexCols.Copy()
-	ord := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+	ord := index.InvertedColumn().InvertedSourceColumnOrdinal()
 	invertedSourceCol := tabID.ColumnID(ord)
 	newInvertedSourceCol := newTabID.ColumnID(ord)
 	srcCols.Add(invertedSourceCol)
@@ -964,6 +1175,28 @@ func (c *CustomFuncs) findJoinFilterConstants(
 	return bestValues, bestFilterIdx, true
 }
 
+// findJoinFilterRange tries to find an inequality range for this column.
+func (c *CustomFuncs) findJoinFilterRange(
+	filters memo.FiltersExpr, col opt.ColumnID,
+) (filterIdx int, ok bool) {
+	for filterIdx := range filters {
+		props := filters[filterIdx].ScalarProps()
+		if props.TightConstraints && props.Constraints.Length() > 0 {
+			constraint := props.Constraints.Constraint(0)
+			constraintCol := constraint.Columns.Get(0).ID()
+			// See comment in findFiltersForIndexLookup for why we check filter here.
+			// We only support 1 span in the execution engine so check that.
+			if constraintCol != col ||
+				constraint.Spans.Count() != 1 ||
+				!c.isCanonicalLookupJoinFilter(filters[filterIdx]) {
+				continue
+			}
+			return filterIdx, true
+		}
+	}
+	return 0, false
+}
+
 // constructJoinWithConstants constructs a cross join that joins every row in
 // the input with every value in vals. The cross join will be converted into a
 // projection by inlining normalization rules if vals contains only a single
@@ -978,7 +1211,7 @@ func (c *CustomFuncs) constructJoinWithConstants(
 	constRows := make(memo.ScalarListExpr, len(vals))
 	for i := range constRows {
 		constRows[i] = c.e.f.ConstructTuple(
-			memo.ScalarListExpr{c.e.f.ConstructConst(vals[i], typ)},
+			memo.ScalarListExpr{c.e.f.ConstructConstVal(vals[i], typ)},
 			tupleType,
 		)
 	}
@@ -1155,37 +1388,44 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 	return result
 }
 
-// CreateLocalityOptimizedAntiLookupJoinPrivate creates a new lookup join
-// private from the given private and replaces the LookupExpr with the given
-// filters. It also marks the private as locality optimized.
-func (c *CustomFuncs) CreateLocalityOptimizedAntiLookupJoinPrivate(
-	lookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
+// IsAntiJoin returns true if the given lookup join is an anti join.
+func (c *CustomFuncs) IsAntiJoin(private *memo.LookupJoinPrivate) bool {
+	return private.JoinType == opt.AntiJoinOp
+}
+
+// EmptyFiltersExpr returns an empty FiltersExpr.
+func (c *CustomFuncs) EmptyFiltersExpr() memo.FiltersExpr {
+	return memo.EmptyFiltersExpr
+}
+
+// CreateLocalityOptimizedLookupJoinPrivate creates a new lookup join private
+// from the given private and replaces the LookupExpr and RemoteLookupExpr with
+// the given filters. It also marks the private as locality optimized.
+func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
+	lookupExpr, remoteLookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
 ) *memo.LookupJoinPrivate {
 	newPrivate := *private
 	newPrivate.LookupExpr = lookupExpr
+	newPrivate.RemoteLookupExpr = remoteLookupExpr
 	newPrivate.LocalityOptimized = true
 	return &newPrivate
 }
 
-// GetLocalityOptimizedAntiJoinLookupExprs returns the local and remote lookup
-// expressions needed to build a locality optimized anti join from the given
+// GetLocalityOptimizedLookupJoinExprs returns the local and remote lookup
+// expressions needed to build a locality optimized lookup join from the given
 // lookup join private, if possible. Otherwise, it returns ok=false. See the
-// comment above the GenerateLocalityOptimizedAntiJoin rule for more details.
-func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
+// comments above the GenerateLocalityOptimizedAntiJoin and
+// GenerateLocalityOptimizedLookupJoin rules for more details.
+func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	input memo.RelExpr, private *memo.LookupJoinPrivate,
 ) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
-	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
 		return nil, nil, false
 	}
 
 	// Check whether this lookup join has already been locality optimized.
 	if private.LocalityOptimized {
-		return nil, nil, false
-	}
-
-	// We can only apply this optimization to anti-joins.
-	if private.JoinType != opt.AntiJoinOp {
 		return nil, nil, false
 	}
 
@@ -1199,6 +1439,15 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	// values.
 	if private.LookupExpr == nil {
 		return nil, nil, false
+	}
+
+	// We can only generate a locality optimized lookup join if we know there is
+	// at most one row produced for each lookup. This is always true for semi and
+	// anti joins, but only true for inner and left joins if
+	// private.LookupColsAreTableKey is true.
+	if private.JoinType != opt.SemiJoinOp && private.JoinType != opt.AntiJoinOp &&
+		!private.LookupColsAreTableKey {
+		return
 	}
 
 	// The local region must be set, or we won't be able to determine which
@@ -1265,8 +1514,6 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	copy(remoteExpr, private.LookupExpr)
 	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
 
-	// Return the two sets of lookup expressions. They will be used to construct
-	// two nested anti joins.
 	return localExpr, remoteExpr, true
 }
 

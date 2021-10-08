@@ -39,7 +39,7 @@ func columnByteSize(col coldata.Vec) int64 {
 		return int64(len(col.Float64()) * 8)
 	case types.BytesFamily:
 		// We subtract the overhead to be in line with Int64 and Float64 cases.
-		return int64(col.Bytes().Size() - coldata.FlatBytesOverhead)
+		return col.Bytes().Size() - coldata.FlatBytesOverhead
 	default:
 		panic(fmt.Sprintf(`unhandled type %s`, t))
 	}
@@ -57,7 +57,7 @@ func benchmarkInitialData(b *testing.B, gen workload.Generator) {
 		var a bufalloc.ByteAllocator
 		for _, table := range tables {
 			for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
-				a = a[:0]
+				a = a.Truncate()
 				table.InitialRows.FillBatch(rowIdx, cb, &a)
 				for _, col := range cb.ColVecs() {
 					bytes += columnByteSize(col)

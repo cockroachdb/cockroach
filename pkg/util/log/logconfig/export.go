@@ -29,19 +29,6 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 		chanSel = onlyChans
 	}
 
-	var buf bytes.Buffer
-	buf.WriteString("@startuml\nleft to right direction\n")
-
-	// Export the channels.
-	buf.WriteString("component sources {\n")
-	for _, ch := range chanSel.Channels {
-		fmt.Fprintf(&buf, "() %s\n", ch)
-	}
-	buf.WriteString("cloud stray as \"stray\\nerrors\"\n}\n")
-
-	// The process stderr stream.
-	buf.WriteString("queue stderr\n")
-
 	// links collects the relationships. We need to collect them and
 	// print them at the end because plantUML does not support
 	// interleaving box and arrow declarations.
@@ -68,7 +55,6 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"strip\"", pkey))
 			links = append(links, fmt.Sprintf("%s %s %s", pkey, arrow, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		// Introduce a "redact" box if the redat flag is set.
 		if *cc.Redact {
@@ -77,7 +63,6 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"redact\"", pkey))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		// Introduce the format box.
 		{
@@ -86,16 +71,17 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"format:%s\"", pkey, *cc.Format))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
-		// Introduce a "filter" box if the filter severity is different from INFO.
-		if cc.Filter != logpb.Severity_INFO {
+		return target, processing, links
+	}
+
+	addFilter := func(target string, processing, links []string, filter logpb.Severity) (string, []string, []string) {
+		if filter != logpb.Severity_INFO {
 			pkey := fmt.Sprintf("p__%d", pNum)
 			pNum++
-			processing = append(processing, fmt.Sprintf("card %s as \"filter:%s\"", pkey, cc.Filter.String()[:1]))
+			processing = append(processing, fmt.Sprintf("card %s as \"filter:%s\"", pkey, filter.String()[:1]))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		return target, processing, links
 	}
@@ -110,7 +96,16 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 	// folders map each directory to a list of files within.
 	folders := map[string][]string{}
 	fileNum := 1
-	for _, fn := range c.Sinks.sortedFileGroupNames {
+
+	// Process the file sinks in sorted order,
+	// so the output order is deteministic.
+	var sortedNames []string
+	for prefix := range c.Sinks.FileGroups {
+		sortedNames = append(sortedNames, prefix)
+	}
+	sort.Strings(sortedNames)
+
+	for _, fn := range sortedNames {
 		fc := c.Sinks.FileGroups[fn]
 		if fc.Filter == logpb.Severity_NONE {
 			// This file is not collecting anything. Skip it.
@@ -132,11 +127,14 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 
 		target, thisprocs, thislinks := process(target, fc.CommonSinkConfig)
 		hasLink := false
-		for _, ch := range fc.Channels.Channels {
+		origTarget := target
+		for _, ch := range fc.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
 			hasLink = true
+			sev := fc.Channels.ChannelFilters[ch]
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 
@@ -175,39 +173,95 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 	//
 	// servers maps each server to its box declaration.
 	servers := map[string]string{}
-	for _, fn := range c.Sinks.sortedServerNames {
+
+	sortedNames = nil
+	for serverName := range c.Sinks.FluentServers {
+		sortedNames = append(sortedNames, serverName)
+	}
+	sort.Strings(sortedNames)
+
+	for _, fn := range sortedNames {
 		fc := c.Sinks.FluentServers[fn]
 		if fc.Filter == logpb.Severity_NONE {
 			continue
 		}
-		skey := fmt.Sprintf("s__%s", fc.serverName)
+		skey := fmt.Sprintf("s__%s", fn)
 		target, thisprocs, thislinks := process(skey, fc.CommonSinkConfig)
+		origTarget := target
 		hasLink := false
-		for _, ch := range fc.Channels.Channels {
+		for _, ch := range fc.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
+			sev := fc.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
 			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 		if hasLink {
 			processing = append(processing, thisprocs...)
 			links = append(links, thislinks...)
-			servers[fc.serverName] = fmt.Sprintf("queue %s as \"fluent: %s:%s\"",
+			servers[fn] = fmt.Sprintf("queue %s as \"fluent: %s:%s\"",
 				skey, fc.Net, fc.Address)
+		}
+	}
+
+	// Collect HTTP sinks
+	// Add the destinations into the same map, for display in the "network server"
+	// section of the diagram
+	sortedNames = nil
+	for sinkName := range c.Sinks.HTTPServers {
+		sortedNames = append(sortedNames, sinkName)
+	}
+	sort.Strings(sortedNames)
+
+	for _, name := range sortedNames {
+		cfg := c.Sinks.HTTPServers[name]
+		if cfg.Filter == logpb.Severity_NONE {
+			continue
+		}
+		key := fmt.Sprintf("h__%s", name)
+		target, thisprocs, thislinks := process(key, cfg.CommonSinkConfig)
+		origTarget := target
+		hasLink := false
+		for _, ch := range cfg.Channels.AllChannels.Channels {
+			if !chanSel.HasChannel(ch) {
+				continue
+			}
+			sev := cfg.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
+			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
+			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
+		}
+		if hasLink {
+			processing = append(processing, thisprocs...)
+			links = append(links, thislinks...)
+			servers[name] = fmt.Sprintf("queue %s as \"http: %s\"",
+				key, *cfg.Address)
 		}
 	}
 
 	// Export the stderr redirects.
 	if c.Sinks.Stderr.Filter != logpb.Severity_NONE {
 		target, thisprocs, thislinks := process("stderr", c.Sinks.Stderr.CommonSinkConfig)
-
+		origTarget := target
 		hasLink := false
-		for _, ch := range c.Sinks.Stderr.Channels.Channels {
+		for _, ch := range c.Sinks.Stderr.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
+			sev := c.Sinks.Stderr.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
 			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 		if hasLink {
@@ -216,11 +270,22 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 		}
 	}
 
+	var buf bytes.Buffer
+	buf.WriteString("@startuml\nleft to right direction\n")
+
+	// Export the channels.
+	buf.WriteString("component sources {\n")
+	for _, ch := range chanSel.Channels {
+		fmt.Fprintf(&buf, "() %s\n", ch)
+	}
+	buf.WriteString("cloud stray as \"stray\\nerrors\"\n}\n")
+
+	// The process stderr stream.
+	buf.WriteString("queue stderr\n")
+
 	// Represent the processing stages, if any.
-	if len(processing) > 0 {
-		for _, p := range processing {
-			fmt.Fprintf(&buf, "%s\n", p)
-		}
+	for _, p := range processing {
+		fmt.Fprintf(&buf, "%s\n", p)
 	}
 
 	// Represent the files, if any.
@@ -238,10 +303,10 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 	}
 
 	// Represent the network servers, if any.
-	if len(c.Sinks.sortedServerNames) > 0 {
+	if len(servers) > 0 {
 		buf.WriteString("cloud network {\n")
-		for _, s := range c.Sinks.sortedServerNames {
-			fmt.Fprintf(&buf, " %s\n", servers[s])
+		for _, s := range servers {
+			fmt.Fprintf(&buf, " %s\n", s)
 		}
 		buf.WriteString("}\n")
 	}

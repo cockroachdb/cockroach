@@ -98,7 +98,9 @@ func (ib *IndexBackfillPlanner) scanTargetSpansToPushTimestampCache(
 ) error {
 	const pageSize = 10000
 	return ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, backfillTimestamp)
+		if err := txn.SetFixedTimestamp(ctx, backfillTimestamp); err != nil {
+			return err
+		}
 		for _, span := range targetSpans {
 			// TODO(dt): a Count() request would be nice here if the target isn't
 			// empty, since we don't need to drag all the results back just to
@@ -128,27 +130,22 @@ func (ib *IndexBackfillPlanner) plan(
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
-	if err := descs.Txn(ctx,
-		ib.execCfg.Settings,
-		ib.execCfg.LeaseManager,
-		ib.execCfg.InternalExecutor,
-		ib.execCfg.DB,
-		func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory, descriptors)
-			planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-				true /* distribute */)
-			// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
-			// batch size. Also plumb in a testing knob.
-			chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-			spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, chunkSize, indexesToBackfill)
-			if err != nil {
-				return err
-			}
-			p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
+	if err := DescsTxn(ctx, ib.execCfg, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory, descriptors)
+		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+			true /* distribute */)
+		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
+		// batch size. Also plumb in a testing knob.
+		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
+		spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, chunkSize, indexesToBackfill)
+		if err != nil {
 			return err
-		}); err != nil {
+		}
+		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 

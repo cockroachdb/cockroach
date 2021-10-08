@@ -222,15 +222,14 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			// the FK reference and the index we're looking up. We have to reshuffle
 			// the values to fix that.
 			fkVals := make(tree.Datums, len(values))
-			for i, ordinal := range out.InsertCols {
-				for j := range out.InsertCols {
-					if fk.OriginColumnOrdinal(tab, j) == int(ordinal) {
-						fkVals[j] = values[i]
+			for i := range fkVals {
+				parentOrd := fk.ReferencedColumnOrdinal(out.ReferencedTable, i)
+				for j := 0; j < out.ReferencedIndex.KeyColumnCount(); j++ {
+					if out.ReferencedIndex.Column(j).Ordinal() == parentOrd {
+						fkVals[i] = values[j]
 						break
 					}
 				}
-			}
-			for i := range fkVals {
 				if fkVals[i] == nil {
 					return errors.AssertionFailedf("invalid column mapping")
 				}
@@ -1048,12 +1047,11 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 
 	case opt.ProjectOp:
 		// Allow Project on top, as long as the expressions are not side-effecting.
-		//
-		// TODO(radu): for now, we only allow passthrough projections because not all
-		// builtins that can error out are marked as side-effecting.
 		proj := rel.(*memo.ProjectExpr)
-		if len(proj.Projections) != 0 {
-			return false
+		for i := 0; i < len(proj.Projections); i++ {
+			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakProof() {
+				return false
+			}
 		}
 		return b.canAutoCommit(proj.Input)
 
@@ -1116,18 +1114,16 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr
 // not worth risking the transformation being a pessimization, so it is only
 // applied when doing so does not risk creating artificial contention.
 func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) bool {
-	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
 		return false
 	}
 
 	// Try to match the Update's input expression against the pattern:
 	//
-	//   [Project] [IndexJoin] Scan
+	//   [Project]* [IndexJoin] Scan
 	//
 	input := upd.Input
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
 	}
@@ -1138,22 +1134,17 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
 // an UPSERT statement.
-//
-// TODO(nvanbenschoten): implement this method to match on appropriate Upsert
-// expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) bool {
-	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
 		return false
 	}
 
 	// Try to match the Upsert's input expression against the pattern:
 	//
-	//   [Project] (LeftJoin Scan | LookupJoin) [Project] Values
+	//   [Project]* (LeftJoin Scan | LookupJoin) [Project]* Values
 	//
 	input := ups.Input
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	switch join := input.(type) {
 	case *memo.LeftJoinExpr:
 		if _, ok := join.Right.(*memo.ScanExpr); !ok {
@@ -1167,9 +1158,7 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 	default:
 		return false
 	}
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	_, ok := input.(*memo.ValuesExpr)
 	return ok
 }
@@ -1182,4 +1171,13 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 // expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) bool {
 	return false
+}
+
+// unwrapProjectExprs unwraps zero or more nested ProjectExprs. It returns the
+// first non-ProjectExpr in the chain, or the input if it is not a ProjectExpr.
+func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
+	if proj, ok := input.(*memo.ProjectExpr); ok {
+		return unwrapProjectExprs(proj.Input)
+	}
+	return input
 }

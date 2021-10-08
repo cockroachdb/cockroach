@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -58,7 +58,7 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 		d.ctx, n.Statement,
 		func(ctx context.Context, field, msg string) {
 			fmt.Fprintf(&query, "%s('%s', ", comma, field)
-			lex.EncodeSQLString(&query, msg)
+			lexbase.EncodeSQLString(&query, msg)
 			query.WriteByte(')')
 			comma = ", "
 		},

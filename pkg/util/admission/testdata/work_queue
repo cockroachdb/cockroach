@@ -1,0 +1,138 @@
+init
+----
+
+set-try-get-return-value v=true
+----
+
+admit id=1 tenant=53 priority=0 create-time=1 bypass=false
+----
+tryGet: returning true
+id 1: admit succeeded
+
+print
+----
+tenantHeap len: 0
+ tenant-id: 53 used: 1
+
+# tryGet will return false, so work will queue up.
+set-try-get-return-value v=false
+----
+
+# bypass=true is ignored since not system tenant.
+admit id=2 tenant=53 priority=0 create-time=3 bypass=true
+----
+tryGet: returning false
+
+print
+----
+tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 3
+
+admit id=3 tenant=53 priority=0 create-time=2 bypass=false
+----
+
+# Tenant 53 has two waiting requests. The one that arrived second is earlier
+# in the heap because of a smaller create-time.
+print
+----
+tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
+
+# Request from tenant 71.
+admit id=4 tenant=71 priority=-128 create-time=4 bypass=false
+----
+
+# Another request from tenant 71. This one has higher priority so will be
+# earlier in the heap, even though it has higher create-time.
+admit id=5 tenant=71 priority=0 create-time=5 bypass=false
+----
+
+# Tenant 71 is the top of the heap since not using any slots.
+print
+----
+tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
+ tenant-id: 71 used: 0 heap: 0: pri: 0, ct: 5 1: pri: -128, ct: 4
+
+granted chain-id=5
+----
+continueGrantChain 5
+id 5: admit succeeded
+granted: returned true
+
+# Both tenants are using 1 slot. The tie is broken arbitrarily in favor of
+# tenant 71.
+print
+----
+tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
+ tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+
+# Cancel a request from tenant 53.
+cancel-work id=3
+----
+id 3: admit failed
+
+print
+----
+tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 3
+ tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+
+# The work admitted for tenant 53 is done.
+work-done id=1
+----
+returnGrant
+
+# Tenant 53 now using fewer slots so it becomes the top of the heap.
+print
+----
+tenantHeap len: 2 top tenant: 53
+ tenant-id: 53 used: 0 heap: 0: pri: 0, ct: 3
+ tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+
+# A request from the system tenant bypasses admission control, but is
+# reflected in the WorkQueue state.
+admit id=6 tenant=1 priority=0 create-time=6 bypass=true
+----
+tookWithoutPermission
+id 6: admit succeeded
+
+print
+----
+tenantHeap len: 2 top tenant: 53
+ tenant-id: 1 used: 1
+ tenant-id: 53 used: 0 heap: 0: pri: 0, ct: 3
+ tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+
+granted chain-id=7
+----
+continueGrantChain 7
+id 2: admit succeeded
+granted: returned true
+
+granted chain-id=9
+----
+continueGrantChain 9
+id 4: admit succeeded
+granted: returned true
+
+# No more waiting requests.
+print
+----
+tenantHeap len: 0
+ tenant-id: 1 used: 1
+ tenant-id: 53 used: 1
+ tenant-id: 71 used: 2
+
+# Granted returns false.
+granted chain-id=10
+----
+granted: returned false
+
+print
+----
+tenantHeap len: 0
+ tenant-id: 1 used: 1
+ tenant-id: 53 used: 1
+ tenant-id: 71 used: 2

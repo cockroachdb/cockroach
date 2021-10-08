@@ -292,7 +292,7 @@ func (g *geoJoinPlanner) extractGeoJoinCondition(
 
 	// The first argument should either come from the input or be a constant.
 	var p props.Shared
-	memo.BuildSharedProps(arg1, &p)
+	memo.BuildSharedProps(arg1, &p, g.factory.EvalContext())
 	if !p.OuterCols.Empty() {
 		if !p.OuterCols.SubsetOf(g.inputCols) {
 			return nil
@@ -468,7 +468,7 @@ func extractInfoFromExpr(
 	if !ok {
 		return 0, nil, nil, nil, false
 	}
-	if arg2.Col != tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()) {
+	if arg2.Col != tabID.ColumnID(index.InvertedColumn().InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return 0, nil, nil, nil, false
 	}

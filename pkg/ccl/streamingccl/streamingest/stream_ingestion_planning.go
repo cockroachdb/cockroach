@@ -105,11 +105,11 @@ func ingestionPlanHook(
 		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if ingestionStmt.AsOf.Expr != nil {
-			var err error
-			startTime, err = p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
+			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
 			if err != nil {
 				return err
 			}
+			startTime = asOf.Timestamp
 		}
 
 		streamIngestionDetails := jobspb.StreamIngestionDetails{

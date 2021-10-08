@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -46,27 +47,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type shutdownScenario struct {
+type testScenario struct {
 	string
 }
 
 var (
-	consumerDone      = shutdownScenario{"ConsumerDone"}
-	consumerClosed    = shutdownScenario{"ConsumerClosed"}
-	shutdownScenarios = []shutdownScenario{consumerDone, consumerClosed}
+	consumerDone     = testScenario{"ConsumerDone"}
+	consumerClosed   = testScenario{"ConsumerClosed"}
+	useBatchReceiver = testScenario{"BatchReceiver"}
+	testScenarios    = []testScenario{consumerDone, consumerClosed, useBatchReceiver}
 )
 
 type callbackCloser struct {
 	closeCb func() error
 }
 
-func (c callbackCloser) Close(_ context.Context) error {
+var _ colexecop.Closer = callbackCloser{}
+
+func (c callbackCloser) Close() error {
 	return c.closeCb()
 }
 
-// TestVectorizedFlowShutdown tests that closing the materializer correctly
+// TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
 // closes all the infrastructure corresponding to the flow ending in that
-// materializer. Namely:
+// FlowCoordinator. Namely:
 // - on a remote node, it creates a colflow.HashRouter with 3 outputs (with a
 // corresponding to each colrpc.Outbox) as well as 3 standalone Outboxes;
 // - on a local node, it creates 6 colrpc.Inboxes that feed into an unordered
@@ -80,7 +84,7 @@ func (c callbackCloser) Close(_ context.Context) error {
 // Hash Router -> output -> Outbox -> | -> Inbox -> |
 //            |                       |
 //             -> output -> Outbox -> | -> Inbox -> |
-//                                    |              -> Synchronizer -> materializer
+//                                    |              -> Synchronizer -> materializer -> FlowCoordinator
 //                          Outbox -> | -> Inbox -> |
 //                                    |
 //                          Outbox -> | -> Inbox -> |
@@ -98,7 +102,7 @@ func (c callbackCloser) Close(_ context.Context) error {
 // Hash Router -> output -> Outbox -> | -> Inbox ->                                |
 //            |                       |             |                              |
 //             -> output -> Outbox -> | -> Inbox ->                                |
-//                                    |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer
+//                                    |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer -> FlowCoordinator
 //                          Outbox -> | -> Inbox ->                                |
 //                                    |             |                              |
 //                          Outbox -> | -> Inbox ->                                |
@@ -107,6 +111,9 @@ func (c callbackCloser) Close(_ context.Context) error {
 //
 // Remote nodes are simulated by having separate contexts and separate outbox
 // registries.
+//
+// We also replace the pair of materializer -> FlowCoordinator with the
+// BatchFlowCoordinator to verify the behavior of the latter too.
 //
 // Additionally, all Outboxes have a single metadata source. In ConsumerDone
 // shutdown scenario, we check that the metadata has been successfully
@@ -127,9 +134,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	defer cleanup()
 
 	for run := 0; run < 10; run++ {
-		for _, shutdownOperation := range shutdownScenarios {
-			t.Run(fmt.Sprintf("shutdownScenario=%s", shutdownOperation.string), func(t *testing.T) {
-				ctxLocal := context.Background()
+		for _, scenario := range testScenarios {
+			t.Run(fmt.Sprintf("testScenario=%s", scenario.string), func(t *testing.T) {
+				ctxLocal, cancelLocal := context.WithCancel(context.Background())
 				ctxRemote, cancelRemote := context.WithCancel(context.Background())
 				// Linter says there is a possibility of "context leak" because
 				// cancelRemote variable may not be used, so we defer the call to it.
@@ -223,7 +230,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					)
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
-				materializerMetadataSource := colexecop.MetadataSource(synchronizer)
+				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				// idToClosed keeps track of whether Close was called for a given id.
@@ -246,16 +253,18 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
-						outboxInput,
+						colexecargs.OpWithMetaInfo{
+							Root:            outboxInput,
+							MetadataSources: outboxMetadataSources,
+							ToClose: []colexecop.Closer{callbackCloser{closeCb: func() error {
+								idToClosed.Lock()
+								idToClosed.mapping[id] = true
+								idToClosed.Unlock()
+								return nil
+							}}},
+						},
 						typs,
 						nil, /* getStats */
-						outboxMetadataSources,
-						[]colexecop.Closer{callbackCloser{closeCb: func() error {
-							idToClosed.Lock()
-							idToClosed.mapping[id] = true
-							idToClosed.Unlock()
-							return nil
-						}}},
 					)
 
 					require.NoError(t, err)
@@ -315,7 +324,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					streamID++
 				}
 
-				var materializerInput colexecop.Operator
+				var input colexecop.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
@@ -333,54 +342,59 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						synchronizer,
 						inbox,
 						streamID,
-						[]colexecop.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)},
+						[]colexecop.MetadataSource{inputMetadataSource, createMetadataSourceForID(streamID)},
 					)
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
-					materializerMetadataSource = inbox
-					materializerInput = inbox
+					inputMetadataSource = inbox
+					input = inbox
 				} else {
-					materializerInput = synchronizer
+					input = synchronizer
 				}
 
-				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
-				materializerCalledClose := false
-				materializer, err := colexec.NewMaterializer(
-					flowCtx,
-					1, /* processorID */
-					colexecargs.OpWithMetaInfo{
-						Root:            materializerInput,
-						MetadataSources: colexecop.MetadataSources{materializerMetadataSource},
-						ToClose: colexecop.Closers{callbackCloser{closeCb: func() error {
-							materializerCalledClose = true
-							return nil
-						}}},
-					},
-					typs,
-					nil, /* output */
-					func() context.CancelFunc { return cancelLocal },
-				)
-				require.NoError(t, err)
-				materializer.Start(ctxLocal)
-
-				for i := 0; i < 10; i++ {
-					row, meta := materializer.Next()
-					require.NotNil(t, row)
-					require.Nil(t, meta)
+				closeCalled := false
+				inputInfo := colexecargs.OpWithMetaInfo{
+					Root:            input,
+					MetadataSources: colexecop.MetadataSources{inputMetadataSource},
+					ToClose: colexecop.Closers{callbackCloser{closeCb: func() error {
+						closeCalled = true
+						return nil
+					}}},
 				}
-				switch shutdownOperation {
-				case consumerDone:
-					materializer.ConsumerDone()
+
+				// runFlowCoordinator creates a pair of a materializer and a
+				// FlowCoordinator, requests 10 rows from it, and returns the
+				// coordinator.
+				runFlowCoordinator := func() *colflow.FlowCoordinator {
+					materializer := colexec.NewMaterializer(
+						flowCtx,
+						1, /* processorID */
+						inputInfo,
+						typs,
+					)
+					coordinator := colflow.NewFlowCoordinator(
+						flowCtx,
+						1, /* processorID */
+						materializer,
+						nil, /* output */
+						cancelLocal,
+					)
+					coordinator.Start(ctxLocal)
+
+					for i := 0; i < 10; i++ {
+						row, meta := coordinator.Next()
+						require.NotNil(t, row)
+						require.Nil(t, meta)
+					}
+					return coordinator
+				}
+
+				// checkMetadata verifies that all the metadata from all
+				// outboxes has been received.
+				checkMetadata := func(receivedMeta []execinfrapb.ProducerMetadata) {
 					receivedMetaFromID := make([]bool, streamID)
-					metaCount := 0
-					for {
-						row, meta := materializer.Next()
-						require.Nil(t, row)
-						if meta == nil {
-							break
-						}
-						metaCount++
+					for _, meta := range receivedMeta {
 						require.NotNil(t, meta.Err)
 						id, err := strconv.Atoi(meta.Err.Error())
 						require.NoError(t, err)
@@ -389,13 +403,45 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					for id, received := range receivedMetaFromID {
 						require.True(t, received, "did not receive metadata from Outbox %d", id)
 					}
+				}
+
+				switch scenario {
+				case consumerDone:
+					coordinator := runFlowCoordinator()
+					coordinator.ConsumerDone()
+					var receivedMeta []execinfrapb.ProducerMetadata
+					for {
+						row, meta := coordinator.Next()
+						require.Nil(t, row)
+						if meta == nil {
+							break
+						}
+						receivedMeta = append(receivedMeta, *meta)
+					}
+					checkMetadata(receivedMeta)
+
 				case consumerClosed:
-					materializer.ConsumerClosed()
+					coordinator := runFlowCoordinator()
+					coordinator.ConsumerClosed()
+
+				case useBatchReceiver:
+					// Use a batch receiver that will ask for 10 batches and
+					// then will transition to draining.
+					recv := &batchReceiver{numMoreBatchesNeeded: 10}
+					coordinator := colflow.NewBatchFlowCoordinator(
+						flowCtx,
+						1, /* processorID */
+						inputInfo,
+						recv,
+						cancelLocal,
+					)
+					coordinator.Run(ctxLocal)
+					checkMetadata(recv.receivedMeta)
 				}
 
 				// When Outboxes are setup through vectorizedFlowCreator, the latter
 				// keeps track of how many outboxes are on the node. When the last one
-				// exits (and if there is no materializer on that node),
+				// exits (and if there is no FlowCoordinator on that node),
 				// vectorizedFlowCreator will cancel the flow context of the node. To
 				// simulate this, we manually cancel contexts of both remote nodes.
 				cancelRemote()
@@ -413,8 +459,41 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for id, closed := range idToClosed.mapping {
 					require.True(t, closed, "outbox with ID %d did not call Close on closers", id)
 				}
-				require.True(t, materializerCalledClose)
+				require.True(t, closeCalled)
 			})
 		}
 	}
+}
+
+// batchReceiver is a utility execinfra.BatchReceiver that will request the
+// specified number of batches before transitioning to draining.
+//
+// numMoreBatchesReceived is expected to be set to a positive number before the
+// usage of the receiver.
+type batchReceiver struct {
+	numMoreBatchesNeeded int
+	receivedMeta         []execinfrapb.ProducerMetadata
+}
+
+var _ execinfra.BatchReceiver = &batchReceiver{}
+
+func (b *batchReceiver) ProducerDone() {}
+
+func (b *batchReceiver) PushBatch(
+	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if batch != nil {
+		b.numMoreBatchesNeeded--
+		if b.numMoreBatchesNeeded < 0 {
+			colexecerror.InternalError(errors.New("unexpectedly received a batch after drain was requested"))
+		}
+	} else if meta != nil {
+		b.receivedMeta = append(b.receivedMeta, *meta)
+	} else {
+		colexecerror.InternalError(errors.New("unexpectedly PushBatch is called with two nil arguments"))
+	}
+	if b.numMoreBatchesNeeded == 0 {
+		return execinfra.DrainRequested
+	}
+	return execinfra.NeedMoreRows
 }

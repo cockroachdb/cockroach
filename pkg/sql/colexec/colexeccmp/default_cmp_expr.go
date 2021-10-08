@@ -29,7 +29,7 @@ func NewComparisonExprAdapter(
 		evalCtx: evalCtx,
 	}
 	op := expr.Operator
-	if op.HasSubOperator() {
+	if op.Symbol.HasSubOperator() {
 		return &cmpWithSubOperatorExprAdapter{
 			cmpExprAdapterBase: base,
 			expr:               expr,

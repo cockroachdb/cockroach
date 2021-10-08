@@ -45,65 +45,65 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T) (partitioner, error) {
+func newPartitioner(t *types.T, nullsAreDistinct bool) (partitioner, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBool{}, nil
+			return partitionerBool{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.BytesFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBytes{}, nil
+			return partitionerBytes{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.DecimalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDecimal{}, nil
+			return partitionerDecimal{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return partitionerInt16{}, nil
+			return partitionerInt16{nullsAreDistinct: nullsAreDistinct}, nil
 		case 32:
-			return partitionerInt32{}, nil
+			return partitionerInt32{nullsAreDistinct: nullsAreDistinct}, nil
 		case -1:
 		default:
-			return partitionerInt64{}, nil
+			return partitionerInt64{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.FloatFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerFloat64{}, nil
+			return partitionerFloat64{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.TimestampTZFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerTimestamp{}, nil
+			return partitionerTimestamp{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.IntervalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerInterval{}, nil
+			return partitionerInterval{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.JsonFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerJSON{}, nil
+			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDatum{}, nil
+			return partitionerDatum{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	}
 	return nil, errors.Errorf("unsupported partition type %s", t)
@@ -113,7 +113,9 @@ func newPartitioner(t *types.T) (partitioner, error) {
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerBool struct{}
+type partitionerBool struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerBool) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -127,12 +129,12 @@ func (p partitionerBool) partitionWithOrder(
 
 	col := colVec.Bool()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -140,16 +142,23 @@ func (p partitionerBool) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -169,6 +178,7 @@ func (p partitionerBool) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -183,6 +193,7 @@ func (p partitionerBool) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 bool
@@ -204,6 +215,7 @@ func (p partitionerBool) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -228,7 +240,6 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 	col := colVec.Bool()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -239,19 +250,27 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -271,6 +290,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -292,6 +312,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -309,6 +330,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -324,7 +346,9 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerBytes struct{}
+type partitionerBytes struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerBytes) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -338,12 +362,12 @@ func (p partitionerBytes) partitionWithOrder(
 
 	col := colVec.Bytes()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -351,16 +375,23 @@ func (p partitionerBytes) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -372,6 +403,7 @@ func (p partitionerBytes) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -386,6 +418,7 @@ func (p partitionerBytes) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 []byte
@@ -399,6 +432,7 @@ func (p partitionerBytes) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -421,9 +455,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Bytes()
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -434,19 +466,26 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -458,6 +497,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -488,6 +528,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -503,7 +544,9 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerDecimal struct{}
+type partitionerDecimal struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerDecimal) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -517,12 +560,12 @@ func (p partitionerDecimal) partitionWithOrder(
 
 	col := colVec.Decimal()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -530,16 +573,23 @@ func (p partitionerDecimal) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -551,6 +601,7 @@ func (p partitionerDecimal) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -565,6 +616,7 @@ func (p partitionerDecimal) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 apd.Decimal
@@ -578,6 +630,7 @@ func (p partitionerDecimal) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -602,7 +655,6 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 	col := colVec.Decimal()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -613,19 +665,27 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -637,6 +697,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -658,6 +719,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -667,6 +729,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -682,7 +745,9 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt16 struct{}
+type partitionerInt16 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt16) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -696,12 +761,12 @@ func (p partitionerInt16) partitionWithOrder(
 
 	col := colVec.Int16()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -709,16 +774,23 @@ func (p partitionerInt16) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -741,6 +813,7 @@ func (p partitionerInt16) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -755,6 +828,7 @@ func (p partitionerInt16) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int16
@@ -779,6 +853,7 @@ func (p partitionerInt16) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -803,7 +878,6 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 	col := colVec.Int16()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -814,19 +888,27 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -849,6 +931,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -870,6 +953,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -890,6 +974,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -905,7 +990,9 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt32 struct{}
+type partitionerInt32 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt32) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -919,12 +1006,12 @@ func (p partitionerInt32) partitionWithOrder(
 
 	col := colVec.Int32()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -932,16 +1019,23 @@ func (p partitionerInt32) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -964,6 +1058,7 @@ func (p partitionerInt32) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -978,6 +1073,7 @@ func (p partitionerInt32) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int32
@@ -1002,6 +1098,7 @@ func (p partitionerInt32) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1026,7 +1123,6 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 	col := colVec.Int32()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -1037,19 +1133,27 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1072,6 +1176,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1093,6 +1198,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -1113,6 +1219,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1128,7 +1235,9 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt64 struct{}
+type partitionerInt64 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt64) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1142,12 +1251,12 @@ func (p partitionerInt64) partitionWithOrder(
 
 	col := colVec.Int64()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1155,16 +1264,23 @@ func (p partitionerInt64) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1187,6 +1303,7 @@ func (p partitionerInt64) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1201,6 +1318,7 @@ func (p partitionerInt64) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int64
@@ -1225,6 +1343,7 @@ func (p partitionerInt64) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1249,7 +1368,6 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 	col := colVec.Int64()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -1260,19 +1378,27 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1295,6 +1421,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1316,6 +1443,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -1336,6 +1464,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1351,7 +1480,9 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerFloat64 struct{}
+type partitionerFloat64 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerFloat64) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1365,12 +1496,12 @@ func (p partitionerFloat64) partitionWithOrder(
 
 	col := colVec.Float64()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1378,16 +1509,23 @@ func (p partitionerFloat64) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1418,6 +1556,7 @@ func (p partitionerFloat64) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1432,6 +1571,7 @@ func (p partitionerFloat64) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 float64
@@ -1464,6 +1604,7 @@ func (p partitionerFloat64) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1488,7 +1629,6 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 	col := colVec.Float64()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -1499,19 +1639,27 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1542,6 +1690,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1563,6 +1712,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -1591,6 +1741,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1606,7 +1757,9 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerTimestamp struct{}
+type partitionerTimestamp struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerTimestamp) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1620,12 +1773,12 @@ func (p partitionerTimestamp) partitionWithOrder(
 
 	col := colVec.Timestamp()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1633,16 +1786,23 @@ func (p partitionerTimestamp) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1661,6 +1821,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1675,6 +1836,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 time.Time
@@ -1695,6 +1857,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1719,7 +1882,6 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 	col := colVec.Timestamp()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -1730,19 +1892,27 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1761,6 +1931,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1782,6 +1953,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -1798,6 +1970,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1813,7 +1986,9 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInterval struct{}
+type partitionerInterval struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInterval) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1827,12 +2002,12 @@ func (p partitionerInterval) partitionWithOrder(
 
 	col := colVec.Interval()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1840,16 +2015,23 @@ func (p partitionerInterval) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1861,6 +2043,7 @@ func (p partitionerInterval) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1875,6 +2058,7 @@ func (p partitionerInterval) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 duration.Duration
@@ -1888,6 +2072,7 @@ func (p partitionerInterval) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1912,7 +2097,6 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 	col := colVec.Interval()
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -1923,19 +2107,27 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
+						//gcassert:bce
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -1947,6 +2139,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -1968,6 +2161,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
+					//gcassert:bce
 					v := col.Get(checkIdx)
 					var unique bool
 
@@ -1977,6 +2171,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -1992,7 +2187,9 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerJSON struct{}
+type partitionerJSON struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerJSON) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -2006,12 +2203,12 @@ func (p partitionerJSON) partitionWithOrder(
 
 	col := colVec.JSON()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -2019,16 +2216,23 @@ func (p partitionerJSON) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -2046,6 +2250,7 @@ func (p partitionerJSON) partitionWithOrder(
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -2060,6 +2265,7 @@ func (p partitionerJSON) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 json.JSON
@@ -2079,6 +2285,7 @@ func (p partitionerJSON) partitionWithOrder(
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -2101,9 +2308,7 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 	}
 
 	col := colVec.JSON()
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -2114,19 +2319,26 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -2144,6 +2356,7 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -2180,6 +2393,7 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -2195,7 +2409,9 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerDatum struct{}
+type partitionerDatum struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerDatum) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -2209,12 +2425,12 @@ func (p partitionerDatum) partitionWithOrder(
 
 	col := colVec.Datum()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -2222,16 +2438,23 @@ func (p partitionerDatum) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -2240,11 +2463,12 @@ func (p partitionerDatum) partitionWithOrder(
 							{
 								var cmpResult int
 
-								cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+								cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -2259,6 +2483,7 @@ func (p partitionerDatum) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 interface{}
@@ -2269,11 +2494,12 @@ func (p partitionerDatum) partitionWithOrder(
 					{
 						var cmpResult int
 
-						cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+						cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v
@@ -2296,9 +2522,7 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Datum()
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
@@ -2309,19 +2533,26 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						}
 					} else {
 						v := col.Get(checkIdx)
 						if lastValNull {
 							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
 							outputCol[outputIdx] = true
 						} else {
 							// Neither value is null, so we must compare.
@@ -2330,11 +2561,12 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 							{
 								var cmpResult int
 
-								cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+								cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 								unique = cmpResult != 0
 							}
 
+							//gcassert:bce
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
 						lastVal = v
@@ -2362,11 +2594,12 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 					{
 						var cmpResult int
 
-						cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+						cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 						unique = cmpResult != 0
 					}
 
+					//gcassert:bce
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
 					{
 						__retval_0 = v

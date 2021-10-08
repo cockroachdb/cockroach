@@ -115,12 +115,14 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	}
 
 	m.names.mu.Lock()
-	for _, desc := range m.names.descriptors {
+	defer m.names.mu.Unlock()
+	_ = m.names.descriptors.IterateByID(func(entry catalog.NameEntry) error {
+		desc := entry.(*descriptorVersionState)
 		desc.mu.Lock()
+		defer desc.mu.Unlock()
 		desc.mu.expiration = past
-		desc.mu.Unlock()
-	}
-	m.names.mu.Unlock()
+		return nil
+	})
 }
 
 // PublishMultiple updates multiple descriptors, maintaining the invariant
@@ -159,7 +161,7 @@ func (m *Manager) PublishMultiple(
 			if err != nil {
 				return nil, err
 			}
-			expectedVersions[id] = expected
+			expectedVersions[id] = expected.GetVersion()
 		}
 
 		descs := make(map[descpb.ID]catalog.MutableDescriptor)

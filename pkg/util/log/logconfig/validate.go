@@ -13,9 +13,12 @@ package logconfig
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -33,71 +36,59 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 
 	bt, bf := true, false
 
-	// If the default directory was not specified, use the one
-	// provided by the environment.
-	if c.FileDefaults.Dir == nil {
-		c.FileDefaults.Dir = defaultLogDir
+	baseCommonSinkConfig := CommonSinkConfig{
+		Filter:      logpb.Severity_INFO,
+		Auditable:   &bf,
+		Redactable:  &bt,
+		Redact:      &bf,
+		Criticality: &bf,
 	}
+	baseFileDefaults := FileDefaults{
+		Dir:             defaultLogDir,
+		BufferedWrites:  &bt,
+		MaxFileSize:     func() *ByteSize { s := ByteSize(0); return &s }(),
+		MaxGroupSize:    func() *ByteSize { s := ByteSize(0); return &s }(),
+		FilePermissions: func() *FilePermissions { s := FilePermissions(0o644); return &s }(),
+		CommonSinkConfig: CommonSinkConfig{
+			Format:      func() *string { s := DefaultFileFormat; return &s }(),
+			Criticality: &bt,
+		},
+	}
+	baseFluentDefaults := FluentDefaults{
+		CommonSinkConfig: CommonSinkConfig{
+			Format: func() *string { s := DefaultFluentFormat; return &s }(),
+		},
+	}
+	baseHTTPDefaults := HTTPDefaults{
+		CommonSinkConfig: CommonSinkConfig{
+			Format: func() *string { s := DefaultHTTPFormat; return &s }(),
+		},
+		UnsafeTLS:         &bf,
+		DisableKeepAlives: &bf,
+		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
+		Timeout:           func() *time.Duration { d := time.Duration(0); return &d }(),
+	}
+
+	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseFluentDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseHTTPDefaults.CommonSinkConfig, baseCommonSinkConfig)
+
+	propagateFileDefaults(&c.FileDefaults, baseFileDefaults)
+	propagateFluentDefaults(&c.FluentDefaults, baseFluentDefaults)
+	propagateHTTPDefaults(&c.HTTPDefaults, baseHTTPDefaults)
+
 	// Normalize the directory.
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
 		fmt.Fprintf(&errBuf, "file-defaults: %v\n", err)
-	}
-	// No severity -> default INFO.
-	if c.FileDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FileDefaults.Filter = logpb.Severity_INFO
-	}
-	if c.FluentDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FluentDefaults.Filter = logpb.Severity_INFO
-	}
-	// Sinks are not auditable by default.
-	if c.FileDefaults.Auditable == nil {
-		c.FileDefaults.Auditable = &bf
-	}
-	if c.FluentDefaults.Auditable == nil {
-		c.FluentDefaults.Auditable = &bf
-	}
-	// File sinks are buffered by default.
-	if c.FileDefaults.BufferedWrites == nil {
-		c.FileDefaults.BufferedWrites = &bt
-	}
-	// No format -> populate defaults.
-	if c.FileDefaults.Format == nil {
-		s := DefaultFileFormat
-		c.FileDefaults.Format = &s
-	}
-	if c.FluentDefaults.Format == nil {
-		s := DefaultFluentFormat
-		c.FluentDefaults.Format = &s
-	}
-	// No redaction markers -> default keep them.
-	if c.FileDefaults.Redactable == nil {
-		c.FileDefaults.Redactable = &bt
-	}
-	if c.FluentDefaults.Redactable == nil {
-		c.FluentDefaults.Redactable = &bt
-	}
-	// No redaction specification -> default false.
-	if c.FileDefaults.Redact == nil {
-		c.FileDefaults.Redact = &bf
-	}
-	if c.FluentDefaults.Redact == nil {
-		c.FluentDefaults.Redact = &bf
-	}
-	// No criticality -> default true for files, false for fluent.
-	if c.FileDefaults.Criticality == nil {
-		c.FileDefaults.Criticality = &bt
-	}
-	if c.FluentDefaults.Criticality == nil {
-		c.FluentDefaults.Criticality = &bf
 	}
 
 	// Validate and fill in defaults for file sinks.
 	for prefix, fc := range c.Sinks.FileGroups {
 		if fc == nil {
-			fc = &FileSinkConfig{}
-			c.Sinks.FileGroups[prefix] = fc
+			fc = c.newFileSinkConfig(prefix)
+		} else {
+			fc.prefix = prefix
 		}
-		fc.prefix = prefix
 		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintf(&errBuf, "file group %q: %v\n", prefix, err)
 		}
@@ -106,7 +97,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// Validate and defaults for fluent.
 	for serverName, fc := range c.Sinks.FluentServers {
 		if fc == nil {
-			fc = &FluentSinkConfig{}
+			fc = &FluentSinkConfig{Channels: SelectChannels()}
 			c.Sinks.FluentServers[serverName] = fc
 		}
 		fc.serverName = serverName
@@ -115,63 +106,88 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		}
 	}
 
+	for sinkName, fc := range c.Sinks.HTTPServers {
+		if fc == nil {
+			fc = &HTTPSinkConfig{Channels: SelectChannels()}
+			c.Sinks.HTTPServers[sinkName] = fc
+		}
+		fc.sinkName = sinkName
+		if err := c.validateHTTPSinkConfig(fc); err != nil {
+			fmt.Fprintf(&errBuf, "http server %q: %v\n", sinkName, err)
+		}
+	}
+
 	// Defaults for stderr.
-	c.inheritCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Filter == logpb.Severity_UNKNOWN {
 		c.Sinks.Stderr.Filter = logpb.Severity_NONE
 	}
-	if c.Sinks.Stderr.Auditable != nil {
-		if *c.Sinks.Stderr.Auditable {
-			if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
-				f := "crdb-v1-tty-count"
-				c.Sinks.Stderr.Format = &f
-			}
-			c.Sinks.Stderr.Criticality = &bt
+	propagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
+	if c.Sinks.Stderr.Auditable != nil && *c.Sinks.Stderr.Auditable {
+		if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
+			f := "crdb-v1-tty-count"
+			c.Sinks.Stderr.Format = &f
 		}
-		c.Sinks.Stderr.Auditable = nil
+		c.Sinks.Stderr.Criticality = &bt
 	}
-	c.Sinks.Stderr.Channels.Sort()
+	c.Sinks.Stderr.Auditable = nil
 
-	// fileSinks maps channels to files.
-	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
-	// fluentSinks maps channels to fluent servers.
-	fluentSinks := make(map[logpb.Channel]*FluentSinkConfig)
+	// Propagate the sink-wide default filter to all channels that don't
+	// have a filter yet.
+	if err := c.Sinks.Stderr.Channels.Validate(c.Sinks.Stderr.Filter); err != nil {
+		fmt.Fprintf(&errBuf, "stderr sink: %v\n", err)
+	}
 
-	// Check that no channel is listed by more than one file sink,
-	// and every file has at least one channel.
-	for _, fc := range c.Sinks.FileGroups {
-		if len(fc.Channels.Channels) == 0 {
+	fileSinks := make(map[logpb.Channel][]*FileSinkConfig)
+	// remember the file sink names for deterministic traversals.
+	fileNames := make([]string, 0, len(c.Sinks.FileGroups))
+
+	// Check that every file has at least one channel.
+	for fname, fc := range c.Sinks.FileGroups {
+		if len(fc.Channels.Filters) == 0 {
 			fmt.Fprintf(&errBuf, "file group %q: no channel selected\n", fc.prefix)
+			continue
 		}
-		fc.Channels.Sort()
-		for _, ch := range fc.Channels.Channels {
-			if prev := fileSinks[ch]; prev != nil {
-				prevPrefix := prev.prefix
-				if prevPrefix == "" {
-					prevPrefix = "debug"
-				}
-				fmt.Fprintf(&errBuf, "file group %q: channel %s already captured by group %q\n",
-					fc.prefix, ch, prevPrefix)
-			} else {
-				fileSinks[ch] = fc
-			}
+		// Propagate the sink-wide default filter to all channels that don't
+		// have a filter yet.
+		if err := fc.Channels.Validate(fc.Filter); err != nil {
+			fmt.Fprintf(&errBuf, "file group %q: %v\n", fc.prefix, err)
+			continue
+		}
+
+		fileNames = append(fileNames, fname)
+	}
+	sort.Strings(fileNames)
+	for _, fname := range fileNames {
+		fc := c.Sinks.FileGroups[fname]
+		for _, ch := range fc.Channels.AllChannels.Channels {
+			// Remember which file sink captures which channel.
+			fileSinks[ch] = append(fileSinks[ch], fc)
 		}
 	}
 
-	// Check that no channel is listed by more than one fluent sink, and
-	// every sink has at least one channel.
-	for _, fc := range c.Sinks.FluentServers {
-		if len(fc.Channels.Channels) == 0 {
-			fmt.Fprintf(&errBuf, "fluent server %q: no channel selected\n", fc.serverName)
+	// Check that every sink has at least one channel.
+	for serverName, fc := range c.Sinks.FluentServers {
+		if len(fc.Channels.Filters) == 0 {
+			fmt.Fprintf(&errBuf, "fluent server %q: no channel selected\n", serverName)
+			continue
 		}
-		fc.Channels.Sort()
-		for _, ch := range fc.Channels.Channels {
-			if prev := fluentSinks[ch]; prev != nil {
-				fmt.Fprintf(&errBuf, "fluent server %q: channel %s already captured by server %q\n",
-					fc.serverName, ch, prev.serverName)
-			} else {
-				fluentSinks[ch] = fc
-			}
+		// Propagate the sink-wide default filter to all channels that don't
+		// have a filter yet.
+		if err := fc.Channels.Validate(fc.Filter); err != nil {
+			fmt.Fprintf(&errBuf, "fluent server %q: %v\n", serverName, err)
+			continue
+		}
+	}
+
+	for sinkName, fc := range c.Sinks.HTTPServers {
+		if len(fc.Channels.Filters) == 0 {
+			fmt.Fprintf(&errBuf, "http server %q: no channel selected\n", sinkName)
+		}
+		// Propagate the sink-wide default filter to all channels that don't
+		// have a filter yet.
+		if err := fc.Channels.Validate(fc.Filter); err != nil {
+			fmt.Fprintf(&errBuf, "http server %q: %v\n", sinkName, err)
+			continue
 		}
 	}
 
@@ -179,7 +195,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// validation on it.
 	if c.CaptureFd2.Enable {
 		if c.CaptureFd2.MaxGroupSize == nil {
-			c.CaptureFd2.MaxGroupSize = &c.FileDefaults.MaxGroupSize
+			c.CaptureFd2.MaxGroupSize = c.FileDefaults.MaxGroupSize
 		}
 		if c.CaptureFd2.Dir == nil {
 			// No directory specified; inherit defaults.
@@ -206,108 +222,98 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 
 	// If there is no file group for DEV yet, create one.
+	// We'll target the "default" group.
+	// If the "default" group already exists, we'll use that. Otherwise, we create it.
 	devch := logpb.Channel_DEV
-	if def := fileSinks[devch]; def == nil {
-		fc := &FileSinkConfig{
-			Channels: ChannelList{Channels: []logpb.Channel{devch}},
+	if def := fileSinks[devch]; len(def) == 0 {
+		// If there is a default group already, use it.
+		var fc *FileSinkConfig
+		if def, ok := c.Sinks.FileGroups["default"]; ok {
+			fc = def
+		} else {
+			// "default" did not exist yet. Create it.
+			fc = c.newFileSinkConfig("default")
+			if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
+				fmt.Fprintln(&errBuf, err)
+			}
 		}
-		fc.prefix = "default"
-		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
-			fmt.Fprintln(&errBuf, err)
+		// Add the DEV channel to the sink.
+		// The call to Update() below fills in the default severity.
+		fc.Channels.AddChannel(devch, logpb.Severity_UNKNOWN)
+		if err := fc.Channels.Validate(fc.Filter); err != nil {
+			// Should never happen.
+			return errors.NewAssertionErrorWithWrappedErrf(err, "programming error: invalid extension of DEV sink")
 		}
-		if c.Sinks.FileGroups == nil {
-			c.Sinks.FileGroups = make(map[string]*FileSinkConfig)
-		}
-		c.Sinks.FileGroups[fc.prefix] = fc
-		fileSinks[devch] = fc
+		// Remember this new sink as a sink that captures DEV.
+		fileSinks[devch] = append(fileSinks[devch], fc)
 	}
 
-	// For every remaining channel without a sink, add it to the DEV sink.
-	devFile := fileSinks[devch]
+	// For every remaining channel without a sink, add it to the first DEV
+	// sink at its default filter.
+	//
+	// The "first" DEV sink is the "default" sink if that exists and
+	// captures DEV; otherwise the first file sink that's a DEV sink in
+	// lexicographic order.
+	var devFile *FileSinkConfig
+	if fc, ok := c.Sinks.FileGroups["default"]; ok && fc.Channels.AllChannels.HasChannel(devch) {
+		// There's a "default" sink and it captures DEV. Use that.
+		devFile = fc
+	} else {
+		// Use the first DEV sink. We know there is one because we've created at least one above.
+		devFile = fileSinks[devch][0]
+	}
 	for _, ch := range channelValues {
 		if fileSinks[ch] == nil {
-			devFile.Channels.Channels = append(devFile.Channels.Channels, ch)
+			devFile.Channels.AddChannel(ch, logpb.Severity_UNKNOWN)
 		}
 	}
-	devFile.Channels.Sort()
+	if err := devFile.Channels.Validate(devFile.Filter); err != nil {
+		// Should never happen.
+		return errors.NewAssertionErrorWithWrappedErrf(err, "programming error: invalid extension of DEV sink")
+	}
 
-	// fileGroupNames collects the names of file groups. We need this to
-	// store this sorted in c.Sinks.sortedFileGroupNames later.
-	fileGroupNames := make([]string, 0, len(c.Sinks.FileGroups))
-	// Elide all the file sinks without a directory or with severity set
-	// to NONE. Also collect the remaining names for sorting below.
+	// Elide all the file sinks without a directory or where all
+	// channels have severity set to NONE.
 	for prefix, fc := range c.Sinks.FileGroups {
-		if fc.Dir == nil || fc.Filter == logpb.Severity_NONE {
+		if fc.Dir == nil || fc.Channels.noChannelsSelected() {
 			delete(c.Sinks.FileGroups, prefix)
-		} else {
-			fileGroupNames = append(fileGroupNames, prefix)
 		}
 	}
 
-	// serverNames collects the names of the servers. We need this to
-	// store this sorted in c.Sinks.sortedServerNames later.
-	serverNames := make([]string, 0, len(c.Sinks.FluentServers))
-	// Elide all the file sinks without a directory or with severity set
-	// to NONE. Also collect the remaining names for sorting below.
+	// Elide all the fluent sinks where all channels have
+	// severity set to NONE.
 	for serverName, fc := range c.Sinks.FluentServers {
-		if fc.Filter == logpb.Severity_NONE {
+		if fc.Channels.noChannelsSelected() {
 			delete(c.Sinks.FluentServers, serverName)
-		} else {
-			serverNames = append(serverNames, serverName)
 		}
 	}
 
-	// Remember the sorted names, so we get deterministic output in
-	// export.
-	sort.Strings(fileGroupNames)
-	c.Sinks.sortedFileGroupNames = fileGroupNames
-	sort.Strings(serverNames)
-	c.Sinks.sortedServerNames = serverNames
+	// Elide all the HTTP sinks where all channels have
+	// severity set to NONE.
+	for serverName, fc := range c.Sinks.HTTPServers {
+		if fc.Channels.noChannelsSelected() {
+			delete(c.Sinks.HTTPServers, serverName)
+		}
+	}
 
 	return nil
 }
 
-func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
-	if fc.Filter == logpb.Severity_UNKNOWN {
-		fc.Filter = defaults.Filter
+func (c *Config) newFileSinkConfig(groupName string) *FileSinkConfig {
+	fc := &FileSinkConfig{
+		Channels: SelectChannels(),
+		prefix:   groupName,
 	}
-	if fc.Format == nil {
-		fc.Format = defaults.Format
+	if c.Sinks.FileGroups == nil {
+		c.Sinks.FileGroups = make(map[string]*FileSinkConfig)
 	}
-	if fc.Redact == nil {
-		fc.Redact = defaults.Redact
-	}
-	if fc.Redactable == nil {
-		fc.Redactable = defaults.Redactable
-	}
-	if fc.Criticality == nil {
-		fc.Criticality = defaults.Criticality
-	}
-	if fc.Auditable == nil {
-		fc.Auditable = defaults.Auditable
-	}
+	c.Sinks.FileGroups[groupName] = fc
+	return fc
 }
 
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
-
-	// Inherit file-specific defaults.
-	if fc.MaxFileSize == nil {
-		fc.MaxFileSize = &c.FileDefaults.MaxFileSize
-	}
-	if fc.MaxGroupSize == nil {
-		fc.MaxGroupSize = &c.FileDefaults.MaxGroupSize
-	}
-	if fc.BufferedWrites == nil {
-		fc.BufferedWrites = c.FileDefaults.BufferedWrites
-	}
-
-	// Set up the directory.
-	if fc.Dir == nil {
-		// If the specific group does not specify its directory,
-		// inherit the default.
-		fc.Dir = c.FileDefaults.Dir
-	} else {
+	propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
+	if fc.Dir != c.FileDefaults.Dir {
 		// A directory was specified explicitly. Normalize it.
 		if err := normalizeDir(&fc.Dir); err != nil {
 			return err
@@ -326,7 +332,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 		fc.BufferedWrites = &bf
 		fc.Criticality = &bt
 		if *fc.Format == "crdb-v1" {
-			s := "`crdb-v1-count"
+			s := "crdb-v1-count"
 			fc.Format = &s
 		}
 	}
@@ -336,8 +342,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 }
 
 func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FluentDefaults.CommonSinkConfig)
-
+	propagateFluentDefaults(&fc.FluentDefaults, c.FluentDefaults)
 	fc.Net = strings.ToLower(strings.TrimSpace(fc.Net))
 	switch fc.Net {
 	case "tcp", "tcp4", "tcp6":
@@ -363,6 +368,14 @@ func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
 	return nil
 }
 
+func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
+	propagateHTTPDefaults(&hsc.HTTPDefaults, c.HTTPDefaults)
+	if hsc.Address == nil || len(*hsc.Address) == 0 {
+		return errors.New("address cannot be empty")
+	}
+	return nil
+}
+
 func normalizeDir(dir **string) error {
 	if *dir == nil {
 		return nil
@@ -379,4 +392,41 @@ func normalizeDir(dir **string) error {
 	}
 	*dir = &absDir
 	return nil
+}
+
+func propagateCommonDefaults(target *CommonSinkConfig, source CommonSinkConfig) {
+	propagateDefaults(target, source)
+}
+
+func propagateFileDefaults(target *FileDefaults, source FileDefaults) {
+	propagateDefaults(target, source)
+}
+
+func propagateFluentDefaults(target *FluentDefaults, source FluentDefaults) {
+	propagateDefaults(target, source)
+}
+
+func propagateHTTPDefaults(target *HTTPDefaults, source HTTPDefaults) {
+	propagateDefaults(target, source)
+}
+
+// propagateDefaults takes (target *T, source T) where T is a struct
+// and sets zero-valued exported fields in target to the values
+// from source (recursively for struct-valued fields).
+// Wrap for static type-checking, as unexpected types will panic.
+//
+// (Consider making this a common utility if it gets some maturity here.)
+func propagateDefaults(target, source interface{}) {
+	s := reflect.ValueOf(source)
+	t := reflect.Indirect(reflect.ValueOf(target)) // *target
+
+	for i := 0; i < t.NumField(); i++ {
+		tf := t.Field(i)
+		sf := s.Field(i)
+		if tf.Kind() == reflect.Struct {
+			propagateDefaults(tf.Addr().Interface(), sf.Interface())
+		} else if tf.CanSet() && tf.IsZero() {
+			tf.Set(s.Field(i))
+		}
+	}
 }

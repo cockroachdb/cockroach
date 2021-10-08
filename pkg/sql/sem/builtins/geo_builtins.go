@@ -734,18 +734,22 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	),
 	"st_geomfromgeojson": makeBuiltin(
 		defProps(),
-		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometryFromGeoJSON([]byte(s))
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g, err := geo.ParseGeometryFromGeoJSON([]byte(tree.MustBeDString(args[0])))
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeometry(g), nil
 			},
-			types.Geometry,
-			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
-			tree.VolatilityImmutable,
-		),
+			// Simulate PostgreSQL's ambiguity type resolving check that prefers
+			// strings over JSON.
+			PreferredOverload: true,
+			Info:              infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
+			Volatility:        tree.VolatilityImmutable,
+		},
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
 				// TODO(otan): optimize to not string it first.
@@ -2128,6 +2132,9 @@ Flags shown square brackets after the geometry type have the following meaning:
 				seed := timeutil.Now().Unix()
 				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
 				if err != nil {
+					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDGeometry(generatedPoints), nil
@@ -2150,6 +2157,9 @@ The requested number of points must be not larger than 65336.`,
 				}
 				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
 				if err != nil {
+					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDGeometry(generatedPoints), nil
@@ -2178,6 +2188,20 @@ The requested number of points must be not larger than 65336.`,
 			types.Int,
 			infoBuilder{
 				info: "Returns the number of points in a LineString. Returns NULL if the Geometry is not a LineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_hasarc": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				// We don't support CIRCULARSTRINGs, so always return false.
+				return tree.DBoolFalse, nil
+			},
+			types.Bool,
+			infoBuilder{
+				info: "Returns whether there is a CIRCULARSTRING in the geometry.",
 			},
 			tree.VolatilityImmutable,
 		),
@@ -4297,14 +4321,17 @@ The paths themselves are given in the direction of the first geometry.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
-				ret, err := geomfn.Simplify(g.Geometry, tolerance)
+				// TODO(#spatial): post v21.1, use the geomfn.Simplify we have implemented internally.
+				// GEOS currently preserves collapsed for linestrings and not for polygons.
+				ret, err := geomfn.SimplifyGEOS(g.Geometry, tolerance)
 				if err != nil {
 					return nil, err
 				}
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4316,7 +4343,17 @@ The paths themselves are given in the direction of the first geometry.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, unimplemented.NewWithIssueDetail(49037, "st_simplify", "this version of st_simplify is not yet implemented")
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				preserveCollapsed := bool(tree.MustBeDBool(args[2]))
+				ret, collapsed, err := geomfn.Simplify(g.Geometry, tolerance, preserveCollapsed)
+				if err != nil {
+					return nil, err
+				}
+				if collapsed {
+					return tree.DNull, nil
+				}
+				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
 				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.`,
@@ -4342,7 +4379,8 @@ The paths themselves are given in the direction of the first geometry.`,
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4535,6 +4573,32 @@ The paths themselves are given in the direction of the first geometry.`,
 				deltaY := float64(tree.MustBeDFloat(args[2]))
 
 				ret, err := geomfn.Translate(g.Geometry, []float64{deltaX, deltaY})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry translated by the given deltas.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+				{"delta_z", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				deltaX := float64(tree.MustBeDFloat(args[1]))
+				deltaY := float64(tree.MustBeDFloat(args[2]))
+				deltaZ := float64(tree.MustBeDFloat(args[3]))
+
+				ret, err := geomfn.Translate(g.Geometry, []float64{deltaX, deltaY, deltaZ})
 				if err != nil {
 					return nil, err
 				}
@@ -6382,9 +6446,6 @@ The parent_only boolean is always ignored.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, newUnsuitableUseOfGeneratorError()
-			},
 			Generator:  makeMinimumBoundGenerator,
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
 			Volatility: tree.VolatilityImmutable,
@@ -6662,6 +6723,10 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				if err != nil {
 					return nil, err
 				}
+				// PostGIS returns nil for empty linestrings.
+				if g.Empty() && g.ShapeType2D() == geopb.ShapeType_LineString {
+					return tree.DNull, nil
+				}
 				geometry, err := geomfn.LineSubstring(g.Geometry, startFractionFloat, endFractionFloat)
 				if err != nil {
 					return nil, err
@@ -6670,43 +6735,76 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			},
 		}),
 
+	"st_linecrossingdirection": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"linestring_a", types.Geometry},
+				{"linestring_b", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				linestringA := tree.MustBeDGeometry(args[0])
+				linestringB := tree.MustBeDGeometry(args[1])
+
+				ret, err := geomfn.LineCrossingDirection(linestringA.Geometry, linestringB.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(ret)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns an interger value defining behavior of crossing of lines: 
+0: lines do not cross,
+-1: linestring_b crosses linestring_a from right to left,
+1: linestring_b crosses linestring_a from left to right,
+-2: linestring_b crosses linestring_a multiple times from right to left,
+2: linestring_b crosses linestring_a multiple times from left to right,
+-3: linestring_b crosses linestring_a multiple times from left to left,
+3: linestring_b crosses linestring_a multiple times from right to right.
+
+Note that the top vertex of the segment touching another line does not count as a crossing, but the bottom vertex of segment touching another line is considered a crossing.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	//
 	// Unimplemented.
 	//
 
-	"st_asgml":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
-	"st_aslatlontext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
-	"st_assvg":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
-	"st_boundingdiagonal":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
-	"st_buildarea":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
-	"st_chaikinsmoothing":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
-	"st_cleangeometry":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
-	"st_clusterdbscan":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
-	"st_clusterintersecting":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
-	"st_clusterkmeans":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
-	"st_clusterwithin":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
-	"st_concavehull":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
-	"st_delaunaytriangles":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
-	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
-	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
-	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
-	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
-	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
-	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
-	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
-	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
-	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
-	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
-	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
-	"st_bdpolyfromtext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
-	"st_geomfromgml":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
-	"st_geomfromtwkb":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
-	"st_gmltosql":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
+	"st_asgml":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
+	"st_aslatlontext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
+	"st_assvg":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
+	"st_boundingdiagonal":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
+	"st_buildarea":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
+	"st_chaikinsmoothing":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
+	"st_cleangeometry":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
+	"st_clusterdbscan":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
+	"st_clusterintersecting": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
+	"st_clusterkmeans":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
+	"st_clusterwithin":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
+	"st_concavehull":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
+	"st_delaunaytriangles":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
+	"st_dump":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
+	"st_dumppoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
+	"st_dumprings":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
+	"st_geometricmedian":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
+	"st_interpolatepoint":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
+	"st_isvaliddetail":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
+	"st_length2dspheroid":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
+	"st_lengthspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
+	"st_polygonize":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
+	"st_quantizecoordinates": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
+	"st_seteffectivearea":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
+	"st_simplifyvw":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
+	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
+	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
+	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
+	"st_bdpolyfromtext":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
+	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
+	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
+	"st_gmltosql":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -7240,7 +7338,11 @@ func stAsGeoJSONFromTuple(
 				)
 			}
 		}
-		tupleJSON, err := tree.AsJSON(d, ctx.GetLocation())
+		tupleJSON, err := tree.AsJSON(
+			d,
+			ctx.SessionData().DataConversionConfig,
+			ctx.GetLocation(),
+		)
 		if err != nil {
 			return nil, err
 		}

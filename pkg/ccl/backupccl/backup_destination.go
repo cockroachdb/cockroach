@@ -16,11 +16,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -122,7 +122,7 @@ func resolveDest(
 		if exists {
 			// The backup in the auto-append directory is the full backup.
 			prevBackupURIs = append(prevBackupURIs, defaultURI)
-			priors, err := FindPriorBackupLocations(ctx, defaultStore)
+			priors, err := FindPriorBackups(ctx, defaultStore, OmitManifest)
 			for _, prior := range priors {
 				priorURI, err := url.Parse(defaultURI)
 				if err != nil {

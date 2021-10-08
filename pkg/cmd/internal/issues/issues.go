@@ -253,6 +253,12 @@ func (o *Options) CanPost() bool {
 	return o.Token != ""
 }
 
+// IsReleaseBranch returns true for branches that we want to treat as
+// "release" branches, including master and provisional branches.
+func (o *Options) IsReleaseBranch() bool {
+	return o.Branch == "master" || strings.HasPrefix(o.Branch, "release-") || strings.HasPrefix(o.Branch, "provisional_")
+}
+
 // TemplateData is the input on which an IssueFormatter operates. It has
 // everything known about the test failure in a predigested form.
 type TemplateData struct {
@@ -308,7 +314,13 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	authorHandle := p.getAuthorGithubHandle(ctx, req.AuthorEmail)
 	if authorHandle != "" {
-		req.Mention = append(req.Mention, "@"+authorHandle)
+		// This is intentionally missing an "@" because we don't want
+		// to ping former interns and employees (and haven't done the
+		// work to let this code here determine whether the author is
+		// still a member of the repo). We rely primarily on
+		// mentioning a team and adding to its project column. The
+		// author is only informative.
+		req.Mention = append(req.Mention, authorHandle)
 	}
 
 	data := p.templateData(
@@ -471,7 +483,7 @@ type PostRequest struct {
 	// that should be mentioned in the message.
 	Mention []string
 	// The instructions to reproduce the failure.
-	ReproductionCommand string
+	ReproductionCommand func(*Renderer)
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
@@ -496,4 +508,29 @@ func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error 
 		&oauth2.Token{AccessToken: opts.Token},
 	)))
 	return newPoster(client, opts).post(ctx, formatter, req)
+}
+
+// ReproductionCommandFromString returns a value for the
+// PostRequest.ReproductionCommand field that is a command to run. It is
+// formatted as a bash code block.
+func ReproductionCommandFromString(repro string) func(*Renderer) {
+	if repro == "" {
+		return func(*Renderer) {}
+	}
+	return func(r *Renderer) {
+		r.Escaped("To reproduce, try:\n")
+		r.CodeBlock("bash", repro)
+	}
+}
+
+// ReproductionAsLink returns a value for the PostRequest.ReproductionCommand field
+// that prints a link to documentation to refer to.
+func ReproductionAsLink(title, href string) func(r *Renderer) {
+	return func(r *Renderer) {
+		// Bit of weird formatting here but apparently markdown links don't work inside
+		// of a line that also has a <p> tag. Putting it on its own line makes it work.
+		r.Escaped("\n\nSee: ")
+		r.A(title, href)
+		r.Escaped("\n\n")
+	}
 }

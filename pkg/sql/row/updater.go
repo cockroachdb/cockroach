@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -65,12 +66,6 @@ const (
 	UpdaterOnlyColumns rowUpdaterType = 1
 )
 
-type returnTrue struct{}
-
-func (returnTrue) Error() string { panic(errors.AssertionFailedf("unimplemented")) }
-
-var returnTruePseudoError error = returnTrue{}
-
 // MakeUpdater creates a Updater for the given table.
 //
 // UpdateCols are the columns being updated and correspond to the updateValues
@@ -89,6 +84,9 @@ func MakeUpdater(
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
 	alloc *rowenc.DatumAlloc,
+	sv *settings.Values,
+	internal bool,
+	metrics *Metrics,
 ) (Updater, error) {
 	if requestedCols == nil {
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
@@ -97,8 +95,8 @@ func MakeUpdater(
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		primaryIndexCols.Add(colID)
 	}
 
@@ -133,12 +131,15 @@ func MakeUpdater(
 		if index.IsPartial() {
 			return true
 		}
-		return index.ForEachColumnID(func(id descpb.ColumnID) error {
-			if _, ok := updateColIDtoRowIndex.Get(id); ok {
-				return returnTruePseudoError
+		colIDs := index.CollectKeyColumnIDs()
+		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
+		for _, colID := range colIDs.Ordered() {
+			if _, ok := updateColIDtoRowIndex.Get(colID); ok {
+				return true
 			}
-			return nil
-		}) != nil
+		}
+		return false
 	}
 
 	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
@@ -160,12 +161,12 @@ func MakeUpdater(
 
 	var deleteOnlyHelper *rowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := newRowHelper(codec, tableDesc, deleteOnlyIndexes)
+		rh := newRowHelper(codec, tableDesc, deleteOnlyIndexes, sv, internal, metrics)
 		deleteOnlyHelper = &rh
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(codec, tableDesc, includeIndexes),
+		Helper:                newRowHelper(codec, tableDesc, includeIndexes, sv, internal, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
@@ -180,9 +181,9 @@ func MakeUpdater(
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		ru.rd = MakeDeleter(codec, tableDesc, requestedCols)
+		ru.rd = MakeDeleter(codec, tableDesc, requestedCols, sv, internal, metrics)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, requestedCols, alloc,
+			ctx, txn, codec, tableDesc, requestedCols, alloc, sv, internal, metrics,
 		); err != nil {
 			return Updater{}, err
 		}

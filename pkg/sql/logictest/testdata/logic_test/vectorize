@@ -191,8 +191,10 @@ SELECT a, b, (a + 1) * (b + 2) FROM a WHERE a < 3
 2  4  18
 2  5  21
 
-statement error .* unhandled cast decimal -> int
+query I
 SELECT (a + 1.0::DECIMAL)::INT FROM a LIMIT 1
+----
+1
 
 # Operations with constants on the left work.
 query I
@@ -223,8 +225,10 @@ statement ok
 CREATE TABLE intdecfloat (a INT, b DECIMAL, c INT4, d INT2, e FLOAT8);
 INSERT INTO intdecfloat VALUES (1, 2.0, 3, 4, 3.5);
 
-statement error .* unhandled cast decimal -> int
+query I
 SELECT (a + b)::INT FROM intdecfloat
+----
+3
 
 query BB
 SELECT b > a, e < b FROM intdecfloat
@@ -1012,9 +1016,11 @@ SELECT * FROM t44304 WHERE CASE WHEN t44304.c0 > 0 THEN NULL END
 statement ok
 CREATE TABLE t44624(c0 STRING, c1 BOOL); INSERT INTO t44624(rowid, c0, c1) VALUES (0, '', true), (1, '', NULL);
 
-# TODO(yuzefovich): #44700.
-statement error .* unsupported type string in CASE operator
+query TB rowsort
 SELECT * FROM t44624 ORDER BY CASE WHEN c1 IS NULL THEN c0 WHEN true THEN c0 END
+----
+·  true
+·  NULL
 
 # Regression test for 44726 (unknown WHEN expression type).
 statement ok
@@ -1125,20 +1131,6 @@ SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a 
 statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
 SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
 
-# Regression for 46140.
-statement ok
-DROP TABLE IF EXISTS t0, t1;
-CREATE TABLE t0(c0 INT);
-CREATE TABLE t1(c0 BOOL) INTERLEAVE IN PARENT t0(rowid);
-INSERT INTO t0(c0) VALUES (0);
-INSERT INTO t1(rowid, c0) VALUES(0, TRUE);
-
-query I
-SELECT max(t1.rowid) FROM t1 WHERE t1.c0
-----
-0
-
-
 # Regression for #46183.
 statement ok
 CREATE TABLE t46183 (x INT PRIMARY KEY, y JSONB, INVERTED INDEX (y));
@@ -1148,19 +1140,6 @@ query I
 SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
 ----
 1
-
-# Regression test for #47029 (not resetting nulls vector when cfetcher read a
-# NULL value in the interleaved table).
-statement ok
-CREATE TABLE t47029_0(c0 INT);
-CREATE TABLE t47029_1(c0 INT);
-INSERT INTO t47029_0(c0) VALUES(0);
-INSERT INTO t47029_1(c0) VALUES(NULL);
-CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0);
-
-query I
-SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
-----
 
 # Regression for #47115 (cfetcher sometimes not reading value component
 # of composite encoded data).
@@ -1204,3 +1183,114 @@ statement ok
 CREATE TYPE greeting AS ENUM ('hello');
 CREATE TABLE greeting_table (x greeting);
 EXPLAIN (VEC) SELECT * FROM greeting_table;
+
+# Regression test for incorrectly updating the batch in the CASE operator.
+statement ok
+SET vectorize=on;
+CREATE TABLE t64793 AS
+  SELECT
+    g % 2 = 1 AS _bool, g::STRING AS _string
+  FROM
+    ROWS FROM (generate_series(1, 5)) AS g;
+SET vectorize=experimental_always;
+INSERT INTO t64793 DEFAULT VALUES;
+
+query T rowsort
+SELECT CASE WHEN _bool THEN _string ELSE _string END FROM t64793;
+----
+1
+2
+3
+4
+5
+NULL
+
+# Regression test for not supporting casts between FLOAT4 and FLOAT8 (which have
+# the same physical representation in the vectorized engine) (#67793).
+statement ok
+CREATE TABLE t67793 (_float4 FLOAT4, _float8 FLOAT8);
+INSERT INTO t67793 VALUES (1, 2), (2, 1);
+
+query RR rowsort
+SELECT t1._float8, t2._float4 FROM t67793 AS t1, t67793 AS t2 WHERE t1._float4 = t2._float8
+----
+1  1
+2  2
+
+query RR rowsort
+SELECT _float4::FLOAT8, _float8::FLOAT4 FROM t67793
+----
+1  2
+2  1
+
+# Regression test for #66706. Ensure that cfetcher can correctly determine when
+# consecutive KVs in a unique secondary index belong to the same row.
+statement ok
+CREATE TABLE t66706 (
+  a STRING,
+  b STRING,
+  UNIQUE INDEX u (b, a),
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t66706 VALUES
+  (NULL, 'bar'),
+  (NULL, 'bar')
+
+query T
+SELECT b FROM t66706@u WHERE NOT (b = 'foo')
+----
+bar
+bar
+
+# Regression test for ignoring the escaping in the LIKE pattern (#68040).
+statement ok
+CREATE TABLE t68040 (c) AS SELECT 'string with \ backslash'
+
+query T
+SELECT c FROM t68040 WHERE c LIKE '%\\%'
+----
+string with \ backslash
+
+# Regression test for #68979. The IN operator should evaluate correctly when the
+# tuple contents are not sorted by the optimizer.
+statement ok
+CREATE TABLE t68979 (
+  a INT
+)
+
+statement ok
+INSERT INTO t68979 VALUES (0)
+
+query B
+SELECT 'b' IN ('b', (SELECT NULL FROM t68979), 'a') FROM t68979
+----
+true
+
+statement ok
+CREATE TABLE t63792 (c INT);
+INSERT INTO t63792 VALUES (NULL), (1), (2)
+
+query IB rowsort
+SELECT c, c = c FROM t63792
+----
+NULL  NULL
+1     true
+2     true
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
+----
+bigint
+
+query I
+SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+4

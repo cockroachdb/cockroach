@@ -23,9 +23,16 @@ func TestSpanGroup(t *testing.T) {
 	if g.Contains(Key("a")) {
 		t.Fatal("empty group should not contain a")
 	}
+	if g.Sub(be) {
+		t.Fatalf("removing b-e from empty group should not expand it")
+	}
 	if !g.Add(be) {
 		t.Fatal("adding b-e to empty should expand it")
 	}
+	if !g.Sub(be) {
+		t.Fatalf("removing b-e from b-e should expand it")
+	}
+	g.Add(be)
 	if g.Add(be) {
 		t.Fatal("adding  b-e to b-e should not expand it")
 	}
@@ -53,5 +60,11 @@ func TestSpanGroup(t *testing.T) {
 		if g.Contains(Key(k)) {
 			t.Fatalf("span b-e should not contain %q", k)
 		}
+	}
+	if !g.Sub(makeSpan("d-e"), makeSpan("b-c")) {
+		t.Fatalf("removing b-c and d-e from b-e should expand it")
+	}
+	if got, expected := g.Slice(), makeSpan("c-d"); len(got) != 1 || !reflect.DeepEqual(got[0], expected) {
+		t.Fatalf("got %v, expected %v", got, expected)
 	}
 }

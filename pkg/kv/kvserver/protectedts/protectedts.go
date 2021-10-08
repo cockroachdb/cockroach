@@ -95,6 +95,10 @@ type Storage interface {
 	// GetState retreives the entire state of protectedts.Storage with the
 	// provided Txn.
 	GetState(context.Context, *kv.Txn) (ptpb.State, error)
+
+	// UpdateTimestamp updates the timestamp protected by the record with the
+	// specified UUID.
+	UpdateTimestamp(ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp) error
 }
 
 // Iterator iterates records in a cache until wantMore is false or all Records

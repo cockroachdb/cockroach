@@ -1,0 +1,139 @@
+statement ok
+CREATE DATABASE d;
+GRANT CREATE ON DATABASE d TO testuser
+
+# By default, testuser should have ALL privileges on a schema it creates.
+user testuser
+
+statement ok
+USE d;
+
+statement ok
+CREATE SCHEMA testuser_s;
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA testuser_s;
+----
+database_name  schema_name  grantee   privilege_type
+d              testuser_s   admin     ALL
+d              testuser_s   root      ALL
+d              testuser_s   testuser  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser;
+
+statement ok
+CREATE SCHEMA testuser_s2;
+
+# Note that CREATE is still present for testuser due to our current inheritance
+# behavior.
+# TODO(richardjcai): Remove this when we remove our current inheritance logic.
+query TTTT colnames
+SHOW GRANTS ON SCHEMA testuser_s2
+----
+database_name  schema_name  grantee   privilege_type
+d              testuser_s2  admin     ALL
+d              testuser_s2  root      ALL
+d              testuser_s2  testuser  CREATE
+
+user root
+
+statement ok
+USE test;
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
+
+statement ok
+CREATE SCHEMA s
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s
+----
+database_name  schema_name  grantee    privilege_type
+test           s            admin      ALL
+test           s            root       ALL
+test           s            testuser   ALL
+test           s            testuser2  ALL
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE USAGE ON SCHEMAS FROM testuser, testuser2
+
+statement ok
+CREATE SCHEMA s2
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s2
+----
+database_name  schema_name  grantee    privilege_type
+test           s2           admin      ALL
+test           s2           root       ALL
+test           s2           testuser   CREATE
+test           s2           testuser   GRANT
+test           s2           testuser2  CREATE
+test           s2           testuser2  GRANT
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2
+
+statement ok
+CREATE SCHEMA s3
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s3
+----
+database_name  schema_name  grantee  privilege_type
+test           s3           admin    ALL
+test           s3           root     ALL
+
+statement ok
+GRANT CREATE ON DATABASE d TO testuser
+
+user testuser
+statement ok
+USE d
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SCHEMAS FROM testuser, testuser2
+
+statement ok
+CREATE SCHEMA s4
+
+# testuser still has CREATE due to "inheriting" it from the parent database.
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s4
+----
+database_name  schema_name  grantee   privilege_type
+d              s4           admin     ALL
+d              s4           root      ALL
+d              s4           testuser  CREATE
+
+user root
+statement ok
+USE d
+
+# root must be a member of testuser to ALTER DEFAULT PRIVILEGES FOR ROLE testuser.
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SCHEMAS FROM testuser, testuser2
+
+user testuser
+statement ok
+USE d
+
+statement ok
+CREATE SCHEMA s5
+
+# testuser still has CREATE due to "inheriting" it from the parent database.
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s5
+----
+database_name  schema_name  grantee   privilege_type
+d              s5           admin     ALL
+d              s5           root      ALL
+d              s5           testuser  CREATE

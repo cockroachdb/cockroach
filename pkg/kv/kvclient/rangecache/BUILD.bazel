@@ -1,3 +1,4 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,7 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/cache",
@@ -24,14 +25,35 @@ go_library(
     ],
 )
 
+gomock(
+    name = "mock_rangecache",
+    out = "mocks_generated.go",
+    interfaces = [
+        "RangeDescriptorDB",
+    ],
+    library = ":rangecache",
+    package = "rangecache",
+    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache",
+)
+
+go_library(
+    name = "with-mocks",
+    srcs = [":mock_rangecache"],
+    embed = [":rangecache"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
 go_test(
     name = "rangecache_test",
     size = "small",
     srcs = ["range_cache_test.go"],
-    embed = [":rangecache"],
+    embed = [":with-mocks"],  # keep
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

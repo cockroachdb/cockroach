@@ -54,6 +54,7 @@ func (t *oneLevelUncachedDescGetter) fromKeyValue(
 		// 3. it's not used by validation at this level anyway.
 		nil, /* dg */
 		catalog.ValidationLevelSelfOnly,
+		true, /* shouldRunPostDeserializationChanges */
 	)
 }
 
@@ -112,9 +113,8 @@ func (t *oneLevelUncachedDescGetter) GetNamespaceEntry(
 }
 
 // GetNamespaceEntries implements the catalog.BatchDescGetter interface.
-// This looks up the new system.namespace table for records matching the
-// requests. If a request has no matching entry, then this falls back to the old
-// system.namespace table.
+// This looks up the system.namespace table for records matching the
+// requests.
 func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
 	ctx context.Context, requests []descpb.NameInfo,
 ) ([]descpb.ID, error) {
@@ -126,8 +126,7 @@ func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
 			// Ignore nameless requests.
 			continue
 		}
-		key := catalogkeys.MakeNameMetadataKey(t.codec, r.ParentID, r.ParentSchemaID, r.Name)
-		b.Get(key)
+		b.Get(catalogkeys.EncodeNameKey(t.codec, r))
 		isBatchEmpty = false
 	}
 	ret := make([]descpb.ID, len(requests))
@@ -139,7 +138,6 @@ func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
 	if err != nil {
 		return nil, err
 	}
-	var indexesToFallBack []int
 	j := 0
 	for i, r := range requests {
 		if r.Name == "" {
@@ -153,37 +151,6 @@ func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
 		}
 		if result.Rows[0].Exists() {
 			ret[i] = descpb.ID(result.Rows[0].ValueInt())
-		} else if r.ParentSchemaID == keys.PublicSchemaID || r.ParentSchemaID == keys.RootNamespaceID {
-			// We'll retry this request in the old namespace table, but don't bother
-			// if it's for a user-defined schema as those won't supported back then.
-			if indexesToFallBack == nil {
-				// Allocate only once.
-				indexesToFallBack = make([]int, 0, len(requests))
-			}
-			indexesToFallBack = append(indexesToFallBack, i)
-		}
-	}
-	if indexesToFallBack == nil {
-		// Happy path return.
-		return ret, nil
-	}
-	// Fall back to old namespace table.
-	b = t.txn.NewBatch()
-	for _, i := range indexesToFallBack {
-		r := requests[i]
-		key := catalogkeys.MakeDeprecatedNameMetadataKey(t.codec, r.ParentID, r.Name)
-		b.Get(key)
-	}
-	err = t.txn.Run(ctx, b)
-	if err != nil {
-		return nil, err
-	}
-	for j, result := range b.Results {
-		if result.Err != nil {
-			return nil, result.Err
-		}
-		if result.Rows[0].Exists() {
-			ret[indexesToFallBack[j]] = descpb.ID(result.Rows[0].ValueInt())
 		}
 	}
 	return ret, nil

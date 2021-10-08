@@ -49,6 +49,11 @@ type renderNode struct {
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
 
+	// if set, join any distributed streams before applying the rendering; used to
+	// "materialize" an ordering before removing the ordering columns (at the root
+	// of a query or subquery).
+	serialize bool
+
 	reqOrdering ReqOrdering
 }
 
@@ -87,9 +92,9 @@ func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 // what is known to the Executor. If the AsOfClause contains a
 // timestamp, then true will be returned.
 func (p *planner) getTimestamp(
-	ctx context.Context, asOf tree.AsOfClause,
+	ctx context.Context, asOfClause tree.AsOfClause,
 ) (hlc.Timestamp, bool, error) {
-	if asOf.Expr != nil {
+	if asOfClause.Expr != nil {
 		// At this point, the executor only knows how to recognize AS OF
 		// SYSTEM TIME at the top level. When it finds it there,
 		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
@@ -98,7 +103,7 @@ func (p *planner) getTimestamp(
 		// table readers at arbitrary timestamps, and each FROM clause
 		// can have its own timestamp. In that case, the timestamp
 		// would not be set globally for the entire txn.
-		if p.semaCtx.AsOfTimestamp == nil {
+		if p.EvalContext().AsOfSystemTime == nil {
 			return hlc.MaxTimestamp, false,
 				pgerror.Newf(pgcode.Syntax,
 					"AS OF SYSTEM TIME must be provided on a top-level statement")
@@ -108,16 +113,19 @@ func (p *planner) getTimestamp(
 		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
 		// subqueries or view queries) but they must all point to the same
 		// timestamp.
-		ts, err := p.EvalAsOfTimestamp(ctx, asOf)
+		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
-		if ts != *p.semaCtx.AsOfTimestamp {
+		// Allow anything with max_timestamp_bound to differ, as this
+		// is a retry and we expect AOST to differ.
+		if asOf != *p.EvalContext().AsOfSystemTime &&
+			p.EvalContext().AsOfSystemTime.MaxTimestampBound.IsEmpty() {
 			return hlc.MaxTimestamp, false,
 				unimplemented.NewWithIssue(35712,
 					"cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
-		return ts, true, nil
+		return asOf.Timestamp, true, nil
 	}
 	return hlc.MaxTimestamp, false, nil
 }

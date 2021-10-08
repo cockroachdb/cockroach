@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -56,6 +57,7 @@ func TestMain(m *testing.M) {
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
 		evalCtx := tree.MakeTestingEvalContext(st)
+		evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 		testColumnFactory = coldataext.NewExtendedColumnFactory(&evalCtx)
 		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)

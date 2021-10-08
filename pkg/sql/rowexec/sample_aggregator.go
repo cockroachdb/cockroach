@@ -143,14 +143,17 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
+	s.sr.Init(
+		int(spec.SampleSize), int(spec.MinSampleSize), input.OutputTypes()[:rankCol], &s.memAcc,
+		sampleCols,
+	)
 	for i := range spec.InvertedSketches {
 		var sr stats.SampleReservoir
 		// The datums are converted to their inverted index bytes and
 		// sent as a single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		s.invSketch[col] = &sketchInfo{
@@ -176,7 +179,7 @@ func newSampleAggregator(
 }
 
 func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
-	execinfra.SendTraceData(ctx, s.Out.Output())
+	execinfra.SendTraceData(ctx, s.Output)
 }
 
 // Run is part of the Processor interface.
@@ -186,11 +189,11 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 
 	earlyExit, err := s.mainLoop(ctx)
 	if err != nil {
-		execinfra.DrainAndClose(ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(ctx, s.Output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
 		s.pushTrailingMeta(ctx)
 		s.input.ConsumerClosed()
-		s.Out.Close()
+		s.Output.ProducerDone()
 	}
 	s.MoveToDraining(nil /* err */)
 }
@@ -264,7 +267,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 						sr.Disable()
 					}
 				}
-			} else if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			} else if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
@@ -283,7 +286,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			colIdx := uint32(invColIdx)
 			if rank, err := row[s.rankCol].GetInt(); err == nil {
 				// Inverted sample row.
-				// Retain the rows with the top ranks.
+				// Shrink capacity to match the child samplerProcessor and then retain
+				// the row if it had one of the top (smallest) ranks.
+				s.maybeDecreaseSamples(ctx, s.invSr[colIdx], row)
 				sampleRow := row[s.invIdxKeyCol : s.invIdxKeyCol+1]
 				if err := s.sampleRow(ctx, s.invSr[colIdx], sampleRow, uint64(rank)); err != nil {
 					return false, err
@@ -302,7 +307,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 		if rank, err := row[s.rankCol].GetInt(); err == nil {
 			// Sample row.
-			// Retain the rows with the top ranks.
+			// Shrink capacity to match the child samplerProcessor and then retain the
+			// row if it had one of the top (smallest) ranks.
+			s.maybeDecreaseSamples(ctx, &s.sr, row)
 			if err := s.sampleRow(ctx, &s.sr, row[:s.rankCol], uint64(rank)); err != nil {
 				return false, err
 			}
@@ -362,9 +369,27 @@ func (s *sampleAggregator) processSketchRow(
 	return nil
 }
 
+// maybeDecreaseSamples shrinks the capacity of the aggregate reservoir to be <=
+// the capacity of the child reservoir. This is done to prevent biasing the
+// sampling in favor of child sampleProcessors with larger reservoirs.
+func (s *sampleAggregator) maybeDecreaseSamples(
+	ctx context.Context, sr *stats.SampleReservoir, row rowenc.EncDatumRow,
+) {
+	if capacity, err := row[s.numRowsCol].GetInt(); err == nil {
+		prevCapacity := sr.Cap()
+		if sr.MaybeResize(ctx, int(capacity)) {
+			log.Infof(
+				ctx, "histogram samples reduced from %d to %d to match sampler processor",
+				prevCapacity, sr.Cap(),
+			)
+		}
+	}
+}
+
 func (s *sampleAggregator) sampleRow(
 	ctx context.Context, sr *stats.SampleReservoir, sampleRow rowenc.EncDatumRow, rank uint64,
 ) error {
+	prevCapacity := sr.Cap()
 	if err := sr.SampleRow(ctx, s.EvalCtx, sampleRow, rank); err != nil {
 		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 			return err
@@ -374,6 +399,11 @@ func (s *sampleAggregator) sampleRow(
 		sr.Disable()
 		log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
 		telemetry.Inc(sqltelemetry.StatsHistogramOOMCounter)
+	} else if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return nil
 }
@@ -394,7 +424,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// closure.
 	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, si := range s.sketches {
-			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
@@ -403,11 +432,11 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				h, err := s.generateHistogram(
 					ctx,
 					s.EvalCtx,
-					s.sr.Get(),
+					&s.sr,
 					colIdx,
 					typ,
 					si.numRows-si.numNulls,
-					distinctCount,
+					s.getDistinctCount(&si, false /* includeNulls */),
 					int(si.spec.HistogramMaxBuckets),
 				)
 				if err != nil {
@@ -425,7 +454,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				// by the existence of an inverted sketch on
 				// the column.
 
-				invDistinctCount := int64(invSketch.sketch.Estimate())
+				invDistinctCount := s.getDistinctCount(invSketch, false /* includeNulls */)
 				// Use 0 for the colIdx here because it refers
 				// to the column index of the samples, which
 				// only has a single bytes column with the
@@ -433,7 +462,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				h, err := s.generateHistogram(
 					ctx,
 					s.EvalCtx,
-					invSr.Get(),
+					invSr,
 					0, /* colIdx */
 					types.Bytes,
 					invSketch.numRows-invSketch.numNulls,
@@ -471,7 +500,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				si.spec.StatName,
 				columnIDs,
 				si.numRows,
-				distinctCount,
+				s.getDistinctCount(&si, true /* includeNulls */),
 				si.numNulls,
 				histogram,
 			); err != nil {
@@ -494,6 +523,30 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	return nil
 }
 
+// getDistinctCount returns the number of distinct values in the given sketch,
+// optionally including null values.
+func (s *sampleAggregator) getDistinctCount(si *sketchInfo, includeNulls bool) int64 {
+	distinctCount := int64(si.sketch.Estimate())
+	if si.numNulls > 0 && !includeNulls {
+		// Nulls are included in the estimate, so reduce the count by 1 if nulls are
+		// not requested.
+		distinctCount--
+	}
+
+	// The maximum number of distinct values is the number of non-null rows plus 1
+	// if there are any nulls. It's possible that distinctCount was calculated to
+	// be greater than this number due to the approximate nature of HyperLogLog.
+	// If this is the case, set it equal to the max.
+	maxDistinctCount := si.numRows - si.numNulls
+	if si.numNulls > 0 && includeNulls {
+		maxDistinctCount++
+	}
+	if distinctCount > maxDistinctCount {
+		distinctCount = maxDistinctCount
+	}
+	return distinctCount
+}
+
 // generateHistogram returns a histogram (on a given column) from a set of
 // samples.
 // numRows is the total number of rows from which values were sampled
@@ -501,41 +554,23 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 func (s *sampleAggregator) generateHistogram(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	samples []stats.SampledRow,
+	sr *stats.SampleReservoir,
 	colIdx int,
 	colType *types.T,
 	numRows int64,
 	distinctCount int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
-	// Account for the memory we'll use copying the samples into values.
-	if err := s.tempMemAcc.Grow(ctx, sizeOfDatum*int64(len(samples))); err != nil {
+	prevCapacity := sr.Cap()
+	values, err := sr.GetNonNullDatums(ctx, &s.tempMemAcc, colIdx)
+	if err != nil {
 		return stats.HistogramData{}, err
 	}
-	values := make(tree.Datums, 0, len(samples))
-
-	var da rowenc.DatumAlloc
-	for _, sample := range samples {
-		ed := &sample.Row[colIdx]
-		// Ignore NULLs (they are counted separately).
-		if !ed.IsNull() {
-			beforeSize := ed.Datum.Size()
-			if err := ed.EnsureDecoded(colType, &da); err != nil {
-				return stats.HistogramData{}, err
-			}
-			afterSize := ed.Datum.Size()
-
-			// Perform memory accounting. This memory is not added to the temporary
-			// account since it won't be released until the sampleAggregator is
-			// destroyed.
-			if afterSize > beforeSize {
-				if err := s.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
-					return stats.HistogramData{}, err
-				}
-			}
-
-			values = append(values, ed.Datum)
-		}
+	if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
 }

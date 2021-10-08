@@ -17,6 +17,7 @@ import (
 	"encoding/pem"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -37,7 +38,7 @@ var connectJoinCmd = &cobra.Command{
 	Use:   "join <join-token>",
 	Short: "request the TLS certs for a new node from an existing node",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runConnectJoin),
+	RunE:  clierrorplus.MaybeDecorateError(runConnectJoin),
 }
 
 func requestPeerCA(

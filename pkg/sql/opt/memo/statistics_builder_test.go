@@ -30,7 +30,7 @@ import (
 // by the optimizer.
 func TestGetStatsFromConstraint(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	evalCtx.SessionData.OptimizerUseMultiColStats = true
+	evalCtx.SessionData().OptimizerUseMultiColStats = true
 
 	catalog := testcat.New()
 	if _, err := catalog.ExecuteDDL(
@@ -118,7 +118,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		sb.applyConstraintSet(cs, true /* tight */, sel, relProps)
+		sb.applyConstraintSet(cs, true /* tight */, sel, relProps, &relProps.Stats)
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount

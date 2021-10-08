@@ -23,6 +23,9 @@ const (
 	// CheckpointEvent indicates that GetResolved will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
+	// GenerationEvent indicates that the stream should start ingesting with the
+	// updated topology.
+	GenerationEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -84,6 +87,26 @@ func (ce checkpointEvent) GetResolved() *hlc.Timestamp {
 	return &ce.resolvedTimestamp
 }
 
+// generationEvent indicates that the topology of the stream has changed.
+type generationEvent struct{}
+
+var _ Event = generationEvent{}
+
+// Type implements the Event interface.
+func (ge generationEvent) Type() EventType {
+	return GenerationEvent
+}
+
+// GetKV implements the Event interface.
+func (ge generationEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetResolved implements the Event interface.
+func (ge generationEvent) GetResolved() *hlc.Timestamp {
+	return nil
+}
+
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
@@ -92,4 +115,9 @@ func MakeKVEvent(kv roachpb.KeyValue) Event {
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
 func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
 	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
+}
+
+// MakeGenerationEvent creates an GenerationEvent.
+func MakeGenerationEvent() Event {
+	return generationEvent{}
 }

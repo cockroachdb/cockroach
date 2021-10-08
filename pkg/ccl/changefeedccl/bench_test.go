@@ -20,7 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -130,8 +132,13 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
+	defer alloc.Release(ctx)
 	return s.emit(int64(len(key) + len(value)))
 }
 func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc.Timestamp) error {
@@ -197,7 +204,7 @@ func createBenchmarkChangefeed(
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts)
+	encoder, err := makeJSONEncoder(details.Opts, details.Targets)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,7 +212,7 @@ func createBenchmarkChangefeed(
 
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
-	buf := kvfeed.MakeChanBuffer()
+	buf := kvevent.MakeChanBuffer()
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -216,23 +223,25 @@ func createBenchmarkChangefeed(
 	}
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
-		Settings: settings,
-		DB:       s.DB(),
-		Clock:    feedClock,
-		Gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
-		Spans:    spans,
-		Targets:  details.Targets,
-		Sink:     buf,
-		EventBufferFactory: func() kvfeed.EventBuffer {
-			return kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
-		},
+		Settings:         settings,
+		DB:               s.DB(),
+		Clock:            feedClock,
+		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
+		Spans:            spans,
+		Targets:          details.Targets,
+		Writer:           buf,
+		Metrics:          &metrics.KVFeedMetrics,
+		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
-		SchemaFeed:       doNothingSchemaFeed{},
+		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}
 
-	sf := span.MakeFrontier(spans...)
+	sf, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, nil, err
+	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
@@ -241,7 +250,7 @@ func createBenchmarkChangefeed(
 		if err != nil {
 			return nil, err
 		}
-		if event.Type() == kvfeed.KVEvent {
+		if event.Type() == kvevent.TypeKV {
 			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
 				return nil, err
 			}
@@ -258,7 +267,10 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := span.MakeFrontier(spans...)
+			sf, err := span.MakeFrontier(spans...)
+			if err != nil {
+				return err
+			}
 			for {
 				// This is basically the ChangeAggregator processor.
 				rs, err := tickFn(ctx)
@@ -268,7 +280,11 @@ func createBenchmarkChangefeed(
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				if sf.Forward(rs.Span, rs.Timestamp) {
+				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					return err
+				}
+				if advanced {
 					frontier := sf.Frontier()
 					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 						return err

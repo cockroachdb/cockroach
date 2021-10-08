@@ -17,7 +17,7 @@ SELECT crdb_internal.create_tenant(10)
 10
 
 query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)
+SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
@@ -38,7 +38,7 @@ SELECT crdb_internal.destroy_tenant(5)
 5
 
 query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)
+SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
@@ -145,9 +145,12 @@ query error pgcode 42704 tenant "5" does not exist
 SELECT crdb_internal.gc_tenant(5)
 
 query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)
+SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
 10  true    {"id": "10", "state": "ACTIVE"}
+
+query error tenant resource limits require a CCL binary
+SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

@@ -41,6 +41,8 @@ type TargetList struct {
 	Tables    TablePatterns
 	Tenant    roachpb.TenantID
 	Types     []*UnresolvedObjectName
+	// If the target is for all tables in a set of schemas.
+	AllTablesInSchema bool
 
 	// ForRoles and Roles are used internally in the parser and not used
 	// in the AST. Therefore they do not participate in pretty-printing,
@@ -54,6 +56,9 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
+	} else if tl.AllTablesInSchema {
+		ctx.WriteString("ALL TABLES IN SCHEMA ")
+		ctx.FormatNode(&tl.Schemas)
 	} else if tl.Schemas != nil {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)

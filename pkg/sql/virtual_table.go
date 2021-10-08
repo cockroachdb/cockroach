@@ -256,7 +256,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	_, db, err := params.p.Descriptors().GetImmutableDatabaseByName(
+	db, err := params.p.Descriptors().GetImmutableDatabaseByName(
 		params.ctx,
 		params.p.txn,
 		v.dbName,

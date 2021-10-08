@@ -1,0 +1,2 @@
+show_locality_stmt ::=
+	'SHOW' 'LOCALITY'

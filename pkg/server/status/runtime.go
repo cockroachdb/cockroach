@@ -11,13 +11,10 @@
 package status
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
-	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -25,10 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
 )
@@ -420,18 +416,6 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	}
 }
 
-var statsTemplate = template.Must(template.New("runtime stats").Funcs(template.FuncMap{
-	"iBytes":            func(i uint64) string { return humanize.IBytes(i) },
-	"oneDecimal":        func(f float64) string { return fmt.Sprintf("%.1f", f) },
-	"oneDecimalPercent": func(f float64) string { return fmt.Sprintf("%.1f", f*100) },
-	"sub":               func(a, b uint64) string { return humanize.IBytes(a - b) },
-}).Parse(`runtime stats: {{iBytes .Mem.Resident}} RSS, {{.NumGoroutines}} goroutines (stacks: {{iBytes .MS.StackSys}}), ` +
-	`{{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} Go alloc/total{{.StaleMsg}} ` +
-	`(heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}}), ` +
-	`{{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} CGO alloc/total ({{oneDecimal .CGORate}} CGO/sec), ` +
-	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %gc ({{.GCCount}}x), ` +
-	`{{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
-
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -461,8 +445,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err := mem.Get(pid); err != nil {
 		log.Ops.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
-	cpuTime := gosigar.ProcTime{}
-	if err := cpuTime.Get(pid); err != nil {
+	userTimeMillis, sysTimeMillis, err := GetCPUTime(ctx)
+	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
 	cgroupCPU, _ := cgroups.GetCgroupCPU()
@@ -523,8 +507,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	now := rsr.clock.PhysicalNow()
 	dur := float64(now - rsr.last.now)
 	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-	utime := int64(cpuTime.User) * 1e6
-	stime := int64(cpuTime.Sys) * 1e6
+	utime := userTimeMillis * 1e6
+	stime := sysTimeMillis * 1e6
 	urate := float64(utime-rsr.last.utime) / dur
 	srate := float64(stime-rsr.last.stime) / dur
 	combinedNormalizedPerc := (srate + urate) / cpuShare
@@ -542,31 +526,31 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
-	var staleMsg = ""
-	if goMemStatsStale {
-		staleMsg = "(stale)"
-	}
+	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
-	var buf bytes.Buffer
-	if err := statsTemplate.Execute(&buf,
-		struct {
-			MS                                  *GoMemStats
-			Mem                                 gosigar.ProcMem
-			DeltaNet                            net.IOCountersStat
-			CS                                  *CGoMemStats
-			GoTotal                             uint64
-			NumGoroutines, GCCount              int
-			CGORate, URate, SRate, GCPauseRatio float64
-			StaleMsg                            string
-		}{
-			MS: ms, Mem: mem, DeltaNet: deltaNet, CS: cs, GoTotal: goTotal, NumGoroutines: numGoroutine,
-			CGORate: cgoRate, URate: urate, SRate: srate, GCPauseRatio: gcPauseRatio, StaleMsg: staleMsg,
-		}); err != nil {
-		log.Warningf(ctx, "failed to render runtime stats: %s", err)
+	stats := &eventpb.RuntimeStats{
+		MemRSSBytes:       mem.Resident,
+		GoroutineCount:    uint64(numGoroutine),
+		MemStackSysBytes:  ms.StackSys,
+		GoAllocBytes:      ms.HeapAlloc,
+		GoTotalBytes:      goTotal,
+		GoStatsStaleness:  goStatsStaleness,
+		HeapFragmentBytes: ms.HeapInuse - ms.HeapAlloc,
+		HeapReservedBytes: ms.HeapIdle - ms.HeapReleased,
+		HeapReleasedBytes: ms.HeapReleased,
+		CGoAllocBytes:     cs.CGoAllocatedBytes,
+		CGoTotalBytes:     cs.CGoTotalBytes,
+		CGoCallRate:       float32(cgoRate),
+		CPUUserPercent:    float32(urate) * 100,
+		CPUSysPercent:     float32(srate) * 100,
+		GCPausePercent:    float32(gcPauseRatio) * 100,
+		GCRunCount:        uint64(gc.NumGC),
+		NetHostRecvBytes:  deltaNet.BytesRecv,
+		NetHostSendBytes:  deltaNet.BytesSent,
 	}
-	log.Health.Infof(ctx, "%s", redact.Safe(buf.String()))
+
+	logStats(ctx, stats)
 
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
@@ -704,4 +688,14 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.BytesSent -= sub.BytesSent
 	from.PacketsRecv -= sub.PacketsRecv
 	from.PacketsSent -= sub.PacketsSent
+}
+
+// GetCPUTime returns the cumulative user/system time (in ms) since the process start.
+func GetCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err error) {
+	pid := os.Getpid()
+	cpuTime := gosigar.ProcTime{}
+	if err := cpuTime.Get(pid); err != nil {
+		return 0, 0, err
+	}
+	return int64(cpuTime.User), int64(cpuTime.Sys), nil
 }

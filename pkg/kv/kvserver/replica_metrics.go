@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,10 +43,12 @@ type ReplicaMetrics struct {
 	Unavailable     bool
 	Underreplicated bool
 	Overreplicated  bool
-	BehindCount     int64
-	LatchInfoLocal  kvserverpb.LatchManagerInfo
-	LatchInfoGlobal kvserverpb.LatchManagerInfo
 	RaftLogTooLarge bool
+	BehindCount     int64
+
+	// Latching and locking metrics.
+	LatchMetrics     concurrency.LatchMetrics
+	LockTableMetrics concurrency.LockTableMetrics
 }
 
 // Metrics returns the current metrics for the replica.
@@ -58,7 +60,7 @@ func (r *Replica) Metrics(
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
-	zone := r.mu.zone
+	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
 	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.RUnlock()
@@ -67,13 +69,14 @@ func (r *Replica) Metrics(
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
 
-	latchInfoGlobal, latchInfoLocal := r.concMgr.LatchMetrics()
+	latchMetrics := r.concMgr.LatchMetrics()
+	lockTableMetrics := r.concMgr.LockTableMetrics()
 
 	return calcReplicaMetrics(
 		ctx,
 		now.ToTimestamp(),
 		&r.store.cfg.RaftConfig,
-		zone,
+		conf,
 		livenessMap,
 		clusterNodes,
 		desc,
@@ -82,8 +85,8 @@ func (r *Replica) Metrics(
 		r.store.StoreID(),
 		quiescent,
 		ticking,
-		latchInfoLocal,
-		latchInfoGlobal,
+		latchMetrics,
+		lockTableMetrics,
 		raftLogSize,
 		raftLogSizeTrusted,
 	)
@@ -93,7 +96,7 @@ func calcReplicaMetrics(
 	_ context.Context,
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
-	zone *zonepb.ZoneConfig,
+	conf roachpb.SpanConfig,
 	livenessMap liveness.IsLiveMap,
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
@@ -102,8 +105,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	latchInfoLocal kvserverpb.LatchManagerInfo,
-	latchInfoGlobal kvserverpb.LatchManagerInfo,
+	latchMetrics concurrency.LatchMetrics,
+	lockTableMetrics concurrency.LockTableMetrics,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
@@ -122,7 +125,11 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
-		storeID, desc, leaseStatus, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
+		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
+
+	const raftLogTooLargeMultiple = 4
+	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
+		raftLogSizeTrusted
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -130,12 +137,8 @@ func calcReplicaMetrics(
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
 	}
 
-	m.LatchInfoLocal = latchInfoLocal
-	m.LatchInfoGlobal = latchInfoGlobal
-
-	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
-		raftLogSizeTrusted
+	m.LatchMetrics = latchMetrics
+	m.LockTableMetrics = lockTableMetrics
 
 	return m
 }
@@ -175,12 +178,17 @@ func calcRangeCounter(
 	// We also compute an estimated per-range count of under-replicated and
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
-		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-			return livenessMap[rDesc.NodeID].IsLive
-		})
 		neededVoters := GetNeededVoters(numVoters, clusterNodes)
-		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
 		neededNonVoters := GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
+		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
+			return livenessMap[rDesc.NodeID].IsLive
+		},
+			// neededVoters - we don't care about the under/over-replication
+			// determinations from the report because it's too magic. We'll do our own
+			// determination below.
+			0)
+		unavailable = !status.Available
+		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
 		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
 		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
 			underreplicated = true
@@ -263,7 +271,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -282,11 +290,11 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
-// size as dictated by the zone config or a previous max size indicating that
+// size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
-	maxBytes := *r.mu.zone.RangeMaxBytes
+	maxBytes := r.mu.conf.RangeMaxBytes
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}

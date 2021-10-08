@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -108,13 +109,13 @@ func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	limitBatches bool,
-	limitHint int64,
+	batchBytesLimit rowinfra.BytesLimit,
+	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.Fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -126,14 +127,14 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	limitBatches bool,
-	limitHint int64,
+	batchBytesLimit rowinfra.BytesLimit,
+	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
 	err := c.Fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, limitBatches, limitHint, traceKV, forceProductionKVBatchSize,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err

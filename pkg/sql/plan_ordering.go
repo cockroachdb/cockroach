@@ -76,6 +76,8 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		return n.reqOrdering
 	case *sortNode:
 		return n.ordering
+	case *topKNode:
+		return n.ordering
 	case *lookupJoinNode:
 		return n.reqOrdering
 	case *invertedJoinNode:

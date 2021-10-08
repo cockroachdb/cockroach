@@ -84,6 +84,11 @@ var (
 	// PartitionedInvertedIndexCounter is to be incremented every time a
 	// partitioned inverted index is created.
 	PartitionedInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partitioned_inverted_index")
+
+	// ExpressionIndexCounter is to be incremented every time an expression
+	// index is created. This includes both regular and inverted expression
+	// indexes.
+	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
 )
 
 var (
@@ -160,3 +165,9 @@ var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unl
 // SchemaRefreshMaterializedView is to be incremented every time a materialized
 // view is refreshed.
 var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
+
+// SchemaChangeErrorCounter is to be incremented for different types
+// of errors.
+func SchemaChangeErrorCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
+}

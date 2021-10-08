@@ -359,15 +359,19 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		// empty keys.
 		return 0, false
 	}
-	if sp.startBoundary == ExcludeBoundary || sp.endBoundary == ExcludeBoundary {
-		// Bounds must be inclusive.
-		return 0, false
-	}
 
 	startKey := sp.start
 	endKey := sp.end
 	if startKey.Length() < prefixLength || endKey.Length() < prefixLength {
 		// Both keys must have at least 'prefixLength' values.
+		return 0, false
+	}
+	if sp.startBoundary == ExcludeBoundary && startKey.Length() == prefixLength {
+		// Bounds must be inclusive if the prefix length equals the key length.
+		return 0, false
+	}
+	if sp.endBoundary == ExcludeBoundary && endKey.Length() == prefixLength {
+		// Bounds must be inclusive if the prefix length equals the key length.
 		return 0, false
 	}
 
@@ -383,68 +387,15 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		}
 	}
 
-	thisVal := startKey.Value(prefixLength - 1)
-	otherVal := endKey.Value(prefixLength - 1)
-
-	if thisVal.ResolvedType() != otherVal.ResolvedType() {
-		// The datums at index [prefixLength-1] must be of the same type.
-		return 0, false
-	}
-	if keyCtx.Compare(prefixLength-1, thisVal, otherVal) == 0 {
-		// If the datums are equal, the distinct count is 1.
-		return 1, true
-	}
-
-	// If the last columns are countable, return the distinct count between them.
-	var start, end int64
-
-	switch t := thisVal.(type) {
-	case *tree.DInt:
-		otherDInt, otherOk := tree.AsDInt(otherVal)
-		if otherOk {
-			start = int64(*t)
-			end = int64(otherDInt)
-		}
-
-	case *tree.DOid:
-		otherDOid, otherOk := tree.AsDOid(otherVal)
-		if otherOk {
-			start = int64((*t).DInt)
-			end = int64(otherDOid.DInt)
-		}
-
-	case *tree.DDate:
-		otherDDate, otherOk := otherVal.(*tree.DDate)
-		if otherOk {
-			if !t.IsFinite() || !otherDDate.IsFinite() {
-				// One of the DDates isn't finite, so we can't extract a distinct count.
-				return 0, false
-			}
-			start = int64((*t).PGEpochDays())
-			end = int64(otherDDate.PGEpochDays())
-		}
-
-	default:
-		// Uncountable type.
-		return 0, false
-	}
+	start := startKey.Value(prefixLength - 1)
+	end := endKey.Value(prefixLength - 1)
 
 	if keyCtx.Columns.Get(prefixLength - 1).Descending() {
 		// Normalize delta according to the key ordering.
 		start, end = end, start
 	}
 
-	if start > end {
-		// Incorrect ordering.
-		return 0, false
-	}
-
-	delta := end - start
-	if delta < 0 {
-		// Overflow or underflow.
-		return 0, false
-	}
-	return delta + 1, true
+	return tree.MaxDistinctCount(keyCtx.EvalCtx, start, end)
 }
 
 // Split returns a Spans object that describes an equivalent set of rows to the
@@ -490,19 +441,23 @@ func (sp *Span) Split(keyCtx *KeyContext, prefixLength int) (spans *Spans, ok bo
 		}
 		start := currKey
 		end := currKey
+		startBoundary := IncludeBoundary
+		endBoundary := IncludeBoundary
 		if i == 0 {
 			// Start key of the first span.
 			start = currKey.Concat(startPostFix)
+			startBoundary = sp.startBoundary
 		}
 		if i == int(keyCount-1) {
 			// End key of the last span.
 			end = currKey.Concat(endPostFix)
+			endBoundary = sp.endBoundary
 		}
 		spans.Append(&Span{
 			start:         start,
 			end:           end,
-			startBoundary: IncludeBoundary,
-			endBoundary:   IncludeBoundary,
+			startBoundary: startBoundary,
+			endBoundary:   endBoundary,
 		})
 		currKey, ok = currKey.Next(keyCtx)
 	}

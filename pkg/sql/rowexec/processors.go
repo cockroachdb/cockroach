@@ -44,14 +44,15 @@ import (
 // both the inputs and the output have been properly closed.
 func emitHelper(
 	ctx context.Context,
-	output *execinfra.ProcOutputHelper,
+	output execinfra.RowReceiver,
+	procOutputHelper *execinfra.ProcOutputHelper,
 	row rowenc.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
 	pushTrailingMeta func(context.Context),
 	inputs ...execinfra.RowSource,
 ) bool {
-	if output.Output() == nil {
-		panic("output RowReceiver not initialized for emitting")
+	if output == nil {
+		panic("output RowReceiver is not set for emitting")
 	}
 	var consumerStatus execinfra.ConsumerStatus
 	if meta != nil {
@@ -60,15 +61,15 @@ func emitHelper(
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		foundErr := meta.Err != nil
-		consumerStatus = output.Output().Push(nil /* row */, meta)
+		consumerStatus = output.Push(nil /* row */, meta)
 		if foundErr {
 			consumerStatus = execinfra.ConsumerClosed
 		}
 	} else {
 		var err error
-		consumerStatus, err = output.EmitRow(ctx, row)
+		consumerStatus, err = procOutputHelper.EmitRow(ctx, row, output)
 		if err != nil {
-			output.Output().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			output.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 			consumerStatus = execinfra.ConsumerClosed
 		}
 	}
@@ -77,14 +78,14 @@ func emitHelper(
 		return true
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		execinfra.DrainAndClose(ctx, output.Output(), nil /* cause */, pushTrailingMeta, inputs...)
+		execinfra.DrainAndClose(ctx, output, nil /* cause */, pushTrailingMeta, inputs...)
 		return false
 	case execinfra.ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
 		for _, input := range inputs {
 			input.ConsumerClosed()
 		}
-		output.Close()
+		output.ProducerDone()
 		return false
 	default:
 		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)

@@ -14,9 +14,18 @@ option go_package = "enginepb";
 
 import "gogoproto/gogo.proto";
 
+// RegistryVersion defines the version of a registry. Newly added versions
+// should be larger than all currently and previously existing versions.
 enum RegistryVersion {
-  // The only version so far.
+  // The initial version of the file registry that wrote a marshaled
+  // FileRegistry proto to the COCKROACHDB_REGISTRY file on disk every time
+  // it was updated.
+  // TODO(ayang): replace with "reserved 0;" when we deprecate the old registry
   Base = 0;
+  // The current version of the file registry that writes incremental
+  // updates to the COCKROACHDB_ENCRYPTION_REGISTRY file on disk using
+  // pebble's record writer.
+  Records = 1;
 }
 
 // EnvType determines which rocksdb::Env is used and for what purpose.
@@ -35,7 +44,7 @@ enum EnvType {
 // Registry describes how a files are handled. This includes the
 // rockdb::Env responsible for each file as well as opaque env details.
 message FileRegistry {
-  // version is currently always Base.
+  // The version of the file registry.
   RegistryVersion version = 1;
   // Map of filename -> FileEntry.
   // Filename is relative to the rocksdb dir if the file is inside it.
@@ -52,4 +61,22 @@ message FileEntry {
   // This is a serialized protobuf. We cannot use protobuf.Any since we use
   // MessageLite in C++.
   bytes encryption_settings = 2;
+}
+
+message RegistryHeader {
+  // The version of the file registry.
+  RegistryVersion version = 1;
+}
+
+message RegistryUpdateBatch {
+  // An ordered list of updates to the registry.
+  repeated RegistryUpdate updates = 1;
+}
+
+message RegistryUpdate {
+  // Name of the file.
+  string filename = 1;
+
+  // Corresponding file entry. A nil entry indicates a file was deleted.
+  FileEntry entry = 2;
 }

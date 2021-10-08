@@ -1,18 +1,21 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "install",
     srcs = [
-        "cassandra.go",
-        "cassandra_yaml.go",
         "cluster_synced.go",
         "cockroach.go",
+        "download.go",
         "expander.go",
         "install.go",
         "iterm2.go",
         "nodes.go",
         "session.go",
         "staging.go",
+    ],
+    embedsrcs = [
+        "scripts/download.sh",
+        "scripts/start.sh",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install",
     visibility = ["//visibility:public"],
@@ -27,7 +30,19 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "install_test",
+    srcs = ["start_template_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":install"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

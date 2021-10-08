@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -145,9 +146,17 @@ type mutationBuilder struct {
 	// are joined into larger LEFT OUTER JOIN expressions.
 	subqueries []*scope
 
-	// parsedColExprs is a cached set of parsed default and computed expressions
+	// parsedColComputedExprs is a cached set of parsed computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
-	parsedColExprs []tree.Expr
+	parsedColComputedExprs []tree.Expr
+
+	// parsedColDefaultExprs is a cached set of parsed default expressions
+	// from the table schema. These are parsed once and cached for reuse.
+	parsedColDefaultExprs []tree.Expr
+
+	// parsedColOnUpdateExprs is a cached set of parsed ON UPDATE expressions from
+	// the table schema. These are parsed once and cached for reuse.
+	parsedColOnUpdateExprs []tree.Expr
 
 	// parsedIndexExprs is a cached set of parsed partial index predicate
 	// expressions from the table schema. These are parsed once and cached for
@@ -280,7 +289,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		indexFlags,
@@ -396,7 +405,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		indexFlags,
@@ -540,7 +549,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 					copy(newTuple, tuple[:itup])
 				}
 
-				val = mb.parseDefaultOrComputedExpr(mb.targetColList[itup])
+				val = mb.parseDefaultExpr(mb.targetColList[itup])
 			}
 			if newTuple != nil {
 				newTuple = append(newTuple, val)
@@ -581,7 +590,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to mb.outScope.
 func (mb *mutationBuilder) addSynthesizedDefaultCols(
-	colIDs opt.OptionalColList, includeOrdinary bool,
+	colIDs opt.OptionalColList, includeOrdinary bool, applyOnUpdate bool,
 ) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
@@ -591,6 +600,8 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		tabCol := mb.tab.Column(i)
 		if kind := tabCol.Kind(); kind == cat.WriteOnly {
 			// Always include WriteOnly columns.
+		} else if tabCol.UseOnUpdate(mb.b.evalCtx.SessionData()) && applyOnUpdate {
+			// Use ON UPDATE columns if specified.
 		} else if includeOrdinary && kind == cat.Ordinary {
 			// Include Ordinary columns if indicated.
 		} else {
@@ -605,14 +616,23 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 			continue
 		}
 
+		// Use ON UPDATE expression if specified, default otherwise
 		tabColID := mb.tabID.ColumnID(i)
-		expr := mb.parseDefaultOrComputedExpr(tabColID)
+		var mutationSuffix string
+		var expr tree.Expr
+		if tabCol.UseOnUpdate(mb.b.evalCtx.SessionData()) && applyOnUpdate {
+			mutationSuffix = "on_update"
+			expr = mb.parseOnUpdateExpr(tabColID)
+		} else {
+			mutationSuffix = "default"
+			expr = mb.parseDefaultExpr(tabColID)
+		}
 
 		// Add synthesized column. It is important to use the real column
 		// reference name, as this column may later be referred to by a computed
 		// column.
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
-			string(tabCol.ColName()) + "_default",
+			string(tabCol.ColName()) + "_" + mutationSuffix,
 		)
 		newCol, _ := pb.Add(colName, expr, tabCol.DatumType())
 
@@ -663,7 +683,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		}
 
 		tabColID := mb.tabID.ColumnID(i)
-		expr := mb.parseDefaultOrComputedExpr(tabColID)
+		expr := mb.parseComputedExpr(tabColID)
 
 		// Add synthesized column.
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
@@ -681,7 +701,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 				refCols.Add(newCol)
 			} else {
 				var p props.Shared
-				memo.BuildSharedProps(scalar, &p)
+				memo.BuildSharedProps(scalar, &p, mb.b.evalCtx)
 				refCols = p.OuterCols
 			}
 			if !refCols.Intersects(updatedColSet) {
@@ -846,7 +866,13 @@ func findRoundingFunction(
 // addCheckConstraintCols synthesizes a boolean output column for each check
 // constraint defined on the target table. The mutation operator will report a
 // constraint violation error if the value of the column is false.
-func (mb *mutationBuilder) addCheckConstraintCols() {
+//
+// Synthesized check columns are not necessary for UPDATE mutations if the
+// columns referenced in the check expression are not being mutated. If isUpdate
+// is true, check columns that do not reference mutation columns are not added
+// to checkColIDs, which allows pruning normalization rules to remove the
+// unnecessary projected column.
+func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -870,12 +896,11 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 			referencedCols := &opt.ColSet{}
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
 
-			// Synthesized check columns are only necessary if the columns
-			// referenced in the check expression are being mutated. If they are
-			// not being mutated, we do not add the newly built column to
-			// checkColIDs. This allows pruning normalization rules to remove
-			// the unnecessary projected column.
-			if referencedCols.Intersects(mutationCols) {
+			// If the mutation is not an UPDATE, track the synthesized check
+			// columns in checkColIDS. If the mutation is an UPDATE, only track
+			// the check columns if the columns referenced in the check
+			// expression are being mutated.
+			if !isUpdate || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
 			}
 		}
@@ -1138,38 +1163,77 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 	}
 }
 
-// parseDefaultOrComputedExpr parses the default (including nullable) or
-// computed value expression for the given table column, and caches it for
-// reuse.
-func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
-	if mb.parsedColExprs == nil {
-		mb.parsedColExprs = make([]tree.Expr, mb.tab.ColumnCount())
+// parseComputedExpr parses the computed expression for the given table column,
+// and caches it for reuse.
+func (mb *mutationBuilder) parseComputedExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColComputedExprs == nil {
+		mb.parsedColComputedExprs = make([]tree.Expr, mb.tab.ColumnCount())
 	}
 
+	ord := mb.tabID.ColumnOrdinal(colID)
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColComputedExprs,
+		mb.tab.Column(ord).ComputedExprStr(),
+	)
+}
+
+// parseDefaultExpr parses the default (including nullable) expression for the
+// given table column, and caches it for reuse.
+func (mb *mutationBuilder) parseDefaultExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColDefaultExprs == nil {
+		mb.parsedColDefaultExprs = make([]tree.Expr, mb.tab.ColumnCount())
+	}
+
+	ord := mb.tabID.ColumnOrdinal(colID)
+	col := mb.tab.Column(ord)
+	exprStr := col.DefaultExprStr()
+
+	// If no default expression, return NULL or a default value.
+	if exprStr == "" {
+		if col.IsMutation() && !col.IsNullable() {
+			// Synthesize default value for NOT NULL mutation column so that it can be
+			// set when in the write-only state. This is only used when no other value
+			// is possible (no default value available, NULL not allowed).
+			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, col.DatumType())
+			if err != nil {
+				panic(err)
+			}
+			return datum
+		}
+
+		return tree.DNull
+	}
+
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColDefaultExprs,
+		exprStr,
+	)
+}
+
+// parseOnUpdateExpr parses the on update (including nullable) expression for
+// the given table column, and caches it for reuse.
+func (mb *mutationBuilder) parseOnUpdateExpr(colID opt.ColumnID) tree.Expr {
+	if mb.parsedColOnUpdateExprs == nil {
+		mb.parsedColOnUpdateExprs = make([]tree.Expr, mb.tab.ColumnCount())
+	}
+
+	ord := mb.tabID.ColumnOrdinal(colID)
+	return mb.parseColExpr(
+		colID,
+		mb.parsedColOnUpdateExprs,
+		mb.tab.Column(ord).OnUpdateExprStr(),
+	)
+}
+
+func (mb *mutationBuilder) parseColExpr(
+	colID opt.ColumnID, cache []tree.Expr, exprStr string,
+) tree.Expr {
 	// Return expression from cache, if it was already parsed previously.
 	ord := mb.tabID.ColumnOrdinal(colID)
-	if mb.parsedColExprs[ord] != nil {
-		return mb.parsedColExprs[ord]
-	}
-
-	var exprStr string
-	tabCol := mb.tab.Column(ord)
-	switch {
-	case tabCol.IsComputed():
-		exprStr = tabCol.ComputedExprStr()
-	case tabCol.HasDefault():
-		exprStr = tabCol.DefaultExprStr()
-	case tabCol.IsMutation() && !tabCol.IsNullable():
-		// Synthesize default value for NOT NULL mutation column so that it can be
-		// set when in the write-only state. This is only used when no other value
-		// is possible (no default value available, NULL not allowed).
-		datum, err := tree.NewDefaultDatum(mb.b.evalCtx, tabCol.DatumType())
-		if err != nil {
-			panic(err)
-		}
-		return datum
-	default:
-		return tree.DNull
+	if cache[ord] != nil {
+		return cache[ord]
 	}
 
 	expr, err := parser.ParseExpr(exprStr)
@@ -1177,7 +1241,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 		panic(err)
 	}
 
-	mb.parsedColExprs[ord] = expr
+	cache[ord] = expr
 	return expr
 }
 
@@ -1317,6 +1381,43 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 		typ, col.DatumType(), tree.ErrNameString(colName))
 	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
 	panic(err)
+}
+
+// checkColumnIsNotGeneratedAlwaysAsIdentity verifies that if current column
+// is not created as an IDENTITY column with the
+// `GENERATED ALWAYS AS IDENTITY` syntax.
+// Such an IDENTITY column is not allowed to be overridden explicitly.
+// Users need to specify the INSERT/UPSERT/UPDATE statement with
+// the OVERRIDING SYSTEM VALUE syntax.
+//
+// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
+// under `INSERT/UPSERT/UPDATE` statement.
+// check also https://github.com/cockroachdb/cockroach/issues/68201.
+//
+// This function is used in code for UPDATE, INSERT and UPSERT statement.
+func checkColumnIsNotGeneratedAlwaysAsIdentity(col *cat.Column) {
+	if !col.IsGeneratedAlwaysAsIdentity() {
+		return
+	}
+	colName := string(col.ColName())
+	err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName)
+	panic(err)
+}
+
+// checkUpdateExpression verifies if current column
+// is compatible with the update expression.
+func checkUpdateExpression(col *cat.Column, updateExpr *tree.UpdateExpr) {
+	if col.IsGeneratedAlwaysAsIdentity() {
+		switch updateExpr.Expr.(type) {
+		// if current column was created with the `GENERATED ALWAYS` syntax,
+		// this column can only be updated to DEFAULT in the update statement.
+		case tree.DefaultVal:
+			return
+		default:
+			err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnUpdateError(string(col.ColName()))
+			panic(err)
+		}
+	}
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only

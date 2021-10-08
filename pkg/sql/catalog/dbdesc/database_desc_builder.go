@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -32,6 +34,8 @@ type DatabaseDescriptorBuilder interface {
 type databaseDescriptorBuilder struct {
 	original      *descpb.DatabaseDescriptor
 	maybeModified *descpb.DatabaseDescriptor
+
+	changed bool
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -54,11 +58,16 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	descpb.MaybeFixPrivileges(ddb.maybeModified.ID, &ddb.maybeModified.Privileges)
+
+	privsChanged := catprivilege.MaybeFixPrivileges(
+		&ddb.maybeModified.Privileges,
+		descpb.InvalidID,
+		descpb.InvalidID,
+		privilege.Database,
+		ddb.maybeModified.GetName())
+	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
+	ddb.changed = privsChanged || removedSelfEntryInSchemas
 	return nil
 }
 
@@ -90,6 +99,7 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 	return &Mutable{
 		immutable:      immutable{DatabaseDescriptor: *ddb.maybeModified},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
+		changed:        ddb.changed,
 	}
 }
 
@@ -105,7 +115,10 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &Mutable{immutable: immutable{DatabaseDescriptor: *desc}}
+	return &Mutable{
+		immutable: immutable{DatabaseDescriptor: *desc},
+		changed:   ddb.changed,
+	}
 }
 
 // NewInitialOption is an optional argument for NewInitial.
@@ -123,6 +136,7 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 			SurvivalGoal:  regionConfig.SurvivalGoal(),
 			PrimaryRegion: regionConfig.PrimaryRegion(),
 			RegionEnumID:  regionConfig.RegionEnumID(),
+			Placement:     regionConfig.Placement(),
 		}
 	}
 }
@@ -136,6 +150,7 @@ func NewInitial(
 		id,
 		name,
 		descpb.NewDefaultPrivilegeDescriptor(owner),
+		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
 		options...,
 	)
 }
@@ -143,13 +158,18 @@ func NewInitial(
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
+	id descpb.ID,
+	name string,
+	privileges *descpb.PrivilegeDescriptor,
+	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Version:    1,
-		Privileges: privileges,
+		Name:              name,
+		ID:                id,
+		Version:           1,
+		Privileges:        privileges,
+		DefaultPrivileges: defaultPrivileges,
 	}
 	for _, option := range options {
 		option(&ret)

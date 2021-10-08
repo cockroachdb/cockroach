@@ -13,13 +13,13 @@ package colexec
 import (
 	"context"
 	"testing"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -51,10 +51,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 	c.Init(ctx)
 	foundRows := 0
 	for {
@@ -101,19 +98,18 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 			const errMsg = "artificial error"
 			rb := distsqlutils.NewRowBuffer([]*types.T{types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
 			rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
-			c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, rb)
-			require.NoError(t, err)
+			c := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, rb)
 
 			c.Init(ctx)
 
 			// If the metadata is obtained through this Next call, the Columnarizer still
 			// returns it in DrainMeta.
-			err = colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
+			err := colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
 			require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
 
 			if tc.consumerClosed {
 				// Closing the Columnarizer should call ConsumerClosed on the processor.
-				require.NoError(t, c.Close(ctx))
+				require.NoError(t, c.Close())
 				require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
 			} else {
 				// Calling DrainMeta from the vectorized execution engine should propagate to
@@ -146,12 +142,9 @@ func BenchmarkColumnarize(b *testing.B) {
 		EvalCtx: &evalCtx,
 	}
 
-	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
+	b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		b.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 	c.Init(ctx)
 	for i := 0; i < b.N; i++ {
 		foundRows := 0

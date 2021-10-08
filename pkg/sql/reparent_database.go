@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -55,26 +55,19 @@ func (p *planner) ReparentDatabase(
 		return nil, err
 	}
 
-	// Ensure that the cluster version is high enough to create the schema.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.UserDefinedSchemas) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
-	}
-
 	if string(n.Name) == p.CurrentDatabase() {
 		return nil, pgerror.DangerousStatementf("CONVERT TO SCHEMA on current database")
 	}
 
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
 
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
-	_, parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
+	parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -114,6 +107,16 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	// Not all Privileges on databases are valid on schemas.
+	// Remove any privileges that are not valid for schemas.
+	schemaPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+	privs := n.db.GetPrivileges()
+	for i, u := range privs.Users {
+		// Remove privileges that are valid for databases but not for schemas.
+		privs.Users[i].Privileges = u.Privileges & schemaPrivs
+	}
+
 	schema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
@@ -132,7 +135,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	if err := p.createDescriptorWithID(
 		ctx,
-		catalogkeys.NewSchemaKey(n.newParent.ID, schema.GetName()).Key(p.ExecCfg().Codec),
+		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.newParent.ID, schema.GetName()),
 		id,
 		schema,
 		params.ExecCfg().Settings,
@@ -153,7 +156,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	// to the new parent DB and schema.
 	for _, objName := range objNames {
 		// First try looking up objName as a table.
-		found, desc, err := p.LookupObject(
+		found, _, desc, err := p.LookupObject(
 			ctx,
 			tree.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
@@ -214,14 +217,14 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			})
 			tbl.ParentID = n.newParent.ID
 			tbl.UnexposedParentSchemaID = schema.GetID()
-			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, tbl.ParentID, tbl.GetParentSchemaID(), tbl.Name).Key(codec)
-			b.CPut(objKey, tbl.ID, nil /* expected */)
+			objKey := catalogkeys.EncodeNameKey(codec, tbl)
+			b.CPut(objKey, tbl.GetID(), nil /* expected */)
 			if err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 				return err
 			}
 		} else {
 			// If we couldn't resolve objName as a table, try a type.
-			found, desc, err := p.LookupObject(
+			found, _, desc, err := p.LookupObject(
 				ctx,
 				tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
@@ -254,7 +257,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			})
 			typ.ParentID = n.newParent.ID
 			typ.ParentSchemaID = schema.GetID()
-			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, typ.ParentID, typ.ParentSchemaID, typ.Name).Key(codec)
+			objKey := catalogkeys.EncodeNameKey(codec, typ)
 			b.CPut(objKey, typ.ID, nil /* expected */)
 			if err := p.writeTypeSchemaChange(ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 				return err
@@ -264,7 +267,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	// Delete the public schema namespace entry for this database. Per our check
 	// during initialization, this is the only schema present under n.db.
-	b.Del(catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, n.db.ID, keys.RootNamespaceID, tree.PublicSchema).Key(codec))
+	b.Del(catalogkeys.MakePublicSchemaNameKey(codec, n.db.ID))
 
 	// This command can only be run when database leasing is supported, so we don't
 	// have to handle the case where it isn't.

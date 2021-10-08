@@ -16,16 +16,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// StmtID is the type of a Statement ID.
-type StmtID uint64
+// StmtFingerprintID is the type of a Statement's fingerprint ID.
+type StmtFingerprintID uint64
 
-// ConstructStatementID constructs an ID by hashing an anonymized query, its database
+// FingerprintID returns the FingerprintID of the StatementStatisticsKey.
+func (m *StatementStatisticsKey) FingerprintID() StmtFingerprintID {
+	return ConstructStatementFingerprintID(
+		m.Query,
+		m.Failed,
+		m.ImplicitTxn,
+		m.Database,
+	)
+}
+
+// ConstructStatementFingerprintID constructs an ID by hashing an anonymized query, its database
 // and failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
-func ConstructStatementID(
+func ConstructStatementFingerprintID(
 	anonymizedStmt string, failed bool, implicitTxn bool, database string,
-) StmtID {
+) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range anonymizedStmt {
 		fnv.Add(uint64(c))
@@ -43,7 +53,16 @@ func ConstructStatementID(
 	} else {
 		fnv.Add('E')
 	}
-	return StmtID(fnv.Sum())
+	return StmtFingerprintID(fnv.Sum())
+}
+
+// TransactionFingerprintID is the hashed string constructed using the
+// individual statement fingerprint IDs that comprise the transaction.
+type TransactionFingerprintID uint64
+
+// Size returns the size of the TransactionFingerprintID.
+func (t TransactionFingerprintID) Size() int64 {
+	return 8
 }
 
 // GetVariance retrieves the variance of the values.
@@ -118,6 +137,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.NumRows.Add(other.NumRows, t.Count, other.Count)
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
+	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -139,7 +159,8 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
-	s.Nodes = util.CombinesUniqueInt64(s.Nodes, other.Nodes)
+	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
+	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
 
 	s.ExecStats.Add(other.ExecStats)
 
@@ -172,7 +193,8 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
-		s.RowsRead.AlmostEqual(other.RowsRead, eps)
+		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
+		s.RowsWritten.AlmostEqual(other.RowsWritten, eps)
 	// s.ExecStats are deliberately ignored since they are subject to sampling
 	// probability and are not fully deterministic (e.g. the number of network
 	// messages depends on the range cache state).
@@ -193,5 +215,5 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 
-	s.Count += s.Count
+	s.Count += other.Count
 }

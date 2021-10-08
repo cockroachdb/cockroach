@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -110,7 +110,7 @@ func (b *Builder) expandStar(
 		}
 
 	case *tree.AllColumnsSelector:
-		src, srcMeta, err := t.Resolve(b.ctx, inScope)
+		src, srcMeta, err := colinfo.ResolveAllColumnsSelector(b.ctx, inScope, t)
 		if err != nil {
 			panic(err)
 		}
@@ -119,7 +119,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(refScope.cols))
 		for i := range refScope.cols {
 			col := &refScope.cols[i]
-			if col.table == *src && col.visibility == cat.Visible {
+			if col.table == *src && (col.visibility == visible || col.visibility == accessibleByQualifiedStar) {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name.ReferenceName()))
 			}
@@ -134,7 +134,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
 			col := &inScope.cols[i]
-			if col.visibility == cat.Visible {
+			if col.visibility == visible {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name.ReferenceName()))
 			}
@@ -247,7 +247,7 @@ func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColum
 	for i := range cols {
 		c := b.synthesizeColumn(scope, scopeColName(tree.Name(cols[i].Name)), cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
-			c.visibility = cat.Hidden
+			c.visibility = accessibleByName
 		}
 	}
 }
@@ -436,10 +436,10 @@ func (b *Builder) resolveAndBuildScalar(
 func resolveTemporaryStatus(name *tree.TableName, persistence tree.Persistence) bool {
 	// An explicit schema can only be provided in the CREATE TEMP TABLE statement
 	// iff it is pg_temp.
-	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != sessiondata.PgTempSchemaName {
+	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != catconstants.PgTempSchemaName {
 		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
 	}
-	return name.SchemaName == sessiondata.PgTempSchemaName || persistence.IsTemporary()
+	return name.SchemaName == catconstants.PgTempSchemaName || persistence.IsTemporary()
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created
@@ -673,8 +673,8 @@ type columnKinds struct {
 	// If true, include system columns.
 	includeSystem bool
 
-	// If true, include virtual inverted index columns.
-	includeVirtualInverted bool
+	// If true, include inverted index columns.
+	includeInverted bool
 
 	// If true, include virtual computed columns.
 	includeVirtualComputed bool
@@ -685,11 +685,11 @@ type columnKinds struct {
 func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	n := tab.ColumnCount()
 	shouldInclude := [...]bool{
-		cat.Ordinary:        true,
-		cat.WriteOnly:       k.includeMutations,
-		cat.DeleteOnly:      k.includeMutations,
-		cat.System:          k.includeSystem,
-		cat.VirtualInverted: k.includeVirtualInverted,
+		cat.Ordinary:   true,
+		cat.WriteOnly:  k.includeMutations,
+		cat.DeleteOnly: k.includeMutations,
+		cat.System:     k.includeSystem,
+		cat.Inverted:   k.includeInverted,
 	}
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {

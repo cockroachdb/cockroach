@@ -153,12 +153,12 @@ NOT a
 index-constraints vars=(a bool) index=(a)
 a != true
 ----
-(/NULL - /false]
+[/false - /false]
 
 index-constraints vars=(a bool) index=(a)
 a != false
 ----
-[/true - ]
+[/true - /true]
 
 index-constraints vars=(a bool) index=(a)
 a IS TRUE
@@ -195,12 +195,12 @@ a IS DISTINCT FROM 5
 index-constraints vars=(a bool) index=(a desc)
 a != true
 ----
-[/false - /NULL)
+[/false - /false]
 
 index-constraints vars=(a bool) index=(a desc)
 a != false
 ----
-[ - /true]
+[/true - /true]
 
 index-constraints vars=(a bool) index=(a desc)
 a IS TRUE

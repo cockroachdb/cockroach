@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -407,8 +407,8 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 func extractHosts(addrs ...string) []string {
 	res := make([]string, 0, len(addrs))
 
-	for _, addr := range addrs {
-		hostname, _, err := netutil.SplitHostPort(addr, "0")
+	for _, a := range addrs {
+		hostname, _, err := addr.SplitHostPort(a, "0")
 		if err != nil {
 			panic(err)
 		}

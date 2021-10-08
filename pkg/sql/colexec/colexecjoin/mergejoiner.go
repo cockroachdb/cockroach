@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -224,6 +225,7 @@ func NewMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
+	evalCtx *tree.EvalContext,
 ) (colexecop.ResettableOperator, error) {
 	// Merge joiner only supports the case when the physical types in the
 	// equality columns in both inputs are the same. We, however, also need to
@@ -273,7 +275,7 @@ func NewMergeJoinOp(
 			}
 			if castLeftToRight {
 				castColumnIdx := len(actualLeftTypes)
-				left, err = colexecbase.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
+				left, err = colexecbase.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -281,7 +283,7 @@ func NewMergeJoinOp(
 				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
 			} else {
 				castColumnIdx := len(actualRightTypes)
-				right, err = colexecbase.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
+				right, err = colexecbase.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -443,13 +445,15 @@ func newMergeJoinBase(
 	var err error
 	base.left.distincterInput = &colexecop.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
-		base.left.distincterInput, lEqCols, leftTypes)
+		base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return base, err
 	}
 	base.right.distincterInput = &colexecop.FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
-		base.right.distincterInput, rEqCols, rightTypes)
+		base.right.distincterInput, rEqCols, rightTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return base, err
 	}
@@ -521,6 +525,7 @@ func (o *mergeJoinBase) Init(ctx context.Context) {
 		o.unlimitedAllocator, o.joinType, o.left.sourceTypes, o.right.sourceTypes,
 		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
 	)
+	o.bufferedGroup.helper.init(o.Ctx)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -582,22 +587,20 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
 			for colIdx := range sourceTypes {
 				bufferedGroup.firstTuple[colIdx].Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:         batch.ColVec(colIdx),
-							Sel:         sel,
-							DestIdx:     0,
-							SrcStartIdx: groupStartIdx,
-							SrcEndIdx:   groupStartIdx + 1,
-						},
+					coldata.SliceArgs{
+						Src:         batch.ColVec(colIdx),
+						Sel:         sel,
+						DestIdx:     0,
+						SrcStartIdx: groupStartIdx,
+						SrcEndIdx:   groupStartIdx + 1,
 					},
 				)
 			}
 		})
 	}
 
-	// For now, we don't enforce any footprint-based memory limit.
-	// TODO(yuzefovich): refactor this.
+	// We don't impose any memory limits on the scratch batch because we rely on
+	// the inputs to the merge joiner to produce reasonably sized batches.
 	const maxBatchMemSize = math.MaxInt64
 	bufferedGroup.scratchBatch, _ = o.unlimitedAllocator.ResetMaybeReallocate(
 		input.sourceTypes, bufferedGroup.scratchBatch, groupLength, maxBatchMemSize,
@@ -605,14 +608,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	o.unlimitedAllocator.PerformOperation(bufferedGroup.scratchBatch.ColVecs(), func() {
 		for colIdx := range input.sourceTypes {
 			bufferedGroup.scratchBatch.ColVec(colIdx).Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:         batch.ColVec(colIdx),
-						Sel:         sel,
-						DestIdx:     0,
-						SrcStartIdx: groupStartIdx,
-						SrcEndIdx:   groupStartIdx + groupLength,
-					},
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					Sel:         sel,
+					DestIdx:     0,
+					SrcStartIdx: groupStartIdx,
+					SrcEndIdx:   groupStartIdx + groupLength,
 				},
 			)
 		}
@@ -766,20 +767,20 @@ func (o *mergeJoinBase) finishProbe() {
 	)
 }
 
-func (o *mergeJoinBase) Close(ctx context.Context) error {
+func (o *mergeJoinBase) Close() error {
 	if !o.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
 	for _, op := range []colexecop.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(colexecop.Closer); ok {
-			if err := c.Close(ctx); err != nil {
+			if err := c.Close(); err != nil {
 				lastErr = err
 			}
 		}
 	}
 	if h := o.bufferedGroup.helper; h != nil {
-		if err := h.Close(ctx); err != nil {
+		if err := h.Close(); err != nil {
 			lastErr = err
 		}
 	}

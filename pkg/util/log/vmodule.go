@@ -85,10 +85,6 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 		return true
 	}
 
-	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		return true
-	}
-
 	// It's off globally but vmodule may still be set.
 	// Here is another cheap but safe test to see if vmodule is enabled.
 	if atomic.LoadInt32(&c.mu.filterLength) > 0 {

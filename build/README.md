@@ -56,13 +56,39 @@ which may or may not work (and are not officially supported).
 
 # Upgrading / extending the Docker image
 
+## Toolchains
+
+The `cockroachdb/builder` image has a number of cross-compilers
+installed for various targets. We build those cross-compilers in a
+separate step prior to the actual image build, and pull in tarballs
+to install them during the image build. This saves time and allows us to
+use the same toolchains for the Bazel build.
+
+Toolchains may need to be rebuilt infrequently. Follow this process to
+do so (if you don't need to update the toolchains, proceed to "basic
+process" below):
+
+- Edit files in `build/toolchains/toolchainbuild` as desired.
+- Run `build/toolchains/toolchainbuild/buildtoolchains.sh` to test --
+  this will build the tarballs locally and place them in your
+  `artifacts` directory.
+- When you're happy with the result, commit your changes, submit a pull
+  request, and have it reviewed.
+- Ask someone with permissions to run the
+  `Build and Publish Cross Toolchains` build configuration in TeamCity.
+  This will publish the toolchains to a new subdirectory in Google cloud
+  storage, and the build log will additionally contain the sha256 of
+  every tarball created.
+- Update the URL's in `build/builder/Dockerfile` and their sha256's
+  accordingly. Then proceed to follow the "Basic process" steps below.
+
 ## Basic Process
 
 - Edit `build/builder/Dockerfile` as desired.
 - Run `build/builder.sh init` to test -- this will build the image locally.
-  Beware this can take a lot of time. The result of `init` is a docker image
-  version which you can subsequently stick into the `version` variable inside
-  the `builder.sh` script for testing locally.
+  The result of `init` is a docker image version which you can subsequently
+  stick into the `version` variable inside the `builder.sh` script for
+  testing locally.
 - When you're happy with the result, commit your changes, submit a pull request,
   and have it reviewed.
 - Ask someone with permissions to run the `Build and Push new Builder Image`
@@ -81,16 +107,16 @@ back to this document and perform these steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile)).
+* [ ] Adjust version in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
 * [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
 * [ ] Bump the version in `WORKSPACE` under `go_register_toolchains`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases).
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
 * [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
-* [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+* [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 * [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
-* [ ] Adjust `GO_VERSION` in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
-  and ask the Developer Infrastructure team to deploy new images.
+* [ ] Ask the Developer Infrastructure team to deploy new TeamCity agent images according to [packer/README.md](./packer/README.md)
 
 You can test the new builder image in TeamCity by using the custom parameters
 UI (the "..." icon next to the "Run" button) to verify the image before
@@ -134,7 +160,7 @@ is missing, ensure it is used in code. This can be a blank dependency, e.g.
 `import _ "golang.org/api/compute/v1"`. These changes must then be committed in the submodule directory
 (see [Working with Submodules](#working-with-submodules)).
 
-Finally, run `make bazel-generate` to regenerate `DEPS.bzl` with the updated Go dependency information.
+Finally, run `./dev generate bazel` to regenerate `DEPS.bzl` with the updated Go dependency information.
 
 Programs can then be run using `go build ...` or `go test ...`.
 

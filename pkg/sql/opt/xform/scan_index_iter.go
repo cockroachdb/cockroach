@@ -343,7 +343,7 @@ func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
-		if !colinfo.HasCompositeKeyEncoding(typ) {
+		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
 			constNonCompositeCols.Add(col)
 		}
 	}
@@ -367,14 +367,7 @@ func (it *scanIndexIter) buildConstProjectionsFromPredicate(
 			panic(errors.AssertionFailedf("could not extract constant value for column %d", col))
 		}
 
-		var scalar opt.ScalarExpr
-		if val == tree.DNull {
-			// NULL values should always be a memo.NullExpr, not a
-			// memo.ConstExpr.
-			scalar = memo.NullSingleton
-		} else {
-			scalar = it.f.ConstructConst(val, typ)
-		}
+		scalar := it.f.ConstructConstVal(val, typ)
 
 		proj = append(proj, it.f.ConstructProjectionsItem(
 			scalar,

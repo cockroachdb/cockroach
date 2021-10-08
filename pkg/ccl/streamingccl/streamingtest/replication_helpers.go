@@ -53,13 +53,21 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 	}
 }
 
+// ReceivedNewGeneration makes a FeedPredicate that matches when a GenerationEvent has
+// been received.
+func ReceivedNewGeneration() FeedPredicate {
+	return func(msg streamingccl.Event) bool {
+		return msg.Type() == streamingccl.GenerationEvent
+	}
+}
+
 // FeedSource is a source of events for a ReplicationFeed.
 type FeedSource interface {
 	// Next returns the next event, and a flag indicating if there are more events
 	// to consume.
 	Next() (streamingccl.Event, bool)
 	// Close shuts down the source.
-	Close()
+	Close(ctx context.Context)
 }
 
 // ReplicationFeed allows tests to search for events on a feed.
@@ -80,25 +88,31 @@ func MakeReplicationFeed(t *testing.T, f FeedSource) *ReplicationFeed {
 // ObserveKey consumes the feed until requested key has been seen (or deadline expired).
 // Note: we don't do any buffering here.  Therefore, it is required that the key
 // we want to observe will arrive at some point in the future.
-func (rf *ReplicationFeed) ObserveKey(key roachpb.Key) roachpb.KeyValue {
-	require.NoError(rf.t, rf.consumeUntil(KeyMatches(key)))
+func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roachpb.KeyValue {
+	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key)))
 	return *rf.msg.GetKV()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
 // as high as the specified low watermark.  Returns observed resolved timestamp.
-func (rf *ReplicationFeed) ObserveResolved(lo hlc.Timestamp) hlc.Timestamp {
-	require.NoError(rf.t, rf.consumeUntil(ResolvedAtLeast(lo)))
+func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
+	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
 	return *rf.msg.GetResolved()
 }
 
-// Close cleans up any resources.
-func (rf *ReplicationFeed) Close() {
-	rf.f.Close()
+// ObserveGeneration consumes the feed until we received a GenerationEvent. Returns true.
+func (rf *ReplicationFeed) ObserveGeneration(ctx context.Context) bool {
+	require.NoError(rf.t, rf.consumeUntil(ctx, ReceivedNewGeneration()))
+	return true
 }
 
-func (rf *ReplicationFeed) consumeUntil(pred FeedPredicate) error {
-	const maxWait = 10 * time.Second
+// Close cleans up any resources.
+func (rf *ReplicationFeed) Close(ctx context.Context) {
+	rf.f.Close(ctx)
+}
+
+func (rf *ReplicationFeed) consumeUntil(ctx context.Context, pred FeedPredicate) error {
+	const maxWait = 20 * time.Second
 	doneCh := make(chan struct{})
 	mu := struct {
 		syncutil.Mutex
@@ -111,7 +125,7 @@ func (rf *ReplicationFeed) consumeUntil(pred FeedPredicate) error {
 			mu.Lock()
 			mu.err = errors.New("test timed out")
 			mu.Unlock()
-			rf.f.Close()
+			rf.f.Close(ctx)
 		case <-doneCh:
 		}
 	}()
@@ -186,7 +200,7 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 	require.NoError(t, err)
 
 	// Start tenant server
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 
 	// Sink to read data from.

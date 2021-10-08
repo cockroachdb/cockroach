@@ -22,12 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 )
 
@@ -93,19 +91,22 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	states := progress.GetNewSchemaChange().States
 
 	settings := execCtx.ExtendedEvalContext().Settings
-	lm := execCtx.LeaseMgr()
-	db := lm.DB()
-	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
-	sc, err := scplan.MakePlan(makeTargetStates(ctx, settings, n.targets, states), scplan.Params{
+	sc, err := scplan.MakePlan(makeState(ctx, settings, n.targets, states), scplan.Params{
 		ExecutionPhase: scplan.PostCommitPhase,
 	})
 	if err != nil {
 		return err
 	}
+	restoreTableIDs := func(txn *kv.Txn, descriptors *descs.Collection) error {
+		return scexec.UpdateDescriptorJobIDs(
+			ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
+		)
+	}
 
 	for i, s := range sc.Stages {
-		var descriptorsWithUpdatedVersions []lease.IDVersion
-		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		if err := sql.DescsTxn(ctx, execCtx.ExecCfg(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			jt := badJobTracker{
 				txn:         txn,
 				descriptors: descriptors,
@@ -113,8 +114,8 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			}
 			if err := scexec.NewExecutor(
 				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
-				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs,
-			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
+				execCtx.ExecCfg().InternalExecutor).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
 				Statements: n.job.Payload().Statement,
 				Phase:      scplan.PostCommitPhase,
 			}); err != nil {
@@ -123,55 +124,68 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			// If this is the last stage, also update all the table descriptors to
 			// remove the job ID.
 			if i == len(sc.Stages)-1 {
-				if err := scexec.UpdateDescriptorJobIDs(
-					ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
-				); err != nil {
+				if err := restoreTableIDs(txn, descriptors); err != nil {
 					return err
 				}
 			}
-			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
-				pg.States = makeStates(s.After)
+				pg.States = makeStatuses(s.After)
 				ju.UpdateProgress(md.Progress)
 				return nil
 			})
 		}); err != nil {
 			return err
 		}
+		err := execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+		if err != nil {
+			return err
+		}
+	}
 
-		// Wait for new versions.
-		if err := sql.WaitToUpdateLeasesMultiple(
-			ctx,
-			lm,
-			descriptorsWithUpdatedVersions,
-		); err != nil {
+	// If no stages exist, then execute a singe transaction
+	// within this job to allow schema changes again.
+	if len(sc.Stages) == 0 {
+		err := sql.DescsTxn(ctx, execCtx.ExecCfg(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			err := restoreTableIDs(txn, descriptors)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		err = execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func makeStates(next []*scpb.Node) []scpb.State {
-	states := make([]scpb.State, len(next))
+func makeStatuses(next scpb.State) []scpb.Status {
+	states := make([]scpb.Status, len(next))
 	for i := range next {
-		states[i] = next[i].State
+		states[i] = next[i].Status
 	}
 	return states
 }
 
-func makeTargetStates(
-	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.State,
-) []*scpb.Node {
+func makeState(
+	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.Status,
+) scpb.State {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
 			len(protos), len(states))
 	}
-	ts := make([]*scpb.Node, len(protos))
+	ts := make(scpb.State, len(protos))
 	for i := range protos {
 		ts[i] = &scpb.Node{
 			Target: protos[i],
-			State:  states[i],
+			Status: states[i],
 		}
 	}
 	return ts

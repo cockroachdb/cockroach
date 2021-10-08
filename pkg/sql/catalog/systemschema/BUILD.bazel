@@ -7,14 +7,18 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -25,7 +29,7 @@ go_test(
     srcs = ["system_test.go"],
     embed = [":systemschema"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",

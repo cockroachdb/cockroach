@@ -34,33 +34,31 @@ var _ = colexecerror.InternalError
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
-	allocator *colmem.Allocator,
-	input colexecop.Operator,
+	args *WindowArgs,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
-	outputColIdx int,
-	partitionColIdx int,
-	peersColIdx int,
 ) (colexecop.Operator, error) {
 	if len(orderingCols) == 0 {
-		return colexecbase.NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
+		return colexecbase.NewConstOp(
+			args.MainAllocator, args.Input, types.Int, int64(1), args.OutputColIdx)
 	}
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
+	input := colexecutils.NewVectorTypeEnforcer(
+		args.MainAllocator, args.Input, types.Int, args.OutputColIdx)
 	initFields := rankInitFields{
 		OneInputNode:    colexecop.NewOneInputNode(input),
-		allocator:       allocator,
-		outputColIdx:    outputColIdx,
-		partitionColIdx: partitionColIdx,
-		peersColIdx:     peersColIdx,
+		allocator:       args.MainAllocator,
+		outputColIdx:    args.OutputColIdx,
+		partitionColIdx: args.PartitionColIdx,
+		peersColIdx:     args.PeersColIdx,
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_RANK:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &rankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &rankNoPartitionOp{rankInitFields: initFields}, nil
 	case execinfrapb.WindowerSpec_DENSE_RANK:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil

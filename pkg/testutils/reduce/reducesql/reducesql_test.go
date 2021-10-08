@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 var printUnknown = flag.Bool("unknown", false, "print unknown types during walk")
@@ -33,11 +33,12 @@ func TestReduceSQL(t *testing.T) {
 	skip.IgnoreLint(t, "unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting, reducesql.SQLPasses)
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting,
+		nil /* chunkReducer */, reducesql.SQLPasses)
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {
-	return func(ctx context.Context, f reduce.File) bool {
+	return func(ctx context.Context, f string) (bool, func()) {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
@@ -60,18 +61,14 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 			RawQuery: options.Encode(),
 		}
 
-		conf, err := pgx.ParseURI(url.String())
+		db, err := pgx.Connect(ctx, url.String())
 		if err != nil {
 			panic(err)
 		}
-		db, err := pgx.Connect(conf)
-		if err != nil {
-			panic(err)
-		}
-		_, err = db.ExecEx(ctx, string(f), nil)
+		_, err = db.Exec(ctx, f)
 		if err == nil {
-			return false
+			return false, nil
 		}
-		return strings.Contains(err.Error(), contains)
+		return strings.Contains(err.Error(), contains), nil
 	}
 }

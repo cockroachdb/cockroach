@@ -185,7 +185,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - iter: for iterating, is defined as
 //   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
 //   followed by newline separated sequence of operations:
-//     next, prev, seek-lt, seek-ge, set-upper, next-key
+//     next, prev, seek-lt, seek-ge, set-upper, next-key, stats
 //
 // Keys are interpreted as:
 // - starting with L is interpreted as a local-range key.
@@ -363,6 +363,9 @@ func TestIntentInterleavingIter(t *testing.T) {
 						k := scanRoachKey(t, d, "k")
 						iter.SetUpperBound(k)
 						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
+					case "stats":
+						stats := iter.Stats()
+						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
 						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
 					}
@@ -385,74 +388,75 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 	func() {
 		opts := IterOptions{LowerBound: keys.MinKey}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SetUpperBound(keys.LocalMax)
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
-		iter.Close()
 	}()
 	func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SetUpperBound(keys.LocalMax)
 		require.Equal(t, constrainedToLocal, iter.constraint)
-		iter.Close()
 	}()
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		iter.SeekLT(MVCCKey{Key: keys.MaxKey})
 	})
 	// Boundary cases for constrainedToGlobal
 	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
-		iter.Close()
 	}()
 	require.Panics(t, func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 		iter.SetUpperBound(keys.LocalMax)
-		iter.Close()
 	})
 	require.Panics(t, func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
-		iter.Close()
 	})
 	// Panics for using a local key that is above the lock table.
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
-		iter.Close()
 	})
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekGE(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
-		iter.Close()
 	})
 	// Prefix iteration does not affect the constraint if bounds are
 	// specified.
 	func() {
 		opts := IterOptions{Prefix: true, LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
-		iter.Close()
 	}()
 	// Prefix iteration with no bounds.
 	func() {
 		iter := newIntentInterleavingIterator(eng, IterOptions{Prefix: true}).(*intentInterleavingIter)
+		defer iter.Close()
 		require.Equal(t, notConstrained, iter.constraint)
-		iter.Close()
 	}()
 }
 
@@ -640,6 +644,13 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue, isLocal bool) []stri
 
 func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings.Builder) {
 	var iter MVCCIterator
+	closeIter := func() {
+		if iter != nil {
+			iter.Close()
+			iter = nil
+		}
+	}
+	defer closeIter()
 	var d datadriven.TestData
 	var err error
 	for _, op := range ops {
@@ -647,6 +658,7 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 		require.NoError(t, err)
 		switch d.Cmd {
 		case "iter":
+			closeIter()
 			var opts IterOptions
 			if d.HasArg("lower") {
 				opts.LowerBound = scanRoachKey(t, &d, "lower")

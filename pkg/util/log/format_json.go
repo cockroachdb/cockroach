@@ -173,6 +173,8 @@ var jsonTags = map[byte]struct {
 		"The node ID where the event was generated, once known. Only reported for single-tenant or KV servers.", true},
 	'x': {[2]string{"x", "cluster_id"},
 		"The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers.", true},
+	'v': {[2]string{"v", "version"},
+		"The binary version with which the event was generated.", true},
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
 		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
@@ -188,8 +190,6 @@ const (
 	tagCompact tagChoice = 0
 	tagVerbose tagChoice = 1
 )
-
-var programEscaped = strings.ReplaceAll(program, ".", "_")
 
 var channelNamesLowercase = func() map[Channel]string {
 	lnames := make(map[Channel]string, len(logpb.Channel_name))
@@ -208,7 +208,11 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteString(`"tag":"`)
 		// Note: fluent prefers if there is no period in the tag other
 		// than the one splitting the application and category.
-		buf.WriteString(programEscaped)
+		// We rely on program having been processed by replacePeriods()
+		// already.
+		// Also use escapeString() in case program contains double
+		// quotes or other special JSON characters.
+		escapeString(buf, fileNameConstants.program)
 		buf.WriteByte('.')
 		if !entry.header {
 			buf.WriteString(channelNamesLowercase[entry.ch])
@@ -290,6 +294,15 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteString(`":`)
 		n = buf.someDigits(0, int(entry.sqlInstanceID))
 		buf.Write(buf.tmp[:n])
+	}
+
+	// The binary version.
+	if entry.version != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['v'].tags[tags])
+		buf.WriteString(`":"`)
+		escapeString(buf, entry.version)
+		buf.WriteByte('"')
 	}
 
 	if !entry.header {

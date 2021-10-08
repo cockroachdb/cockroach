@@ -12,25 +12,23 @@ package storage
 
 import (
 	"context"
-	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
-// NewInMem allocates and returns a new, opened in-memory engine. The caller
-// must call the engine's Close method when the engine is no longer needed.
-//
-// FIXME(tschottdorf): make the signature similar to NewPebble (require a cfg).
-func NewInMem(
-	ctx context.Context,
-	attrs roachpb.Attributes,
-	cacheSize, storeSize int64,
-	settings *cluster.Settings,
-) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, settings)
+// InMemFromFS allocates and returns new, opened in-memory engine. Engine
+// uses provided in mem file system and base directory to store data. The
+// caller must call obtained engine's Close method when engine is no longer
+// needed.
+func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOption) Engine {
+	// TODO(jackson): Replace this function with a special Location
+	// constructor that allows both specifying a directory and supplying your
+	// own VFS?
+	eng, err := Open(ctx, Location{dir: dir, fs: fs}, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return eng
 }
 
 // The ForTesting functions randomize the settings for separated intents. This
@@ -44,38 +42,25 @@ func NewInMem(
 // other than configuring separated intents. So the fact that we have two
 // inconsistent cluster.Settings is harmless.
 
-// NewInMemForTesting allocates and returns a new, opened in-memory engine. The caller
-// must call the engine's Close method when the engine is no longer needed.
-func NewInMemForTesting(ctx context.Context, attrs roachpb.Attributes, storeSize int64) Engine {
-	settings := MakeRandomSettingsForSeparatedIntents()
-	return newPebbleInMem(ctx, attrs, 0 /* cacheSize */, storeSize, settings)
-}
-
-// NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
-// the default configuration. The caller must call the engine's Close method
-// when the engine is no longer needed.
-func NewDefaultInMemForTesting() Engine {
-	return NewInMemForTesting(context.Background(), roachpb.Attributes{}, 1<<20)
-}
-
-// MakeRandomSettingsForSeparatedIntents makes settings for which it randomly
-// picks whether the cluster understands separated intents, and if yes,
-// whether to write separated intents. Once made, these setting do not change.
-func MakeRandomSettingsForSeparatedIntents() *cluster.Settings {
-	oldClusterVersion := rand.Intn(2) == 0
-	enabledSeparated := rand.Intn(2) == 0
-	log.Infof(context.Background(),
-		"engine creation is randomly setting oldClusterVersion: %t, enabledSeparated: %t",
-		oldClusterVersion, enabledSeparated)
-	return makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
-}
-
-func makeSettingsForSeparatedIntents(oldClusterVersion bool, enabled bool) *cluster.Settings {
-	version := clusterversion.ByKey(clusterversion.SeparatedIntents)
-	if oldClusterVersion {
-		version = clusterversion.ByKey(clusterversion.V20_2)
+// NewDefaultInMemForTesting allocates and returns a new, opened in-memory
+// engine with the default configuration. The caller must call the engine's
+// Close method when the engine is no longer needed. This method randomizes
+// whether separated intents are written.
+func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
+	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20), CombineOptions(opts...))
+	if err != nil {
+		panic(err)
 	}
-	settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-	SeparatedIntentsEnabled.Override(&settings.SV, enabled)
-	return settings
+	return eng
+}
+
+// NewInMemForTesting is just like NewDefaultInMemForTesting but allows to
+// deterministically define whether it separates intents from MVCC data.
+func NewInMemForTesting(enableSeparatedIntents bool, opts ...ConfigOption) Engine {
+	eng, err := Open(context.Background(), InMemory(),
+		SetSeparatedIntents(!enableSeparatedIntents), MaxSize(1<<20), CombineOptions(opts...))
+	if err != nil {
+		panic(err)
+	}
+	return eng
 }

@@ -21,7 +21,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -39,18 +38,21 @@ import (
 func TestTenantStreaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	skip.UnderRace(t, "slow under race")
 
 	ctx := context.Background()
 
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	}
+
 	// Start the source server.
-	source, sourceDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	source, sourceDB, _ := serverutils.StartServer(t, args)
 	defer source.Stopper().Stop(ctx)
 
 	// Start tenant server in the srouce cluster.
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
 	defer tenantConn.Close()
 	// sourceSQL refers to the tenant generating the data.

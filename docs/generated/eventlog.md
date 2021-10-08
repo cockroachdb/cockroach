@@ -139,6 +139,47 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+## Health events
+
+Events in this category pertain to the health of one or more servers.
+
+Events in this category are logged to the `HEALTH` channel.
+
+
+### `runtime_stats`
+
+An event of type `runtime_stats` is recorded every 10 seconds as server health metrics.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `MemRSSBytes` | The process resident set size. Expressed as bytes. | no |
+| `GoroutineCount` | The number of goroutines. | no |
+| `MemStackSysBytes` | The stack system memory used. Expressed as bytes. | no |
+| `GoAllocBytes` | The memory allocated by Go. Expressed as bytes. | no |
+| `GoTotalBytes` | The total memory allocated by Go but not released. Expressed as bytes. | no |
+| `GoStatsStaleness` | The staleness of the Go memory statistics. Expressed in seconds. | no |
+| `HeapFragmentBytes` | The amount of heap fragmentation. Expressed as bytes. | no |
+| `HeapReservedBytes` | The amount of heap reserved. Expressed as bytes. | no |
+| `HeapReleasedBytes` | The amount of heap released. Expressed as bytes. | no |
+| `CGoAllocBytes` | The memory allocated outside of Go. Expressed as bytes. | no |
+| `CGoTotalBytes` | The total memory allocated outside of Go but not released. Expressed as bytes. | no |
+| `CGoCallRate` | The total number of calls outside of Go over time. Expressed as operations per second. | no |
+| `CPUUserPercent` | The user CPU percentage. | no |
+| `CPUSysPercent` | The system CPU percentage. | no |
+| `GCPausePercent` | The GC pause percentage. | no |
+| `GCRunCount` | The total number of GC runs. | no |
+| `NetHostRecvBytes` | The bytes received on all network interfaces since this process started. | no |
+| `NetHostSendBytes` | The bytes sent on all network interfaces since this process started. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Job events
 
 Events in this category pertain to long-running jobs that are orchestrated by
@@ -226,11 +267,11 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ## SQL Access Audit Events
@@ -261,11 +302,11 @@ is directly or indirectly a member of the admin role) executes a query.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
@@ -295,11 +336,11 @@ a table marked as audited.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
@@ -336,11 +377,11 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
@@ -382,11 +423,11 @@ An event of type `alter_database_add_region` is recorded when a region is added 
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_database_drop_region`
@@ -406,11 +447,35 @@ AlterDatabaseAddRegion is recorded when a region is added to a database.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `alter_database_placement`
+
+An event of type `alter_database_placement` is recorded when the database placement is modified.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the database. | yes |
+| `Placement` | The new placement policy. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_database_primary_region`
@@ -430,11 +495,11 @@ An event of type `alter_database_primary_region` is recorded when a primary regi
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_database_survival_goal`
@@ -454,11 +519,11 @@ An event of type `alter_database_survival_goal` is recorded when the survival go
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_index`
@@ -479,11 +544,11 @@ An event of type `alter_index` is recorded when an index is altered.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_sequence`
@@ -502,11 +567,11 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_table`
@@ -527,11 +592,11 @@ An event of type `alter_table` is recorded when a table is altered.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_type`
@@ -550,11 +615,11 @@ EventAlterType is recorded when a user-defined type is altered.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_column`
@@ -576,11 +641,37 @@ An event of type `comment_on_column` is recorded when a column is commented.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `comment_on_constraint`
+
+An event of type `comment_on_constraint` is recorded when an constraint is commented.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | The name of the table containing the affected constraint. | yes |
+| `ConstraintName` | The name of the affected constraint. | yes |
+| `Comment` | The new comment. | yes |
+| `NullComment` | Set to true if the comment was removed entirely. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_database`
@@ -601,11 +692,11 @@ CommentOnTable is recorded when a database is commented.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_index`
@@ -627,11 +718,11 @@ An event of type `comment_on_index` is recorded when an index is commented.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_table`
@@ -652,11 +743,11 @@ An event of type `comment_on_table` is recorded when a table is commented.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `convert_to_schema`
@@ -676,11 +767,11 @@ An event of type `convert_to_schema` is recorded when a database is converted to
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_database`
@@ -699,11 +790,11 @@ An event of type `create_database` is recorded when a database is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_index`
@@ -724,11 +815,11 @@ An event of type `create_index` is recorded when an index is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_schema`
@@ -748,11 +839,11 @@ An event of type `create_schema` is recorded when a schema is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_sequence`
@@ -772,11 +863,11 @@ An event of type `create_sequence` is recorded when a sequence is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_statistics`
@@ -799,11 +890,11 @@ Events of this type are only collected when the cluster setting
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_table`
@@ -823,11 +914,11 @@ An event of type `create_table` is recorded when a table is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_type`
@@ -847,11 +938,11 @@ An event of type `create_type` is recorded when a user-defined type is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_view`
@@ -872,11 +963,11 @@ An event of type `create_view` is recorded when a view is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_database`
@@ -896,11 +987,11 @@ An event of type `drop_database` is recorded when a database is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_index`
@@ -922,11 +1013,11 @@ An event of type `drop_index` is recorded when an index is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_schema`
@@ -945,11 +1036,11 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_sequence`
@@ -968,11 +1059,11 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_table`
@@ -992,11 +1083,11 @@ An event of type `drop_table` is recorded when a table is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_type`
@@ -1015,11 +1106,11 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_view`
@@ -1039,11 +1130,11 @@ An event of type `drop_view` is recorded when a view is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `finish_schema_change`
@@ -1097,11 +1188,11 @@ initiated schema change rollback has completed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_database`
@@ -1121,11 +1212,11 @@ An event of type `rename_database` is recorded when a database is renamed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_schema`
@@ -1145,11 +1236,11 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_table`
@@ -1169,11 +1260,11 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_type`
@@ -1193,11 +1284,11 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `reverse_schema_change`
@@ -1240,11 +1331,11 @@ An event of type `set_schema` is recorded when a table, view, sequence or type's
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `truncate_table`
@@ -1263,11 +1354,11 @@ An event of type `truncate_table` is recorded when a table is truncated.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_delete_descriptor`
@@ -1294,11 +1385,11 @@ patch releases without advance notice.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_delete_namespace_entry`
@@ -1325,11 +1416,11 @@ patch releases without advance notice.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_upsert_descriptor`
@@ -1352,11 +1443,11 @@ using crdb_internal.unsafe_upsert_descriptor().
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_upsert_namespace_entry`
@@ -1385,11 +1476,11 @@ patch releases without advance notice.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ## SQL Privilege changes
@@ -1422,12 +1513,40 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `alter_default_privileges`
+
+An event of type `alter_default_privileges` is recorded when default privileges are changed.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the affected database. | yes |
+| `RoleName` | Either role_name should be populated or for_all_roles should be true. The role having its default privileges altered. | yes |
+| `ForAllRoles` | Identifies if FOR ALL ROLES is used. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `Grantee` | The user/role affected by the grant or revoke operation. | yes |
+| `GrantedPrivileges` | The privileges being granted to the grantee. | no |
+| `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
 
 ### `alter_schema_owner`
 
@@ -1446,11 +1565,11 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_table_owner`
@@ -1470,11 +1589,11 @@ An event of type `alter_table_owner` is recorded when the owner of a table, view
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_type_owner`
@@ -1494,11 +1613,11 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `change_database_privilege`
@@ -1518,11 +1637,11 @@ added to / removed from a user for a database object.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
@@ -1545,11 +1664,11 @@ removed from a user for a schema object.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
@@ -1572,11 +1691,11 @@ from a user for a table, sequence or view object.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
@@ -1599,11 +1718,11 @@ removed from a user for a type object.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
@@ -1786,6 +1905,28 @@ are only emitted via external logging.
 Events in this category are logged to the `SQL_PERF` channel.
 
 
+### `large_row`
+
+An event of type `large_row` is recorded when a statement tries to write a row larger than
+cluster setting `sql.guardrails.max_row_size_log` to the database. Multiple
+LargeRow events will be recorded for statements writing multiple large rows.
+LargeRow events are recorded before the transaction commits, so in the case
+of transaction abort there will not be a corresponding row in the database.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `RowSize` |  | no |
+| `TableID` |  | no |
+| `FamilyID` |  | no |
+| `PrimaryKey` |  | yes |
+
 ### `slow_query`
 
 An event of type `slow_query` is recorded when a query triggers the "slow query" condition.
@@ -1807,11 +1948,11 @@ set to a non-zero value, AND
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
@@ -1822,6 +1963,59 @@ set to a non-zero value, AND
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+
+### `txn_rows_read_limit`
+
+An event of type `txn_rows_read_limit` is recorded when a transaction tries to read more rows than
+cluster setting `sql.defaults.transaction_rows_read_log`. There will only be
+a single record for a single transaction (unless it is retried) even if there
+are more statement within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
+
+### `txn_rows_written_limit`
+
+An event of type `txn_rows_written_limit` is recorded when a transaction tries to write more rows
+than cluster setting `sql.defaults.transaction_rows_written_log`. There will
+only be a single record for a single transaction (unless it is retried) even
+if there are more mutation statements within the transaction that haven't
+been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ## SQL Slow Query Log (Internal)
 
@@ -1835,6 +2029,26 @@ are only emitted via external logging.
 
 Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
+
+### `large_row_internal`
+
+An event of type `large_row_internal` is recorded when an internal query tries to write a row
+larger than cluster settings `sql.guardrails.max_row_size_log` or
+`sql.guardrails.max_row_size_err` to the database.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `RowSize` |  | no |
+| `TableID` |  | no |
+| `FamilyID` |  | no |
+| `PrimaryKey` |  | yes |
 
 ### `slow_query_internal`
 
@@ -1853,11 +2067,11 @@ the "slow query" condition.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
@@ -1868,6 +2082,61 @@ the "slow query" condition.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+
+### `txn_rows_read_limit_internal`
+
+An event of type `txn_rows_read_limit_internal` is recorded when an internal transaction tries to
+read more rows than cluster setting `sql.defaults.transaction_rows_read_log`
+or `sql.defaults.transaction_rows_read_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statements within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
+
+### `txn_rows_written_limit_internal`
+
+An event of type `txn_rows_written_limit_internal` is recorded when an internal transaction tries to
+write more rows than cluster setting
+`sql.defaults.transaction_rows_written_log` or
+`sql.defaults.transaction_rows_written_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statements within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ## SQL User and Role operations
 
@@ -1898,11 +2167,11 @@ An event of type `alter_role` is recorded when a role is altered.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_role`
@@ -1921,11 +2190,11 @@ An event of type `create_role` is recorded when a role is created.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_role`
@@ -1944,12 +2213,52 @@ An event of type `drop_role` is recorded when a role is dropped.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+## Telemetry events
+
+
+
+Events in this category are logged to the `TELEMETRY` channel.
+
+
+### `sampled_query`
+
+An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
+contains common SQL event/execution details.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SkippedQueries` | skipped_queries indicate how many SQL statements were not considered for sampling prior to this one. If the field is omitted, or its value is zero, this indicates that no statement was omitted since the last event. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | yes |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
 ## Zone config events
 
@@ -1980,11 +2289,11 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
@@ -2003,11 +2312,11 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
 | `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. | yes |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
@@ -2025,7 +2334,7 @@ authentication failure.
 
 
 | Value | Textual alias in code or documentation | Description |
-|--|--|
+|--|--|--|
 | 0 | UNKNOWN | is reported when the reason is unknown. |
 | 1 | USER_RETRIEVAL_ERROR | occurs when there was an internal error accessing the principals. |
 | 2 | USER_NOT_FOUND | occurs when the principal is unknown. |

@@ -17,19 +17,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,6 +109,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
 	gc.ttlseconds = 90000,
+	global_reads = true,
 	num_replicas = 3,
 	num_voters = 3,
 	constraints = '{+region=ajstorm-1: 1}',
@@ -168,9 +173,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
+	skip.UnderRace(t, "takes >400s under race")
 
 	var chunkSize int64 = 100
 	var maxValue = 4000
@@ -366,6 +369,8 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 										return errorMode.runOnChunk(db)
 									},
 								},
+								// Decrease the adopt loop interval so that retries happen quickly.
+								JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 							}
 							var s serverutils.TestServerInterface
 							var kvDB *kv.DB
@@ -428,16 +433,16 @@ USE t;
 										len(tableDesc.AllMutations()),
 									)
 								}
-								if tableDesc.GetPrimaryIndex().NumColumns() != len(testCase.originalPKCols) {
+								if tableDesc.GetPrimaryIndex().NumKeyColumns() != len(testCase.originalPKCols) {
 									return errors.Errorf("expected primary key change to not succeed after cancellation")
 								}
 								for i, name := range testCase.originalPKCols {
-									if tableDesc.GetPrimaryIndex().GetColumnName(i) != name {
+									if tableDesc.GetPrimaryIndex().GetKeyColumnName(i) != name {
 										return errors.Errorf(
 											"expected primary key change to not succeed after cancellation\nmismatch idx %d: exp %s, got %s",
 											i,
 											name,
-											tableDesc.GetPrimaryIndex().GetColumnName(i),
+											tableDesc.GetPrimaryIndex().GetKeyColumnName(i),
 										)
 									}
 								}
@@ -501,9 +506,6 @@ func TestRepartitionFailureRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	var mu syncutil.Mutex
 	errorReturned := false
 	knobs := base.TestingKnobs{
@@ -518,6 +520,8 @@ func TestRepartitionFailureRollback(t *testing.T) {
 				return nil
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, knobs,
@@ -556,9 +560,6 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	for _, tc := range []struct {
 		locality string
 	}{
@@ -567,21 +568,25 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 		{locality: "REGIONAL BY ROW AS region_col"},
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
-			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-				t, 3 /* numServers */, base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						// Disable the merge queue because it makes this test flakey
-						// under stress. Consider changing this when admin commands are
-						// better synchronized leading to less thrashing of the range cache.
-						// We may also need to retry ClearRange operations which bump into
-						// the GC threshold. Generally that's not a concern because
-						// generally that threshold isn't super small. The problem with
-						// ranges is that when they merge, as may happen during the parallel
-						// execution of a big ClearRange is that the highest threshold will
-						// be inherited.
-						DisableMergeQueue: true,
-					},
+			knobs := base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable the merge queue because it makes this test flakey
+					// under stress. Consider changing this when admin commands are
+					// better synchronized leading to less thrashing of the range cache.
+					// We may also need to retry ClearRange operations which bump into
+					// the GC threshold. Generally that's not a concern because
+					// generally that threshold isn't super small. The problem with
+					// ranges is that when they merge, as may happen during the parallel
+					// execution of a big ClearRange is that the highest threshold will
+					// be inherited.
+					DisableMergeQueue: true,
 				},
+				// Decrease the adopt loop interval so that retries happen quickly.
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			}
+
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 3 /* numServers */, knobs,
 			)
 			defer cleanup()
 
@@ -887,4 +892,133 @@ USE t;
 			})
 		}
 	}
+}
+
+// TestIndexDescriptorUpdateForImplicitColumns checks that the column ID slices
+// in the indexes of a table descriptor undergoing partitioning changes
+// involving implicit columns are correctly updated.
+func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{},
+	)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`)
+
+	fetchIndexes := func(tableName string) []catalog.Index {
+		kvDB := c.Servers[0].DB()
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		return desc.NonDropIndexes()
+	}
+
+	t.Run("primary index", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t1 (
+			a INT PRIMARY KEY, 
+			b test.public.crdb_internal_region NOT NULL
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t1 SET LOCALITY REGIONAL BY ROW AS b`)
+		indexes = fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.Empty(t, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t1 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+	})
+
+	t.Run("secondary index", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t2 (
+			a INT PRIMARY KEY, 
+			b test.public.crdb_internal_region NOT NULL,
+			c INT NOT NULL,
+			d INT NOT NULL,
+			INDEX sec (c) STORING (d)
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2, 3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t2 SET LOCALITY REGIONAL BY ROW AS b`)
+		indexes = fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2, 3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t2 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2, 3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+	})
+
+	t.Run("secondary index key suffix", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t3 (
+			a test.public.crdb_internal_region PRIMARY KEY,
+			b INT NOT NULL,
+			INDEX sec (b)
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t3 SET LOCALITY REGIONAL BY ROW AS a`)
+		indexes = fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t3 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+	})
 }

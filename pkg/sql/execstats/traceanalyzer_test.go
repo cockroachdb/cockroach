@@ -114,8 +114,8 @@ func TestTraceAnalyzer(t *testing.T) {
 				SessionData: sessiondatapb.SessionData{
 					VectorizeMode: vectorizeMode,
 				},
-				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
-					DistSQLMode: sessiondata.DistSQLOn,
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+					DistSQLMode: sessiondatapb.DistSQLOn,
 				},
 			},
 		)
@@ -253,6 +253,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  6,
 		ContentionTime:   7 * time.Second,
 		MaxDiskUsage:     8,
+		Regions:          []string{"gcp-us-east1"},
 	}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent: 8,
@@ -263,6 +264,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  13,
 		ContentionTime:   14 * time.Second,
 		MaxDiskUsage:     15,
+		Regions:          []string{"gcp-us-west1"},
 	}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent: 9,
@@ -273,6 +275,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  19,
 		ContentionTime:   21 * time.Second,
 		MaxDiskUsage:     15,
+		Regions:          []string{"gcp-us-east1", "gcp-us-west1"},
 	}
 
 	aCopy := a

@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/util/humanizeutil",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -16,4 +17,5 @@ go_test(
     size = "small",
     srcs = ["env_test.go"],
     embed = [":envutil"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

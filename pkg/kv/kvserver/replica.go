@@ -18,12 +18,11 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -38,13 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -67,6 +66,11 @@ const (
 	// the key space being written is starting out empty.
 	optimizePutThreshold = 10
 
+	// Transaction names used for range changes.
+	// Note that those names are used by tests to perform request filtering
+	// in absence of better criteria. If names are changed, tests should be
+	// updated accordingly to avoid flakiness.
+
 	replicaChangeTxnName = "change-replica"
 	splitTxnName         = "split"
 	mergeTxnName         = "merge"
@@ -84,15 +88,20 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 	false,
 )
 
-// MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
-// cluster setting.
-const MaxCommandSizeFloor = 4 << 20 // 4MB
+const (
+	// MaxCommandSizeFloor is the minimum allowed value for the
+	// kv.raft.command.max_size cluster setting.
+	MaxCommandSizeFloor = 4 << 20 // 4MB
+	// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
+	// cluster setting.
+	MaxCommandSizeDefault = 64 << 20
+)
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
 var MaxCommandSize = settings.RegisterByteSizeSetting(
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
-	64<<20,
+	MaxCommandSizeDefault,
 	func(size int64) error {
 		if size < MaxCommandSizeFloor {
 			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
@@ -366,8 +375,8 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
-		// A pointer to the zone config for this replica.
-		zone *zonepb.ZoneConfig
+		// The span config for this replica.
+		conf roachpb.SpanConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
 		// evaluation and is consumed by the Raft processing thread. Once
@@ -399,9 +408,6 @@ type Replica struct {
 		// to the *RaftCommand contained in its associated *ProposalData. This
 		// is because the *RaftCommand can be mutated during reproposals by
 		// Replica.tryReproposeWithNewLeaseIndex.
-		//
-		// TODO(ajwerner): move the proposal map and ProposalData entirely under
-		// the raftMu.
 		proposals map[kvserverbase.CmdIDKey]*ProposalData
 		// Indicates that the replica is in the process of applying log entries.
 		// Updated to true in handleRaftReady before entries are removed from
@@ -428,9 +434,6 @@ type Replica struct {
 		// we know that the replica has caught up.
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
-		// initialMaxClosed is the initial maxClosed timestamp for the replica as known
-		// from its left-hand-side upon creation.
-		initialMaxClosed hlc.Timestamp
 
 		// The most recently updated time for each follower of this range. This is updated
 		// every time a Raft message is received from a peer.
@@ -539,14 +542,19 @@ type Replica struct {
 		// the request. See the comment on the struct for more details.
 		cachedProtectedTS cachedProtectedTimestampState
 
-		// largestPreviousMaxRangeSizeBytes tracks a previous zone.RangeMaxBytes
-		// which exceeded the current zone.RangeMaxBytes to help defeat the range
+		// largestPreviousMaxRangeSizeBytes tracks a previous conf.RangeMaxBytes
+		// which exceeded the current conf.RangeMaxBytes to help defeat the range
 		// backpressure mechanism in cases where a user reduces the configured range
-		// size. It is set when the zone config changes to a smaller value and the
+		// size. It is set when the span config changes to a smaller value and the
 		// current range size exceeds the new value. It is cleared after the range's
-		// size drops below its current zone.MaxRangeBytes or if the
-		// zone.MaxRangeBytes increases to surpass the current value.
+		// size drops below its current conf.MaxRangeBytes or if the
+		// conf.MaxRangeBytes increases to surpass the current value.
 		largestPreviousMaxRangeSizeBytes int64
+		// spanConfigExplicitlySet tracks whether a span config was explicitly set
+		// on this replica (as opposed to it having initialized with the default
+		// span config). It's used to reason about
+		// largestPreviousMaxRangeSizeBytes.
+		spanConfigExplicitlySet bool
 
 		// failureToGossipSystemConfig is set to true when the leaseholder of the
 		// range containing the system config span fails to gossip due to an
@@ -658,9 +666,8 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
-// It requires that both Replica.mu and Replica.raftMu are exclusively held.
+// It requires that Replica.mu is exclusively held.
 func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
-	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
 	delete(r.mu.proposals, p.idKey)
 	p.releaseQuota()
@@ -670,48 +677,43 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 func (r *Replica) GetMinBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return *r.mu.zone.RangeMinBytes
+	return r.mu.conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return *r.mu.zone.RangeMaxBytes
+	return r.mu.conf.RangeMaxBytes
 }
 
-// SetZoneConfig sets the replica's zone config.
-func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
+// SetSpanConfig sets the replica's span config.
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.isInitializedRLocked() &&
-		r.mu.zone != nil &&
-		zone != nil {
+	if r.isInitializedRLocked() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
 
-		// Set largestPreviousMaxRangeSizeBytes if the current range size is above
-		// the new limit and we don't already have a larger value. Reset it if
-		// the new limit is larger than the current largest we're aware of.
-		if total > *zone.RangeMaxBytes &&
-			*zone.RangeMaxBytes < *r.mu.zone.RangeMaxBytes &&
-			r.mu.largestPreviousMaxRangeSizeBytes < *r.mu.zone.RangeMaxBytes &&
-			// Check to make sure that we're replacing a real zone config. Otherwise
-			// the default value would prevent backpressure until the range was
-			// larger than the default value. When the store starts up it sets the
-			// zone for the replica to this default value; later on it overwrites it
-			// with a new instance even if the value is the same as the default.
-			r.mu.zone != r.store.cfg.DefaultZoneConfig &&
-			r.mu.zone != r.store.cfg.DefaultSystemZoneConfig {
-
-			r.mu.largestPreviousMaxRangeSizeBytes = *r.mu.zone.RangeMaxBytes
+		// Set largestPreviousMaxRangeSizeBytes if the current range size is
+		// greater than the new limit, if the limit has decreased from what we
+		// last remember, and we don't already have a larger value.
+		if total > conf.RangeMaxBytes && conf.RangeMaxBytes < r.mu.conf.RangeMaxBytes &&
+			r.mu.largestPreviousMaxRangeSizeBytes < r.mu.conf.RangeMaxBytes &&
+			// We also want to make sure that we're replacing a real span config.
+			// If we didn't have this check, the default value would prevent
+			// backpressure until the range got larger than it.
+			r.mu.spanConfigExplicitlySet {
+			r.mu.largestPreviousMaxRangeSizeBytes = r.mu.conf.RangeMaxBytes
 		} else if r.mu.largestPreviousMaxRangeSizeBytes > 0 &&
-			r.mu.largestPreviousMaxRangeSizeBytes < *zone.RangeMaxBytes {
-
+			r.mu.largestPreviousMaxRangeSizeBytes < conf.RangeMaxBytes {
+			// Reset it if the new limit is larger than the largest we were
+			// aware of.
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-	r.mu.zone = zone
+
+	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -731,12 +733,26 @@ func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
-// DescAndZone returns the authoritative range descriptor as well
-// as the zone config for the replica.
-func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig) {
+// IsQuiescent returns whether the replica is quiescent or not.
+func (r *Replica) IsQuiescent() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.zone
+	return r.mu.quiescent
+}
+
+// DescAndSpanConfig returns the authoritative range descriptor as well
+// as the span config for the replica.
+func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.Desc, r.mu.conf
+}
+
+// SpanConfig returns the authoritative span config for the replica.
+func (r *Replica) SpanConfig() roachpb.SpanConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.conf
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
@@ -753,11 +769,13 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 }
 
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
-// range, which is updated asynchronously through gossip of zone configurations.
+// range, which is updated asynchronously by listening in on span configuration
+// changes.
+//
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
-	if r.mu.zone.GlobalReads != nil && *r.mu.zone.GlobalReads {
+	if r.mu.conf.GlobalReads {
 		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 			return roachpb.LEAD_FOR_GLOBAL_READS
 		}
@@ -800,11 +818,6 @@ func (r *Replica) Clock() *hlc.Clock {
 	return r.store.Clock()
 }
 
-// DB returns the Replica's client DB.
-func (r *Replica) DB() *kv.DB {
-	return r.store.DB()
-}
-
 // Engine returns the Replica's underlying Engine. In most cases the
 // evaluation Batch should be used instead.
 func (r *Replica) Engine() storage.Engine {
@@ -817,11 +830,6 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	// memory. It just provides methods that take a Batch, so SpanSet
 	// declarations are enforced there.
 	return r.abortSpan
-}
-
-// GetLimiters returns the Replica's limiters.
-func (r *Replica) GetLimiters() *batcheval.Limiters {
-	return &r.store.limiters
 }
 
 // GetConcurrencyManager returns the Replica's concurrency.Manager.
@@ -933,7 +941,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 		return threshold
 	}
 
-	impliedThreshold := gc.CalculateThreshold(st.Now.ToTimestamp(), *r.mu.zone.GC)
+	impliedThreshold := gc.CalculateThreshold(st.Now.ToTimestamp(), r.mu.conf.TTL())
 	threshold.Forward(impliedThreshold)
 
 	// If we have a protected timestamp record which precedes the implied
@@ -1142,14 +1150,12 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
 	// this first before RLocking below. Performance of this extra lock
 	// acquisition is not a concern.
-	ri.ActiveClosedTimestamp, _ = r.maxClosed(context.Background())
+	ri.ActiveClosedTimestamp = r.GetClosedTimestamp(ctx)
 
 	// NB: numRangefeedRegistrations doesn't require Replica.mu to be locked.
 	// However, it does require coordination between multiple goroutines, so
 	// it's best to keep it out of the Replica.mu critical section.
 	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
-
-	ri.LockTable = r.concMgr.LockTableDebug()
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1169,36 +1175,14 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 			}
 		}
 	}
-	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
-	if desc := ri.ReplicaState.Desc; desc != nil {
-		// Learner replicas don't serve follower reads, but they still receive
-		// closed timestamp updates, so include them here.
-		allReplicas := desc.Replicas().Descriptors()
-		for i := range allReplicas {
-			replDesc := &allReplicas[i]
-			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
-				mlai, found := e.MLAI[r.RangeID]
-				if !found {
-					return false // not done
-				}
-				if ri.NewestClosedTimestamp.ClosedTimestamp.Less(e.ClosedTimestamp) {
-					ri.NewestClosedTimestamp.NodeID = replDesc.NodeID
-					ri.NewestClosedTimestamp.ClosedTimestamp = e.ClosedTimestamp
-					ri.NewestClosedTimestamp.MLAI = int64(mlai)
-					ri.NewestClosedTimestamp.Epoch = int64(e.Epoch)
-				}
-				return true // done
-			})
-		}
-
-		if r.mu.tenantID != (roachpb.TenantID{}) {
-			ri.TenantID = r.mu.tenantID.ToUint64()
-		}
+	ri.RangeMaxBytes = r.mu.conf.RangeMaxBytes
+	if r.mu.tenantID != (roachpb.TenantID{}) {
+		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
 	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
 	r.sideTransportClosedTimestamp.mu.Lock()
-	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.closedTimestamp
-	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.lai
+	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
+	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
 	r.sideTransportClosedTimestamp.mu.Unlock()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
@@ -1291,7 +1275,7 @@ func (r *Replica) checkExecutionCanProceed(
 	}
 
 	// Is the lease valid?
-	if !ba.ReadConsistency.RequiresReadLease() {
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
 		// For INCONSISTENT requests, we don't need the lease.
 		st = kvserverpb.LeaseStatus{
 			Now: now,
@@ -1311,9 +1295,7 @@ func (r *Replica) checkExecutionCanProceed(
 		st, shouldExtend, err = r.leaseGoodToGoRLocked(ctx, now, ba.WriteTimestamp())
 		if err != nil {
 			// If not, can we serve this request on a follower?
-			// TODO(nvanbenschoten): once we make this check cheaper
-			// than leaseGoodToGoRLocked, invert these checks.
-			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
+			if !r.canServeFollowerReadRLocked(ctx, ba) {
 				return st, err
 			}
 			err = nil                     // ignore error
@@ -1645,7 +1627,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				PusheeTxn: intent.Txn,
 				PushType:  roachpb.PUSH_ABORT,
 			})
-			if err := r.DB().Run(ctx, b); err != nil {
+			if err := r.store.DB().Run(ctx, b); err != nil {
 				select {
 				case <-r.store.stopper.ShouldQuiesce():
 					// The server is shutting down. The error while pushing the
@@ -1680,7 +1662,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			var getRes *roachpb.GetResponse
 			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
-				res, pErr := kv.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
+				res, pErr := kv.SendWrappedWith(ctx, r.store.DB().NonTransactionalSender(), roachpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
 					// resolving those intents might involve sending requests to this
 					// range, and that could deadlock. See the comment on
@@ -1867,6 +1849,13 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.failureToGossipSystemConfig = true
+}
+
+// GetResponseMemoryAccount implements the batcheval.EvalContext interface.
+func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
+	// Return an empty account, which places no limits. Places where a real
+	// account is needed use a wrapper for Replica as the EvalContext.
+	return nil
 }
 
 func init() {

@@ -281,7 +281,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// non-overlapping keyspace this split partitions off "our" target space for
 		// future splitting/scattering, while if they don't, doing this only once
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
-		if b.flushCounts.total == 1 {
+		//
+		// We only do this splitting if the caller expects the sst_batcher to
+		// split and scatter the data as it ingests it (which is the case when
+		// splitAfter) is set.
+		if b.flushCounts.total == 1 && b.splitAfter != nil {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "%v", err)
 			} else {
@@ -349,14 +353,19 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
+	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	b.totalRows.DataSize += b.sstWriter.DataSize
 	return nil
 }
 
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close() {
 	b.sstWriter.Close()
+}
+
+// GetBatchSummary returns this batcher's total added rows/bytes/etc.
+func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+	return b.rowCounter.BulkOpSummary
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.

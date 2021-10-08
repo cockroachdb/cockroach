@@ -14,10 +14,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,13 +65,13 @@ type consistencyQueue struct {
 type consistencyShouldQueueData struct {
 	desc                      *roachpb.RangeDescriptor
 	getQueueLastProcessed     func(ctx context.Context) (hlc.Timestamp, error)
-	isNodeLive                func(nodeID roachpb.NodeID) (bool, error)
+	isNodeAvailable           func(nodeID roachpb.NodeID) bool
 	disableLastProcessedCheck bool
 	interval                  time.Duration
 }
 
 // newConsistencyQueue returns a new instance of consistencyQueue.
-func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue {
+func newConsistencyQueue(store *Store) *consistencyQueue {
 	q := &consistencyQueue{
 		interval: func() time.Duration {
 			return consistencyCheckInterval.Get(&store.ClusterSettings().SV)
@@ -80,7 +79,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 		replicaCountFn: store.ReplicaCount,
 	}
 	q.baseQueue = newBaseQueue(
-		"consistencyChecker", q, store, gossip,
+		"consistencyChecker", q, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
@@ -97,7 +96,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 }
 
 func (q *consistencyQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
 	return consistencyQueueShouldQueueImpl(ctx, now,
 		consistencyShouldQueueData{
@@ -105,12 +104,12 @@ func (q *consistencyQueue) shouldQueue(
 			getQueueLastProcessed: func(ctx context.Context) (hlc.Timestamp, error) {
 				return repl.getQueueLastProcessed(ctx, q.name)
 			},
-			isNodeLive: func(nodeID roachpb.NodeID) (bool, error) {
+			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
 				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.IsLive(nodeID)
+					return repl.store.cfg.NodeLiveness.IsAvailableNotDraining(nodeID)
 				}
 				// Some tests run without a NodeLiveness configured.
-				return true, nil
+				return true
 			},
 			disableLastProcessedCheck: repl.store.cfg.TestingKnobs.DisableLastProcessedCheck,
 			interval:                  q.interval(),
@@ -136,12 +135,9 @@ func consistencyQueueShouldQueueImpl(
 			return false, 0
 		}
 	}
-	// Check if all replicas are live.
+	// Check if all replicas are available.
 	for _, rep := range data.desc.Replicas().Descriptors() {
-		if live, err := data.isNodeLive(rep.NodeID); err != nil {
-			log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
-			return false, 0
-		} else if !live {
+		if !data.isNodeAvailable(rep.NodeID) {
 			return false, 0
 		}
 	}
@@ -150,7 +146,7 @@ func consistencyQueueShouldQueueImpl(
 
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
-	ctx context.Context, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, error) {
 	if q.interval() <= 0 {
 		return false, nil

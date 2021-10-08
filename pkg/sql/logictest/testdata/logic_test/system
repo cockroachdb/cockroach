@@ -11,6 +11,7 @@ query TTTTIT
 SHOW TABLES FROM system
 ----
 public  comments                         table  NULL  0  NULL
+public  database_role_settings           table  NULL  0  NULL
 public  descriptor                       table  NULL  0  NULL
 public  eventlog                         table  NULL  0  NULL
 public  jobs                             table  NULL  0  NULL
@@ -19,7 +20,6 @@ public  lease                            table  NULL  0  NULL
 public  locations                        table  NULL  0  NULL
 public  migrations                       table  NULL  0  NULL
 public  namespace                        table  NULL  0  NULL
-public  namespace2                       table  NULL  0  NULL
 public  protected_ts_meta                table  NULL  0  NULL
 public  protected_ts_records             table  NULL  0  NULL
 public  rangelog                         table  NULL  0  NULL
@@ -31,12 +31,17 @@ public  role_members                     table  NULL  0  NULL
 public  role_options                     table  NULL  0  NULL
 public  scheduled_jobs                   table  NULL  0  NULL
 public  settings                         table  NULL  0  NULL
+public  span_configurations              table  NULL  0  NULL
+public  sql_instances                    table  NULL  0  NULL
 public  sqlliveness                      table  NULL  0  NULL
 public  statement_bundle_chunks          table  NULL  0  NULL
 public  statement_diagnostics            table  NULL  0  NULL
 public  statement_diagnostics_requests   table  NULL  0  NULL
+public  statement_statistics             table  NULL  0  NULL
 public  table_statistics                 table  NULL  0  NULL
+public  tenant_usage                     table  NULL  0  NULL
 public  tenants                          table  NULL  0  NULL
+public  transaction_statistics           table  NULL  0  NULL
 public  ui                               table  NULL  0  NULL
 public  users                            table  NULL  0  NULL
 public  web_sessions                     table  NULL  0  NULL
@@ -46,7 +51,6 @@ query I rowsort
 SELECT id FROM system.descriptor
 ----
 1
-2
 3
 4
 5
@@ -77,6 +81,12 @@ SELECT id FROM system.descriptor
 39
 40
 41
+42
+43
+44
+45
+46
+47
 50
 51
 52
@@ -103,20 +113,20 @@ query TTBTTTB
 SHOW COLUMNS FROM system.descriptor
 ----
 id          INT8   false  NULL  ·  {primary}  false
-descriptor  BYTES  true   NULL  ·  {}         false
+descriptor  BYTES  true   NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
 username        STRING  false  NULL   ·  {primary}  false
-hashedPassword  BYTES   true   NULL   ·  {}         false
-isRole          BOOL    false  false  ·  {}         false
+hashedPassword  BYTES   true   NULL   ·  {primary}  false
+isRole          BOOL    false  false  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
 ----
 id      INT8   false  NULL  ·  {primary}  false
-config  BYTES  true   NULL  ·  {}         false
+config  BYTES  true   NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.lease
@@ -130,57 +140,59 @@ query TTBTTTB
 SHOW COLUMNS FROM system.eventlog
 ----
 timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
-eventType    STRING     false  NULL       ·  {}         false
-targetID     INT8       false  NULL       ·  {}         false
-reportingID  INT8       false  NULL       ·  {}         false
-info         STRING     true   NULL       ·  {}         false
+eventType    STRING     false  NULL       ·  {primary}  false
+targetID     INT8       false  NULL       ·  {primary}  false
+reportingID  INT8       false  NULL       ·  {primary}  false
+info         STRING     true   NULL       ·  {primary}  false
 uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.rangelog
 ----
 timestamp     TIMESTAMP  false  NULL            ·  {primary}  false
-rangeID       INT8       false  NULL            ·  {}         false
-storeID       INT8       false  NULL            ·  {}         false
-eventType     STRING     false  NULL            ·  {}         false
-otherRangeID  INT8       true   NULL            ·  {}         false
-info          STRING     true   NULL            ·  {}         false
+rangeID       INT8       false  NULL            ·  {primary}  false
+storeID       INT8       false  NULL            ·  {primary}  false
+eventType     STRING     false  NULL            ·  {primary}  false
+otherRangeID  INT8       true   NULL            ·  {primary}  false
+info          STRING     true   NULL            ·  {primary}  false
 uniqueID      INT8       false  unique_rowid()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.ui
 ----
 key          STRING     false  NULL  ·  {primary}  false
-value        BYTES      true   NULL  ·  {}         false
-lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
+value        BYTES      true   NULL  ·  {primary}  false
+lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx,primary}  false
-status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx}          false
-created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
-payload            BYTES      false  NULL               ·  {}                                                                        false
-progress           BYTES      true   NULL               ·  {}                                                                        false
-created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
-created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
-claim_session_id   BYTES      true   NULL               ·  {}                                                                        false
-claim_instance_id  INT8       true   NULL               ·  {}                                                                        false
+id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
+status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
+created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                         false
+payload            BYTES      false  NULL               ·  {primary}                                                                                    false
+progress           BYTES      true   NULL               ·  {primary}                                                                                    false
+created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                             false
+created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                             false
+claim_session_id   BYTES      true   NULL               ·  {jobs_run_stats_idx,primary}                                                                 false
+claim_instance_id  INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                 false
+num_runs           INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                 false
+last_run           TIMESTAMP  true   NULL               ·  {jobs_run_stats_idx,primary}                                                                 false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
 name         STRING     false  NULL               ·  {primary}  false
-value        STRING     false  NULL               ·  {}         false
-lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}         false
-valueType    STRING     true   NULL               ·  {}         false
+value        STRING     false  NULL               ·  {primary}  false
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {primary}  false
+valueType    STRING     true   NULL               ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
 role     STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
 member   STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
-isAdmin  BOOL    false  NULL  ·  {}                                                       false
+isAdmin  BOOL    false  NULL  ·  {primary}                                                false
 
 
 # Verify default privileges on system tables.
@@ -206,6 +218,16 @@ system  public  comments                         root    GRANT
 system  public  comments                         root    INSERT
 system  public  comments                         root    SELECT
 system  public  comments                         root    UPDATE
+system  public  database_role_settings           admin   DELETE
+system  public  database_role_settings           admin   GRANT
+system  public  database_role_settings           admin   INSERT
+system  public  database_role_settings           admin   SELECT
+system  public  database_role_settings           admin   UPDATE
+system  public  database_role_settings           root    DELETE
+system  public  database_role_settings           root    GRANT
+system  public  database_role_settings           root    INSERT
+system  public  database_role_settings           root    SELECT
+system  public  database_role_settings           root    UPDATE
 system  public  descriptor                       admin   GRANT
 system  public  descriptor                       admin   SELECT
 system  public  descriptor                       root    GRANT
@@ -274,10 +296,6 @@ system  public  namespace                        admin   GRANT
 system  public  namespace                        admin   SELECT
 system  public  namespace                        root    GRANT
 system  public  namespace                        root    SELECT
-system  public  namespace2                       admin   GRANT
-system  public  namespace2                       admin   SELECT
-system  public  namespace2                       root    GRANT
-system  public  namespace2                       root    SELECT
 system  public  protected_ts_meta                admin   GRANT
 system  public  protected_ts_meta                admin   SELECT
 system  public  protected_ts_meta                root    GRANT
@@ -376,6 +394,26 @@ system  public  settings                         root    GRANT
 system  public  settings                         root    INSERT
 system  public  settings                         root    SELECT
 system  public  settings                         root    UPDATE
+system  public  span_configurations              admin   DELETE
+system  public  span_configurations              admin   GRANT
+system  public  span_configurations              admin   INSERT
+system  public  span_configurations              admin   SELECT
+system  public  span_configurations              admin   UPDATE
+system  public  span_configurations              root    DELETE
+system  public  span_configurations              root    GRANT
+system  public  span_configurations              root    INSERT
+system  public  span_configurations              root    SELECT
+system  public  span_configurations              root    UPDATE
+system  public  sql_instances                    admin   DELETE
+system  public  sql_instances                    admin   GRANT
+system  public  sql_instances                    admin   INSERT
+system  public  sql_instances                    admin   SELECT
+system  public  sql_instances                    admin   UPDATE
+system  public  sql_instances                    root    DELETE
+system  public  sql_instances                    root    GRANT
+system  public  sql_instances                    root    INSERT
+system  public  sql_instances                    root    SELECT
+system  public  sql_instances                    root    UPDATE
 system  public  sqlliveness                      admin   DELETE
 system  public  sqlliveness                      admin   GRANT
 system  public  sqlliveness                      admin   INSERT
@@ -416,6 +454,10 @@ system  public  statement_diagnostics_requests   root    GRANT
 system  public  statement_diagnostics_requests   root    INSERT
 system  public  statement_diagnostics_requests   root    SELECT
 system  public  statement_diagnostics_requests   root    UPDATE
+system  public  statement_statistics             admin   GRANT
+system  public  statement_statistics             admin   SELECT
+system  public  statement_statistics             root    GRANT
+system  public  statement_statistics             root    SELECT
 system  public  table_statistics                 admin   DELETE
 system  public  table_statistics                 admin   GRANT
 system  public  table_statistics                 admin   INSERT
@@ -426,10 +468,24 @@ system  public  table_statistics                 root    GRANT
 system  public  table_statistics                 root    INSERT
 system  public  table_statistics                 root    SELECT
 system  public  table_statistics                 root    UPDATE
+system  public  tenant_usage                     admin   DELETE
+system  public  tenant_usage                     admin   GRANT
+system  public  tenant_usage                     admin   INSERT
+system  public  tenant_usage                     admin   SELECT
+system  public  tenant_usage                     admin   UPDATE
+system  public  tenant_usage                     root    DELETE
+system  public  tenant_usage                     root    GRANT
+system  public  tenant_usage                     root    INSERT
+system  public  tenant_usage                     root    SELECT
+system  public  tenant_usage                     root    UPDATE
 system  public  tenants                          admin   GRANT
 system  public  tenants                          admin   SELECT
 system  public  tenants                          root    GRANT
 system  public  tenants                          root    SELECT
+system  public  transaction_statistics           admin   GRANT
+system  public  transaction_statistics           admin   SELECT
+system  public  transaction_statistics           root    GRANT
+system  public  transaction_statistics           root    SELECT
 system  public  ui                               admin   DELETE
 system  public  ui                               admin   GRANT
 system  public  ui                               admin   INSERT
@@ -653,3 +709,15 @@ SET DATABASE = test
 # system is a database, not a schema.
 query error relation ".system.users" does not exist
 SELECT username FROM "".system.users WHERE username = 'root'
+
+# Verify that tenant_usage has a reduced TTL.
+query T
+SELECT raw_config_sql FROM [ SHOW ZONE CONFIGURATION FOR TABLE system.tenant_usage ]
+----
+ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
+  range_min_bytes = 134217728,
+  range_max_bytes = 536870912,
+  gc.ttlseconds = 7200,
+  num_replicas = 5,
+  constraints = '[]',
+  lease_preferences = '[]'

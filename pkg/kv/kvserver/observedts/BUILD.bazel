@@ -11,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
     ],
 )
@@ -26,7 +26,7 @@ go_test(
     embed = [":observedts"],
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",

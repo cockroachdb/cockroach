@@ -31,7 +31,7 @@ ALTER TABLE def INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -68,15 +68,14 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@primary
-│ equality: (b) = (f)
-│ pred: e > 1
+│ lookup condition: (f = b) AND (e > 1)
 │
 └── • scan
       columns: (a, b, c)
@@ -87,7 +86,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -106,7 +105,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -125,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -268,7 +267,7 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -312,7 +311,7 @@ ALTER TABLE authors INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -357,7 +356,7 @@ NULL       NULL     {5}       5
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • distinct
@@ -384,7 +383,7 @@ vectorized: true
               table: authors@primary
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck9Fv2j4Qx99_f4V_95RIbsFJAClSJaPCVCYWOkDapImHhFwha7Az25E2If73KQldCWpC6ZvPd5-vv3e296B_peDD-PvjdDgJiDWaLJaLr1ObLMbT8f2SFPEkuF-SMDdbqfStCHdIPs1nX0gk5bMmwwWJGK0Cp4wc-lJMvj2M52NiWRG7NYlJkdyRyKmWNhkGI2K9yBZ8kT0W2sd0xG71FtMn8n9JlmsbKAgZYxDuUIP_AxhQ6MGKQqbkGrWWqtjel0WT-Df4XQqJyHJTbK8orKVC8PdQngQ-BPJGZp0-UIjRhElalh0oyNy8QtqEGwR_cKAnwqxdeBlGKc4xjFF1ujV5KOfFM5XsQvUHKCyyUGif3ACFWW58whnlLjS5YB91weoujtO_4MNp9OE0-ng9PhdSxagwPp_v5ZI3mnkI9fazTASqjlPvJcUnY3Fm36lkszUWd-xaD5S7lHuNnbjXTLQwcByo-8a1OifznEr5nGfkp0wEkcIn3CtcBYQ7xZPmg38emy_bu8baKNEmEWvT8erGOGvU731Iv_du_X5N_8JfnKPOpND4rs_YLV4IxhusXpyWuVrjo5Lr8pgqnJVcuRGjNlV2UAUTUaUKg6cwa4XdGszOYecK2DmH3VbYa7fttcK9drjXCvfb4X4r3D2DV4f__gYAAP__TEsXpA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3KW73lEheIU7opEiVggpTmRh0gLRJEw8JuULWYGe2I21CfPcpDl0bBOnoW86-3__-d77sUP_KMcTh9_txfzQBZzCaL-Zfxy7Mh-Ph7QKqeDS5XUBcmo1U-krEW4JPs-kXSKR81NCfQ-KxOuA24uwpGb7dDWdDcJzEuzKZyQluIOH1pwv9yQCcJ9mKr24Pie7hOvGu9IbyB3hvSfvtIkMhU5rEW9IY_kAPlwwLJVektVTV0c4mjNLfGHYZZqIoTXW8ZLiSijDcoa2CIS7iJKcZxSmpThcZpmTiLLeytqWoUNk2Vn-Q4byIhQ7hAzKcliaEyGORj8s9Q1ma5wraxGvC0Nuzt7nwmi4OA3rFBz_rg5_18Vy-FFKlpChtlF5W5GspJ5q5i_Xms8wEqQ5v9pLTg3Eiz71R2XpjnIi7jR5Y5LMoONuJf8lEKwOHgfonnpW_mOdYyseygJ8yEyBFCFFQuZpAxKutiz7-83j-sYNLrA0ybTKxMp2gaSzyzur33qTf-2_960v0Z6QLKTQdL8tJ5W61IZSuqd44LUu1onslV7ZMHU4tZw9S0qa-5XUwEvbK_k0vYe8CmB_DvBX2G3D3GPZb4aAdDlrhXjvca4Wvj-Dl_t3fAAAA___-ZuVx
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -624,7 +623,7 @@ vectorized: true
       table: small@primary
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2zAUhd_3Ky4XBglT6sh20lRQSLe64JLZnePBxsiDGovOm2t5sgIrJf99WC7UKYtt8EveLMnH59zvCt9nLP9kyND7dre68gMYXfvreP1lNYa1t_I-xaDpGSeg7bN7uInCz1A-8iyDqzVoCivvJobb0A8g4-pBmF0bwgBGlQouKxkfw1VwDaOR-cR7mI_hEqZjCKNrL4KP340BEsxlIgL-KEpkP5AiQRsJOkjQRYIz3BAslNyKspSqeuXZCPzkL7IpwTQvdrra3hDcSiWQPaNOdSaQYczvMxEJnghlTZFgIjRPM2NjalkWKn3k6gkJrguelwwmFgWeJ0BB6p9CIcFwpxksKW72BOVOv5qVmj8IZHRP-ge6lWn-kmd2mCd-KgSrqYZfYy8ybJGgodvIuZLy966AXzLNQeYmGcEK-9KpCDPG_CBeGNAvz681kKVztAz7aBmv6aVKhBLJYfAl_YCb_X9qDeREFhY95H7M3jmwp_3bSnu11aITyx7U2I5IjcbOT7mxdn-ydj-y9sRyBpHtiNQge37KZJ3-ZJ1-ZJ2J5Q4i2xGpQXZxymTd_mTdfmTdiTUbRLYjUoPsxSmT7ZhWkSgLmZei1x98Ws0AkTyIemaUcqe24k7JrbGpl6HRmY1ElLo-pfXCz-ujKmBTTFvF9oGYvhXb7c4d1k6r2m0Xu0Nyz1rF83bn-RDn81bxot15McT5or1X045r0n7J3npv9u_-BQAA__8-W3La
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2z4Uxd__n-Jy4Q8JU-rIdtJUUEi3uuCS2Z3jwcbIgxqLzptrebICKyXffVguq1MW2-CXvMVSjs45vyvQM5a_MmTofblbXfkBjK79dbz-tBrD2lt5H2LQ9IwT0PbZPdxE4UcoH3mWwdUaNIWVdxPDbegHkHH1IMyqDWEAo0oFl5WMj-EquIbRyBzxP8zHcAnTMYTRtRfB-6_GAAnmMhEBfxQlsm9IkaCNBB0k6CLBGW4IFkpuRVlKVf3l2Qj85DeyKcE0L3a6Wt4Q3EolkD2jTnUmkGHM7zMRCZ4IZU2RYCI0TzNjY7osC5U-cvWEBNcFz0sGE4sCzxOgIPV3oZBguNMMlhQ3e4Jyp1_NSs0fBDK6J_0D3co0f8kzO8wTPxWC1VTDz7EXGbZI0NBt5FxJ-XNXwA-Z5iBzk4xghX3pVIQZY34QLwzol9-vHcjSJkvnaBP7aJPXAlIlQonkMPuSvsPN_h91AzmRhUXfoP-b5ngU5yAK7T9l2mvKFp1Y9qA5d0RqzHl-4nO2-8O1-8G1J5YzCG5HpAbc8xOH6_SH6_SD60wsdxDcjkgNuIsTh-v2h-v2g-tOrNkguB2RGnAvThxux0MWibKQeSkOWhw7eVq9DSJ5EPVbUsqd2oo7JbfGpv4Mjc4sJKLU9S6tP_y83qoCNsW0VWwfiOlbsd3u3GHttKrddrE7JPesVTxvd54PcT5vFS_anRdDnC_aZzXtuCbtl-yt92b_358AAAD__1JDeNY=
 
 # Left join against covering secondary index
 query T
@@ -924,7 +923,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (inner)
@@ -945,7 +944,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • merge join (inner)
@@ -973,7 +972,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • sort
@@ -1003,7 +1002,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1021,7 +1020,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1039,7 +1038,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1058,7 +1057,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1077,7 +1076,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (semi)
@@ -1096,7 +1095,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1709,67 +1708,64 @@ ORDER BY numwait DESC, s_name
 distribution: full
 vectorized: true
 ·
-• limit
+• top-k
 │ estimated row count: 0
-│ count: 100
+│ order: -count_rows,+s_name
+│ k: 100
 │
-└── • sort
+└── • group
     │ estimated row count: 0
-    │ order: -count_rows,+s_name
+    │ group by: s_name
     │
-    └── • group
+    └── • lookup join (semi)
         │ estimated row count: 0
-        │ group by: s_name
+        │ table: lineitem@primary
+        │ equality: (l_orderkey) = (l_orderkey)
+        │ pred: l_suppkey != l_suppkey
         │
-        └── • lookup join (semi)
+        └── • lookup join
             │ estimated row count: 0
-            │ table: lineitem@primary
-            │ equality: (l_orderkey) = (l_orderkey)
-            │ pred: l_suppkey != l_suppkey
+            │ table: orders@primary
+            │ equality: (l_orderkey) = (o_orderkey)
+            │ equality cols are key
+            │ pred: o_orderstatus = 'F'
             │
-            └── • lookup join
+            └── • lookup join (anti)
                 │ estimated row count: 0
-                │ table: orders@primary
-                │ equality: (l_orderkey) = (o_orderkey)
-                │ equality cols are key
-                │ pred: o_orderstatus = 'F'
+                │ table: lineitem@primary
+                │ equality: (l_orderkey) = (l_orderkey)
+                │ pred: l_receiptdate > l_commitdate
                 │
-                └── • lookup join (anti)
-                    │ estimated row count: 0
+                └── • lookup join
                     │ table: lineitem@primary
-                    │ equality: (l_orderkey) = (l_orderkey)
+                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
+                    │ equality cols are key
                     │ pred: l_receiptdate > l_commitdate
                     │
                     └── • lookup join
-                        │ table: lineitem@primary
-                        │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
-                        │ equality cols are key
-                        │ pred: l_receiptdate > l_commitdate
+                        │ estimated row count: 240,049
+                        │ table: lineitem@l_sk
+                        │ equality: (s_suppkey) = (l_suppkey)
                         │
                         └── • lookup join
-                            │ estimated row count: 240,049
-                            │ table: lineitem@l_sk
-                            │ equality: (s_suppkey) = (l_suppkey)
+                            │ estimated row count: 400
+                            │ table: supplier@primary
+                            │ equality: (s_suppkey) = (s_suppkey)
+                            │ equality cols are key
                             │
                             └── • lookup join
                                 │ estimated row count: 400
-                                │ table: supplier@primary
-                                │ equality: (s_suppkey) = (s_suppkey)
-                                │ equality cols are key
+                                │ table: supplier@s_nk
+                                │ equality: (n_nationkey) = (s_nationkey)
                                 │
-                                └── • lookup join
-                                    │ estimated row count: 400
-                                    │ table: supplier@s_nk
-                                    │ equality: (n_nationkey) = (s_nationkey)
+                                └── • filter
+                                    │ estimated row count: 1
+                                    │ filter: n_name = 'SAUDI ARABIA'
                                     │
-                                    └── • filter
-                                        │ estimated row count: 1
-                                        │ filter: n_name = 'SAUDI ARABIA'
-                                        │
-                                        └── • scan
-                                              estimated row count: 25 (100% of the table; stats collected <hidden> ago)
-                                              table: nation@primary
-                                              spans: FULL SCAN
+                                    └── • scan
+                                          estimated row count: 25 (100% of the table; stats collected <hidden> ago)
+                                          table: nation@primary
+                                          spans: FULL SCAN
 
 # Regression test for #50964.
 statement ok
@@ -1837,7 +1833,7 @@ CREATE TABLE t59615 (
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1854,7 +1850,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615 t WHERE u.y = t.y
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)
@@ -1882,7 +1878,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
 ON u.w = t.w AND u.x = t.x
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (left outer)
@@ -1899,7 +1895,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
   SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
 )
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • lookup join (anti)

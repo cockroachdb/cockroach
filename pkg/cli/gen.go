@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -18,10 +19,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -40,7 +43,7 @@ example, to install man pages globally on many Unix-like systems,
 use "--path=/usr/local/share/man/man1".
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runGenManCmd),
+	RunE: clierrorplus.MaybeDecorateError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
@@ -95,7 +98,7 @@ instructions.
 `,
 	Args:      cobra.OnlyValidArgs,
 	ValidArgs: []string{"bash", "zsh", "fish"},
-	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
+	RunE:      clierrorplus.MaybeDecorateError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
@@ -197,7 +200,7 @@ Output the list of cluster settings known to this binary.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wrapCode := func(s string) string {
-			if cliCtx.tableDisplayFormat == tableDisplayHTML {
+			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
 				return fmt.Sprintf("<code>%s</code>", s)
 			}
 			return s
@@ -205,7 +208,7 @@ Output the list of cluster settings known to this binary.
 
 		// Fill a Values struct with the defaults.
 		s := cluster.MakeTestingClusterSettings()
-		settings.NewUpdater(&s.SV).ResetRemaining()
+		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
 		for _, name := range settings.Keys() {
@@ -232,7 +235,7 @@ Output the list of cluster settings known to this binary.
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
-				if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+				if override, ok := startupmigrations.SettingsDefaultOverrides[name]; ok {
 					defaultVal = override
 				}
 			}
@@ -240,20 +243,9 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		reporter, cleanup, err := makeReporter(os.Stdout)
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
-		if hr, ok := reporter.(*htmlReporter); ok {
-			hr.escape = false
-			hr.rowStats = false
-		}
+		sliceIter := clisqlexec.NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return render(reporter, os.Stdout,
-			cols, NewRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
+		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
 	},
 }
 

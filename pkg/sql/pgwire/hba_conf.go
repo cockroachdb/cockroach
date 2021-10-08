@@ -17,13 +17,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -133,24 +130,11 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			"To use the default configuration, assign the empty string ('').")
 	}
 
-	// Retrieve the cluster version handle. We'll need to check the current cluster version.
-	var vh clusterversion.Handle
-	if values != nil {
-		vh = values.Opaque().(clusterversion.Handle)
-	}
-
 	for _, entry := range conf.Entries {
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
 		case hba.ConnHostSSL, hba.ConnHostNoSSL:
-			if vh != nil &&
-				!vh.IsActive(context.TODO(), clusterversion.HBAForNonTLS) {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					`authentication rule type 'hostssl'/'hostnossl' requires all nodes to be upgraded to %s`,
-					clusterversion.ByKey(clusterversion.HBAForNonTLS),
-				)
-			}
 
 		default:
 			return unimplemented.Newf("hba-type-"+entry.ConnType.String(),

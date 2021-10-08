@@ -9,45 +9,45 @@ build
 SELECT a+b, a+b FROM ab
 ----
 project
- ├── columns: "?column?":5 "?column?":5
+ ├── columns: "?column?":6 "?column?":6
  ├── scan ab
- │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      └── a:1 + b:2 [as="?column?":5]
+      └── a:1 + b:2 [as="?column?":6]
 
 # Ensure whitespace differences don't prevent deduplication.
 build
 SELECT a+b, a + b FROM ab
 ----
 project
- ├── columns: "?column?":5 "?column?":5
+ ├── columns: "?column?":6 "?column?":6
  ├── scan ab
- │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      └── a:1 + b:2 [as="?column?":5]
+      └── a:1 + b:2 [as="?column?":6]
 
 # Side-effecting expressions are not deduplicated.
 build
 SELECT random(), random() FROM ab
 ----
 project
- ├── columns: random:5 random:6
+ ├── columns: random:6 random:7
  ├── scan ab
- │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      ├── random() [as=random:5]
-      └── random() [as=random:6]
+      ├── random() [as=random:6]
+      └── random() [as=random:7]
 
 build
 SELECT random(), random() FROM ab
 ----
 project
- ├── columns: random:5 random:6
+ ├── columns: random:6 random:7
  ├── scan ab
- │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      ├── random() [as=random:5]
-      └── random() [as=random:6]
+      ├── random() [as=random:6]
+      └── random() [as=random:7]
 
 # ORDER BY does not add a new projection if the same expression is projected
 # already, regardless of side-effects.
@@ -55,15 +55,15 @@ build
 SELECT a, b, random(), random() FROM ab ORDER BY random()
 ----
 sort
- ├── columns: a:1 b:2 random:5 random:6
- ├── ordering: +5
+ ├── columns: a:1 b:2 random:6 random:7
+ ├── ordering: +6
  └── project
-      ├── columns: random:5 random:6 a:1 b:2
+      ├── columns: random:6 random:7 a:1 b:2
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
       └── projections
-           ├── random() [as=random:5]
-           └── random() [as=random:6]
+           ├── random() [as=random:6]
+           └── random() [as=random:7]
 
 # With GROUP BY, expressions identical to a grouping column are always
 # collapsed into a single value.
@@ -71,14 +71,14 @@ build
 SELECT random(), random() FROM ab GROUP BY random()
 ----
 group-by
- ├── columns: random:5 random:5
- ├── grouping columns: column5:5
+ ├── columns: random:6 random:6
+ ├── grouping columns: column6:6
  └── project
-      ├── columns: column5:5
+      ├── columns: column6:6
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
       └── projections
-           └── random() [as=column5:5]
+           └── random() [as=column6:6]
 
 build
 INSERT INTO ab VALUES (random(), random())
@@ -86,16 +86,16 @@ INSERT INTO ab VALUES (random(), random())
 insert ab
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    ├── column2:6 => b:2
- │    └── rowid_default:7 => rowid:3
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── rowid_default:8 => rowid:3
  └── project
-      ├── columns: rowid_default:7 column1:5 column2:6
+      ├── columns: rowid_default:8 column1:6 column2:7
       ├── values
-      │    ├── columns: column1:5 column2:6
+      │    ├── columns: column1:6 column2:7
       │    └── (random(), random())
       └── projections
-           └── unique_rowid() [as=rowid_default:7]
+           └── unique_rowid() [as=rowid_default:8]
 
 # Make sure impure default expressions are not deduplicated.
 exec-ddl
@@ -108,20 +108,20 @@ INSERT INTO abcd VALUES (1, 1)
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:9 => c:3
- │    ├── d_default:10 => d:4
- │    └── rowid_default:11 => rowid:5
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── c_default:10 => c:3
+ │    ├── d_default:11 => d:4
+ │    └── rowid_default:12 => rowid:5
  └── project
-      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7!null column2:8!null
+      ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8!null column2:9!null
       ├── values
-      │    ├── columns: column1:7!null column2:8!null
+      │    ├── columns: column1:8!null column2:9!null
       │    └── (1.0, 1.0)
       └── projections
-           ├── random() [as=c_default:9]
-           ├── random() [as=d_default:10]
-           └── unique_rowid() [as=rowid_default:11]
+           ├── random() [as=c_default:10]
+           ├── random() [as=d_default:11]
+           └── unique_rowid() [as=rowid_default:12]
 
 build
 INSERT INTO abcd VALUES (random(), random())
@@ -129,20 +129,20 @@ INSERT INTO abcd VALUES (random(), random())
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:9 => c:3
- │    ├── d_default:10 => d:4
- │    └── rowid_default:11 => rowid:5
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── c_default:10 => c:3
+ │    ├── d_default:11 => d:4
+ │    └── rowid_default:12 => rowid:5
  └── project
-      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7 column2:8
+      ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8 column2:9
       ├── values
-      │    ├── columns: column1:7 column2:8
+      │    ├── columns: column1:8 column2:9
       │    └── (random(), random())
       └── projections
-           ├── random() [as=c_default:9]
-           ├── random() [as=d_default:10]
-           └── unique_rowid() [as=rowid_default:11]
+           ├── random() [as=c_default:10]
+           ├── random() [as=d_default:11]
+           └── unique_rowid() [as=rowid_default:12]
 
 build
 UPSERT INTO abcd VALUES (1, 1)
@@ -150,20 +150,20 @@ UPSERT INTO abcd VALUES (1, 1)
 upsert abcd
  ├── columns: <none>
  ├── upsert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:9 => c:3
- │    ├── d_default:10 => d:4
- │    └── rowid_default:11 => rowid:5
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── c_default:10 => c:3
+ │    ├── d_default:11 => d:4
+ │    └── rowid_default:12 => rowid:5
  └── project
-      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7!null column2:8!null
+      ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8!null column2:9!null
       ├── values
-      │    ├── columns: column1:7!null column2:8!null
+      │    ├── columns: column1:8!null column2:9!null
       │    └── (1.0, 1.0)
       └── projections
-           ├── random() [as=c_default:9]
-           ├── random() [as=d_default:10]
-           └── unique_rowid() [as=rowid_default:11]
+           ├── random() [as=c_default:10]
+           ├── random() [as=d_default:11]
+           └── unique_rowid() [as=rowid_default:12]
 
 build
 UPSERT INTO abcd VALUES (random(), random())
@@ -171,38 +171,38 @@ UPSERT INTO abcd VALUES (random(), random())
 upsert abcd
  ├── columns: <none>
  ├── upsert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:9 => c:3
- │    ├── d_default:10 => d:4
- │    └── rowid_default:11 => rowid:5
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── c_default:10 => c:3
+ │    ├── d_default:11 => d:4
+ │    └── rowid_default:12 => rowid:5
  └── project
-      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7 column2:8
+      ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8 column2:9
       ├── values
-      │    ├── columns: column1:7 column2:8
+      │    ├── columns: column1:8 column2:9
       │    └── (random(), random())
       └── projections
-           ├── random() [as=c_default:9]
-           ├── random() [as=d_default:10]
-           └── unique_rowid() [as=rowid_default:11]
+           ├── random() [as=c_default:10]
+           ├── random() [as=d_default:11]
+           └── unique_rowid() [as=rowid_default:12]
 
 build
 UPDATE abcd SET a = random(), b = random() WHERE a=1
 ----
 update abcd
  ├── columns: <none>
- ├── fetch columns: a:7 b:8 c:9 d:10 rowid:11
+ ├── fetch columns: a:8 b:9 c:10 d:11 rowid:12
  ├── update-mapping:
- │    ├── a_new:13 => a:1
- │    └── b_new:14 => b:2
+ │    ├── a_new:15 => a:1
+ │    └── b_new:16 => b:2
  └── project
-      ├── columns: a_new:13 b_new:14 a:7!null b:8 c:9 d:10 rowid:11!null crdb_internal_mvcc_timestamp:12
+      ├── columns: a_new:15 b_new:16 a:8!null b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       ├── select
-      │    ├── columns: a:7!null b:8 c:9 d:10 rowid:11!null crdb_internal_mvcc_timestamp:12
+      │    ├── columns: a:8!null b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan abcd
-      │    │    └── columns: a:7 b:8 c:9 d:10 rowid:11!null crdb_internal_mvcc_timestamp:12
+      │    │    └── columns: a:8 b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    └── filters
-      │         └── a:7 = 1.0
+      │         └── a:8 = 1.0
       └── projections
-           ├── random() [as=a_new:13]
-           └── random() [as=b_new:14]
+           ├── random() [as=a_new:15]
+           └── random() [as=b_new:16]

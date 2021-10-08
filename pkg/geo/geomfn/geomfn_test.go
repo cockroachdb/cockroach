@@ -11,6 +11,7 @@
 package geomfn
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -136,6 +137,14 @@ func requireGeometryFromGeomT(t *testing.T, g geom.T) geo.Geometry {
 	return ret
 }
 
+// flatCoordsInEpsilon ensures the flat coords are within the expected epsilon.
+func flatCoordsInEpsilon(t *testing.T, expected []float64, actual []float64, epsilon float64) {
+	require.Equal(t, len(expected), len(actual), "expected %#v, got %#v", expected, actual)
+	for i := range expected {
+		require.True(t, math.Abs(expected[i]-actual[i]) < epsilon, "expected %#v, got %#v (mismatching at position %d)", expected, actual, i)
+	}
+}
+
 // requireGeometryWithinEpsilon and ensures the geometry shape and SRID are equal,
 // and that each coordinate is within the provided epsilon.
 func requireGeometryWithinEpsilon(t *testing.T, expected, got geo.Geometry, epsilon float64) {
@@ -152,14 +161,14 @@ func requireGeomTWithinEpsilon(t *testing.T, expectedT, gotT geom.T, epsilon flo
 	require.IsType(t, expectedT, gotT)
 	switch lhs := expectedT.(type) {
 	case *geom.Point, *geom.LineString:
-		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+		flatCoordsInEpsilon(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
 	case *geom.MultiPoint, *geom.Polygon, *geom.MultiLineString:
 		require.Equal(t, expectedT.Ends(), gotT.Ends())
-		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+		flatCoordsInEpsilon(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
 	case *geom.MultiPolygon:
 		require.Equal(t, expectedT.Ends(), gotT.Ends())
 		require.Equal(t, expectedT.Endss(), gotT.Endss())
-		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+		flatCoordsInEpsilon(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
 	case *geom.GeometryCollection:
 		rhs, ok := gotT.(*geom.GeometryCollection)
 		require.True(t, ok)

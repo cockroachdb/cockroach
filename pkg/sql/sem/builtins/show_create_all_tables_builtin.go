@@ -17,14 +17,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
-
-const sizeOfInt64 = int64(unsafe.Sizeof(int64(0)))
 
 // mapEntryOverhead is a guess on how much space (in bytes)
 // each item added to a map takes.
@@ -54,10 +53,9 @@ func getTopologicallySortedTableIDs(
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	dbName string,
-	ts string,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
-	ids, err := getTableIDs(ctx, ie, txn, ts, dbName, acc)
+	ids, err := getTableIDs(ctx, ie, txn, dbName, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +73,8 @@ func getTopologicallySortedTableIDs(
 		query := fmt.Sprintf(`
 		SELECT dependson_id
 		FROM %s.crdb_internal.backward_dependencies
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-		`, dbName, ts)
+		`, dbName)
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
@@ -101,7 +98,7 @@ func getTopologicallySortedTableIDs(
 		}
 
 		// Account for memory of map.
-		sizeOfKeyValue := int64(unsafe.Sizeof(tid)) + int64(len(refs))*sizeOfInt64
+		sizeOfKeyValue := int64(unsafe.Sizeof(tid)) + int64(len(refs))*memsize.Int64
 		sizeOfMap += sizeOfKeyValue + mapEntryOverhead
 		if err = acc.Grow(ctx, sizeOfKeyValue+mapEntryOverhead); err != nil {
 			return nil, err
@@ -122,7 +119,7 @@ func getTopologicallySortedTableIDs(
 	var topologicallyOrderedIDs []int64
 
 	// The sort relies on creating a new array for the ids.
-	if err = acc.Grow(ctx, int64(len(ids))*sizeOfInt64); err != nil {
+	if err = acc.Grow(ctx, int64(len(ids))*memsize.Int64); err != nil {
 		return nil, err
 	}
 	seen := make(map[int64]struct{})
@@ -137,7 +134,7 @@ func getTopologicallySortedTableIDs(
 	// Clear memory used by the seen map.
 	sizeOfSeen := len(seen)
 	seen = nil
-	acc.Shrink(ctx, int64(sizeOfSeen)*(sizeOfInt64+mapEntryOverhead))
+	acc.Shrink(ctx, int64(sizeOfSeen)*(memsize.Int64+mapEntryOverhead))
 
 	// The lengths should match. This is also important for memory accounting,
 	// the two arrays should have the same length.
@@ -148,7 +145,7 @@ func getTopologicallySortedTableIDs(
 	}
 
 	// Shrink the memory we used for the original ids array.
-	acc.Shrink(ctx, int64(len(ids))*sizeOfInt64)
+	acc.Shrink(ctx, int64(len(ids))*memsize.Int64)
 	acc.Shrink(ctx, sizeOfMap)
 	return topologicallyOrderedIDs, nil
 }
@@ -159,18 +156,16 @@ func getTableIDs(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
-	ts string,
 	dbName string,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE database_name = $1 
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
-		`, dbName, ts)
+		`, dbName)
 	it, err := ie.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -226,7 +221,7 @@ func topologicalSort(
 	// Account for memory of map.
 	// The key value entry into the map is only the memory of an int64 since
 	// the value stuct{}{} uses no memory.
-	if err := acc.Grow(ctx, sizeOfInt64+mapEntryOverhead); err != nil {
+	if err := acc.Grow(ctx, memsize.Int64+mapEntryOverhead); err != nil {
 		return err
 	}
 	seen[tid] = struct{}{}
@@ -247,15 +242,14 @@ func topologicalSort(
 // getCreateStatement gets the create statement to recreate a table (ignoring fks)
 // for a given table id in a database.
 func getCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, ts string, dbName string,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
 			create_nofks
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-	`, dbName, ts)
+	`, dbName)
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -278,7 +272,6 @@ func getAlterStatements(
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	id int64,
-	ts string,
 	dbName string,
 	statementType string,
 ) (tree.Datum, error) {
@@ -286,9 +279,8 @@ func getAlterStatements(
 		SELECT
 			%s
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-	`, statementType, dbName, ts)
+	`, statementType, dbName)
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",

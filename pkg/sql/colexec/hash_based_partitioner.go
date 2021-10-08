@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/marusama/semaphore"
 )
 
@@ -120,7 +121,7 @@ type hashBasedPartitioner struct {
 	colexecop.CloserHelper
 
 	unlimitedAllocator                 *colmem.Allocator
-	name                               string
+	name                               redact.SafeString
 	state                              hashBasedPartitionerState
 	inputs                             []colexecop.Operator
 	inputTypes                         [][]*types.T
@@ -209,7 +210,7 @@ func newHashBasedPartitioner(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	name string,
+	name redact.SafeString,
 	inputs []colexecop.Operator,
 	inputTypes [][]*types.T,
 	hashCols [][]uint32,
@@ -370,12 +371,10 @@ func (op *hashBasedPartitioner) partitionBatch(
 			colVecs := scratchBatch.ColVecs()
 			op.unlimitedAllocator.PerformOperation(colVecs, func() {
 				for i, colvec := range colVecs {
-					colvec.Copy(coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:       batch.ColVec(i),
-							Sel:       sel,
-							SrcEndIdx: len(sel),
-						},
+					colvec.Copy(coldata.SliceArgs{
+						Src:       batch.ColVec(i),
+						Sel:       sel,
+						SrcEndIdx: len(sel),
 					})
 				}
 				scratchBatch.SetLength(len(sel))
@@ -538,7 +537,7 @@ StateChanged:
 				if partitionInfo.memSize <= op.maxPartitionSizeToProcessUsingMain {
 					log.VEventf(op.Ctx, 2,
 						`%s processes partition with idx %d of size %s using the "main" strategy`,
-						op.name, partitionIdx, humanizeutil.IBytes(partitionInfo.memSize),
+						op.name, partitionIdx, redact.SafeString(humanizeutil.IBytes(partitionInfo.memSize)),
 					)
 					for i := range op.partitionedInputs {
 						op.partitionedInputs[i].partitionIdx = partitionIdx
@@ -620,7 +619,7 @@ StateChanged:
 			return b
 
 		case hbpFinished:
-			if err := op.Close(op.Ctx); err != nil {
+			if err := op.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -631,10 +630,11 @@ StateChanged:
 	}
 }
 
-func (op *hashBasedPartitioner) Close(ctx context.Context) error {
+func (op *hashBasedPartitioner) Close() error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
+	ctx := op.EnsureCtx()
 	log.VEventf(ctx, 1, "%s is closed", op.name)
 	var retErr error
 	for i := range op.inputs {
@@ -645,7 +645,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	// The in-memory main operator might be a Closer (e.g. the in-memory hash
 	// aggregator), and we need to close it if so.
 	if c, ok := op.inMemMainOp.(colexecop.Closer); ok {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			retErr = err
 		}
 	}
@@ -653,7 +653,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	// it will still be closed appropriately because we accumulate all closers
 	// in NewColOperatorResult.
 	if c, ok := op.diskBackedFallbackOp.(colexecop.Closer); ok {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			retErr = err
 		}
 	}

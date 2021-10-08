@@ -80,10 +80,14 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	*lval = l.tokens[l.lastPos]
 
 	switch lval.id {
-	case NOT, WITH, AS, GENERATED, NULLS:
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON:
 		nextID := int32(0)
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
+		}
+		secondID := int32(0)
+		if l.lastPos+2 < len(l.tokens) {
+			secondID = l.tokens[l.lastPos+2].id
 		}
 
 		// If you update these cases, update lex.lookaheadKeywords.
@@ -102,6 +106,8 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case ALWAYS:
 				lval.id = GENERATED_ALWAYS
+			case BY:
+				lval.id = GENERATED_BY_DEFAULT
 			}
 
 		case WITH:
@@ -113,6 +119,31 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case FIRST, LAST:
 				lval.id = NULLS_LA
+			}
+		case RESET:
+			switch nextID {
+			case ALL:
+				lval.id = RESET_ALL
+			}
+		case ROLE:
+			switch nextID {
+			case ALL:
+				lval.id = ROLE_ALL
+			}
+		case USER:
+			switch nextID {
+			case ALL:
+				lval.id = USER_ALL
+			}
+		case ON:
+			switch nextID {
+			case DELETE:
+				lval.id = ON_LA
+			case UPDATE:
+				switch secondID {
+				case NO, RESTRICT, CASCADE, SET:
+					lval.id = ON_LA
+				}
 			}
 		}
 	}
@@ -276,6 +307,11 @@ func (l *lexer) SetHelp(msg HelpMessage) {
 	}
 }
 
+// specialHelpErrorPrefix is a special prefix that must be present at
+// the start of an error message to be considered a valid help
+// response payload by the CLI shell.
+const specialHelpErrorPrefix = "help token in input"
+
 func (l *lexer) populateHelpMsg(msg string) {
-	l.lastError = errors.WithHint(errors.Wrap(l.lastError, "help token in input"), msg)
+	l.lastError = errors.WithHint(errors.Wrap(l.lastError, specialHelpErrorPrefix), msg)
 }

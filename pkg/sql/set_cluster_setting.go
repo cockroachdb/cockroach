@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -207,9 +210,11 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 						return errors.New("no persisted cluster version found, please retry later")
 					}
 					// The tenant cluster in 20.2 did not ever initialize this value and
-					// utilized a hard-coded value of
+					// utilized this hard-coded value instead. In 21.1, the builtin
+					// which creates tenants sets up the cluster version state. It also
+					// is set when the version is upgraded.
 					tenantDefaultVersion := clusterversion.ClusterVersion{
-						Version: clusterversion.ByKey(clusterversion.V20_2),
+						Version: roachpb.Version{Major: 20, Minor: 2},
 					}
 					// Pretend that the expected value was already there to allow us to
 					// run migrations.
@@ -229,26 +234,73 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if isSetVersion {
+				// Updates the version inside the system.settings table.
+				// If we are already at the target version, then this
+				// function is idempotent.
+				updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion) error {
+					rawValue, err := protoutil.Marshal(&version)
+					if err != nil {
+						return err
+					}
+					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						// Confirm if the version has actually changed on us.
+						datums, err := execCfg.InternalExecutor.QueryRowEx(
+							ctx, "retrieve-prev-setting", txn,
+							sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+							"SELECT value FROM system.settings WHERE name = $1", n.name,
+						)
+						versionIsDifferent := true
+						if len(datums) > 0 {
+							dStr, ok := datums[0].(*tree.DString)
+							if !ok {
+								return errors.Errorf("existing version value is not a string, got %T", datums[0])
+							}
+							oldRawValue := []byte(string(*dStr))
+							versionIsDifferent = !bytes.Equal(oldRawValue, rawValue)
+						}
+						// Only if the version has changed alter the setting.
+						if versionIsDifferent {
+							_, err = execCfg.InternalExecutor.ExecEx(
+								ctx, "update-setting", txn,
+								sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+								`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+								n.name, string(rawValue), n.setting.Typ(),
+							)
+						}
+						return err
+					})
+				}
 				if err := runVersionUpgradeHook(
-					ctx, params, prev, value, n.versionUpgradeHook,
+					ctx, params, prev, value, n.versionUpgradeHook, updateVersionSystemSetting,
+				); err != nil {
+					return err
+				}
+			} else {
+				if _, err = execCfg.InternalExecutor.ExecEx(
+					ctx, "update-setting", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+					n.name, encoded, n.setting.Typ(),
 				); err != nil {
 					return err
 				}
 			}
 
-			if _, err = execCfg.InternalExecutor.ExecEx(
-				ctx, "update-setting", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-				n.name, encoded, n.setting.Typ(),
-			); err != nil {
-				return err
-			}
-
 			if params.p.execCfg.TenantTestingKnobs != nil {
-				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(
-					n.name, encoded, n.setting.Typ(),
-				); err != nil {
+				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, n.name, encoded, n.setting.Typ()); err != nil {
+					return err
+				}
+			}
+		}
+
+		if n.name == sessioninit.CacheEnabledSettingName {
+			if expectedEncodedValue == "false" {
+				// Bump role-related table versions to force other nodes to clear out
+				// their AuthInfo cache.
+				if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+					return err
+				}
+				if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 					return err
 				}
 			}
@@ -294,6 +346,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				break
 			}
 			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
+		case colexec.HashAggregationDiskSpillingEnabledSettingName:
+			if expectedEncodedValue == "false" {
+				telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
+			}
 		}
 
 		return params.p.logEvent(ctx,
@@ -330,7 +386,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 }
 
 func runVersionUpgradeHook(
-	ctx context.Context, params runParams, prev tree.Datum, value tree.Datum, f VersionUpgradeHook,
+	ctx context.Context,
+	params runParams,
+	prev tree.Datum,
+	value tree.Datum,
+	f VersionUpgradeHook,
+	updateVersionSystemSetting UpdateVersionSystemSettingHook,
 ) error {
 	var from, to clusterversion.ClusterVersion
 
@@ -342,25 +403,10 @@ func runVersionUpgradeHook(
 	targetVersionStr := string(*value.(*tree.DString))
 	to.Version = roachpb.MustParseVersion(targetVersionStr)
 
-	start21_1 := clusterversion.ByKey(clusterversion.Start21_1)
-	if !params.extendedEvalCtx.Codec.ForSystemTenant() && from.Less(start21_1) {
-
-		// In the case that we're setting the cluster version to something that
-		// precedes the start of 21.1, which is permitted, if only because it's
-		// complex to prevent, then there's definitely no migrations to run and
-		// it may be hazardous due to assumptions about versions being even.
-		if to.Less(start21_1) {
-			return nil
-		}
-		// Otherwise, tell the migration layer that we're starting from the lowest
-		// allowable version.
-		from.Version = start21_1
-	}
-
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our
 	// upgrade hook to run migrations, if any.
-	if err := f(ctx, params.p.User(), from, to); err != nil {
+	if err := f(ctx, params.p.User(), from, to, updateVersionSystemSetting); err != nil {
 		return err
 	}
 	return nil

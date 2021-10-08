@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -148,7 +148,7 @@ func (t *parallelTest) run(dir string) {
 		log.Infof(t.ctx, "spec: %+v", spec)
 	}
 
-	t.setup(&spec)
+	t.setup(context.Background(), &spec)
 	defer t.close()
 
 	for runListIdx, runList := range spec.Run {
@@ -175,7 +175,7 @@ func (t *parallelTest) run(dir string) {
 	}
 }
 
-func (t *parallelTest) setup(spec *parTestSpec) {
+func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	if spec.ClusterSize == 0 {
 		spec.ClusterSize = 1
 	}
@@ -188,12 +188,12 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		server := t.cluster.Server(i)
-		mode := sessiondata.DistSQLOff
+		mode := sessiondatapb.DistSQLOff
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		sql.DistSQLClusterExecMode.Override(&st.SV, int64(mode))
+		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
 		// Disable automatic stats - they can interfere with the test shutdown.
-		stats.AutomaticStatisticsClusterMode.Override(&st.SV, false)
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	}
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)

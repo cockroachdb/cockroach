@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -66,9 +66,10 @@ type TableStatisticsCache struct {
 	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
 	Codec       keys.SQLCodec
+	Settings    *cluster.Settings
 
-	LeaseMgr *lease.Manager
-	Settings *cluster.Settings
+	// Used to resolve descriptors.
+	collectionFactory *descs.CollectionFactory
 
 	// Used when decoding KV from the range feed.
 	datumAlloc rowenc.DatumAlloc
@@ -114,16 +115,16 @@ func NewTableStatisticsCache(
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
-	leaseManager *lease.Manager,
 	settings *cluster.Settings,
 	rangeFeedFactory *rangefeed.Factory,
+	cf *descs.CollectionFactory,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
-		ClientDB:    db,
-		SQLExecutor: sqlExecutor,
-		Codec:       codec,
-		LeaseMgr:    leaseManager,
-		Settings:    settings,
+		ClientDB:          db,
+		SQLExecutor:       sqlExecutor,
+		Codec:             codec,
+		Settings:          settings,
+		collectionFactory: cf,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -206,7 +207,7 @@ func decodeTableStatisticsKV(
 	return descpb.ID(uint32(*tableID)), nil
 }
 
-// GetTableStats looks up statistics for the requested table ID in the cache,
+// GetTableStats looks up statistics for the requested table in the cache,
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
 //
@@ -216,18 +217,37 @@ func decodeTableStatisticsKV(
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) GetTableStats(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, table catalog.TableDescriptor,
 ) ([]*TableStatistic, error) {
-	if descpb.IsReservedID(tableID) {
+	if !hasStatistics(table) {
+		return nil, nil
+	}
+	return sc.getTableStatsFromCache(ctx, table.GetID())
+}
+
+// hasStatistics returns true if the table can have statistics collected for it.
+func hasStatistics(table catalog.TableDescriptor) bool {
+	if catalog.IsSystemDescriptor(table) {
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
-		return nil, nil
+		return false
 	}
-	if descpb.IsVirtualTable(tableID) {
+	if table.IsVirtualTable() {
 		// Don't try to get statistics for virtual tables.
-		return nil, nil
+		return false
 	}
+	if table.IsView() {
+		// Don't try to get statistics for views.
+		return false
+	}
+	return true
+}
 
+// getTableStatsFromCache is like GetTableStats but assumes that the table ID
+// is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
+func (sc *TableStatisticsCache) getTableStatsFromCache(
+	ctx context.Context, tableID descpb.ID,
+) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
@@ -502,20 +522,16 @@ func (sc *TableStatisticsCache) parseStats(
 			// If have types that are not backwards compatible in this way, then we
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
-			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(
-					sc.Settings,
-					sc.LeaseMgr,
-					nil, // hydratedTables
-					nil, // virtualSchemas
-				)
-				defer collection.ReleaseAll(ctx)
-				resolver := descs.NewDistSQLTypeResolver(collection, txn)
+			//
+			// TODO(ajwerner): We now do delete members from enum types. See #67050.
+			if err := sc.collectionFactory.Txn(ctx, sc.SQLExecutor, sc.ClientDB, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)
 				var err error
 				res.HistogramData.ColumnType, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
 				return err
-			})
-			if err != nil {
+			}); err != nil {
 				return nil, err
 			}
 		}

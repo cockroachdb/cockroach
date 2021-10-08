@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,13 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,6 @@ import (
 
 func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	t.Run("wait for old-style schema changes", func(t *testing.T) {
 		// This test starts an old-style schema change job (job 1), and then starts
@@ -110,6 +110,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					})
 				},
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
 		var sqlDB *gosql.DB
 		s, sqlDB, kvDB = serverutils.StartServer(t, params)
@@ -234,7 +235,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 						return nil
 					}
 					for _, op := range ops.Slice() {
-						if backfillOp, ok := op.(scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
+						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
 								<-job1ContinueNotification
@@ -310,7 +311,6 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	ctx := context.Background()
 
@@ -347,7 +347,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 					return nil
 				}
 				for _, op := range ops.Slice() {
-					if _, ok := op.(scop.BackfillIndex); ok {
+					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
 							<-continueNotification
@@ -357,6 +357,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				return nil
 			},
 		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
 	var s serverutils.TestServerInterface
@@ -411,4 +412,216 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 
 	close(continueNotification)
 	require.NoError(t, g.Wait())
+}
+
+func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	var doOnce sync.Once
+	// Closed when we enter the RunBeforeBackfill knob.
+	beforeBackfillNotification := make(chan struct{})
+	// Closed when we're ready to continue with the schema change.
+	continueNotification := make(chan struct{})
+
+	var kvDB *kv.DB
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				// Assert that old schema change jobs never run in this test.
+				t.Errorf("unexpected old schema change job %d", jobID)
+				return nil
+			},
+		},
+		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
+			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+				// Verify that we never get a mutation ID not associated with the schema
+				// change that is running.
+				if m.Phase != scplan.PostCommitPhase {
+					return nil
+				}
+				table := catalogkv.TestingGetTableDescriptorFromSchema(
+					kvDB, keys.SystemSQLCodec, "db", "public", "t")
+				for _, m := range table.AllMutations() {
+					assert.LessOrEqual(t, int(m.MutationID()), 2)
+				}
+
+				if ops.Type() != scop.BackfillType {
+					return nil
+				}
+				for _, op := range ops.Slice() {
+					if _, ok := op.(*scop.BackfillIndex); ok {
+						doOnce.Do(func() {
+							close(beforeBackfillNotification)
+							<-continueNotification
+						})
+					}
+				}
+				return nil
+			},
+		},
+	}
+
+	var s serverutils.TestServerInterface
+	var sqlDB *gosql.DB
+	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+
+	g := ctxgroup.WithContext(ctx)
+
+	g.GoCtx(func(ctx context.Context) error {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		assert.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 100`)
+		assert.NoError(t, err)
+		return nil
+	})
+
+	<-beforeBackfillNotification
+
+	// At this point the backfill operation is paused as it's about to begin.
+	// The new column `b` is not yet public, so a concurrent insert should:
+	// - in the current primary index, only insert a value for `a`,
+	// - in the new secondary index, which will be the future primary index,
+	//   insert a value both for `a` and the default value for `b`, because that
+	//   new index is delete-and-write-only as it is being backfilled.
+	tdb.Exec(t, `
+		SET tracing = on,kv;
+		INSERT INTO db.t (a) VALUES (10);
+		SET tracing = off;`)
+
+	// Trigger the resumption and conclusion of the backfill,
+	// and hence of the ADD COLUMN transaction.
+	close(continueNotification)
+	require.NoError(t, g.Wait())
+
+	// Check that the expectations set out above are verified.
+	results := tdb.QueryStr(t, `
+		SELECT message
+		FROM [SHOW KV TRACE FOR SESSION]
+		WHERE message LIKE 'CPut %' OR message LIKE 'InitPut %'`)
+	require.GreaterOrEqual(t, len(results), 2)
+	require.Equal(t, fmt.Sprintf("CPut /Table/%d/1/10/0 -> /TUPLE/", desc.GetID()), results[0][0])
+	require.Equal(t, fmt.Sprintf("InitPut /Table/%d/2/10/0 -> /TUPLE/2:2:Int/100", desc.GetID()), results[1][0])
+}
+
+// TestDropJobCancelable ensure that certain operations like
+// drops are not cancelable for simple operations.
+func TestDropJobCancelable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc       string
+		query      string
+		cancelable bool
+	}{
+		{
+			"simple drop sequence",
+			"BEGIN;DROP SEQUENCE db.sq1; END;",
+			false,
+		},
+		{
+			"simple drop view",
+			"BEGIN;DROP VIEW db.v1; END;",
+			false,
+		},
+		{
+			"simple drop table",
+			"BEGIN;DROP TABLE db.t1 CASCADE; END;",
+			false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+
+			params, _ := tests.CreateTestServerParams()
+
+			// Wait groups for synchronizing various parts of the test.
+			var schemaChangeStarted sync.WaitGroup
+			schemaChangeStarted.Add(1)
+			var blockSchemaChange sync.WaitGroup
+			blockSchemaChange.Add(1)
+			var finishedSchemaChange sync.WaitGroup
+			finishedSchemaChange.Add(1)
+			// Atomic for checking if job control hook
+			// was enabled.
+			jobControlHookEnabled := uint64(0)
+
+			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+			params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+				RunBeforeResume: func(jobID jobspb.JobID) error {
+					if atomic.SwapUint64(&jobControlHookEnabled, 0) == 1 {
+						schemaChangeStarted.Done()
+						blockSchemaChange.Wait()
+					}
+					return nil
+				},
+			}
+
+			s, sqlDB, _ := serverutils.StartServer(t, params)
+
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+
+			// Setup.
+			_, err := sqlDB.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t1 (name VARCHAR(256));
+CREATE TABLE db.t2 (name VARCHAR(256));
+CREATE VIEW db.v1 AS (SELECT a.name as name2, b.name FROM db.t1 as a, db.t2 as b);
+CREATE SEQUENCE db.sq1;
+`)
+			require.NoError(t, err)
+
+			go func() {
+				atomic.StoreUint64(&jobControlHookEnabled, 1)
+				_, err := sqlDB.Exec(tc.query)
+				if tc.cancelable && !testutils.IsError(err, "job canceled by user") {
+					t.Errorf("expected user to have canceled job, got %v", err)
+				}
+				if !tc.cancelable && err != nil {
+					t.Error(err)
+				}
+				finishedSchemaChange.Done()
+			}()
+
+			schemaChangeStarted.Wait()
+			rows, err := sqlDB.Query(`
+SELECT job_id FROM [SHOW JOBS]
+WHERE 
+	job_type = 'SCHEMA CHANGE' AND 
+	status = $1`, jobs.StatusRunning)
+			if err != nil {
+				t.Fatalf("unexpected error querying rows %s", err)
+			}
+			for rows.Next() {
+				jobID := ""
+				err := rows.Scan(&jobID)
+				if err != nil {
+					t.Fatalf("unexpected error fetching job ID %s", err)
+				}
+				_, err = sqlDB.Exec(`CANCEL JOB $1`, jobID)
+				if !tc.cancelable && !testutils.IsError(err, "not cancelable") {
+					t.Fatalf("expected schema change job to be not cancelable; found %v ", err)
+				} else if tc.cancelable && err != nil {
+					t.Fatal(err)
+				}
+			}
+			blockSchemaChange.Done()
+			finishedSchemaChange.Wait()
+		})
+	}
 }

@@ -11,6 +11,7 @@
 package settings
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -86,29 +87,29 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 // default value.
 //
 // For testing usage only.
-func (d *DurationSetting) Override(sv *Values, v time.Duration) {
-	sv.setInt64(d.slotIdx, int64(v))
+func (d *DurationSetting) Override(ctx context.Context, sv *Values, v time.Duration) {
+	sv.setInt64(ctx, d.slotIdx, int64(v))
 	sv.setDefaultOverrideInt64(d.slotIdx, int64(v))
 }
 
-func (d *DurationSetting) set(sv *Values, v time.Duration) error {
+func (d *DurationSetting) set(ctx context.Context, sv *Values, v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(d.slotIdx, int64(v))
+	sv.setInt64(ctx, d.slotIdx, int64(v))
 	return nil
 }
 
-func (d *DurationSetting) setToDefault(sv *Values) {
+func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(d.slotIdx)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = d.set(sv, time.Duration(val))
+		_ = d.set(ctx, sv, time.Duration(val))
 		return
 	}
-	if err := d.set(sv, d.defaultValue); err != nil {
+	if err := d.set(ctx, sv, d.defaultValue); err != nil {
 		panic(err)
 	}
 }
@@ -190,7 +191,8 @@ func NonNegativeDuration(v time.Duration) error {
 	return nil
 }
 
-// NonNegativeDurationWithMaximum can be passed to RegisterDurationSetting.
+// NonNegativeDurationWithMaximum returns a validation function that can be
+// passed to RegisterDurationSetting.
 func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) error {
 	return func(v time.Duration) error {
 		if v < 0 {
@@ -201,4 +203,12 @@ func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) 
 		}
 		return nil
 	}
+}
+
+// PositiveDuration can be passed to RegisterDurationSetting.
+func PositiveDuration(v time.Duration) error {
+	if v <= 0 {
+		return errors.Errorf("cannot be set to a non-positive duration: %s", v)
+	}
+	return nil
 }

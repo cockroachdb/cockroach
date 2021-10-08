@@ -149,6 +149,24 @@ SELECT a FROM t_idx WHERE w IN (4,6)
 3
 5
 
+# Covering lookup join.
+query II
+SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
+----
+2   2
+5   5
+10  10
+10  10
+
+# Non-covering lookup join that requires a second join on the primary index.
+query IIII
+SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
+----
+1  1  2   2
+2  8  10  10
+4  6  10  10
+5  0  5   5
+
 statement ok
 DELETE FROM t_idx WHERE v = 6
 
@@ -775,7 +793,7 @@ a  b   v   x  y   z
 2  20  22  3  21  22
 3  30  33  4  31  33
 
-statement error computed columns cannot reference other computed columns
+statement error computed column expression cannot reference computed columns
 ALTER TABLE sc ADD COLUMN u INT AS (a+v) VIRTUAL
 
 statement ok
@@ -1093,6 +1111,72 @@ COMMIT;
 statement ok
 DROP TABLE t_ref;
 
+# Tests for virtual computed columns that reference foreign key columns.
+subtest referencing_fks
+
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c_update (
+  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+  v_cascade INT AS (p_cascade + 100) VIRTUAL,
+  v_default INT AS (p_default) VIRTUAL,
+  v_null INT AS (p_null + 100) VIRTUAL
+)
+
+statement ok
+CREATE TABLE c_delete_cascade (
+  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+  v_cascade INT AS (p_cascade + 100) VIRTUAL
+)
+
+statement ok
+CREATE TABLE c_delete_set (
+  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON DELETE SET NULL,
+  v_default INT AS (p_default) VIRTUAL,
+  v_null INT AS (p_null + 100) VIRTUAL
+)
+
+statement ok
+INSERT INTO p VALUES (0), (1), (2), (3)
+
+statement ok
+INSERT INTO c_update VALUES (1, 1, 1), (2, 2, 2)
+
+statement ok
+UPDATE p SET p = 10 WHERE p = 1
+
+query IIIIII colnames,rowsort
+SELECT * FROM c_update
+----
+p_cascade  p_default  p_null  v_cascade  v_default  v_null
+2          2          2       102        2          102
+10         0          NULL    110        0          NULL
+
+statement ok
+INSERT INTO c_delete_cascade VALUES (2), (3);
+INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
+
+statement ok
+DELETE FROM p WHERE p = 3
+
+query II colnames,rowsort
+SELECT * FROM c_delete_cascade
+----
+p_cascade  v_cascade
+2          102
+
+query IIII colnames,rowsort
+SELECT * FROM c_delete_set
+----
+p_default  p_null  v_default  v_null
+0          NULL    0          NULL
+2          2       2          102
+
 # Regression test for #63167. CREATE TABLE LIKE should copy VIRTUAL columns as
 # VIRTUAL, not STORED.
 statement ok
@@ -1109,3 +1193,36 @@ CREATE TABLE public.t63167_b (
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
+
+# Test that columns backfills to tables with virtual columns work.
+subtest column_backfill
+
+statement ok
+CREATE TABLE t_65915 (i INT PRIMARY KEY, j INT AS (i + 1) VIRTUAL NOT NULL);
+INSERT INTO t_65915 VALUES (1)
+
+statement ok
+ALTER TABLE t_65915 ADD COLUMN k INT DEFAULT 42;
+
+query III
+SELECT * FROM t_65915;
+----
+1  2  42
+
+statement ok
+DROP TABLE t_65915
+
+# Test that backfills on indexes with non-null virtual columns work.
+subtest 67528
+
+statement ok
+CREATE TABLE t67528 (
+  s STRING,
+  v STRING AS (lower(s)) VIRTUAL NOT NULL
+)
+
+statement ok
+INSERT INTO t67528 (s) VALUES ('')
+
+statement ok
+CREATE INDEX ON t67528 (v DESC)

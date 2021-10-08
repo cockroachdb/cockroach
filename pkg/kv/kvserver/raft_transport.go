@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
@@ -154,11 +155,11 @@ type RaftTransport struct {
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
+func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st,
+	return NewRaftTransport(log.AmbientContext{Tracer: tracer}, st,
 		nodedialer.New(nil, resolver), nil, nil)
 }
 
@@ -614,11 +615,15 @@ func (t *RaftTransport) startProcessNewQueue(
 		}
 		defer cleanup(ch)
 		defer t.queues[class].Delete(int64(toNodeID))
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		// NB: we dial without a breaker here because the caller has already
+		// checked the breaker. Checking it again can cause livelock, see:
+		// https://github.com/cockroachdb/cockroach/issues/68419
+		conn, err := t.dialer.DialNoBreaker(ctx, toNodeID, class)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
+
 		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()

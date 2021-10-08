@@ -1777,6 +1777,21 @@ SELECT array_length(ARRAY['a'], 2)
 NULL
 
 query I
+SELECT cardinality(ARRAY['a', 'b'])
+----
+2
+
+query I
+SELECT cardinality(ARRAY[]:::int[])
+----
+0
+
+query I
+SELECT cardinality(NULL:::int[])
+----
+NULL
+
+query I
 SELECT array_lower(ARRAY['a', 'b'], 1)
 ----
 1
@@ -2039,6 +2054,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('regnamespace'::regtype, -1)),
        (format_type('regproc'::regtype, -1)),
        (format_type('regprocedure'::regtype, -1)),
+       (format_type('regrole'::regtype, -1)),
        (format_type('regtype'::regtype, -1)),
        (format_type('string'::regtype, -1)),
        (format_type('time'::regtype, -1)),
@@ -2082,6 +2098,7 @@ regclass
 regnamespace
 regproc
 regprocedure
+regrole
 regtype
 text
 time without time zone
@@ -2786,6 +2803,38 @@ SELECT getdatabaseencoding()
 ----
 UTF8
 
+subtest get_byte
+
+query I
+SELECT get_byte('Th\000omas'::BYTEA, 4)
+----
+109
+
+query error byte index 10 out of valid range
+SELECT get_byte('abc'::BYTEA, 10)
+
+query error byte index -10 out of valid range
+SELECT get_byte('abc'::BYTEA, -10)
+
+subtest set_byte
+
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 64)
+----
+Th@omas
+
+# A substitute value that's larger than 8 bit will be truncated.
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 16448)
+----
+Th@omas
+
+query error byte index 10 out of valid range
+SELECT set_byte('abc'::BYTEA, 10, 123)
+
+query error byte index -10 out of valid range
+SELECT set_byte('abc'::BYTEA, -10, 123)
+
 subtest get_bit
 
 query I rowsort
@@ -2806,27 +2855,37 @@ SELECT get_bit(B'10110', 10)
 query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
-# Binary representation of 'l' is 01101100
-# Binary representation of \o145 is 01100101
-# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
-
-query I rowsort
-SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+query II
+SELECT i, get_bit('\x11'::BYTEA, i) FROM generate_series(0, 7) i ORDER BY i;
 ----
-0
-1
+0  1
+1  0
+2  0
+3  0
+4  1
+5  0
+6  0
+7  0
 
-query I rowsort
-SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+query II rowsort
+SELECT i, get_bit('\x11ef'::BYTEA, i) FROM generate_series(0, 15) i ORDER BY i;
 ----
-1
-0
-
-query I rowsort
-SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
-----
-1
-0
+0   1
+1   0
+2   0
+3   0
+4   1
+5   0
+6   0
+7   0
+8   1
+9   1
+10  1
+11  1
+12  0
+13  1
+14  1
+15  1
 
 query error get_bit\(\): bit index 8 out of valid range \(0..7\)
 SELECT get_bit(b'\x61', 8)
@@ -2851,27 +2910,43 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
-# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
-# Binary representation of \o145 is 1100101
-# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
-
-query T rowsort
-SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+query IT
+SELECT i, encode(set_bit('\x00'::BYTEA, i, 1), 'hex') FROM generate_series(0, 7) i ORDER BY i
 ----
-cb
-af
+0  01
+1  02
+2  04
+3  08
+4  10
+5  20
+6  40
+7  80
 
-query T rowsort
-SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+query IT
+SELECT i, encode(set_bit('\x0000'::bytea, i, 1), 'hex') FROM generate_series(0, 15) i ORDER BY i
 ----
-a
-af
+0   0100
+1   0200
+2   0400
+3   0800
+4   1000
+5   2000
+6   4000
+7   8000
+8   0001
+9   0002
+10  0004
+11  0008
+12  0010
+13  0020
+14  0040
+15  0080
 
 query error set_bit\(\): bit index 16 out of valid range \(0..15\)
 SELECT set_bit(b'ac', 16, 0)
@@ -2879,7 +2954,7 @@ SELECT set_bit(b'ac', 16, 0)
 query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(b'', 0, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
 subtest num_nulls_test
@@ -3082,3 +3157,43 @@ select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIME
 
 statement ok
 SET TIME ZONE +0
+
+query B
+SELECT 'AAA'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+true
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape(NULL::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+true
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
+----
+NULL

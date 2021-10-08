@@ -77,18 +77,18 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker
 
-| Field           | Description                                                                                                               |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
-| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
-| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
-| dd              | The day (zero padded).                                                                                                    |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
-| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
-| file            | The file name where the entry originated.                                                                                 |
-| line            | The line number where the entry originated.                                                                               |
-| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                       |
+| Field           | Description                                                                                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                                |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                                |
+| dd              | The day (zero padded).                                                                                                               |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                                 |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
+| file            | The file name where the entry originated.                                                                                            |
+| line            | The line number where the entry originated.                                                                                          |
+| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
@@ -142,18 +142,18 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
-| Field           | Description                                                                                                               |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
-| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
-| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
-| dd              | The day (zero padded).                                                                                                    |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
-| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
-| file            | The file name where the entry originated.                                                                                 |
-| line            | The line number where the entry originated.                                                                               |
-| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                       |
+| Field           | Description                                                                                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                                |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                                |
+| dd              | The day (zero padded).                                                                                                               |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                                 |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
+| file            | The file name where the entry originated.                                                                                            |
+| line            | The line number where the entry originated.                                                                                          |
+| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
 | tags    | The logging tags, enclosed between `[` and `]`. May be absent. |
 | counter | The entry counter. Always present.                                                 |
 
@@ -195,21 +195,21 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker [tags...] counter cont
 
-| Field           | Description                                                                                                               |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
-| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
-| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
-| dd              | The day (zero padded).                                                                                                    |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
-| goid            | The goroutine id (zero when cannot be determined).                                                                        |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
-| file            | The file name where the entry originated. Also see below.                                                                 |
-| line            | The line number where the entry originated.                                                                               |
-| marker          | Redactability marker "⋮" (see below for details).                                               |
-| tags            | The logging tags, enclosed between `[` and `]`. See below.                                            |
-| counter         | The optional entry counter (see below for details).                                                                       |
-| cont            | Continuation mark for structured and multi-line entries. See below.                                                       |
+| Field           | Description                                                                                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                                |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                                |
+| dd              | The day (zero padded).                                                                                                               |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
+| goid            | The goroutine id (zero when cannot be determined).                                                                                   |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
+| file            | The file name where the entry originated. Also see below.                                                                            |
+| line            | The line number where the entry originated.                                                                                          |
+| marker          | Redactability marker "⋮" (see below for details).                                                          |
+| tags            | The logging tags, enclosed between `[` and `]`. See below.                                                       |
+| counter         | The optional entry counter (see below for details).                                                                                  |
+| cont            | Continuation mark for structured and multi-line entries. See below.                                                                  |
 
 The `chan@` prefix before the file name indicates the logging channel,
 and is omitted if the channel is `DEV`.
@@ -254,24 +254,34 @@ reliably that no counter was present.
 
 Example single-line unstructured entry:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  started with engine type ‹2›
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+~~~
 
 Example multi-line unstructured entry:
 
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
 
 Example structured entry:
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
 
 Example long entries broken up into multiple lines:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventTy...
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 |pe":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventTy...
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 |pe":"node_restart"}
+~~~
 
 ### Backward-compatibility notes
 
@@ -291,7 +301,7 @@ to indicate whether the remainder of the line is a
 structured entry, or a continuation of a previous entry.
 
 Finally, in the previous format, structured entries
-were prefixed with the string `Structured entry:`. In
+were prefixed with the string `Structured entry: `. In
 the new format, they are prefixed by the `=` continuation
 indicator.
 
@@ -322,6 +332,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -379,6 +390,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -437,6 +449,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -495,6 +508,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,

@@ -70,6 +70,10 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IndeterminateCommit
 	case *ErrorDetail_InvalidLeaseError:
 		return t.InvalidLeaseError
+	case *ErrorDetail_OptimisticEvalConflicts:
+		return t.OptimisticEvalConflicts
+	case *ErrorDetail_MinTimestampBoundUnsatisfiable:
+		return t.MinTimestampBoundUnsatisfiable
 	default:
 		return nil
 	}
@@ -140,12 +144,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.TransferLease
 	case *RequestUnion_LeaseInfo:
 		return t.LeaseInfo
-	case *RequestUnion_WriteBatch:
-		return t.WriteBatch
 	case *RequestUnion_Export:
 		return t.Export
-	case *RequestUnion_Import:
-		return t.Import
 	case *RequestUnion_QueryTxn:
 		return t.QueryTxn
 	case *RequestUnion_QueryIntent:
@@ -168,6 +168,12 @@ func (ru RequestUnion) GetInner() Request {
 		return t.AdminVerifyProtectedTimestamp
 	case *RequestUnion_Migrate:
 		return t.Migrate
+	case *RequestUnion_QueryResolvedTimestamp:
+		return t.QueryResolvedTimestamp
+	case *RequestUnion_ScanInterleavedIntents:
+		return t.ScanInterleavedIntents
+	case *RequestUnion_Barrier:
+		return t.Barrier
 	default:
 		return nil
 	}
@@ -236,12 +242,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.InitPut
 	case *ResponseUnion_LeaseInfo:
 		return t.LeaseInfo
-	case *ResponseUnion_WriteBatch:
-		return t.WriteBatch
 	case *ResponseUnion_Export:
 		return t.Export
-	case *ResponseUnion_Import:
-		return t.Import
 	case *ResponseUnion_QueryTxn:
 		return t.QueryTxn
 	case *ResponseUnion_QueryIntent:
@@ -264,6 +266,12 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.AdminVerifyProtectedTimestamp
 	case *ResponseUnion_Migrate:
 		return t.Migrate
+	case *ResponseUnion_QueryResolvedTimestamp:
+		return t.QueryResolvedTimestamp
+	case *ResponseUnion_ScanInterleavedIntents:
+		return t.ScanInterleavedIntents
+	case *ResponseUnion_Barrier:
+		return t.Barrier
 	default:
 		return nil
 	}
@@ -332,6 +340,10 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_IndeterminateCommit{t}
 	case *InvalidLeaseError:
 		union = &ErrorDetail_InvalidLeaseError{t}
+	case *OptimisticEvalConflictsError:
+		union = &ErrorDetail_OptimisticEvalConflicts{t}
+	case *MinTimestampBoundUnsatisfiableError:
+		union = &ErrorDetail_MinTimestampBoundUnsatisfiable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -405,12 +417,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_TransferLease{t}
 	case *LeaseInfoRequest:
 		union = &RequestUnion_LeaseInfo{t}
-	case *WriteBatchRequest:
-		union = &RequestUnion_WriteBatch{t}
 	case *ExportRequest:
 		union = &RequestUnion_Export{t}
-	case *ImportRequest:
-		union = &RequestUnion_Import{t}
 	case *QueryTxnRequest:
 		union = &RequestUnion_QueryTxn{t}
 	case *QueryIntentRequest:
@@ -433,6 +441,12 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_AdminVerifyProtectedTimestamp{t}
 	case *MigrateRequest:
 		union = &RequestUnion_Migrate{t}
+	case *QueryResolvedTimestampRequest:
+		union = &RequestUnion_QueryResolvedTimestamp{t}
+	case *ScanInterleavedIntentsRequest:
+		union = &RequestUnion_ScanInterleavedIntents{t}
+	case *BarrierRequest:
+		union = &RequestUnion_Barrier{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -504,12 +518,8 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_InitPut{t}
 	case *LeaseInfoResponse:
 		union = &ResponseUnion_LeaseInfo{t}
-	case *WriteBatchResponse:
-		union = &ResponseUnion_WriteBatch{t}
 	case *ExportResponse:
 		union = &ResponseUnion_Export{t}
-	case *ImportResponse:
-		union = &ResponseUnion_Import{t}
 	case *QueryTxnResponse:
 		union = &ResponseUnion_QueryTxn{t}
 	case *QueryIntentResponse:
@@ -532,13 +542,19 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_AdminVerifyProtectedTimestamp{t}
 	case *MigrateResponse:
 		union = &ResponseUnion_Migrate{t}
+	case *QueryResolvedTimestampResponse:
+		union = &ResponseUnion_QueryResolvedTimestamp{t}
+	case *ScanInterleavedIntentsResponse:
+		union = &ResponseUnion_ScanInterleavedIntents{t}
+	case *BarrierResponse:
+		union = &ResponseUnion_Barrier{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [45]int32
+type reqCounts [46]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -608,34 +624,36 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[29]++
 		case *RequestUnion_LeaseInfo:
 			counts[30]++
-		case *RequestUnion_WriteBatch:
-			counts[31]++
 		case *RequestUnion_Export:
-			counts[32]++
-		case *RequestUnion_Import:
-			counts[33]++
+			counts[31]++
 		case *RequestUnion_QueryTxn:
-			counts[34]++
+			counts[32]++
 		case *RequestUnion_QueryIntent:
-			counts[35]++
+			counts[33]++
 		case *RequestUnion_AdminScatter:
-			counts[36]++
+			counts[34]++
 		case *RequestUnion_AddSstable:
-			counts[37]++
+			counts[35]++
 		case *RequestUnion_RecomputeStats:
-			counts[38]++
+			counts[36]++
 		case *RequestUnion_Refresh:
-			counts[39]++
+			counts[37]++
 		case *RequestUnion_RefreshRange:
-			counts[40]++
+			counts[38]++
 		case *RequestUnion_Subsume:
-			counts[41]++
+			counts[39]++
 		case *RequestUnion_RangeStats:
-			counts[42]++
+			counts[40]++
 		case *RequestUnion_AdminVerifyProtectedTimestamp:
-			counts[43]++
+			counts[41]++
 		case *RequestUnion_Migrate:
+			counts[42]++
+		case *RequestUnion_QueryResolvedTimestamp:
+			counts[43]++
+		case *RequestUnion_ScanInterleavedIntents:
 			counts[44]++
+		case *RequestUnion_Barrier:
+			counts[45]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -675,9 +693,7 @@ var requestNames = []string{
 	"InitPut",
 	"TransferLease",
 	"LeaseInfo",
-	"WriteBatch",
 	"Export",
-	"Import",
 	"QueryTxn",
 	"QueryIntent",
 	"AdmScatter",
@@ -689,6 +705,9 @@ var requestNames = []string{
 	"RngStats",
 	"AdmVerifyProtectedTimestamp",
 	"Migrate",
+	"QueryResolvedTimestamp",
+	"ScanInterleavedIntents",
+	"Barrier",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -844,17 +863,9 @@ type leaseInfoResponseAlloc struct {
 	union ResponseUnion_LeaseInfo
 	resp  LeaseInfoResponse
 }
-type writeBatchResponseAlloc struct {
-	union ResponseUnion_WriteBatch
-	resp  WriteBatchResponse
-}
 type exportResponseAlloc struct {
 	union ResponseUnion_Export
 	resp  ExportResponse
-}
-type importResponseAlloc struct {
-	union ResponseUnion_Import
-	resp  ImportResponse
 }
 type queryTxnResponseAlloc struct {
 	union ResponseUnion_QueryTxn
@@ -900,6 +911,18 @@ type migrateResponseAlloc struct {
 	union ResponseUnion_Migrate
 	resp  MigrateResponse
 }
+type queryResolvedTimestampResponseAlloc struct {
+	union ResponseUnion_QueryResolvedTimestamp
+	resp  QueryResolvedTimestampResponse
+}
+type scanInterleavedIntentsResponseAlloc struct {
+	union ResponseUnion_ScanInterleavedIntents
+	resp  ScanInterleavedIntentsResponse
+}
+type barrierResponseAlloc struct {
+	union ResponseUnion_Barrier
+	resp  BarrierResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -941,20 +964,21 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf28 []initPutResponseAlloc
 	var buf29 []requestLeaseResponseAlloc
 	var buf30 []leaseInfoResponseAlloc
-	var buf31 []writeBatchResponseAlloc
-	var buf32 []exportResponseAlloc
-	var buf33 []importResponseAlloc
-	var buf34 []queryTxnResponseAlloc
-	var buf35 []queryIntentResponseAlloc
-	var buf36 []adminScatterResponseAlloc
-	var buf37 []addSSTableResponseAlloc
-	var buf38 []recomputeStatsResponseAlloc
-	var buf39 []refreshResponseAlloc
-	var buf40 []refreshRangeResponseAlloc
-	var buf41 []subsumeResponseAlloc
-	var buf42 []rangeStatsResponseAlloc
-	var buf43 []adminVerifyProtectedTimestampResponseAlloc
-	var buf44 []migrateResponseAlloc
+	var buf31 []exportResponseAlloc
+	var buf32 []queryTxnResponseAlloc
+	var buf33 []queryIntentResponseAlloc
+	var buf34 []adminScatterResponseAlloc
+	var buf35 []addSSTableResponseAlloc
+	var buf36 []recomputeStatsResponseAlloc
+	var buf37 []refreshResponseAlloc
+	var buf38 []refreshRangeResponseAlloc
+	var buf39 []subsumeResponseAlloc
+	var buf40 []rangeStatsResponseAlloc
+	var buf41 []adminVerifyProtectedTimestampResponseAlloc
+	var buf42 []migrateResponseAlloc
+	var buf43 []queryResolvedTimestampResponseAlloc
+	var buf44 []scanInterleavedIntentsResponseAlloc
+	var buf45 []barrierResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1175,104 +1199,111 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf30[0].union.LeaseInfo = &buf30[0].resp
 			br.Responses[i].Value = &buf30[0].union
 			buf30 = buf30[1:]
-		case *RequestUnion_WriteBatch:
+		case *RequestUnion_Export:
 			if buf31 == nil {
-				buf31 = make([]writeBatchResponseAlloc, counts[31])
+				buf31 = make([]exportResponseAlloc, counts[31])
 			}
-			buf31[0].union.WriteBatch = &buf31[0].resp
+			buf31[0].union.Export = &buf31[0].resp
 			br.Responses[i].Value = &buf31[0].union
 			buf31 = buf31[1:]
-		case *RequestUnion_Export:
+		case *RequestUnion_QueryTxn:
 			if buf32 == nil {
-				buf32 = make([]exportResponseAlloc, counts[32])
+				buf32 = make([]queryTxnResponseAlloc, counts[32])
 			}
-			buf32[0].union.Export = &buf32[0].resp
+			buf32[0].union.QueryTxn = &buf32[0].resp
 			br.Responses[i].Value = &buf32[0].union
 			buf32 = buf32[1:]
-		case *RequestUnion_Import:
+		case *RequestUnion_QueryIntent:
 			if buf33 == nil {
-				buf33 = make([]importResponseAlloc, counts[33])
+				buf33 = make([]queryIntentResponseAlloc, counts[33])
 			}
-			buf33[0].union.Import = &buf33[0].resp
+			buf33[0].union.QueryIntent = &buf33[0].resp
 			br.Responses[i].Value = &buf33[0].union
 			buf33 = buf33[1:]
-		case *RequestUnion_QueryTxn:
+		case *RequestUnion_AdminScatter:
 			if buf34 == nil {
-				buf34 = make([]queryTxnResponseAlloc, counts[34])
+				buf34 = make([]adminScatterResponseAlloc, counts[34])
 			}
-			buf34[0].union.QueryTxn = &buf34[0].resp
+			buf34[0].union.AdminScatter = &buf34[0].resp
 			br.Responses[i].Value = &buf34[0].union
 			buf34 = buf34[1:]
-		case *RequestUnion_QueryIntent:
+		case *RequestUnion_AddSstable:
 			if buf35 == nil {
-				buf35 = make([]queryIntentResponseAlloc, counts[35])
+				buf35 = make([]addSSTableResponseAlloc, counts[35])
 			}
-			buf35[0].union.QueryIntent = &buf35[0].resp
+			buf35[0].union.AddSstable = &buf35[0].resp
 			br.Responses[i].Value = &buf35[0].union
 			buf35 = buf35[1:]
-		case *RequestUnion_AdminScatter:
+		case *RequestUnion_RecomputeStats:
 			if buf36 == nil {
-				buf36 = make([]adminScatterResponseAlloc, counts[36])
+				buf36 = make([]recomputeStatsResponseAlloc, counts[36])
 			}
-			buf36[0].union.AdminScatter = &buf36[0].resp
+			buf36[0].union.RecomputeStats = &buf36[0].resp
 			br.Responses[i].Value = &buf36[0].union
 			buf36 = buf36[1:]
-		case *RequestUnion_AddSstable:
+		case *RequestUnion_Refresh:
 			if buf37 == nil {
-				buf37 = make([]addSSTableResponseAlloc, counts[37])
+				buf37 = make([]refreshResponseAlloc, counts[37])
 			}
-			buf37[0].union.AddSstable = &buf37[0].resp
+			buf37[0].union.Refresh = &buf37[0].resp
 			br.Responses[i].Value = &buf37[0].union
 			buf37 = buf37[1:]
-		case *RequestUnion_RecomputeStats:
+		case *RequestUnion_RefreshRange:
 			if buf38 == nil {
-				buf38 = make([]recomputeStatsResponseAlloc, counts[38])
+				buf38 = make([]refreshRangeResponseAlloc, counts[38])
 			}
-			buf38[0].union.RecomputeStats = &buf38[0].resp
+			buf38[0].union.RefreshRange = &buf38[0].resp
 			br.Responses[i].Value = &buf38[0].union
 			buf38 = buf38[1:]
-		case *RequestUnion_Refresh:
+		case *RequestUnion_Subsume:
 			if buf39 == nil {
-				buf39 = make([]refreshResponseAlloc, counts[39])
+				buf39 = make([]subsumeResponseAlloc, counts[39])
 			}
-			buf39[0].union.Refresh = &buf39[0].resp
+			buf39[0].union.Subsume = &buf39[0].resp
 			br.Responses[i].Value = &buf39[0].union
 			buf39 = buf39[1:]
-		case *RequestUnion_RefreshRange:
+		case *RequestUnion_RangeStats:
 			if buf40 == nil {
-				buf40 = make([]refreshRangeResponseAlloc, counts[40])
+				buf40 = make([]rangeStatsResponseAlloc, counts[40])
 			}
-			buf40[0].union.RefreshRange = &buf40[0].resp
+			buf40[0].union.RangeStats = &buf40[0].resp
 			br.Responses[i].Value = &buf40[0].union
 			buf40 = buf40[1:]
-		case *RequestUnion_Subsume:
+		case *RequestUnion_AdminVerifyProtectedTimestamp:
 			if buf41 == nil {
-				buf41 = make([]subsumeResponseAlloc, counts[41])
+				buf41 = make([]adminVerifyProtectedTimestampResponseAlloc, counts[41])
 			}
-			buf41[0].union.Subsume = &buf41[0].resp
+			buf41[0].union.AdminVerifyProtectedTimestamp = &buf41[0].resp
 			br.Responses[i].Value = &buf41[0].union
 			buf41 = buf41[1:]
-		case *RequestUnion_RangeStats:
+		case *RequestUnion_Migrate:
 			if buf42 == nil {
-				buf42 = make([]rangeStatsResponseAlloc, counts[42])
+				buf42 = make([]migrateResponseAlloc, counts[42])
 			}
-			buf42[0].union.RangeStats = &buf42[0].resp
+			buf42[0].union.Migrate = &buf42[0].resp
 			br.Responses[i].Value = &buf42[0].union
 			buf42 = buf42[1:]
-		case *RequestUnion_AdminVerifyProtectedTimestamp:
+		case *RequestUnion_QueryResolvedTimestamp:
 			if buf43 == nil {
-				buf43 = make([]adminVerifyProtectedTimestampResponseAlloc, counts[43])
+				buf43 = make([]queryResolvedTimestampResponseAlloc, counts[43])
 			}
-			buf43[0].union.AdminVerifyProtectedTimestamp = &buf43[0].resp
+			buf43[0].union.QueryResolvedTimestamp = &buf43[0].resp
 			br.Responses[i].Value = &buf43[0].union
 			buf43 = buf43[1:]
-		case *RequestUnion_Migrate:
+		case *RequestUnion_ScanInterleavedIntents:
 			if buf44 == nil {
-				buf44 = make([]migrateResponseAlloc, counts[44])
+				buf44 = make([]scanInterleavedIntentsResponseAlloc, counts[44])
 			}
-			buf44[0].union.Migrate = &buf44[0].resp
+			buf44[0].union.ScanInterleavedIntents = &buf44[0].resp
 			br.Responses[i].Value = &buf44[0].union
 			buf44 = buf44[1:]
+		case *RequestUnion_Barrier:
+			if buf45 == nil {
+				buf45 = make([]barrierResponseAlloc, counts[45])
+			}
+			buf45[0].union.Barrier = &buf45[0].resp
+			br.Responses[i].Value = &buf45[0].union
+			buf45 = buf45[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1345,12 +1376,8 @@ func CreateRequest(method Method) Request {
 		return &TransferLeaseRequest{}
 	case LeaseInfo:
 		return &LeaseInfoRequest{}
-	case WriteBatch:
-		return &WriteBatchRequest{}
 	case Export:
 		return &ExportRequest{}
-	case Import:
-		return &ImportRequest{}
 	case QueryTxn:
 		return &QueryTxnRequest{}
 	case QueryIntent:
@@ -1373,6 +1400,12 @@ func CreateRequest(method Method) Request {
 		return &AdminVerifyProtectedTimestampRequest{}
 	case Migrate:
 		return &MigrateRequest{}
+	case QueryResolvedTimestamp:
+		return &QueryResolvedTimestampRequest{}
+	case ScanInterleavedIntents:
+		return &ScanInterleavedIntentsRequest{}
+	case Barrier:
+		return &BarrierRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}

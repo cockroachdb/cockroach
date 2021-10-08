@@ -17,7 +17,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -76,10 +75,33 @@ type SimpleMVCCIterator interface {
 	UnsafeValue() []byte
 }
 
-// IteratorStats is returned from (MVCCIterator).Stats.
+// IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
 type IteratorStats struct {
+	// TODO(sumeer): populate this stat that was inherited from RocksDB, which
+	// counts the number of deletes or single deletes skipped over during
+	// iteration. It may be better to replace this with the number of Pebble
+	// key-values encountered, which would encompass Pebble versions that were
+	// explicitly deleted and those that were obsoleted due to newer Pebble
+	// versions.
 	InternalDeleteSkippedCount int
 	TimeBoundNumSSTs           int
+
+	// Iteration stats. We directly expose pebble.IteratorStats. Callers
+	// may want to aggregate and interpret these in the following manner:
+	// - Aggregate {Forward,Reverse}SeekCount, {Forward,Reverse}StepCount.
+	// - Interpret the four aggregated stats as follows:
+	//   - {SeekCount,StepCount}[InterfaceCall]: We can refer to these simply as
+	//     {SeekCount,StepCount} in logs/metrics/traces. These represents
+	//     explicit calls by the implementation of MVCCIterator, in response to
+	//     the caller of MVCCIterator. A high count relative to the unique MVCC
+	//     keys returned suggests there are many versions for the same key.
+	//   - {SeekCount,StepCount}[InternalIterCall]: We can refer to these simply
+	//     as {InternalSeekCount,InternalStepCount}. If these are significantly
+	//     larger than the ones in the preceding bullet, it suggests that there
+	//     are lots of uncompacted deletes or stale Pebble-versions (not to be
+	//     confused with MVCC versions) that need to be compacted away. This
+	//     should be very rare, but has been observed.
+	Stats pebble.IteratorStats
 }
 
 // MVCCIterator is an interface for iterating over key/value pairs in an
@@ -255,6 +277,8 @@ type EngineIterator interface {
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
 	// some pathological situations (uncompacted deleted locks).
 	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
@@ -333,14 +357,56 @@ const (
 	MVCCKeyIterKind
 )
 
+// ExportOptions contains options provided to export operation.
+type ExportOptions struct {
+	// StartKey determines start of the exported interval (inclusive).
+	// StartKey.Timestamp is either empty which represent starting from a potential
+	// intent and continuing to versions or non-empty, which represents starting
+	// from a particular version.
+	StartKey MVCCKey
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine exported time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
+	// If ExportAllRevisions is true export every revision of a key for the interval,
+	// otherwise only the latest value within the interval is exported.
+	ExportAllRevisions bool
+	// If TargetSize is positive, it indicates that the export should produce SSTs
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
+	TargetSize uint64
+	// If MaxSize is positive, it is an absolute maximum on byte size for the
+	// returned sst. If it is the case that the versions of the last key will lead
+	// to an SST that exceeds maxSize, an error will be returned. This parameter
+	// exists to prevent creating SSTs which are too large to be used.
+	MaxSize uint64
+	// If StopMidKey is false, once function reaches targetSize it would continue
+	// adding all versions until it reaches next key or end of range. If true, it
+	// would stop immediately when targetSize is reached and return the next versions
+	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
+	StopMidKey bool
+	// ResourceLimiter limits how long iterator could run until it exhausts allocated
+	// resources. Expot queries limiter in its iteration loop to break out once
+	// resources are exhausted.
+	ResourceLimiter ResourceLimiter
+	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
+	// time-bound iterator along with its regular iterator. The TBI will be used
+	// as an optimization to skip over swaths of uninteresting keys i.e. keys
+	// outside our time bounds, while locating the KVs to export.
+	UseTBI bool
+}
+
 // Reader is the read interface to an engine's data. Certain implementations
 // of Reader guarantee consistency of the underlying engine state across the
 // different iterators created by NewMVCCIterator, NewEngineIterator:
 // - pebbleSnapshot, because it uses an engine snapshot.
 // - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
-//   timestamp hint. Note that currently the engine state visible here is
-//   not as of the time of the Reader creation. It is the time when the
-//   first iterator is created.
+//   timestamp hint (see IterOptions). Note that currently the engine state
+//   visible here is not as of the time of the Reader creation. It is the time
+//   when the first iterator is created, or earlier if
+//   PinEngineStateForIterators is called.
 // The ConsistentIterators method returns true when this consistency is
 // guaranteed by the Reader.
 // TODO(sumeer): this partial consistency can be a source of bugs if future
@@ -357,37 +423,25 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportMVCCToSst exports changes to the keyrange [startKey, endKey) over the
-	// interval (startTS, endTS]. Passing exportAllRevisions exports
-	// every revision of a key for the interval, otherwise only the latest value
-	// within the interval is exported. Deletions are included if all revisions are
-	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
-	// SSTable containing the exported keys, the size of exported data, or an error.
-	//
-	// If targetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will return an SST such that
-	// the last key is responsible for meeting or exceeding the targetSize. If the
-	// resumeKey is non-nil then the data size of the returned sst will be greater
-	// than or equal to the targetSize.
-	//
-	// If maxSize is positive, it is an absolute maximum on byte size for the
-	// returned sst. If it is the case that the versions of the last key will lead
-	// to an SST that exceeds maxSize, an error will be returned. This parameter
-	// exists to prevent creating SSTs which are too large to be used.
-	//
-	// If useTBI is true, the backing MVCCIncrementalIterator will initialize a
-	// time-bound iterator along with its regular iterator. The TBI will be used
-	// as an optimization to skip over swaths of uninteresting keys i.e. keys
-	// outside our time bounds, while locating the KVs to export.
-	//
+	// ExportMVCCToSst exports changes to the keyrange [StartKey, EndKey) over the
+	// interval (StartTS, EndTS].
+	// Deletions are included if all revisions are requested or if the StartTS
+	// is non-zero.
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
+	// exportOptions determine ranges as well as additional export options. See
+	// struct definition for details.
+	//
+	// Data is written to dest as it is collected. If error is returned content of
+	// dest is undefined.
+	//
+	// Returns summary containing number of exported bytes, resumeKey and resumeTS
+	// that allow resuming export if it was cut short because it reached limits or
+	// an error if export failed for some reason.
 	ExportMVCCToSst(
-		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
-		dest io.WriteCloser,
-	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
-	// Get returns the value for the given key, nil otherwise. Semantically, it
+		ctx context.Context, exportOptions ExportOptions, dest io.Writer,
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
+	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.
@@ -418,9 +472,25 @@ type Reader interface {
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
-	// that the different iterators constructed by this Reader will see the
-	// same underlying Engine state.
+	// that the different iterators constructed by this Reader will see the same
+	// underlying Engine state. NB: this only applies to iterators without
+	// timestamp hints (see IterOptions), i.e., even if this returns true, those
+	// iterators can be "inconsistent" in terms of seeing a different engine
+	// state. The only exception to this is a Reader created using NewSnapshot.
 	ConsistentIterators() bool
+
+	// PinEngineStateForIterators ensures that the state seen by iterators
+	// without timestamp hints (see IterOptions) is pinned and will not see
+	// future mutations. It can be called multiple times on a Reader in which
+	// case the state seen will be either:
+	// - As of the first call.
+	// - For a Reader returned by Engine.NewSnapshot, the pinned state is as of
+	//   the time the snapshot was taken.
+	// So the semantics that are true for all Readers is that the pinned state
+	// is somewhere in the time interval between the creation of the Reader and
+	// the first call to PinEngineStateForIterators.
+	// REQUIRES: ConsistentIterators returns true.
+	PinEngineStateForIterators() error
 }
 
 // PrecedingIntentState is information needed when writing or clearing an
@@ -598,11 +668,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutEngineKey(key EngineKey, value []byte) error
-	// SafeToWriteSeparatedIntents is only for internal use in the storage
-	// package. Returns an error if the callee does not know whether it is safe.
-	// This method is temporary, to handle the transition from clusters where
-	// not all nodes understand separated intents.
-	SafeToWriteSeparatedIntents(ctx context.Context) (bool, error)
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
@@ -628,6 +693,31 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
+
+	// OverrideTxnDidNotUpdateMetaToFalse is a temporary method that will be removed
+	// for 22.1.
+	//
+	// See #69891 for details on the bug related to usage of SingleDelete in
+	// separated intent resolution. The following is needed for correctly
+	// migrating from 21.1 to 21.2.
+	//
+	// We have fixed the intent resolution code path in 21.2-beta to use
+	// SingleDelete more conservatively. The 21.2-GA will also likely include
+	// Pebble changes to make the old buggy usage of SingleDelete correct.
+	// However, there is a problem if someone upgrades from 21.1 to
+	// 21.2-beta/21.2-GA:
+	// 21.1 nodes will not write separated intents while they are the
+	// leaseholder for a range. However they can become the leaseholder for a
+	// range after a separated intent was written (in a mixed version cluster).
+	// Hence they can resolve separated intents. The logic in 21.1 for using
+	// SingleDelete when resolving intents is similarly buggy, and the Pebble
+	// code included in 21.1 will not make this buggy usage correct. The
+	// solution is for 21.2 nodes to never set txnDidNotUpdateMeta=true when
+	// writing separated intents, until the cluster version is at the version
+	// when the buggy code was fixed in 21.2. So 21.1 code will never use
+	// SingleDelete when resolving these separated intents (since the only
+	// separated intents being written are by 21.2 nodes).
+	OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -648,11 +738,8 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// GetCompactionStats returns the internal RocksDB compaction stats. See
-	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
-	GetCompactionStats() string
 	// GetMetrics retrieves metrics from the engine.
-	GetMetrics() (*Metrics, error)
+	GetMetrics() Metrics
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
 	GetEncryptionRegistries() (*EncryptionRegistries, error)
@@ -740,6 +827,18 @@ type Engine interface {
 	// that know that this enabled setting is not changing and need the value to
 	// adjust their expectations.
 	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
+
+	// SetMinVersion is used to signal to the engine the current minimum
+	// version that it must maintain compatibility with.
+	SetMinVersion(version roachpb.Version) error
+
+	// UsingRecordsEncryptionRegistry returns whether the engine is using the
+	// Records version incremental encryption-at-rest registry.
+	UsingRecordsEncryptionRegistry() (bool, error)
+
+	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
+	// storage min version is at least the target version.
+	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 }
 
 // Batch is the interface for batch specific operations.
@@ -755,6 +854,8 @@ type Batch interface {
 	Commit(sync bool) error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
+	// Count returns the number of memtable-modifying operations in the batch.
+	Count() uint32
 	// Len returns the size of the underlying representation of the batch.
 	// Because of the batch header, the size of the batch is never 0 and should
 	// not be used interchangeably with Empty. The method avoids the memory copy
@@ -765,42 +866,53 @@ type Batch interface {
 	Repr() []byte
 }
 
-// Metrics is a set of Engine metrics. Most are described in RocksDB.
-// Some metrics (eg, `IngestedBytes`) are only exposed by Pebble.
-//
-// Currently, we collect stats from the following sources:
-// 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
-//    rocksdb/statistics.h
-// 2. DBEventListener, which implements RocksDB's EventListener interface.
-// 3. rocksdb::DB::GetProperty().
-//
-// This is a good resource describing RocksDB's memory-related stats:
-// https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-//
-// TODO(jackson): Refactor to mirror or even expose pebble.Metrics when
-// RocksDB is removed.
+// Metrics is a set of Engine metrics. Most are contained in the embedded
+// *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
-	BlockCacheHits                 int64
-	BlockCacheMisses               int64
-	BlockCacheUsage                int64
-	BlockCachePinnedUsage          int64
-	BloomFilterPrefixChecked       int64
-	BloomFilterPrefixUseful        int64
-	DiskSlowCount                  int64
-	DiskStallCount                 int64
-	MemtableTotalSize              int64
-	Flushes                        int64
-	FlushedBytes                   int64
-	Compactions                    int64
-	IngestedBytes                  int64 // Pebble only
-	CompactedBytesRead             int64
-	CompactedBytesWritten          int64
-	TableReadersMemEstimate        int64
-	PendingCompactionBytesEstimate int64
-	L0FileCount                    int64
-	L0SublevelCount                int64
-	ReadAmplification              int64
-	NumSSTables                    int64
+	*pebble.Metrics
+	// WriteStallCount counts the number of times Pebble intentionally delayed
+	// incoming writes. Currently, the only two reasons for this to happen are:
+	// - "memtable count limit reached"
+	// - "L0 file count limit exceeded"
+	//
+	// We do not split this metric across these two reasons, but they can be
+	// distinguished in the pebble logs.
+	WriteStallCount int64
+	// DiskSlowCount counts the number of times Pebble records disk slowness.
+	DiskSlowCount int64
+	// DiskStallCount counts the number of times Pebble observes slow writes
+	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
+	DiskStallCount int64
+}
+
+// NumSSTables returns the total number of SSTables in the LSM, aggregated
+// across levels.
+func (m *Metrics) NumSSTables() int64 {
+	var num int64
+	for _, lm := range m.Metrics.Levels {
+		num += lm.NumFiles
+	}
+	return num
+}
+
+// IngestedBytes returns the sum of all ingested tables, aggregated across all
+// levels of the LSM.
+func (m *Metrics) IngestedBytes() uint64 {
+	var ingestedBytes uint64
+	for _, lm := range m.Metrics.Levels {
+		ingestedBytes += lm.BytesIngested
+	}
+	return ingestedBytes
+}
+
+// CompactedBytes returns the sum of bytes read and written during
+// compactions across all levels of the LSM.
+func (m *Metrics) CompactedBytes() (read, written uint64) {
+	for _, lm := range m.Metrics.Levels {
+		read += lm.BytesRead
+		written += lm.BytesCompacted
+	}
+	return read, written
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -829,24 +941,6 @@ type EncryptionRegistries struct {
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
 	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
-}
-
-// NewEngine creates a new storage engine.
-func NewEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	pebbleConfig := PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          DefaultPebbleOptions(),
-	}
-	pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-	defer pebbleConfig.Opts.Cache.Unref()
-
-	return NewPebble(context.Background(), pebbleConfig)
-}
-
-// NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
-// The caller must call the engine's Close method when the engine is no longer needed.
-func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	return NewEngine(cacheSize, storageConfig)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
@@ -1026,17 +1120,14 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if settings == nil {
 		return
 	}
-	metrics, err := eng.GetMetrics()
-	if err != nil {
-		log.Warningf(ctx, "failed to read metrics: %+v", err)
-		return
-	}
-	targetDelay := calculatePreIngestDelay(settings, metrics)
+	metrics := eng.GetMetrics()
+	targetDelay := calculatePreIngestDelay(settings, metrics.Metrics)
 
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, metrics.L0FileCount, metrics.L0SublevelCount)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
+		targetDelay, metrics.Levels[0].NumFiles, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -1044,15 +1135,16 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	}
 }
 
-func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.Duration {
+func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := metrics.L0FileCount
-	if metrics.L0SublevelCount >= 0 {
-		l0ReadAmp = metrics.L0SublevelCount
+	l0ReadAmp := metrics.Levels[0].NumFiles
+	if metrics.Levels[0].Sublevels >= 0 {
+		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}
+
 	if l0ReadAmp > l0ReadAmpLimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
 		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile

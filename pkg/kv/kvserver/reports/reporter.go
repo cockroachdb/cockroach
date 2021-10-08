@@ -53,6 +53,12 @@ var ReporterInterval = settings.RegisterDurationSetting(
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
 // replication_stats_report and replication_critical_localities.
+//
+// TODO(irfansharif): After #67679 these replication reports will be the last
+// remaining use of the system config span in KV. Strawman: we could hoist all
+// this code above KV and run it for each tenant. We'd have to expose a view
+// into node liveness and store descriptors, and instead of using the system
+// config span we could consult the tenant-scoped system.zones directly.
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
@@ -105,7 +111,7 @@ func (stats *Reporter) reportInterval() (time.Duration, <-chan struct{}) {
 
 // Start the periodic calls to Update().
 func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
-	ReporterInterval.SetOnChange(&stats.settings.SV, func() {
+	ReporterInterval.SetOnChange(&stats.settings.SV, func(ctx context.Context) {
 		stats.frequencyMu.Lock()
 		defer stats.frequencyMu.Unlock()
 		// Signal the current waiter (if any), and prepare the channel for future
@@ -489,7 +495,7 @@ func visitDefaultZone(
 func getZoneByID(
 	id config.SystemTenantObjectID, cfg *config.SystemConfig,
 ) (*zonepb.ZoneConfig, error) {
-	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
+	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil
 	}
@@ -604,7 +610,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.Errorf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)

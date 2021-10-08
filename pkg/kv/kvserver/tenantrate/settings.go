@@ -11,29 +11,21 @@
 package tenantrate
 
 import (
+	"runtime"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/errors"
 )
 
 // Config contains the configuration of the rate limiter.
 //
-// We limit the rate in terms of "KV Compute Units". The configuration contains
-// the rate and burst limits for KVCUs, as well as factors that define a "cost
-// mode" for calculating the number of KVCUs for a read or write request.
-//
-// Specifically, the cost model is a linear function combining a fixed
-// pre-request cost and a size-dependent (per-byte) cost.
-//
-// For a read:
-//   KVCUs = ReadRequestUnits + <size of read> * ReadUnitsPerByte
-// For a write:
-//   KVCUs = WriteRequestUnits + <size of write) * WriteUnitsPerByte
-//
+// We limit the rate of KV operations using the tenant cost model which can
+// map these operations to "Request Units".
 type Config struct {
-	// Rate defines the "sustained" rate limit in KV Compute Units per second.
+	// Rate defines the "sustained" rate limit in Request Units per second.
 	Rate float64
-	// Burst defines the "burst" limit in KV Compute Units. Unused units
-	// accumulate up to this limit.
+	// Burst defines the "burst" limit in Request Units. Unused units accumulate
+	// up to this limit.
 	Burst float64
 
 	// ReadRequestUnits is the baseline cost of a read, in KV Compute Units.
@@ -54,19 +46,34 @@ type Config struct {
 // The settings are designed so that there is one important "knob" to turn:
 // kv.tenant_rate_limiter.rate_limit.
 //
-// The rest of the settings are meant to be changed rarely. Note that the burst
-// limit setting is defined as a multiplier of the rate (i.e. in seconds), so
-// it doesn't need to be adjusted in concert with the rate.
+// The burst limit setting is defined as a multiplier of the rate (i.e. in
+// seconds), so it doesn't need to be adjusted in concert with the rate.
 //
-// The settings that determine the KV Request Units (the "cost model") are set
-// based on experiments, where 1000 KV Request Units correspond to one CPU
-// second.
+// These settings have analogs in the tenantcostmodel settings but the values
+// are different; the purpose here is to estimate CPU usage on the KV node,
+// whereas the tenant cost model is about pricing and takes into consideration
+// more costs (like network transfers, IOs).
 var (
+	// kvcuRateLimit was initially set to an absolute value in KV Compute Units/s,
+	// with the intention of throttling free tier tenants.
+	//
+	// We now use it to disallow a single tenant from harnessing a large fraction
+	// of a KV node, in order to avoid very significant fluctuations in
+	// performance depending on what other tenants are using the same KV node.
+	// In this mode, a value of -200 means that we allow 200 KV Compute Units/s
+	// per CPU, or roughly 20% of the machine (by design 1 RU roughly maps to 1
+	// CPU-millisecond).
 	kvcuRateLimit = settings.RegisterFloatSetting(
 		"kv.tenant_rate_limiter.rate_limit",
-		"per-tenant rate limit in KV Compute Units per second",
-		200,
-		settings.PositiveFloat,
+		"per-tenant rate limit in KV Compute Units per second if positive, "+
+			"or KV Compute Units per second per CPU if negative",
+		-200,
+		func(v float64) error {
+			if v == 0 {
+				return errors.New("cannot set to zero value")
+			}
+			return nil
+		},
 	)
 
 	kvcuBurstLimitSeconds = settings.RegisterFloatSetting(
@@ -115,25 +122,37 @@ var (
 	}
 )
 
+// absoluteRateFromConfigValue returns an absolute rate (in KVCU/s) from a value
+// of the kv.tenant_rate_limiter.rate_limit setting.
+func absoluteRateFromConfigValue(value float64) float64 {
+	if value < 0 {
+		// We use GOMAXPROCS instead of NumCPU because the former could be adjusted
+		// based on cgroup limits (see cgroups.AdjustMaxProcs).
+		return -value * float64(runtime.GOMAXPROCS(0))
+	}
+	return value
+}
+
 // ConfigFromSettings constructs a Config using the cluster setting values.
-func ConfigFromSettings(st *cluster.Settings) Config {
-	const perMBToPerByte = float64(1) / (1024 * 1024)
-	var c Config
-	c.Rate = kvcuRateLimit.Get(&st.SV)
-	c.Burst = c.Rate * kvcuBurstLimitSeconds.Get(&st.SV)
-	c.ReadRequestUnits = readRequestCost.Get(&st.SV)
-	c.ReadUnitsPerByte = readCostPerMB.Get(&st.SV) * perMBToPerByte
-	c.WriteRequestUnits = writeRequestCost.Get(&st.SV)
-	c.WriteUnitsPerByte = writeCostPerMB.Get(&st.SV) * perMBToPerByte
-	return c
+func ConfigFromSettings(sv *settings.Values) Config {
+	rate := absoluteRateFromConfigValue(kvcuRateLimit.Get(sv))
+	return Config{
+		Rate:              rate,
+		Burst:             rate * kvcuBurstLimitSeconds.Get(sv),
+		ReadRequestUnits:  readRequestCost.Get(sv),
+		ReadUnitsPerByte:  readCostPerMB.Get(sv) / (1024 * 1024),
+		WriteRequestUnits: writeRequestCost.Get(sv),
+		WriteUnitsPerByte: writeCostPerMB.Get(sv) / (1024 * 1024),
+	}
 }
 
 // DefaultConfig returns the configuration that corresponds to the default
 // setting values.
 func DefaultConfig() Config {
+	rate := absoluteRateFromConfigValue(kvcuRateLimit.Default())
 	return Config{
-		Rate:              kvcuRateLimit.Default(),
-		Burst:             kvcuRateLimit.Default() * kvcuBurstLimitSeconds.Default(),
+		Rate:              rate,
+		Burst:             rate * kvcuBurstLimitSeconds.Default(),
 		ReadRequestUnits:  readRequestCost.Default(),
 		ReadUnitsPerByte:  readCostPerMB.Default() / (1024 * 1024),
 		WriteRequestUnits: writeRequestCost.Default(),

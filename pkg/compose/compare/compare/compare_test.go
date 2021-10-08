@@ -134,7 +134,7 @@ func TestCompare(t *testing.T) {
 				if !ok {
 					t.Fatalf("bad connection name: %s", testCn.name)
 				}
-				conn, err := cmpconn.NewConnWithMutators(uri.addr, rng, testCn.mutators)
+				conn, err := cmpconn.NewConnWithMutators(ctx, uri.addr, rng, testCn.mutators)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -156,16 +156,20 @@ func TestCompare(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			ignoredErrCount := 0
+			totalQueryCount := 0
 			until := time.After(*flagEach)
 			for {
 				select {
 				case <-until:
-					t.Logf("done with test: %s", confName)
+					t.Logf("done with test. totalQueryCount=%d ignoredErrCount=%d test=%s",
+						totalQueryCount, ignoredErrCount, confName,
+					)
 					return
 				default:
 				}
 				query := smither.Generate()
-				if err := cmpconn.CompareConns(
+				if ignoredErr, err := cmpconn.CompareConns(
 					ctx, time.Second*30, conns, "" /* prep */, query, config.ignoreSQLErrors,
 				); err != nil {
 					path := filepath.Join(*flagArtifacts, confName+".log")
@@ -173,7 +177,10 @@ func TestCompare(t *testing.T) {
 						t.Log(err)
 					}
 					t.Fatal(err)
+				} else if ignoredErr {
+					ignoredErrCount++
 				}
+				totalQueryCount++
 				// Make sure we can still ping on a connection. If we can't we may have
 				// crashed something.
 				for name, conn := range conns {

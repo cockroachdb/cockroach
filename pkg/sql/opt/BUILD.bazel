@@ -48,8 +48,10 @@ go_test(
     ],
     embed = [":opt"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
@@ -112,7 +114,8 @@ genrule(
       cp $(location rule_name.go) `dirname $(location :gen-rulenames)`/rule_name.go
       GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
-      env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
+      # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+      env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
       -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,

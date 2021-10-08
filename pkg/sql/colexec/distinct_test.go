@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type distinctTestCase struct {
@@ -36,6 +38,13 @@ type distinctTestCase struct {
 	tuples                  []colexectestutils.Tuple
 	expected                []colexectestutils.Tuple
 	isOrderedOnDistinctCols bool
+	nullsAreDistinct        bool
+	// errorOnDup indicates the message that should be emitted if any duplicates
+	// are observed by the distinct operator.
+	errorOnDup string
+	// noError indicates whether no error should actually occur. It should only
+	// be used in conjunction with errorOnDup.
+	noError bool
 }
 
 var distinctTestCases = []distinctTestCase{
@@ -189,6 +198,106 @@ var distinctTestCases = []distinctTestCase{
 			{mustParseJSON(`{"id": 6}`), "f"},
 		},
 	},
+	{
+		distinctCols: []uint32{0},
+		typs:         []*types.T{types.Int},
+		tuples: colexectestutils.Tuples{
+			{nil},
+			{nil},
+			{nil},
+			{1},
+			{1},
+			{2},
+			{2},
+			{2},
+		},
+		expected: colexectestutils.Tuples{
+			{nil},
+			{nil},
+			{nil},
+			{1},
+			{2},
+		},
+		isOrderedOnDistinctCols: true,
+		nullsAreDistinct:        true,
+	},
+	{
+		distinctCols: []uint32{0, 1},
+		typs:         []*types.T{types.Int, types.Int},
+		tuples: colexectestutils.Tuples{
+			{nil, nil},
+			{nil, nil},
+			{1, nil},
+			{1, nil},
+			{1, 1},
+			{1, 1},
+			{1, 1},
+			{2, nil},
+			{2, 2},
+			{2, 2},
+		},
+		expected: colexectestutils.Tuples{
+			{nil, nil},
+			{nil, nil},
+			{1, nil},
+			{1, nil},
+			{1, 1},
+			{2, nil},
+			{2, 2},
+		},
+		isOrderedOnDistinctCols: true,
+		nullsAreDistinct:        true,
+	},
+	{
+		distinctCols: []uint32{0},
+		typs:         []*types.T{types.Int},
+		tuples: colexectestutils.Tuples{
+			{1},
+			{2},
+			{2},
+			{3},
+		},
+		isOrderedOnDistinctCols: true,
+		errorOnDup:              "duplicate twos",
+	},
+	{
+		distinctCols: []uint32{0, 1},
+		typs:         []*types.T{types.Int, types.Int},
+		tuples: colexectestutils.Tuples{
+			{1, 1},
+			{1, 2},
+			{1, 2},
+			{1, 3},
+		},
+		isOrderedOnDistinctCols: true,
+		errorOnDup:              "duplicates in the second column",
+	},
+	{
+		distinctCols: []uint32{0},
+		typs:         []*types.T{types.Int},
+		tuples: colexectestutils.Tuples{
+			{nil},
+			{nil},
+		},
+		isOrderedOnDistinctCols: true,
+		errorOnDup:              "duplicate nulls",
+	},
+	{
+		distinctCols: []uint32{0},
+		typs:         []*types.T{types.Int},
+		tuples: colexectestutils.Tuples{
+			{nil},
+			{nil},
+		},
+		expected: colexectestutils.Tuples{
+			{nil},
+			{nil},
+		},
+		isOrderedOnDistinctCols: true,
+		nullsAreDistinct:        true,
+		errorOnDup:              "\"duplicate\" distinct nulls",
+		noError:                 true,
+	},
 }
 
 func mustParseJSON(s string) json.JSON {
@@ -199,18 +308,72 @@ func mustParseJSON(s string) json.JSON {
 	return j
 }
 
+func (tc *distinctTestCase) runTests(
+	t *testing.T,
+	verifier colexectestutils.VerifierType,
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
+) {
+	if tc.errorOnDup == "" {
+		colexectestutils.RunTestsWithTyps(
+			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
+			tc.expected, verifier, constructor,
+		)
+	} else {
+		var numErrorRuns int
+		errorHandler := func(err error) {
+			if strings.Contains(err.Error(), tc.errorOnDup) {
+				numErrorRuns++
+				return
+			}
+			t.Fatal(err)
+		}
+		// numConstructorCalls is incremented every time the operator to test is
+		// constructed and is a lower bound on the number of test runs. It is a
+		// lower bound because in some cases we will reset the operator chain
+		// for a second run, and the constructor won't get called then.
+		var numConstructorCalls int
+		instrumentedConstructor := func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+			numConstructorCalls++
+			return constructor(inputs)
+		}
+		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
+			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs},
+			tc.expected, verifier, instrumentedConstructor, errorHandler,
+		)
+		if tc.noError {
+			require.Zero(t, numErrorRuns)
+		} else {
+			// RunTests test harness runs two scenarios in which the error might
+			// not be encountered:
+			// 1) verifySelAndNullResets - because it exits once two batches are
+			//    returned. Note that in this scenario the constructor is called
+			//    up to two times;
+			// 2) randomNullsInjection - because the input data set is modified;
+			// so we subtract three runs from the lower bound on the number of
+			// expected errors.
+			numConstructorCalls -= 3
+			// Because numConstructorCalls is a lower bound on the number of
+			// the test runs, we expect numErrorRuns to be no less than
+			// numConstructorCalls.
+			require.GreaterOrEqual(
+				t, numErrorRuns, numConstructorCalls,
+				"expected to have no less erroneous runs than the total number of constructor calls",
+			)
+		}
+	}
+}
+
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
-		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return NewUnorderedDistinct(
-					testAllocator, input[0], tc.distinctCols, tc.typs,
-				), nil
-			})
+		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return NewUnorderedDistinct(
+				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
+			), nil
+		})
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
 				log.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
@@ -218,18 +381,16 @@ func TestDistinct(t *testing.T) {
 				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 					orderedCols[i] = tc.distinctCols[j]
 				}
-				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
-						return newPartiallyOrderedDistinct(
-							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
-						)
-					})
+				tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+					return newPartiallyOrderedDistinct(
+						testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
+					)
+				})
 			}
 			log.Info(context.Background(), "ordered")
-			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
-				func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
-				})
+			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup)
+			})
 		}
 	}
 }
@@ -259,7 +420,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs), nil
+			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 	)
 }
@@ -396,13 +557,13 @@ func BenchmarkDistinct(b *testing.B) {
 
 	distinctConstructors := []func(*colmem.Allocator, colexecop.Operator, []uint32, int, []*types.T) (colexecop.Operator, error){
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return NewUnorderedDistinct(allocator, input, distinctCols, typs), nil
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
+			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return colexecbase.NewOrderedDistinct(input, distinctCols, typs)
+			return colexecbase.NewOrderedDistinct(input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		},
 	}
 	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}

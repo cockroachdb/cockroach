@@ -112,17 +112,19 @@ func TestImplicator(t *testing.T) {
 				buf.WriteString("none")
 			} else {
 				execBld := execbuilder.New(
-					nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters,
-					&evalCtx, false, /* allowAutoCommit */
+					nil /* factory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+					&remainingFilters, &evalCtx, false, /* allowAutoCommit */
 				)
 				expr, err := execBld.BuildScalar()
 				if err != nil {
 					d.Fatalf(t, "unexpected error: %v\n", err)
 				}
-				fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-				fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-					ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
-				})
+				fmtCtx := tree.NewFmtCtx(
+					tree.FmtSimple,
+					tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+						ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
+					}),
+				)
 				expr.Format(fmtCtx)
 				buf.WriteString(fmtCtx.String())
 			}

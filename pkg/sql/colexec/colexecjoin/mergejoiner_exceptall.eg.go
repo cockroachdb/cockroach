@@ -33,7 +33,7 @@ import (
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ apd.Context
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ duration.Duration
 	_ tree.AggType
 	_ json.JSON
@@ -2551,7 +2551,7 @@ EqLoop:
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -2584,7 +2584,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -2616,7 +2616,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -2682,7 +2682,7 @@ EqLoop:
 										{
 											var cmpResult int
 
-											cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+											cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 											match = cmpResult == 0
 										}
@@ -5230,7 +5230,7 @@ EqLoop:
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -5263,7 +5263,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -5295,7 +5295,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -5361,7 +5361,7 @@ EqLoop:
 										{
 											var cmpResult int
 
-											cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+											cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 											match = cmpResult == 0
 										}
@@ -7909,7 +7909,7 @@ EqLoop:
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -7942,7 +7942,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -7974,7 +7974,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -8040,7 +8040,7 @@ EqLoop:
 										{
 											var cmpResult int
 
-											cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+											cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 											match = cmpResult == 0
 										}
@@ -10588,7 +10588,7 @@ EqLoop:
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -10621,7 +10621,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -10653,7 +10653,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -10719,7 +10719,7 @@ EqLoop:
 										{
 											var cmpResult int
 
-											cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+											cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 											match = cmpResult == 0
 										}
@@ -10790,6 +10790,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 	o.unlimitedAllocator.PerformOperation(
 		o.output.ColVecs()[:len(input.sourceTypes)],
 		func() {
+			outputCapacity := o.output.Capacity()
 			// Loop over every column.
 		LeftColLoop:
 			for colIdx := range input.sourceTypes {
@@ -10837,8 +10838,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -10848,7 +10849,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -10902,8 +10903,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -10967,8 +10968,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -10978,7 +10979,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx].Set(&val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11031,8 +11032,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11042,7 +11043,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11092,8 +11093,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11103,7 +11104,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11154,8 +11155,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11165,7 +11166,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11219,8 +11220,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11230,7 +11231,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11284,8 +11285,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11295,7 +11296,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11349,8 +11350,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11360,7 +11361,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11414,8 +11415,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11479,8 +11480,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11553,8 +11554,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11564,7 +11565,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11617,8 +11618,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11681,8 +11682,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11692,7 +11693,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx].Set(&val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11744,8 +11745,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11755,7 +11756,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11804,8 +11805,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11815,7 +11816,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11865,8 +11866,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11876,7 +11877,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11929,8 +11930,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -11940,7 +11941,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -11993,8 +11994,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12004,7 +12005,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -12057,8 +12058,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12068,7 +12069,7 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx] = val
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -12121,8 +12122,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12185,8 +12186,8 @@ func (o *mergeJoinExceptAllOp) buildLeftGroupsFromBatch(
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12257,6 +12258,7 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 	o.unlimitedAllocator.PerformOperation(
 		o.output.ColVecs()[colOffset:colOffset+len(input.sourceTypes)],
 		func() {
+			outputCapacity := o.output.Capacity()
 			// Loop over every column.
 		RightColLoop:
 			for colIdx := range input.sourceTypes {
@@ -12292,8 +12294,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12305,18 +12307,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12361,8 +12361,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12378,14 +12378,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12430,8 +12428,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12443,18 +12441,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx].Set(&v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12498,8 +12494,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12511,18 +12507,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12563,8 +12557,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12576,18 +12570,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12629,8 +12621,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12642,18 +12634,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12698,8 +12688,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12711,18 +12701,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12767,8 +12755,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12780,18 +12768,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12836,8 +12822,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12849,18 +12835,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12905,8 +12889,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12922,14 +12906,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -12974,8 +12956,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -12991,14 +12973,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13053,8 +13033,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13066,18 +13046,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13122,8 +13100,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13139,14 +13117,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13191,8 +13167,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13204,18 +13180,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx].Set(&v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13259,8 +13233,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13272,18 +13246,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13324,8 +13296,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13337,18 +13309,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13390,8 +13360,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13403,18 +13373,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13459,8 +13427,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13472,18 +13440,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13528,8 +13494,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13541,18 +13507,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13597,8 +13561,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13610,18 +13574,16 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx] = v
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13666,8 +13628,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13683,14 +13645,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13735,8 +13695,8 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 										o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 									}
 									toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-									if outStartIdx+toAppend > o.output.Capacity() {
-										toAppend = o.output.Capacity() - outStartIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
 									}
 
 									{
@@ -13752,14 +13712,12 @@ func (o *mergeJoinExceptAllOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -13868,6 +13826,7 @@ func (o *mergeJoinExceptAllOp) exhaustRightSource() {
 // accordingly.
 func (o *mergeJoinExceptAllOp) calculateOutputCount(groups []group) int {
 	count := o.builderState.outCount
+	outputCapacity := o.output.Capacity()
 
 	for i := 0; i < len(groups); i++ {
 		if !groups[i].unmatched {
@@ -13879,8 +13838,8 @@ func (o *mergeJoinExceptAllOp) calculateOutputCount(groups []group) int {
 		count += groups[i].toBuild
 		groups[i].toBuild = 0
 		if count > o.output.Capacity() {
-			groups[i].toBuild = count - o.output.Capacity()
-			count = o.output.Capacity()
+			groups[i].toBuild = count - outputCapacity
+			count = outputCapacity
 			return count
 		}
 	}
@@ -13926,7 +13885,7 @@ func (o *mergeJoinExceptAllOp) build() {
 
 func (o *mergeJoinExceptAllOp) Next() coldata.Batch {
 	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
-		o.outputTypes, o.output, 1 /* minCapacity */, o.memoryLimit,
+		o.outputTypes, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
 	)
 	o.bufferedGroup.helper.output = o.output
 	for {

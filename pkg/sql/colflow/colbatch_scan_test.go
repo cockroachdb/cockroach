@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,12 +74,9 @@ func TestColBatchScanMeta(t *testing.T) {
 				Spans: []execinfrapb.TableReaderSpan{
 					{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 				},
-				Table: *td.TableDesc(),
+				NeededColumns: []uint32{0},
+				Table:         *td.TableDesc(),
 			}},
-		Post: execinfrapb.PostProcessSpec{
-			Projection:    true,
-			OutputColumns: []uint32{0},
-		},
 		ResultTypes: types.OneIntCol,
 	}
 
@@ -93,9 +88,10 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
-	meta := tr.(*colexecutils.CancelChecker).Input.(*colfetcher.ColBatchScan).DrainMeta()
+	meta := res.MetadataSources[0].DrainMeta()
 	var txnFinalStateSeen bool
 	for _, m := range meta {
 		if m.LeafTxnFinalState != nil {
@@ -135,11 +131,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 						Spans: []execinfrapb.TableReaderSpan{
 							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 						},
+						NeededColumns: []uint32{0, 1},
 					}},
-				Post: execinfrapb.PostProcessSpec{
-					Projection:    true,
-					OutputColumns: []uint32{0, 1},
-				},
 				ResultTypes: types.TwoIntCols,
 			}
 
@@ -156,7 +149,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
@@ -166,14 +158,16 @@ func BenchmarkColBatchScan(b *testing.B) {
 					b.Fatal(err)
 				}
 				tr := res.Root
-				tr.Init(ctx)
 				b.StartTimer()
+				tr.Init(ctx)
 				for {
 					bat := tr.Next()
 					if bat.Length() == 0 {
 						break
 					}
 				}
+				b.StopTimer()
+				res.TestCleanupNoError(b)
 			}
 		})
 	}

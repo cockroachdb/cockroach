@@ -24,6 +24,11 @@ import (
 // different set of columns than its input. Either way, it updates
 // projectionsScope.group with the output memo group ID.
 func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
+	if b.evalCtx.SessionData().PropagateInputOrdering && len(projectionsScope.ordering) == 0 {
+		// Preserve the input ordering.
+		projectionsScope.copyOrdering(inScope)
+	}
+
 	// Don't add an unnecessary "pass through" project.
 	if projectionsScope.hasSameColumns(inScope) {
 		projectionsScope.expr = inScope.expr
@@ -189,9 +194,11 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 		colName := unresolved.Parts[0]
 		_, srcMeta, _, resolveErr := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
 		if resolveErr != nil {
-			if sqlerrors.IsUndefinedColumnError(resolveErr) {
-				// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
-				// Attempt to resolve as a TupleStar.
+			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
+			// Attempt to resolve as a TupleStar. We do not attempt to resolve
+			// as a TupleStar if we are inside a view definition because views
+			// do not support * expressions.
+			if !b.insideViewDef && sqlerrors.IsUndefinedColumnError(resolveErr) {
 				return func() tree.TypedExpr {
 					defer wrapColTupleStarPanic(resolveErr)
 					return inScope.resolveType(columnNameAsTupleStar(colName), types.Any)

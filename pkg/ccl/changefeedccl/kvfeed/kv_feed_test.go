@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,26 +29,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKVFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// We want to inject fake table events and data into the buffer
 	// and use that to assert that there are proper calls to the kvScanner and
 	// what not.
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
-	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
+
+	mkKey := func(tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
 		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
-		if err != nil {
-			panic(err)
-		}
+		require.NoError(t, err)
+		return key
+	}
+	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		return roachpb.KeyValue{
-			Key: key,
+			Key: mkKey(tableID, k),
 			Value: roachpb.Value{
 				RawBytes:  []byte(v),
 				Timestamp: ts,
@@ -81,6 +86,7 @@ func TestKVFeed(t *testing.T) {
 		schemaChangePolicy changefeedbase.SchemaChangePolicy
 		initialHighWater   hlc.Timestamp
 		spans              []roachpb.Span
+		checkpoint         []roachpb.Span
 		events             []roachpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
@@ -89,19 +95,20 @@ func TestKVFeed(t *testing.T) {
 		expEvents int
 		expErrRE  string
 	}
+	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
-		buf := MakeChanBuffer()
+		buf := kvevent.MakeChanBuffer()
 		mm := mon.NewUnlimitedMonitor(
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
-		metrics := MakeMetrics(time.Minute)
-		bufferFactory := func() EventBuffer {
-			return MakeMemBuffer(mm.MakeBoundAccount(), &metrics)
+		metrics := kvevent.MakeMetrics(time.Minute)
+		bufferFactory := func() kvevent.Buffer {
+			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
 		scans := make(chan physicalConfig)
-		sf := scannerFunc(func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {
+		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
 			select {
 			case scans <- cfg:
 				return nil
@@ -111,23 +118,25 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans,
+		f := newKVFeed(buf, tc.spans, tc.checkpoint,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
 			keys.SystemSQLCodec,
-			tf, sf, rangefeedFactory(ref.run), bufferFactory)
+			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			return f.run(ctx)
 		})
+		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
 				scan := <-scans
 				assert.Equal(t, expScans[0], scan.Timestamp)
 				assert.Equal(t, tc.withDiff, scan.WithDiff)
+				assert.Equal(t, spansToScan, scan.Spans)
 			}
 			return nil
 		})
@@ -155,6 +164,13 @@ func TestKVFeed(t *testing.T) {
 	}
 	makeTableDesc := schematestutils.MakeTableDesc
 	addColumnDropBackfillMutation := schematestutils.AddColumnDropBackfillMutation
+
+	makeSpan := func(tableID uint32, start, end string) (s roachpb.Span) {
+		s.Key = mkKey(tableID, start)
+		s.EndKey = mkKey(tableID, end)
+		return s
+	}
+
 	for _, tc := range []testCase{
 		{
 			name:               "no events - backfill",
@@ -167,6 +183,45 @@ func TestKVFeed(t *testing.T) {
 			},
 			events: []roachpb.RangeFeedEvent{
 				kvEvent(42, "a", "b", ts(3)),
+			},
+			expScans: []hlc.Timestamp{
+				ts(2),
+			},
+			expEvents: 1,
+		},
+		{
+			name:               "no events -  full checkpoint",
+			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
+			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyBackfill,
+			needsInitialScan:   true,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				tableSpan(42),
+			},
+			checkpoint: []roachpb.Span{
+				tableSpan(42),
+			},
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "b", ts(3)),
+			},
+			expScans:  []hlc.Timestamp{},
+			expEvents: 1,
+		},
+		{
+			name:               "no events - partial backfill",
+			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
+			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyBackfill,
+			needsInitialScan:   true,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				tableSpan(42),
+			},
+			checkpoint: []roachpb.Span{
+				makeSpan(42, "a", "q"),
+			},
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "val", ts(3)),
+				kvEvent(42, "d", "val", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -256,9 +311,9 @@ func TestKVFeed(t *testing.T) {
 	}
 }
 
-type scannerFunc func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error
+type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
 
-func (s scannerFunc) Scan(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {
+func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
 	return s(ctx, sink, cfg)
 }
 
@@ -268,7 +323,9 @@ type rawTableFeed struct {
 	events []schemafeed.TableEvent
 }
 
-func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp) SchemaFeed {
+func newRawTableFeed(
+	descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp,
+) schemafeed.SchemaFeed {
 	sort.Slice(descs, func(i, j int) bool {
 		if descs[i].GetID() != descs[j].GetID() {
 			return descs[i].GetID() < descs[j].GetID()
@@ -357,7 +414,7 @@ func (f rawEventFeed) run(
 	return nil
 }
 
-var _ SchemaFeed = (*rawTableFeed)(nil)
+var _ schemafeed.SchemaFeed = (*rawTableFeed)(nil)
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{

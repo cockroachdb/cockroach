@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -141,7 +141,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
 	if err != nil {
@@ -176,14 +177,14 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// pgServer stops waiting for connections to respond to cancellation.
 		realCancels := pgServer.OverwriteCancelMap()
 
-		// Set draining with no drainWait or cancelWait timeout. The expected
+		// Set draining with no queryWait or cancelWait timeout. The expected
 		// behavior is that the ongoing session is immediately canceled but
 		// since we overwrote the context.CancelFunc, this cancellation will
 		// not have any effect. The pgServer will not bother to wait for the
 		// connection to close properly and should notify the caller that a
 		// session did not respond to cancellation.
 		if err := pgServer.DrainImpl(
-			0 /* drainWait */, 0, /* cancelWait */
+			ctx, 0 /* queryWait */, 0, /* cancelWait */
 		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -218,11 +219,11 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set draining with no drainWait timeout and a 2s cancelWait timeout.
+		// Set draining with no queryWait timeout and a 2s cancelWait timeout.
 		// The expected behavior is for the pgServer to immediately cancel any
 		// ongoing sessions and wait for 2s for the cancellation to take effect.
 		if err := pgServer.DrainImpl(
-			0 /* drainWait */, 2*time.Second, /* cancelWait */
+			ctx, 0 /* queryWait */, 2*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -533,8 +534,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
-				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
-				Results("isRole", "BOOL", false, false, "", "{}", false),
+				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
+				Results("isRole", "BOOL", false, false, "", "{primary}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", security.RootUser).
@@ -555,10 +556,12 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", security.RootUser, "UPDATE"),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
+			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
+				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false).
+				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(30),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(35),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
@@ -818,6 +821,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"TRUNCATE TABLE d.str", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
+		{"SELECT '{\"field\": 12}'::JSON->$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
+		{"SELECT '{\"field\": 12}'::JSON->>$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
@@ -925,7 +936,7 @@ func TestPGPreparedQuery(t *testing.T) {
 					t.Errorf("%s: unexpected row: %s", query, b)
 				}
 				if test.others > 0 {
-					t.Fatalf("%s: expected %d more rows", query, test.others)
+					t.Fatalf("%s: expected %d more row(s)", query, test.others)
 				}
 			})
 		}
@@ -1790,13 +1801,12 @@ func TestSessionParameters(t *testing.T) {
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
-	connCfg := pgx.ConnConfig{
-		Host:      host,
-		Port:      uint16(port),
-		User:      security.RootUser,
-		TLSConfig: nil, // insecure
-		Logger:    pgxTestLogger{},
-	}
+	connCfg, err := pgx.ParseConfig(
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+	)
+	require.NoError(t, err)
+	connCfg.TLSConfig = nil
+	connCfg.Logger = pgxTestLogger{}
 
 	testData := []struct {
 		varName        string
@@ -1823,14 +1833,14 @@ func TestSessionParameters(t *testing.T) {
 		{"server_version", "bar", false, false, `parameter "server_version" cannot be changed.*55P02`},
 		// Erroneous values are also rejected.
 		{"extra_float_digits", "42", false, false, `42 is outside the valid range for parameter "extra_float_digits".*22023`},
-		{"datestyle", "woo", false, false, `invalid value for parameter "DateStyle".*22023`},
+		{"datestyle", "woo", false, false, `invalid value for parameter "DateStyle": "woo".*22023`},
 	}
 
 	for _, test := range testData {
 		t.Run(test.varName+"="+test.val, func(t *testing.T) {
 			cfg := connCfg
 			cfg.RuntimeParams = map[string]string{test.varName: test.val}
-			db, err := pgx.Connect(cfg)
+			db, err := pgx.ConnectConfig(ctx, cfg)
 			t.Logf("conn error: %v", err)
 			if !testutils.IsError(err, test.expectedErr) {
 				t.Fatalf("expected %q, got %v", test.expectedErr, err)
@@ -1838,16 +1848,12 @@ func TestSessionParameters(t *testing.T) {
 			if err != nil {
 				return
 			}
-			defer func() { _ = db.Close() }()
-
-			for k, v := range db.RuntimeParams {
-				t.Logf("received runtime param %s = %q", k, v)
-			}
+			defer func() { _ = db.Close(ctx) }()
 
 			// If the session var is also a valid status param, then check
 			// the requested value was processed.
 			if test.expectedStatus {
-				serverVal := db.RuntimeParams[test.varName]
+				serverVal := db.PgConn().ParameterStatus(test.varName)
 				if serverVal != test.val {
 					t.Fatalf("initial server status %v: got %q, expected %q",
 						test.varName, serverVal, test.val)
@@ -1855,7 +1861,7 @@ func TestSessionParameters(t *testing.T) {
 			}
 
 			// Check the value also inside the session.
-			rows, err := db.Query("SHOW " + test.varName)
+			rows, err := db.Query(ctx, "SHOW "+test.varName)
 			if err != nil {
 				// Check that the value was not expected to be settable.
 				// (The set was ignored).
@@ -1889,8 +1895,10 @@ func TestSessionParameters(t *testing.T) {
 
 type pgxTestLogger struct{}
 
-func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
+func (l pgxTestLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
+	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.

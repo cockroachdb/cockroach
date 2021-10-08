@@ -58,26 +58,27 @@ type Params struct {
 // A Plan is a schema change plan, primarily containing ops to be executed that
 // are partitioned into stages.
 type Plan struct {
-	Params       Params
-	InitialNodes []*scpb.Node
-	Graph        *scgraph.Graph
-	Stages       []Stage
+	Params  Params
+	Initial scpb.State
+	Graph   *scgraph.Graph
+	Stages  []Stage
 }
 
 // A Stage is a sequence of ops to be executed "together" as part of a schema
 // change.
 //
-// Stages also contain their corresponding targets and states before and after
-// the execution of the ops in the stage, reflecting the fact that any set of
-// ops can be thought of as a transition from a set of target states to another.
+// Stages also contain the state before and after the execution of the ops in
+// the stage, reflecting the fact that any set of ops can be thought of as a
+// transition from one state to another.
 type Stage struct {
-	Before, After []*scpb.Node
+	Before, After scpb.State
 	Ops           scop.Ops
+	Revertible    bool
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
-// the initial states for a set of targets.
-func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
+// the initial state for a set of targets.
+func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
@@ -88,36 +89,36 @@ func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
 		}
 	}()
 
-	g, err := scgraph.New(initialStates)
+	g, err := scgraph.New(initial)
 	if err != nil {
 		return Plan{}, err
 	}
 	// TODO(ajwerner): Generate the stages for all of the phases as it will make
 	// debugging easier.
-	for _, ts := range initialStates {
-		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.State, params)
+	for _, ts := range initial {
+		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.Status, params)
 	}
 	if err := g.ForEachNode(func(n *scpb.Node) error {
 		d, ok := p[reflect.TypeOf(n.Element())]
 		if !ok {
 			return errors.Errorf("not implemented for %T", n.Target)
 		}
-		d.deps(g, n.Target, n.State)
+		d.deps(g, n.Target, n.Status)
 		return nil
 	}); err != nil {
 		return Plan{}, err
 	}
-	stages := buildStages(initialStates, g)
+	stages := buildStages(initial, g, params)
 	return Plan{
-		Params:       params,
-		InitialNodes: initialStates,
-		Graph:        g,
-		Stages:       stages,
+		Params:  params,
+		Initial: initial,
+		Graph:   g,
+		Stages:  stages,
 	}, nil
 }
 
-func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
-	// TODO(ajwerner): deal with the case where the target state was
+func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
+	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}
@@ -168,14 +169,23 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 			return Stage{}, false
 		}
 		next := append(cur[:0:0], cur...)
+		isStageRevertible := true
 		var ops []scop.Op
-		for i, ts := range cur {
-			for _, e := range edges {
-				if e.From() == ts {
-					next[i] = e.To()
-					ops = append(ops, e.Op())
-					break
+		for revertible := 1; revertible >= 0; revertible-- {
+			isStageRevertible = revertible == 1
+			for i, ts := range cur {
+				for _, e := range edges {
+					if e.From() == ts && isStageRevertible == e.Revertible() {
+						next[i] = e.To()
+						ops = append(ops, e.Op()...)
+						break
+					}
 				}
+			}
+			// If we added non-revertible stages
+			// then this stage is done
+			if len(ops) != 0 {
+				break
 			}
 		}
 		return Stage{
@@ -207,7 +217,9 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		// Group the op edges a per-type basis.
 		opTypes := make(map[scop.Type][]*scgraph.OpEdge)
 		for _, oe := range opEdges {
-			opTypes[oe.Op().Type()] = append(opTypes[oe.Op().Type()], oe)
+			for _, op := range oe.Op() {
+				opTypes[op.Type()] = append(opTypes[op.Type()], oe)
+			}
 		}
 
 		// Greedily attempt to find a stage which can be executed. This is sane
@@ -226,8 +238,91 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		if !didSomething {
 			break
 		}
+		// Sort ops based on graph dependencies.
+		sortOps(g, s.Ops.Slice())
 		stages = append(stages, s)
 		cur = s.After
 	}
 	return stages
+}
+
+// Check if some route exists from curr to the
+// target node
+func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.Node) bool {
+	nodesToVisit := []*scpb.Node{start}
+	visitedNodes := map[*scpb.Node]struct{}{}
+	for len(nodesToVisit) > 0 {
+		curr := nodesToVisit[0]
+		if curr == target {
+			return true
+		}
+		nodesToVisit = nodesToVisit[1:]
+		if _, ok := visitedNodes[curr]; !ok {
+			visitedNodes[curr] = struct{}{}
+			edges, ok := graph.GetDepEdgesFrom(curr)
+			if !ok {
+				return false
+			}
+			// Append all of the nodes to visit
+			for _, currEdge := range edges {
+				nodesToVisit = append(nodesToVisit, currEdge.To())
+			}
+		}
+	}
+	return false
+}
+
+// sortOps sorts the operations into order based on
+// graph dependencies
+func sortOps(graph *scgraph.Graph, ops []scop.Op) {
+	for i := 1; i < len(ops); i++ {
+		for j := i; j > 0; j-- {
+			if compareOps(graph, ops[j], ops[j-1]) {
+				tmp := ops[j]
+				ops[j] = ops[j-1]
+				ops[j-1] = tmp
+			}
+		}
+	}
+	// Sanity: Graph order is sane across all of
+	// the ops.
+	for i := 0; i < len(ops); i++ {
+		for j := i + 1; j < len(ops); j++ {
+			if !compareOps(graph, ops[i], ops[j]) && // Greater, but not equal (if equal opposite comparison would match).
+				compareOps(graph, ops[j], ops[i]) {
+				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
+			} else if compareOps(graph, ops[j], ops[i]) {
+				compareOps(graph, ops[j], ops[i])
+				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
+			}
+		}
+	}
+}
+
+// compareOps compares operations and orders them based on
+// followed by the graph dependencies.
+func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less bool) {
+	// Otherwise, lets compare attributes
+	firstNode := graph.GetNodeFromOp(firstOp)
+	secondNode := graph.GetNodeFromOp(secondOp)
+	if firstNode == secondNode {
+		return false // Equal
+	}
+	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
+	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
+	if firstExists && secondExists {
+		if firstNode.Target.Direction == scpb.Target_DROP {
+			return true
+		} else if secondNode.Target.Direction == scpb.Target_DROP {
+			return false
+		} else {
+			panic(errors.AssertionFailedf("A potential cycle exists in plan the graph, without any"+
+				"nodes transitioning in opposite directions\n %s\n%s\n",
+				firstNode,
+				secondNode))
+		}
+	}
+
+	// Path exists from first to second, so we depend on second.
+	return firstExists
 }

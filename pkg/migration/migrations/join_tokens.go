@@ -14,15 +14,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 )
 
 func joinTokensTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
 ) error {
-	return sqlmigrations.CreateSystemTable(
+	return startupmigrations.CreateSystemTable(
 		ctx, d.DB, d.Codec, d.Settings, systemschema.JoinTokensTable,
 	)
 }

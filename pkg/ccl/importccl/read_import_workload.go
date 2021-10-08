@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -35,6 +35,7 @@ import (
 )
 
 type workloadReader struct {
+	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
 	table   catalog.TableDescriptor
 	kvCh    chan row.KVBatch
@@ -43,9 +44,12 @@ type workloadReader struct {
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan row.KVBatch, table catalog.TableDescriptor, evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	table catalog.TableDescriptor,
+	kvCh chan row.KVBatch,
 ) *workloadReader {
-	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
+	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -164,7 +168,7 @@ func (w *workloadReader) readFiles(
 	for _, wc := range wcs {
 		if err := ctxgroup.GroupWorkers(ctx, runtime.GOMAXPROCS(0), func(ctx context.Context, _ int) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx)
+			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {
 			return err
 		}
@@ -216,9 +220,11 @@ func NewWorkloadKVConverter(
 // minimzing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
-func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
-	conv, err := row.NewDatumRowConverter(ctx, w.tableDesc, nil /* targetColNames */, evalCtx,
-		w.kvCh, nil /* seqChunkProvider */)
+func (w *WorkloadKVConverter) Worker(
+	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext,
+) error {
+	conv, err := row.NewDatumRowConverter(ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
+		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */)
 	if err != nil {
 		return err
 	}
@@ -235,7 +241,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		if batchIdx >= w.batchEnd {
 			break
 		}
-		a = a[:0]
+		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range cb.ColVecs() {

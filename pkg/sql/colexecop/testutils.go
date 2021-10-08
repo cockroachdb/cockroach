@@ -116,11 +116,9 @@ func (s *RepeatableBatchSource) Next() coldata.Batch {
 		// This Copy is outside of the allocator since the RepeatableBatchSource is
 		// a test utility which is often used in the benchmarks, and we want to
 		// reduce the performance impact of this operator.
-		s.output.ColVec(i).Copy(coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				Src:       colVec,
-				SrcEndIdx: s.numToCopy,
-			},
+		s.output.ColVec(i).Copy(coldata.SliceArgs{
+			Src:       colVec,
+			SrcEndIdx: s.numToCopy,
 		})
 	}
 	s.output.SetLength(s.batchLen)
@@ -143,7 +141,7 @@ type CallbackOperator struct {
 	ZeroInputNode
 	InitCb  func(context.Context)
 	NextCb  func() coldata.Batch
-	CloseCb func(context.Context) error
+	CloseCb func() error
 }
 
 var _ ClosableOperator = &CallbackOperator{}
@@ -165,11 +163,11 @@ func (o *CallbackOperator) Next() coldata.Batch {
 }
 
 // Close is part of the ClosableOperator interface.
-func (o *CallbackOperator) Close(ctx context.Context) error {
+func (o *CallbackOperator) Close() error {
 	if o.CloseCb == nil {
 		return nil
 	}
-	return o.CloseCb(ctx)
+	return o.CloseCb()
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always

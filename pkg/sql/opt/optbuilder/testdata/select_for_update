@@ -20,7 +20,7 @@ SELECT * FROM t FOR UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -29,7 +29,7 @@ SELECT * FROM t FOR NO KEY UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
 build
@@ -38,7 +38,7 @@ SELECT * FROM t FOR SHARE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share
 
 build
@@ -47,7 +47,7 @@ SELECT * FROM t FOR KEY SHARE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-key-share
 
 build
@@ -56,7 +56,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share
 
 build
@@ -65,7 +65,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
 build
@@ -74,7 +74,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -83,7 +83,7 @@ SELECT * FROM t FOR UPDATE OF t
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -95,12 +95,12 @@ build
 SELECT 1 FROM t FOR UPDATE OF t
 ----
 project
- ├── columns: "?column?":4!null
+ ├── columns: "?column?":5!null
  ├── scan t
- │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  │    └── locking: for-update
  └── projections
-      └── 1 [as="?column?":4]
+      └── 1 [as="?column?":5]
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -112,7 +112,7 @@ SELECT * FROM t AS t2 FOR UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -126,7 +126,7 @@ SELECT * FROM t AS t2 FOR UPDATE OF t2
 project
  ├── columns: a:1!null b:2
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 # ------------------------------------------------------------------------------
@@ -140,7 +140,7 @@ SELECT * FROM [53 AS t] FOR UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -149,7 +149,7 @@ SELECT * FROM [53 AS t] FOR UPDATE OF t
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -167,7 +167,7 @@ SELECT * FROM v FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -176,7 +176,7 @@ SELECT * FROM v FOR UPDATE OF v
 project
  ├── columns: a:1!null
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -204,7 +204,7 @@ SELECT * FROM v AS v2 FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -218,7 +218,7 @@ SELECT * FROM v AS v2 FOR UPDATE OF v2
 project
  ├── columns: a:1!null
  └── scan t [as=t2]
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 # ------------------------------------------------------------------------------
@@ -235,7 +235,7 @@ SELECT * FROM (SELECT a FROM t) FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -244,7 +244,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE)
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -253,7 +253,7 @@ SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
 build
@@ -262,7 +262,7 @@ SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
 build
@@ -276,7 +276,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -285,7 +285,7 @@ SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -294,7 +294,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
@@ -308,40 +308,40 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) FOR UPDATE
 ----
 project
- ├── columns: a:4
+ ├── columns: a:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:4]
+      └── subquery [as=a:5]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
 
 build
 SELECT (SELECT a FROM t FOR UPDATE)
 ----
 project
- ├── columns: a:4
+ ├── columns: a:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:4]
+      └── subquery [as=a:5]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
                           └── locking: for-update
 
 build
@@ -353,50 +353,50 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 project
- ├── columns: a:4
+ ├── columns: a:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:4]
+      └── subquery [as=a:5]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
                           └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
 project
- ├── columns: r:4
+ ├── columns: r:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:4]
+      └── subquery [as=r:5]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
 
 build
 SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 project
- ├── columns: r:4
+ ├── columns: r:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:4]
+      └── subquery [as=r:5]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
                           └── locking: for-update
 
 build
@@ -408,17 +408,17 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 project
- ├── columns: r:4
+ ├── columns: r:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:4]
+      └── subquery [as=r:5]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
                           └── locking: for-update
 
 build
@@ -427,16 +427,16 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
-      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       │    └── locking: for-update
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: a:4!null
+                │    ├── columns: a:5!null
                 │    └── scan t
-                │         └── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
+                │         └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
                 └── a:1
 
 build
@@ -445,15 +445,15 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
-      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: a:4!null
+                │    ├── columns: a:5!null
                 │    └── scan t
-                │         ├── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
+                │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
                 │         └── locking: for-update
                 └── a:1
 
@@ -463,16 +463,16 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
-      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       │    └── locking: for-update
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: a:4!null
+                │    ├── columns: a:5!null
                 │    └── scan t
-                │         └── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
+                │         └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
                 └── a:1
 
 build
@@ -481,15 +481,15 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
-      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: a:4!null
+                │    ├── columns: a:5!null
                 │    └── scan t
-                │         ├── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
+                │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
                 │         └── locking: for-update
                 └── a:1
 
@@ -505,59 +505,59 @@ build
 SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
 with &1
- ├── columns: a:4!null
+ ├── columns: a:5!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │         └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  └── with-scan &1
-      ├── columns: a:4!null
+      ├── columns: a:5!null
       └── mapping:
-           └──  t.a:1 => a:4
+           └──  t.a:1 => a:5
 
 build
 WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
 with &1 (cte)
- ├── columns: a:4!null
+ ├── columns: a:5!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │         └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  └── with-scan &1 (cte)
-      ├── columns: a:4!null
+      ├── columns: a:5!null
       └── mapping:
-           └──  t.a:1 => a:4
+           └──  t.a:1 => a:5
 
 build
 SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 with &1
- ├── columns: a:4!null
+ ├── columns: a:5!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  │         └── locking: for-update
  └── with-scan &1
-      ├── columns: a:4!null
+      ├── columns: a:5!null
       └── mapping:
-           └──  t.a:1 => a:4
+           └──  t.a:1 => a:5
 
 build
 WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: a:4!null
+ ├── columns: a:5!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  │         └── locking: for-update
  └── with-scan &1 (cte)
-      ├── columns: a:4!null
+      ├── columns: a:5!null
       └── mapping:
-           └──  t.a:1 => a:4
+           └──  t.a:1 => a:5
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
@@ -567,79 +567,79 @@ build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    └── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-share
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -650,65 +650,65 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
-      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-share
       └── filters
-           └── t2.a:1 = u2.a:4
+           └── t2.a:1 = u2.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-key-share
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 build
 SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:4
+           └── t.a:1 = u.a:5
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
@@ -718,17 +718,17 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
-      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:4
+           └── t2.a:1 = u2.a:5
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -749,47 +749,47 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
-      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    └── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    └── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       └── filters
-           └── t2.a:1 = u2.a:4
+           └── t2.a:1 = u2.a:5
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
-      │    └── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
+      │    └── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:4
+           └── t2.a:1 = u2.a:5
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
-      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:4
+           └── t2.a:1 = u2.a:5
 
 
 # Postgres doesn't support applying locking clauses to joins. The following
@@ -800,17 +800,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u2.a:4
+           └── t.a:1 = u2.a:5
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -831,17 +831,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 project
- ├── columns: a:1!null b:2 c:5
+ ├── columns: a:1!null b:2 c:6
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u [as=u2]
-      │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u2.a:4
+           └── t.a:1 = u2.a:5
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
@@ -851,14 +851,14 @@ build
 SELECT * FROM t, u FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 a:4!null c:5
+ ├── columns: a:1!null b:2 a:5!null c:6
  └── inner-join (cross)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters (true)
 
@@ -866,28 +866,28 @@ build
 SELECT * FROM t, u FOR UPDATE OF t
 ----
 project
- ├── columns: a:1!null b:2 a:4!null c:5
+ ├── columns: a:1!null b:2 a:5!null c:6
  └── inner-join (cross)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── scan u
-      │    └── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       └── filters (true)
 
 build
 SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 project
- ├── columns: a:1!null b:2 a:4!null c:5
+ ├── columns: a:1!null b:2 a:5!null c:6
  └── inner-join (cross)
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-share
       ├── scan u
-      │    ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    └── locking: for-update
       └── filters (true)
 
@@ -895,16 +895,16 @@ build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 a:4!null c:5
+ ├── columns: a:1!null b:2 a:5!null c:6
  └── inner-join-apply
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    └── locking: for-update
       ├── project
-      │    ├── columns: u.a:4!null c:5
+      │    ├── columns: u.a:5!null c:6
       │    └── scan u
-      │         ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │         ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │         └── locking: for-update
       └── filters (true)
 
@@ -917,15 +917,15 @@ build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 project
- ├── columns: a:1!null b:2 a:4!null c:5
+ ├── columns: a:1!null b:2 a:5!null c:6
  └── inner-join-apply
-      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 u.a:4!null c:5
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6
       ├── scan t
-      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
+      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       ├── project
-      │    ├── columns: u.a:4!null c:5
+      │    ├── columns: u.a:5!null c:6
       │    └── scan u
-      │         ├── columns: u.a:4!null c:5 u.crdb_internal_mvcc_timestamp:6
+      │         ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │         └── locking: for-update
       └── filters (true)
 
@@ -948,7 +948,7 @@ SELECT * FROM t FOR UPDATE NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update,nowait
 
 build
@@ -957,7 +957,7 @@ SELECT * FROM t FOR NO KEY UPDATE NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,nowait
 
 build
@@ -966,7 +966,7 @@ SELECT * FROM t FOR SHARE NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,nowait
 
 build
@@ -975,7 +975,7 @@ SELECT * FROM t FOR KEY SHARE NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-key-share,nowait
 
 build
@@ -984,7 +984,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,nowait
 
 build
@@ -993,7 +993,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,nowait
 
 build
@@ -1002,7 +1002,7 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWA
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update,nowait
 
 build
@@ -1011,7 +1011,7 @@ SELECT * FROM t FOR UPDATE OF t NOWAIT
 project
  ├── columns: a:1!null b:2
  └── scan t
-      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update,nowait
 
 build
@@ -1023,9 +1023,9 @@ build
 SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 ----
 project
- ├── columns: "?column?":4!null
+ ├── columns: "?column?":5!null
  ├── scan t
- │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  │    └── locking: for-update,nowait
  └── projections
-      └── 1 [as="?column?":4]
+      └── 1 [as="?column?":5]

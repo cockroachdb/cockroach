@@ -170,8 +170,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		bt := true
 		cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 			"auth": {
-				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
-				Channels:         logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
+				FileDefaults: logconfig.FileDefaults{
+					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				},
+				Channels: logconfig.SelectChannels(channel.SESSIONS),
 			}}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
@@ -312,13 +314,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								// t.Logf("found log entry: %+v", *entry)
 
-								if !strings.HasPrefix(entry.Message, "={") {
-									// TODO(knz): Enhance this when the log file
-									// contains proper markers for structured entries.
+								if entry.StructuredEnd == 0 {
 									t.Errorf("malformed structured message: %q", entry.Message)
 								}
 
-								jsonPayload := []byte(entry.Message[1:])
+								jsonPayload := []byte(entry.Message)
 								if entry.Redactable {
 									jsonPayload = redact.RedactableBytes(jsonPayload).StripMarkers()
 								}

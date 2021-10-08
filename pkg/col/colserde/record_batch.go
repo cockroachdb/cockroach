@@ -93,6 +93,9 @@ func calculatePadding(numBytes int) int {
 // Serialize serializes data as an arrow RecordBatch message and writes it to w.
 // Serializing a schema that does not match the schema given in
 // NewRecordBatchSerializer results in undefined behavior.
+// Each element of the input data array is consumed to minimize memory waste,
+// so users who wish to retain references to individual array.Data elements must
+// do so by making a copy elsewhere.
 func (s *RecordBatchSerializer) Serialize(
 	w io.Writer, data []*array.Data, headerLength int,
 ) (metadataLen uint32, dataLen uint64, _ error) {
@@ -213,6 +216,8 @@ func (s *RecordBatchSerializer) Serialize(
 				return 0, 0, err
 			}
 		}
+		// Eagerly discard the buffer; we have no use for it any longer.
+		data[i] = nil
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.

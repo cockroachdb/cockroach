@@ -71,11 +71,11 @@ const (
 	// used by the rpc context.
 	defaultRPCHeartbeatInterval = 3 * time.Second
 
-	// rangeLeaseRenewalFraction specifies what fraction the range lease
+	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
 	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
 	// eagerly renewed 8 seconds into each lease.
-	rangeLeaseRenewalFraction = 0.5
+	defaultRangeLeaseRenewalFraction = 0.5
 
 	// livenessRenewalFraction specifies what fraction the node liveness
 	// renewal duration should be of the node liveness duration. For example,
@@ -231,18 +231,6 @@ type Config struct {
 	// The flag exists mostly for the benefit of tests, and for
 	// `cockroach start-single-node`.
 	AutoInitializeCluster bool
-
-	// IdleExistAfter, If nonzero, will cause the server to run normally for the
-	// indicated amount of time, wait for all SQL connections to terminate,
-	// start a `defaultCountdownDuration` countdown and exit upon countdown
-	// reaching zero if no new connections occur. New connections will be
-	// accepted at all times and will effectively delay the exit (indefinitely
-	// if there is always at least one connection or there are no connection
-	// for less than `defaultCountdownDuration`. A new `defaultCountdownDuration`
-	// countdown will start when no more SQL connections exist.
-	// The interval is specified with a suffix of 's' for seconds, 'm' for
-	// minutes, and 'h' for hours.
-	IdleExitAfter time.Duration
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
@@ -317,6 +305,13 @@ type RaftConfig struct {
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
+	// RangeLeaseRenewalFraction specifies what fraction the range lease renewal
+	// duration should be of the range lease active time. For example, with a
+	// value of 0.2 and a lease duration of 10 seconds, leases would be eagerly
+	// renewed 8 seconds into each lease. A value of zero means use the default
+	// and a value of -1 means never pre-emptively renew the lease. A value of 1
+	// means always renew.
+	RangeLeaseRenewalFraction float64
 
 	// RaftLogTruncationThreshold controls how large a single Range's Raft log
 	// can grow. When a Range's Raft log grows above this size, the Range will
@@ -384,6 +379,15 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier
 	}
+	if cfg.RangeLeaseRenewalFraction == 0 {
+		cfg.RangeLeaseRenewalFraction = defaultRangeLeaseRenewalFraction
+	}
+	// TODO(andrei): -1 is a special value for RangeLeaseRenewalFraction which
+	// really means "0" (never renew), except that the zero value means "use
+	// default". We can't turn the -1 into 0 here because, unfortunately,
+	// SetDefaults is called multiple times (see NewStore()). So, we leave -1
+	// alone and ask all the users to handle it specially.
+
 	if cfg.RaftLogTruncationThreshold == 0 {
 		cfg.RaftLogTruncationThreshold = defaultRaftLogTruncationThreshold
 	}
@@ -438,7 +442,11 @@ func (cfg RaftConfig) RaftElectionTimeout() time.Duration {
 func (cfg RaftConfig) RangeLeaseDurations() (rangeLeaseActive, rangeLeaseRenewal time.Duration) {
 	rangeLeaseActive = time.Duration(cfg.RangeLeaseRaftElectionTimeoutMultiplier *
 		float64(cfg.RaftElectionTimeout()))
-	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
+	renewalFraction := cfg.RangeLeaseRenewalFraction
+	if renewalFraction == -1 {
+		renewalFraction = 0
+	}
+	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * renewalFraction)
 	return
 }
 
@@ -502,11 +510,17 @@ type StorageConfig struct {
 	// MaxSize is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSize int64
+	// BallastSize is the amount reserved by a ballast file for manual
+	// out-of-disk recovery.
+	BallastSize int64
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
 	// This may force the store version to versionFileRegistry if currently lower.
 	UseFileRegistry bool
+	// DisableSeparatedIntents is true if separated intents should not be written
+	// by intent writers. Only true for tests.
+	DisableSeparatedIntents bool
 	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
 	// through to C CCL code to set up encryption-at-rest.  Must be set if and
 	// only if encryption is enabled, otherwise left empty.

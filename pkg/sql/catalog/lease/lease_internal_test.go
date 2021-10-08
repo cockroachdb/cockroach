@@ -170,7 +170,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, table.Desc().(catalog.TableDescriptor))
+			tables = append(tables, table.Underlying().(catalog.TableDescriptor))
 			expiration = table.Expiration()
 			table.Release(context.Background())
 		}
@@ -286,7 +286,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		latestDesc := table.Desc().(catalog.TableDescriptor)
+		latestDesc := table.Underlying().(catalog.TableDescriptor)
 		table.Release(ctx)
 		return latestDesc
 	}
@@ -303,7 +303,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	update := func(catalog.MutableDescriptor) error { return nil }
 	logEvent := func(txn *kv.Txn) error {
 		txn2 := kvDB.NewTxn(ctx, "future-read")
-		txn2.SetFixedTimestamp(ctx, futureTime.Prev())
+		if err := txn2.SetFixedTimestamp(ctx, futureTime.Prev()); err != nil {
+			return err
+		}
 		if _, err := txn2.Get(ctx, "key"); err != nil {
 			return errors.Wrap(err, "read from other txn in future")
 		}
@@ -380,6 +382,7 @@ CREATE TEMP TABLE t2 (temp int);
 	for _, tableName := range []string{"t", "t2"} {
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 		lease := leaseManager.names.get(
+			context.Background(),
 			tableDesc.GetParentID(),
 			descpb.ID(keys.PublicSchemaID),
 			tableName,
@@ -419,11 +422,23 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), "test", s.Clock().Now()) != nil {
+	if leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		"test",
+		s.Clock().Now(),
+	) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
+	lease := leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		"test2",
+		s.Clock().Now(),
+	)
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
@@ -444,11 +459,23 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), "test2", s.Clock().Now()) != nil {
+	if leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		"test2",
+		s.Clock().Now(),
+	) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease = leaseManager.names.get(newTableDesc.GetParentID(), tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
+	lease = leaseManager.names.get(
+		context.Background(),
+		newTableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		"test2",
+		s.Clock().Now(),
+	)
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
@@ -483,7 +510,13 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
+	if lease := leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		tableName,
+		s.Clock().Now(),
+	); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	} else {
 		lease.Release(context.Background())
@@ -492,7 +525,13 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease != nil {
+	if lease := leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		tableName,
+		s.Clock().Now(),
+	); lease != nil {
 		t.Fatalf("name cache has unexpired entry for (%d, %s): %s", tableDesc.GetParentID(), tableName, lease)
 	}
 }
@@ -530,7 +569,13 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// There is a cache entry.
-	lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	lease := leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		tableName,
+		s.Clock().Now(),
+	)
 	if lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
@@ -543,7 +588,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check the name resolves to the new lease.
-	newLease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	newLease := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
@@ -584,7 +629,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), "tEsT", s.Clock().Now()) != nil {
+	if leaseManager.names.get(
+		context.Background(),
+		tableDesc.GetParentID(),
+		tableDesc.GetParentSchemaID(),
+		"tEsT",
+		s.Clock().Now(),
+	) != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
@@ -660,7 +711,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := desc.Desc().(catalog.TableDescriptor)
+		table := desc.Underlying().(catalog.TableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -816,7 +867,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	skip.WithIssue(t, 51798, "fails in the presence of migrations requiring backfill, "+
-		"but cannot import sqlmigrations")
+		"but cannot import startupmigrations")
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
@@ -894,7 +945,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 					LeaseStoreTestingKnobs: StorageTestingKnobs{
 						RemoveOnceDereferenced: true,
 						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
-						LeaseAcquireResultBlockEvent: func(leaseBlockType AcquireBlockType) {
+						LeaseAcquireResultBlockEvent: func(leaseBlockType AcquireBlockType, _ descpb.ID) {
 							if leaseBlockType == AcquireBlock {
 								if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
 									(count < 2 && !test.isSecondCallAcquireFreshest) {
@@ -924,7 +975,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			LeaseJitterFraction.Override(&serverArgs.SV, 0)
+			LeaseJitterFraction.Override(ctx, &serverArgs.SV, 0)
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
@@ -968,7 +1019,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			// Release the lease. This also causes it to get removed as the
 			// knob RemoveOnceDereferenced is set.
-			tracker := removalTracker.TrackRemoval(result1.table.Desc())
+			tracker := removalTracker.TrackRemoval(result1.table.Underlying())
 			result1.table.Release(ctx)
 			// Wait until the lease is removed.
 			if err := tracker.WaitForRemoval(); err != nil {

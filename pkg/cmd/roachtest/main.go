@@ -20,9 +20,20 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
 )
+
+// ExitCodeTestsFailed is the exit code that results from a run of
+// roachtest in which the infrastructure worked, but at least one
+// test failed.
+const ExitCodeTestsFailed = 10
 
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
@@ -49,7 +60,7 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
-
+		Version: "details:\n" + build.GetInfo().Long(),
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// Don't bother checking flags for the default help command.
 			if cmd.Name() == "help" {
@@ -89,6 +100,16 @@ func main() {
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
 
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   `version`,
+		Short: `print version information`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := build.GetInfo()
+			fmt.Println(info.Long())
+			return nil
+		}},
+	)
+
 	var listBench bool
 
 	var listCmd = &cobra.Command{
@@ -112,14 +133,14 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r, err := makeTestRegistry()
+			r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 			if err != nil {
 				return err
 			}
 			if !listBench {
-				registerTests(&r)
+				tests.RegisterTests(&r)
 			} else {
-				registerBenchmarks(&r)
+				tests.RegisterBenchmarks(&r)
 			}
 
 			matchedTests := r.List(context.Background(), args)
@@ -146,9 +167,13 @@ Examples:
 roachtest run takes a list of regex patterns and runs all the matching tests.
 If no pattern is given, all tests are run. See "help list" for more details on
 the test tags.
+
+If all invoked tests passed, the exit status is zero. If at least one test
+failed, it is 10. Any other exit status reports a problem with the test
+runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerTests, cliCfg{
+			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
@@ -173,6 +198,8 @@ the test tags.
 		&slackToken, "slack-token", "", "Slack bot token")
 	runCmd.Flags().BoolVar(
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
+	runCmd.Flags().BoolVar(
+		&disableIssue, "disable-issue", false, "disable posting GitHub issue for failures")
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -181,7 +208,7 @@ the test tags.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerBenchmarks, cliCfg{
+			return runTests(tests.RegisterBenchmarks, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
@@ -244,8 +271,12 @@ the test tags.
 	rootCmd.AddCommand(benchCmd)
 
 	if err := rootCmd.Execute(); err != nil {
+		code := 1
+		if errors.Is(err, errTestsFailed) {
+			code = ExitCodeTestsFailed
+		}
 		// Cobra has already printed the error message.
-		os.Exit(1)
+		os.Exit(code)
 	}
 }
 
@@ -262,11 +293,11 @@ type cliCfg struct {
 	versionsBinaryOverride map[string]string
 }
 
-func runTests(register func(*testRegistry), cfg cliCfg) error {
+func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
-	r, err := makeTestRegistry()
+	r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 	if err != nil {
 		return err
 	}
@@ -274,7 +305,7 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, r.buildVersion)
 
-	filter := newFilter(cfg.args)
+	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
 	if local {
 		clusterType = localCluster
@@ -360,7 +391,7 @@ func getUser(userFlag string) string {
 // respond to the cancelation and return, and so the process will be dead by the
 // time the 5s elapse.
 // If a 2nd signal is received, it calls os.Exit(2).
-func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
+func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegistry) {
 	// Shut down test clusters when interrupted (for example CTRL-C).
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -400,24 +431,24 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 // runnerLogPath is the path to the file that will contain the runner's log.
 func testRunnerLogger(
 	ctx context.Context, parallelism int, runnerLogPath string,
-) (*logger, teeOptType) {
-	teeOpt := noTee
+) (*logger.Logger, logger.TeeOptType) {
+	teeOpt := logger.NoTee
 	if parallelism == 1 {
-		teeOpt = teeToStdout
+		teeOpt = logger.TeeToStdout
 	}
 
-	var l *logger
-	if teeOpt == teeToStdout {
-		verboseCfg := loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+	var l *logger.Logger
+	if teeOpt == logger.TeeToStdout {
+		verboseCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 		var err error
-		l, err = verboseCfg.newLogger(runnerLogPath)
+		l, err = verboseCfg.NewLogger(runnerLogPath)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		verboseCfg := loggerConfig{}
+		verboseCfg := logger.Config{}
 		var err error
-		l, err = verboseCfg.newLogger(runnerLogPath)
+		l, err = verboseCfg.NewLogger(runnerLogPath)
 		if err != nil {
 			panic(err)
 		}
@@ -426,10 +457,12 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(ctx context.Context, r testRegistry, filter *testFilter) []testSpec {
+func testsToRun(
+	ctx context.Context, r testRegistryImpl, filter *registry.TestFilter,
+) []registry.TestSpec {
 	tests := r.GetTests(ctx, filter)
 
-	var notSkipped []testSpec
+	var notSkipped []registry.TestSpec
 	for _, s := range tests {
 		if s.Skip == "" {
 			notSkipped = append(notSkipped, s)

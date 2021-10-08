@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gcp",
+    srcs = ["gcs_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/gcp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/contextutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+        "@org_golang_google_api//option",
+        "@org_golang_x_oauth2//google",
+    ],
+)
+
+go_test(
+    name = "gcp_test",
+    srcs = ["gcs_storage_test.go"],
+    embed = [":gcp"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudtestutils",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_oauth2//google",
+    ],
+)

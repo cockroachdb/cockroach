@@ -438,6 +438,14 @@ func (s *Smither) extractIndexes(
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
+		// Remove indexes with empty Columns. This is the case for rowid indexes
+		// where the only index column, rowid, is ignored in the SQL statement
+		// above, but the stored columns are not.
+		for name, idx := range indexes {
+			if len(idx.Columns) == 0 {
+				delete(indexes, name)
+			}
+		}
 		ret[*t.TableName] = indexes
 	}
 	return ret, nil
@@ -455,7 +463,7 @@ var operators = func() map[oid.Oid][]operator {
 			bo := ov.(*tree.BinOp)
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
-				Operator: BinaryOperator,
+				Operator: tree.MakeBinaryOperator(BinaryOperator),
 			})
 		}
 	}

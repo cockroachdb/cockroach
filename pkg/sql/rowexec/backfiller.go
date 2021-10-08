@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,7 +46,7 @@ type chunkBackfiller interface {
 	runChunk(
 		ctx context.Context,
 		span roachpb.Span,
-		chunkSize int64,
+		chunkSize rowinfra.RowLimit,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
@@ -92,14 +93,14 @@ func (b *backfiller) Run(ctx context.Context) {
 	defer span.Finish()
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
-	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
+	if emitHelper(ctx, b.output, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}
 }
 
 func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	semaCtx := tree.MakeSemaContext()
-	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx(), b.output); err != nil {
+	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx()); err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	finishedSpans, err := b.mainLoop(ctx)
@@ -147,7 +148,7 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, todo, b.spec.ChunkSize, b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.RowLimit(b.spec.ChunkSize), b.spec.ReadAsOf)
 			if err != nil {
 				return nil, err
 			}

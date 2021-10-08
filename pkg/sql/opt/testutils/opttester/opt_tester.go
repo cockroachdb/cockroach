@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,6 +81,7 @@ var (
 		"funcdeps":    memo.ExprFmtHideFuncDeps,
 		"ruleprops":   memo.ExprFmtHideRuleProps,
 		"stats":       memo.ExprFmtHideStats,
+		"hist":        memo.ExprFmtHideHistograms,
 		"cost":        memo.ExprFmtHideCost,
 		"qual":        memo.ExprFmtHideQualifications,
 		"scalars":     memo.ExprFmtHideScalars,
@@ -172,6 +174,10 @@ type Flags struct {
 	// SessionData.PreferLookupJoinsForFKs.
 	PreferLookupJoinsForFKs bool
 
+	// PropagateInputOrdering is the default value for
+	// SessionData.PropagateInputOrdering
+	PropagateInputOrdering bool
+
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
 	// If there are no tiers, then the node's location is not known. Examples:
@@ -248,14 +254,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 
 	// Set any OptTester-wide session flags here.
 
-	ot.evalCtx.SessionData.UserProto = security.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
-	ot.evalCtx.SessionData.Database = "defaultdb"
-	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
-	ot.evalCtx.SessionData.OptimizerUseHistograms = true
-	ot.evalCtx.SessionData.OptimizerUseMultiColStats = true
-	ot.evalCtx.SessionData.LocalityOptimizedSearch = true
-	ot.evalCtx.SessionData.ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	ot.evalCtx.SessionData.InsertFastPath = true
+	ot.evalCtx.SessionData().UserProto = security.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
+	ot.evalCtx.SessionData().Database = "defaultdb"
+	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
+	ot.evalCtx.SessionData().OptimizerUseHistograms = true
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
+	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
+	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
+	ot.evalCtx.SessionData().InsertFastPath = true
 
 	return ot
 }
@@ -474,12 +480,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
-	ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
-	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
+	ot.evalCtx.SessionData().ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
+	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
+	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
-	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
+	ot.evalCtx.SessionData().SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 	ot.evalCtx.Placeholders = nil
 
 	switch d.Cmd {
@@ -656,7 +663,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "exprnorm":
 		e, err := ot.ExprNorm()
 		if err != nil {
-			d.Fatalf(tb, "%+v", err)
+			return fmt.Sprintf("error: %s\n", err)
 		}
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
@@ -986,6 +993,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "query-args":
 		f.QueryArgs = arg.Vals
+
+	case "preserve-input-order":
+		f.PropagateInputOrdering = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -1328,11 +1338,26 @@ func (ot *OptTester) OptSteps() (string, error) {
 // OptStepsWeb is similar to Optsteps but it uses a special web page for
 // formatting the output. The result will be an URL which contains the encoded
 // data.
-//
-// TODO(radu): currently, we only show normalization steps on this page.
 func (ot *OptTester) OptStepsWeb() (string, error) {
-	ot.builder.Reset()
+	normDiffStr, err := ot.optStepsNormDiff()
+	if err != nil {
+		return "", err
+	}
 
+	exploreDiffStr, err := ot.optStepsExploreDiff()
+	if err != nil {
+		return "", err
+	}
+	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}
+
+// optStepsNormDiff produces the normalization steps as a diff where each step
+// is a pair of "files" (showing the before and after plans).
+func (ot *OptTester) optStepsNormDiff() (string, error) {
 	// Store all the normalization steps.
 	type step struct {
 		Name string
@@ -1357,9 +1382,7 @@ func (ot *OptTester) OptStepsWeb() (string, error) {
 		normSteps = append(normSteps, step{Name: name, Expr: expr})
 	}
 
-	// Produce a diff for each step, as if there was a pair of files for each step
-	// (showing the before and after plans).
-	var normDiff bytes.Buffer
+	var buf bytes.Buffer
 	for i, s := range normSteps {
 		before := ""
 		if i > 0 {
@@ -1378,23 +1401,78 @@ func (ot *OptTester) OptStepsWeb() (string, error) {
 			return "", err
 		}
 		diffStr = strings.TrimRight(diffStr, " \r\t\n")
-		normDiff.WriteString(diffStr)
-		normDiff.WriteString("\n")
+		buf.WriteString(diffStr)
+		buf.WriteString("\n")
 	}
-	url, err := ot.encodeOptstepsURL(normDiff.String())
-	if err != nil {
-		return "", err
-	}
-	return url.String(), nil
+	return buf.String(), nil
 }
 
-func (ot *OptTester) encodeOptstepsURL(normDiff string) (url.URL, error) {
+// optStepsExploreDiff produces the exploration steps as a diff where each new
+// expression is shown as a pair of "files" (showing the before and after
+// expression). Note that normalization rules that are applied as part of
+// creating the new expression are not shown separately.
+func (ot *OptTester) optStepsExploreDiff() (string, error) {
+	et := newExploreTracer(ot)
+
+	var buf bytes.Buffer
+
+	for step := 0; ; step++ {
+		if step > 2000 {
+			ot.output("step limit reached\n")
+			break
+		}
+		err := et.Next()
+		if err != nil {
+			return "", err
+		}
+		if et.Done() {
+			break
+		}
+
+		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
+			et.LastRuleName() != ot.Flags.ExploreTraceRule {
+			continue
+		}
+		newNodes := et.NewExprs()
+		before := et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat)
+
+		for i := range newNodes {
+			name := et.LastRuleName().String()
+			after := memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
+
+			diff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(before),
+				FromFile: fmt.Sprintf("a/%s", name),
+				B:        difflib.SplitLines(after),
+				ToFile:   fmt.Sprintf("b/%s", name),
+				Context:  10000,
+			}
+			diffStr, err := difflib.GetUnifiedDiffString(diff)
+			if err != nil {
+				return "", err
+			}
+			diffStr = strings.TrimRight(diffStr, " \r\t\n")
+			if diffStr == "" {
+				// It's possible that the "new" expression is identical to the original
+				// one; ignore it in that case.
+				continue
+			}
+			buf.WriteString(diffStr)
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String(), nil
+}
+
+func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, error) {
 	output := struct {
-		SQL      string
-		Normdiff string
+		SQL         string
+		NormDiff    string
+		ExploreDiff string
 	}{
-		SQL:      ot.sql,
-		Normdiff: normDiff,
+		SQL:         ot.sql,
+		NormDiff:    normDiff,
+		ExploreDiff: exploreDiff,
 	}
 
 	var buf bytes.Buffer
@@ -1418,9 +1496,19 @@ func (ot *OptTester) encodeOptstepsURL(normDiff string) (url.URL, error) {
 		Scheme: "https",
 		Host:   "raduberinde.github.io",
 		Path:   "optsteps.html",
-		// We could use Fragment (which avoids the data being sent to the server),
-		// but then the link will become invalid when a real fragment link is used.
-		RawQuery: compressed.String(),
+	}
+	const githubPagesMaxURLLength = 8100
+	if compressed.Len() > githubPagesMaxURLLength {
+		// If the compressed data is longer than the maximum allowed URL length
+		// for the GitHub Pages server, we include it as a fragment. This
+		// prevents the browser from sending this data to the server, avoiding a
+		// 414 error from GitHub Pages.
+		url.Fragment = compressed.String()
+	} else {
+		// Otherwise, the compressed data is included as a query parameter. This
+		// is preferred because the URL remains valid when anchor links are
+		// clicked and fragments are added to the URL by the browser.
+		url.RawQuery = compressed.String()
 	}
 	return url, nil
 }
@@ -1763,7 +1851,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		colMeta := rel.Memo().Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
-		columns[i].InitNonVirtual(
+		columns[i].Init(
 			i,
 			cat.StableID(i+1),
 			tree.Name(colName),
@@ -1773,6 +1861,9 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			cat.Visible,
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
+			nil, /* onUpdateExpr */
+			cat.NotGeneratedAsIdentity,
+			nil, /* generatedAsIdentitySequenceOption */
 		)
 
 		// Make sure we have estimated stats for this column.
@@ -1825,7 +1916,7 @@ func (ot *OptTester) makeStat(
 	columns []string, rowCount, distinctCount, nullCount uint64,
 ) stats.JSONStatistic {
 	return stats.JSONStatistic{
-		Name: stats.AutoStatsName,
+		Name: jobspb.AutoStatsName,
 		CreatedAt: tree.AsStringWithFlags(
 			&tree.DTimestamp{Time: timeutil.Now()}, tree.FmtBareStrings,
 		),
@@ -1874,6 +1965,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 		return err
 	}
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+	ot.semaCtx.TypeResolver = ot.catalog
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	return b.Build()
 }

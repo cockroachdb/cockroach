@@ -12,6 +12,7 @@ package colexecproj
 import (
 	"bytes"
 	"math"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -36,7 +37,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ duration.Duration
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
 )
@@ -1099,7 +1100,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -1121,7 +1122,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -1146,7 +1147,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1164,7 +1165,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -2223,7 +2224,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -2245,7 +2246,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -2270,7 +2271,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -2288,7 +2289,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -3347,7 +3348,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -3369,7 +3370,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -3394,7 +3395,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -3412,7 +3413,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -4577,9 +4578,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -4606,9 +4605,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -4637,9 +4634,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -4662,9 +4657,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -5281,9 +5274,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5310,9 +5301,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5341,9 +5330,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -5366,9 +5353,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -5985,9 +5970,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6014,9 +5997,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6045,9 +6026,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6070,9 +6049,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6262,7 +6239,12 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2)
+						t_res := duration.Add(arg1, arg2)
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -6277,7 +6259,12 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2)
+						t_res := duration.Add(arg1, arg2)
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -6293,7 +6280,12 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2)
+					t_res := duration.Add(arg1, arg2)
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -6304,7 +6296,12 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2)
+					t_res := duration.Add(arg1, arg2)
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -6364,7 +6361,12 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg2, arg1)
+						t_res := duration.Add(arg2, arg1)
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -6379,7 +6381,12 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg2, arg1)
+						t_res := duration.Add(arg2, arg1)
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -6395,7 +6402,12 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg2, arg1)
+					t_res := duration.Add(arg2, arg1)
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -6406,7 +6418,12 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg2, arg1)
+					t_res := duration.Add(arg2, arg1)
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -6573,9 +6590,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6602,9 +6617,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6633,9 +6646,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6658,9 +6669,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6733,7 +6742,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6760,7 +6769,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6789,7 +6798,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6812,7 +6821,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6885,7 +6894,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6912,7 +6921,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -6941,7 +6950,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -6964,7 +6973,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -7037,7 +7046,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -7064,7 +7073,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -7093,7 +7102,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -7116,7 +7125,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -7189,7 +7198,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -7216,7 +7225,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -7245,7 +7254,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -7268,7 +7277,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -8433,9 +8442,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -8462,9 +8469,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -8493,9 +8498,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -8518,9 +8521,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -9137,9 +9138,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9166,9 +9165,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9197,9 +9194,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -9222,9 +9217,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -9841,9 +9834,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9870,9 +9861,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9901,9 +9890,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -9926,9 +9913,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -10232,7 +10217,12 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+						t_res := duration.Add(arg1, arg2.Mul(-1))
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -10247,7 +10237,12 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+						t_res := duration.Add(arg1, arg2.Mul(-1))
+						rounded_res := t_res.Round(time.Microsecond)
+						if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -10263,7 +10258,12 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+					t_res := duration.Add(arg1, arg2.Mul(-1))
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -10274,7 +10274,12 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+					t_res := duration.Add(arg1, arg2.Mul(-1))
+					rounded_res := t_res.Round(time.Microsecond)
+					if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -10441,9 +10446,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -10470,9 +10473,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-						_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -10501,9 +10502,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -10526,9 +10525,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_nonDatumArgAsColdataExtDatum := &coldataext.Datum{Datum: _nonDatumArgAsDatum}
-
-					_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, _nonDatumArgAsDatum.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11091,7 +11088,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11113,7 +11110,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11138,7 +11135,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11156,7 +11153,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11229,7 +11226,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11256,7 +11253,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11285,7 +11282,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11308,7 +11305,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11381,7 +11378,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11407,7 +11404,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11436,7 +11433,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11458,7 +11455,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11531,7 +11528,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11558,7 +11555,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11587,7 +11584,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11610,7 +11607,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11683,7 +11680,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11710,7 +11707,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11739,7 +11736,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11762,7 +11759,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11835,7 +11832,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11862,7 +11859,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -11891,7 +11888,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -11914,7 +11911,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -25997,7 +25994,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -26019,7 +26016,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -26044,7 +26041,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -26062,7 +26059,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg2)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), arg2.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27341,7 +27338,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27368,7 +27365,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27397,7 +27394,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27420,7 +27417,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27493,7 +27490,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27520,7 +27517,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27549,7 +27546,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27572,7 +27569,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27645,7 +27642,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27672,7 +27669,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -27701,7 +27698,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -27724,7 +27721,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29003,7 +29000,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29030,7 +29027,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29059,7 +29056,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29082,7 +29079,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29155,7 +29152,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29182,7 +29179,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29211,7 +29208,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29234,7 +29231,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29307,7 +29304,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29334,7 +29331,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
-						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+						_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -29363,7 +29360,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -29386,7 +29383,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
-					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
+					_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, arg1.(tree.Datum), _nonDatumArgAsDatum.(tree.Datum))
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -30707,7 +30704,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -30729,7 +30726,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -30754,7 +30751,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
 					}
@@ -30772,7 +30769,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
 					}
@@ -30841,7 +30838,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -30873,7 +30870,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+						_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -30908,7 +30905,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
 					}
@@ -30936,7 +30933,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(*coldataext.Datum).Datum))
+					_path, _err := tree.GetJSONPath(arg1, *tree.MustBeDArray(arg2.(tree.Datum)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
 					}
@@ -36010,7 +36007,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult == 0
 						}
@@ -36031,7 +36028,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult == 0
 						}
@@ -36055,7 +36052,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult == 0
 					}
@@ -36072,7 +36069,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult == 0
 					}
@@ -41132,7 +41129,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult != 0
 						}
@@ -41153,7 +41150,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult != 0
 						}
@@ -41177,7 +41174,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult != 0
 					}
@@ -41194,7 +41191,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult != 0
 					}
@@ -46254,7 +46251,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult < 0
 						}
@@ -46275,7 +46272,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult < 0
 						}
@@ -46299,7 +46296,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult < 0
 					}
@@ -46316,7 +46313,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult < 0
 					}
@@ -51376,7 +51373,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult <= 0
 						}
@@ -51397,7 +51394,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult <= 0
 						}
@@ -51421,7 +51418,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult <= 0
 					}
@@ -51438,7 +51435,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult <= 0
 					}
@@ -56498,7 +56495,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult > 0
 						}
@@ -56519,7 +56516,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult > 0
 						}
@@ -56543,7 +56540,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult > 0
 					}
@@ -56560,7 +56557,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult > 0
 					}
@@ -61620,7 +61617,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult >= 0
 						}
@@ -61641,7 +61638,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+							cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 							projCol[i] = cmpResult >= 0
 						}
@@ -61665,7 +61662,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult >= 0
 					}
@@ -61682,7 +61679,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						projCol[i] = cmpResult >= 0
 					}
@@ -61728,9 +61725,9 @@ func GetProjectionOperator(
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
-	switch op.(type) {
+	switch op := op.(type) {
 	case tree.BinaryOperator:
-		switch op {
+		switch op.Symbol {
 		case tree.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
@@ -63137,7 +63134,7 @@ func GetProjectionOperator(
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
-			switch op {
+			switch op.Symbol {
 			case tree.EQ:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:

@@ -60,7 +60,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -162,7 +162,11 @@ func TestTenantRateLimiter(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	// Set a small rate limit so the test doesn't take a long time.
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 200`)
+
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -176,7 +180,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// Ensure that the qps rate limit does not affect the system tenant even for
 	// the tenant range.
 	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
-	cfg := tenantrate.ConfigFromSettings(s.ClusterSettings())
+	cfg := tenantrate.ConfigFromSettings(&s.ClusterSettings().SV)
 
 	// We don't know the exact size of the write, but we can set lower and upper
 	// bounds.
@@ -222,8 +226,7 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t,
-		`SET CLUSTER SETTING server.child_metrics.enabled = true`)
+	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
 	httpClient, err := s.GetHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
@@ -235,7 +238,7 @@ func TestTenantRateLimiter(t *testing.T) {
 		return string(read)
 	}
 	makeMetricStr := func(expCount int64) string {
-		const tenantMetricStr = `kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="10"}`
+		tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
 		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
 	}
 
@@ -245,5 +248,9 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// Ensure that the metric for the admitted requests reflects the number of
 	// admitted requests.
-	require.Contains(t, getMetrics(), makeMetricStr(int64(tooManyWrites)))
+	// TODO(radu): this is fragile because a background write could sneak in and
+	// the count wouldn't match exactly.
+	m := getMetrics()
+	exp := makeMetricStr(int64(tooManyWrites))
+	require.Contains(t, m, exp, "could not find %s in metrics: \n%s\n", exp, m)
 }

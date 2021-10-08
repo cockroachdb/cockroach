@@ -19,7 +19,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/settings/cluster",
@@ -27,7 +27,6 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
@@ -70,7 +69,7 @@ go_test(
     ],
     embed = [":execinfrapb"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
@@ -121,7 +120,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

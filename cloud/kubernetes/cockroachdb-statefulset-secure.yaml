@@ -194,31 +194,32 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v20.2.9
+        image: cockroachdb/cockroach:v21.1.10
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:
         #   kubectl describe nodes
         # Note that requests and limits should have identical values.
-        # resources:
-        #   requests:
-        #     cpu: "16"
-        #     memory: "8Gi"
-        #   limits:
-        #     cpu: "16"
-        #     memory: "8Gi" 
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi" 
         ports:
         - containerPort: 26257
           name: grpc
         - containerPort: 8080
           name: http
-        livenessProbe:
-          httpGet:
-            path: "/health"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 30
-          periodSeconds: 5
+# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+#       livenessProbe:
+#         httpGet:
+#           path: "/health"
+#           port: http
+#           scheme: HTTPS
+#         initialDelaySeconds: 30
+#         periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"

@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/col/typeconv",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/memsize",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/duration",
@@ -43,6 +44,8 @@ go_test(
     embed = [":coldata"],
     deps = [
         "//pkg/col/coldatatestutils",
+        "//pkg/sql/colconv",
+        "//pkg/sql/randgen",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/util/leaktest",

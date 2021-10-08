@@ -43,7 +43,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 )
 
 // Remove unused warning.
@@ -90,19 +90,18 @@ func new_AGG_TITLE_AGGKINDAggAlloc(
 type _AGG_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// {{else}}
+	unorderedAggregateFuncBase
 	// {{end}}
 	// col points to the output vector we are updating.
 	col _GOTYPESLICE
-	// {{if eq "_AGGKIND" "Hash"}}
-	hashAggregateFuncBase
-	// {{end}}
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
-	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
 	curAgg _GOTYPE
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
@@ -111,17 +110,18 @@ func (a *_AGG_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec._TYPE()
 }
 
 func (a *_AGG_TYPE_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
+	// {{if not (eq "_AGGKIND" "Window")}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups and col to force bounds check to work. See
@@ -134,21 +134,21 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 		// sel to specify the tuples to be aggregated.
 		// */}}
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_MINMAX(a, nulls, i, true, false)
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_MINMAX(a, nulls, i, false, false)
 				}
 			}
 		} else
 		// {{end}}
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					_ACCUMULATE_MINMAX(a, nulls, i, true, true)
@@ -161,6 +161,21 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	// {{else}}
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_MINMAX(a, nulls, i, true, false)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_MINMAX(a, nulls, i, false, false)
+		}
+	}
+	// {{end}}
 	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -177,14 +192,20 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		// {{if eq "_AGGKIND" "Window"}}
+		// We need to copy the value because window functions reuse the aggregation
+		// between rows.
+		execgen.COPYVAL(a.curAgg, a.curAgg)
+		// {{end}}
+		a.col.Set(outputIdx, a.curAgg)
 	}
-	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	// {{if and (not (eq "_AGGKIND" "Window")) (or (.IsBytesLike) (eq .VecMethod "Datum"))}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
-	// Release the reference to curAgg eagerly.
+	// Release the reference to curAgg eagerly. We can't do this for the window
+	// variants because they may reuse curAgg between subsequent window frames.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 	// {{end}}
@@ -194,7 +215,13 @@ func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Reset()
 	// {{end}}
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
+	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
+	// Release the reference to curAgg.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+	// {{end}}
 }
 
 type _AGG_TYPE_AGGKINDAggAlloc struct {
@@ -218,6 +245,17 @@ func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// {{if eq "_AGGKIND" "Window"}}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*_AGG_TYPE_AGGKINDAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on _AGG_TYPE_AGGKINDAgg"))
+}
+
+// {{end}}
 // {{end}}
 // {{end}}
 // {{end}}
@@ -240,15 +278,13 @@ func _ACCUMULATE_MINMAX(
 		if !a.isFirstGroup {
 			// If we encounter a new group, and we haven't found any non-nulls for the
 			// current group, the output for this group should be null.
-			if !a.foundNonNullForCurrentGroup {
+			if a.numNonNull == 0 {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
-			a.foundNonNullForCurrentGroup = false
+			a.numNonNull = 0
 		}
 		a.isFirstGroup = false
 	}
@@ -261,7 +297,7 @@ func _ACCUMULATE_MINMAX(
 	isNull = false
 	// {{end}}
 	if !isNull {
-		if !a.foundNonNullForCurrentGroup {
+		if a.numNonNull == 0 {
 			// {{if and (.Sliceable) (not .HasSel)}}
 			//gcassert:bce
 			// {{end}}
@@ -269,7 +305,6 @@ func _ACCUMULATE_MINMAX(
 			// {{with .Global}}
 			execgen.COPYVAL(a.curAgg, val)
 			// {{end}}
-			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
 			// {{if and (.Sliceable) (not .HasSel)}}
@@ -283,6 +318,7 @@ func _ACCUMULATE_MINMAX(
 			}
 			// {{end}}
 		}
+		a.numNonNull++
 	}
 	// {{end}}
 

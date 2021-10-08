@@ -16,16 +16,16 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/geo/wkt"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/pierrre/geohash"
-	"github.com/twpayne/go-geom"
+	geom "github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/wkb"
 	"github.com/twpayne/go-geom/encoding/wkbcommon"
+	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
 // parseEWKBRaw creates a geopb.SpatialObject from an EWKB
@@ -115,6 +115,9 @@ func parseGeoJSON(
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if t == nil {
+		return geopb.SpatialObject{}, errors.Newf("invalid GeoJSON input")
+	}
 	if defaultSRID != 0 && t.SRID() == 0 {
 		AdjustGeomTSRID(t, defaultSRID)
 	}
@@ -168,16 +171,12 @@ func parseEWKT(
 		}
 	}
 
-	geom, wktUnmarshalErr := wkt.Unmarshal(string(str))
+	g, wktUnmarshalErr := wkt.Unmarshal(string(str))
 	if wktUnmarshalErr != nil {
 		return geopb.SpatialObject{}, wktUnmarshalErr
 	}
-	AdjustGeomTSRID(geom, srid)
-	ewkb, ewkbMarshalErr := ewkb.Marshal(geom, DefaultEWKBEncodingFormat)
-	if ewkbMarshalErr != nil {
-		return geopb.SpatialObject{}, ewkbMarshalErr
-	}
-	return parseEWKBRaw(soType, ewkb)
+	AdjustGeomTSRID(g, srid)
+	return spatialObjectFromGeomT(g, soType)
 }
 
 // hasPrefixIgnoreCase returns whether a given str begins with a prefix, ignoring case.
@@ -247,7 +246,7 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
-		return "", fmt.Errorf("error parsing input geometry: %v", err)
+		return "", errors.Wrap(err, "error parsing input geometry")
 	}
 	if gt.SRID() != 4326 {
 		return "", errors.New("only SRID 4326 is supported")
@@ -263,7 +262,7 @@ func ParseEncodedPolyline(encodedPolyline string, precision int) (Geometry, erro
 
 	g, err := MakeGeometryFromGeomT(ls)
 	if err != nil {
-		return Geometry{}, fmt.Errorf("parsing geography error: %v", err)
+		return Geometry{}, errors.Wrap(err, "parsing geography error")
 	}
 	return g, nil
 }

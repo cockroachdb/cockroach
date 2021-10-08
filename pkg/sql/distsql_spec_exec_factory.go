@@ -76,7 +76,7 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 	distribute := false
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
 		distribute = shouldDistributeGivenRecAndMode(
-			recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode,
+			recommendation, e.planner.extendedEvalCtx.SessionData().DistSQLMode,
 		)
 	}
 	e.planCtx.isLocal = !distribute
@@ -129,7 +129,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 			specifiedInQuery: true,
 		}
 		planNodesToClose = []planNode{v}
-		physPlan, err = e.dsp.wrapPlan(planCtx, v)
+		physPlan, err = e.dsp.wrapPlan(planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
@@ -158,7 +158,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return constructVirtualScan(
 			e, e.planner, table, index, params, reqOrdering,
 			func(d *delayedNode) (exec.Node, error) {
-				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d)
+				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d, e.planningMode != distSQLLocalOnlyPlanning)
 				if err != nil {
 					return nil, err
 				}
@@ -240,8 +240,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}
-	if vc := getVirtualColumn(colCfg.virtualColumn, cols); vc != nil {
-		trSpec.VirtualColumn = vc.ColumnDesc()
+	if vc := getInvertedColumn(colCfg.invertedColumn, cols); vc != nil {
+		trSpec.InvertedColumn = vc.ColumnDesc()
 	}
 
 	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)
@@ -356,12 +356,15 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(cols))
+	physPlan.AddProjection(
+		projection,
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+	)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(
 		cols, nil /* colNames */, physPlan.GetResultTypes(), physPlan.ResultColumns,
 	)
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
@@ -374,7 +377,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	physPlan.AddProjection(projection, execinfrapb.Ordering{})
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	return plan, nil
@@ -388,14 +391,16 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(exprs, physPlan)
+
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
 		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
 	); err != nil {
 		return nil, err
 	}
 	physPlan.ResultColumns = columns
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
@@ -591,21 +596,36 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 	return plan, nil
 }
 
-func (e *distSQLSpecExecFactory) ConstructSetOp(
+// ConstructHashSetOp is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructHashSetOp(
+	typ tree.UnionType, all bool, left, right exec.Node,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: hash set op")
+}
+
+// ConstructStreamingSetOp is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
+	streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
-	hardLimit uint64,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: streaming set op")
+}
+
+// ConstructUnionAll is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructUnionAll(
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: union all")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix)
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -635,6 +655,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
 	lookupExpr tree.TypedExpr,
+	remoteLookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isSecondJoinInPairedJoiner bool,
@@ -697,6 +718,20 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 	return plan, nil
 }
 
+func (e *distSQLSpecExecFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+) (exec.Node, error) {
+	physPlan, plan := getPhysPlan(input)
+	if k <= 0 {
+		return nil, errors.New("negative or zero value for LIMIT")
+	}
+	// No already ordered prefix.
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k)
+	// Since addition of topk doesn't change any properties of
+	// the physical plan, we don't need to update any of those.
+	return plan, nil
+}
+
 func (e *distSQLSpecExecFactory) ConstructMax1Row(
 	input exec.Node, errorText string,
 ) (exec.Node, error) {
@@ -735,7 +770,11 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 }
 
 func (e *distSQLSpecExecFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+	root exec.Node,
+	subqueries []exec.Subquery,
+	cascades []exec.Cascade,
+	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	if len(subqueries) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: subqueries")
@@ -746,7 +785,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	if len(checks) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, checks)
+	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
@@ -766,8 +805,11 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 
 	// We cannot create the explained plan in the same PlanInfrastructure with the
 	// "outer" plan. Create a separate factory.
-	explainFactory := explain.NewFactory(newDistSQLSpecExecFactory(e.planner, e.planningMode))
+	newFactory := newDistSQLSpecExecFactory(e.planner, e.planningMode)
+	explainFactory := explain.NewFactory(newFactory)
 	plan, err := buildFn(explainFactory)
+	// Release the resources acquired during the physical planning right away.
+	newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +834,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 		}
 	}
 
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode)
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -933,7 +975,7 @@ func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (e
 	if err != nil {
 		return nil, err
 	}
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan)
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -980,7 +1022,7 @@ func (e *distSQLSpecExecFactory) ConstructRecursiveCTE(
 }
 
 func (e *distSQLSpecExecFactory) ConstructControlJobs(
-	command tree.JobCommand, input exec.Node,
+	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: control jobs")
 }
@@ -1052,21 +1094,22 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	leftEqColsRemapped := eqCols(leftEqCols, leftMap)
 	rightEqColsRemapped := eqCols(rightEqCols, rightMap)
 	info := joinPlanningInfo{
-		leftPlan:              leftPhysPlan,
-		rightPlan:             rightPhysPlan,
-		joinType:              joinType,
-		joinResultTypes:       getTypesFromResultColumns(resultColumns),
-		onExpr:                onExpr,
-		post:                  post,
-		joinToStreamColMap:    joinToStreamColMap,
-		leftEqCols:            leftEqColsRemapped,
-		rightEqCols:           rightEqColsRemapped,
-		leftEqColsAreKey:      leftEqColsAreKey,
-		rightEqColsAreKey:     rightEqColsAreKey,
-		leftMergeOrd:          distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
-		rightMergeOrd:         distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
-		leftPlanDistribution:  leftPhysPlan.Distribution,
-		rightPlanDistribution: rightPhysPlan.Distribution,
+		leftPlan:                 leftPhysPlan,
+		rightPlan:                rightPhysPlan,
+		joinType:                 joinType,
+		joinResultTypes:          getTypesFromResultColumns(resultColumns),
+		onExpr:                   onExpr,
+		post:                     post,
+		joinToStreamColMap:       joinToStreamColMap,
+		leftEqCols:               leftEqColsRemapped,
+		rightEqCols:              rightEqColsRemapped,
+		leftEqColsAreKey:         leftEqColsAreKey,
+		rightEqColsAreKey:        rightEqColsAreKey,
+		leftMergeOrd:             distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
+		rightMergeOrd:            distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
+		leftPlanDistribution:     leftPhysPlan.Distribution,
+		rightPlanDistribution:    rightPhysPlan.Distribution,
+		allowPartialDistribution: e.planningMode != distSQLLocalOnlyPlanning,
 	}
 	p := e.dsp.planJoiners(planCtx, &info, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns

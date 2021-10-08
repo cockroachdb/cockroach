@@ -47,7 +47,7 @@ func (r *runParams) EvalContext() *tree.EvalContext {
 
 // SessionData gives convenient access to the runParam's SessionData.
 func (r *runParams) SessionData() *sessiondata.SessionData {
-	return r.extendedEvalCtx.SessionData
+	return r.extendedEvalCtx.SessionData()
 }
 
 // ExecCfg gives convenient access to the runParam's ExecutorConfig.
@@ -101,6 +101,16 @@ type planNode interface {
 	// The node must not be used again after this method is called. Some nodes put
 	// themselves back into memory pools on Close.
 	Close(ctx context.Context)
+}
+
+// mutationPlanNode is a specification of planNode for mutations operations
+// (those that insert/update/detele/etc rows).
+type mutationPlanNode interface {
+	planNode
+
+	// rowsWritten returns the number of rows modified by this planNode. It
+	// should only be called once Next returns false.
+	rowsWritten() int64
 }
 
 // PlanNode is the exported name for planNode. Useful for CCL hooks.
@@ -202,6 +212,7 @@ var _ planNode = &showFingerprintsNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &topKNode{}
 var _ planNode = &unsplitNode{}
 var _ planNode = &unsplitAllNode{}
 var _ planNode = &truncateNode{}
@@ -404,6 +415,10 @@ type planComponents struct {
 	// plan for the main query.
 	main planMaybePhysical
 
+	// mainRowCount is the estimated number of rows that the main query will
+	// return, negative if the stats weren't available to make a good estimate.
+	mainRowCount int64
+
 	// cascades contains metadata for all cascades.
 	cascades []cascadeMetadata
 
@@ -574,12 +589,27 @@ const (
 	planFlagTenant
 
 	// planFlagContainsFullTableScan is set if the plan involves an unconstrained
-	// scan on (the primary key of) a table.
+	// scan on (the primary key of) a table. This could be an unconstrained scan
+	// of any cardinality.
 	planFlagContainsFullTableScan
 
 	// planFlagContainsFullIndexScan is set if the plan involves an unconstrained
-	// secondary index scan.
+	// secondary index scan. This could be an unconstrainted scan of any
+	// cardinality.
 	planFlagContainsFullIndexScan
+
+	// planFlagContainsLargeFullTableScan is set if the plan involves an
+	// unconstrained scan on (the primary key of) a table estimated to read more
+	// than large_full_scan_rows (or without available stats).
+	planFlagContainsLargeFullTableScan
+
+	// planFlagContainsLargeFullIndexScan is set if the plan involves an
+	// unconstrained secondary index scan estimated to read more than
+	// large_full_scan_rows (or without available stats).
+	planFlagContainsLargeFullIndexScan
+
+	// planFlagContainsMutation is set if the plan has any mutations.
+	planFlagContainsMutation
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
@@ -588,6 +618,10 @@ func (pf planFlags) IsSet(flag planFlags) bool {
 
 func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
+}
+
+func (pf *planFlags) Unset(flag planFlags) {
+	*pf &= ^flag
 }
 
 // IsDistributed returns true if either the fully or the partially distributed

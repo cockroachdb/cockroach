@@ -618,10 +618,10 @@
           "type": "string",
           "x-go-name": "Sql"
         },
-        "sql_anon": {
+        "sql_no_constants": {
           "description": "The SQL statement fingerprint, compatible with StatementStatisticsKey.",
           "type": "string",
-          "x-go-name": "SqlAnon"
+          "x-go-name": "SqlNoConstants"
         },
         "start": {
           "description": "Start timestamp of this query.",
@@ -1088,10 +1088,10 @@
           "type": "string",
           "x-go-name": "LastActiveQuery"
         },
-        "last_active_query_anon": {
+        "last_active_query_no_constants": {
           "description": "The SQL statement fingerprint of the last query executed on this session,\ncompatible with StatementStatisticsKey.",
           "type": "string",
-          "x-go-name": "LastActiveQueryAnon"
+          "x-go-name": "LastActiveQueryNoConstants"
         },
         "max_alloc_bytes": {
           "description": "High water mark of allocated bytes in the session memory monitor.",

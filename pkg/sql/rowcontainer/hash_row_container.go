@@ -13,11 +13,11 @@ package rowcontainer
 import (
 	"bytes"
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -171,11 +171,6 @@ func storedEqColsToOrdering(storedEqCols columns) colinfo.ColumnOrdering {
 	return ordering
 }
 
-const sizeOfBucket = int64(unsafe.Sizeof([]int{}))
-const sizeOfRowIdx = int64(unsafe.Sizeof(int(0)))
-const sizeOfBoolSlice = int64(unsafe.Sizeof([]bool{}))
-const sizeOfBool = int64(unsafe.Sizeof(false))
-
 // HashMemRowContainer is an in-memory implementation of a HashRowContainer.
 // The rows are stored in an underlying MemRowContainer and an accompanying
 // map stores the mapping from equality column encodings to indices in the
@@ -279,10 +274,10 @@ func (h *HashMemRowContainer) addRowToBucket(
 
 	bucket, ok := h.buckets[string(encoded)]
 
-	usage := sizeOfRowIdx
+	usage := memsize.Int
 	if !ok {
 		usage += int64(len(encoded))
-		usage += sizeOfBucket
+		usage += memsize.IntSliceOverhead
 	}
 
 	if err := h.bucketsAcc.Grow(ctx, usage); err != nil {
@@ -300,7 +295,7 @@ func (h *HashMemRowContainer) ReserveMarkMemoryMaybe(ctx context.Context) error 
 	if h.markMemoryReserved {
 		return nil
 	}
-	if err := h.bucketsAcc.Grow(ctx, sizeOfBoolSlice+(sizeOfBool*int64(h.Len()))); err != nil {
+	if err := h.bucketsAcc.Grow(ctx, memsize.BoolSliceOverhead+(memsize.Bool*int64(h.Len()))); err != nil {
 		return err
 	}
 	h.markMemoryReserved = true

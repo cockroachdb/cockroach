@@ -105,7 +105,7 @@ type overloadBase struct {
 	// overload is a binary operator or a comparison operator. Neither of the
 	// fields will be set when it is a hash or cast overload.
 	CmpOp tree.ComparisonOperator
-	BinOp tree.BinaryOperator
+	BinOp tree.BinaryOperatorSymbol
 }
 
 // overloadKind describes the type of an overload. The word "kind" was chosen
@@ -116,7 +116,6 @@ const (
 	binaryOverload overloadKind = iota
 	comparisonOverload
 	hashOverload
-	castOverload
 )
 
 func (b *overloadBase) String() string {
@@ -272,7 +271,6 @@ type lastArgWidthOverload struct {
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
-	CastFunc    castFunc
 }
 
 // newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
@@ -353,7 +351,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
-type castFunc func(to, from, fromCol, toType string) string
+type castFunc func(to, from, evalCtx, toType string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -399,16 +397,6 @@ func (o *lastArgWidthOverload) Compare(
 	return fmt.Sprintf(
 		"if %s < %s { %s = -1 } else if %s > %s { %s = 1 } else { %s = 0 }",
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
-}
-
-func (o *lastArgWidthOverload) Cast(to, from, fromCol, toType string) string {
-	if o.CastFunc != nil {
-		if ret := o.CastFunc(to, from, fromCol, toType); ret != "" {
-			return ret
-		}
-	}
-	// Default cast function is "identity" cast.
-	return fmt.Sprintf("%s = %s", to, from)
 }
 
 func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
@@ -489,33 +477,6 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
-func set(canonicalTypeFamily types.Family, target, i, new string) string {
-	switch canonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
-	case types.DecimalFamily:
-		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
-	}
-	return fmt.Sprintf("%s[%s] = %s", target, i, new)
-}
-
-// Set is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Set(target, i, new string) string {
-	return set(b.CanonicalTypeFamily, target, i, new)
-}
-
-// slice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) slice(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		// Bytes-like vector doesn't support slicing.
-		colexecerror.InternalError(errors.AssertionFailedf("slice method is attempted to be generated on Bytes vector"))
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
-	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
-}
-
 // sliceable returns whether the vector of canonicalTypeFamily can be sliced
 // (i.e. whether it is a Golang's slice).
 func sliceable(canonicalTypeFamily types.Family) bool {
@@ -530,39 +491,6 @@ func sliceable(canonicalTypeFamily types.Family) bool {
 // Sliceable is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Sliceable() bool {
 	return sliceable(b.CanonicalTypeFamily)
-}
-
-// CopySlice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) CopySlice(
-	target, src, destIdx, srcStartIdx, srcEndIdx string,
-) string {
-	var tmpl string
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
-		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
-	case types.DecimalFamily:
-		tmpl = `{
-  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
-  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
-  for __i := range __src_slice {
-    __tgt_slice[__i].Set(&__src_slice[__i])
-  }
-}`
-	default:
-		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
-	}
-	args := map[string]string{
-		"Tgt":      target,
-		"Src":      src,
-		"TgtIdx":   destIdx,
-		"SrcStart": srcStartIdx,
-		"SrcEnd":   srcEndIdx,
-	}
-	var buf strings.Builder
-	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
-		colexecerror.InternalError(err)
-	}
-	return buf.String()
 }
 
 // AppendSlice is a function that should only be used in templates.
@@ -625,15 +553,6 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
-// Window is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Window(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
-	}
-	return b.slice(target, start, end)
-}
-
 // setVariableSize is a function that should only be used in templates. It
 // returns a string that contains a code snippet for computing the size of the
 // object named 'value' if it has variable size and assigns it to the variable
@@ -654,7 +573,7 @@ if %[2]s != nil {
 		return fmt.Sprintf(`
 		var %[1]s uintptr
 		if %[2]s != nil {
-			%[1]s = %[2]s.(*coldataext.Datum).Size()
+			%[1]s = %[2]s.(tree.Datum).Size()
 		}`, target, value)
 	default:
 		return fmt.Sprintf(`var %s uintptr`, target)
@@ -672,18 +591,14 @@ var (
 	lawo = &lastArgWidthOverload{}
 	_    = lawo.Assign
 	_    = lawo.Compare
-	_    = lawo.Cast
 	_    = lawo.UnaryAssign
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
 	_    = awob.CopyVal
-	_    = awob.Set
 	_    = awob.Sliceable
-	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
-	_    = awob.Window
 	_    = awob.SetVariableSize
 	_    = awob.IsBytesLike
 )
@@ -694,7 +609,6 @@ func init() {
 	populateBinOpOverloads()
 	populateCmpOpOverloads()
 	populateHashOverloads()
-	populateCastOverloads()
 }
 
 // typeCustomizer is a marker interface for something that implements one or

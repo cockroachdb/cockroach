@@ -333,8 +333,18 @@ func (b *Builder) buildStmt(
 		return b.buildCreateStatistics(stmt, inScope)
 
 	case *tree.Analyze:
-		// ANALYZE is syntactic sugar for CREATE STATISTICS.
-		return b.buildCreateStatistics(&tree.CreateStats{Table: stmt.Table}, inScope)
+		// ANALYZE is syntactic sugar for CREATE STATISTICS. We add AS OF SYSTEM
+		// TIME '-0.001ms' to trigger use of inconsistent scans. This prevents
+		// GC TTL errors during ANALYZE. See the sql.stats.max_timestamp_age
+		// setting.
+		return b.buildCreateStatistics(&tree.CreateStats{
+			Table: stmt.Table,
+			Options: tree.CreateStatsOptions{
+				AsOf: tree.AsOfClause{
+					Expr: tree.NewStrVal("-0.001ms"),
+				},
+			},
+		}, inScope)
 
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
@@ -429,7 +439,11 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	if b.trackViewDeps {
 		if texpr.ResolvedType().UserDefined() {
-			for id := range typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()) {
+			children, err := typedesc.GetTypeDescriptorClosure(texpr.ResolvedType())
+			if err != nil {
+				panic(err)
+			}
+			for id := range children {
 				b.viewTypeDeps.Add(int(id))
 			}
 		}

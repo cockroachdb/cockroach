@@ -15,12 +15,12 @@ package slprovider
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -31,11 +31,12 @@ func New(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	testingKnobs *sqlliveness.TestingKnobs,
 ) sqlliveness.Provider {
-	storage := slstorage.NewStorage(stopper, clock, db, ie, settings)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings)
+	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
+	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testingKnobs)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,

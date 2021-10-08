@@ -18,17 +18,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	stdLog "log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that shortHostname works as advertised.
@@ -141,229 +138,6 @@ func TestStandardLog(t *testing.T) {
 	}
 	if !contains("test", t) {
 		t.Error("Info failed")
-	}
-}
-
-func TestEntryDecoder(t *testing.T) {
-	entryIdx := 1
-	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
-		entry := logpb.Entry{
-			Severity:  s,
-			Channel:   c,
-			Time:      now.UnixNano(),
-			Goroutine: int64(gid),
-			File:      file,
-			Line:      int64(line),
-			Tags:      tags,
-			Message:   msg,
-			Counter:   uint64(entryIdx),
-		}
-		entryIdx++
-		var buf bytes.Buffer
-		_ = FormatLegacyEntry(entry, &buf)
-		return buf.String()
-	}
-
-	t1 := timeutil.Now().Round(time.Microsecond)
-	t2 := t1.Add(time.Microsecond)
-	t3 := t2.Add(time.Microsecond)
-	t4 := t3.Add(time.Microsecond)
-	t5 := t4.Add(time.Microsecond)
-	t6 := t5.Add(time.Microsecond)
-	t7 := t6.Add(time.Microsecond)
-	t8 := t7.Add(time.Microsecond)
-	t9 := t8.Add(time.Microsecond)
-	t10 := t9.Add(time.Microsecond)
-	t11 := t10.Add(time.Microsecond)
-
-	// Verify the truncation logic for reading logs that are longer than the
-	// default scanner can handle.
-	preambleLength := len(formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ``, ""))
-	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
-	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
-	tooLongEntry := reallyLongEntry + "a"
-
-	contents := formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ``, "info")
-	contents += formatEntry(severity.INFO, channel.DEV, t2, 1, "clog_test.go", 137, ``, "multi-\nline")
-	contents += formatEntry(severity.INFO, channel.DEV, t3, 2, "clog_test.go", 138, ``, reallyLongEntry)
-	contents += formatEntry(severity.INFO, channel.DEV, t4, 3, "clog_test.go", 139, ``, tooLongEntry)
-	contents += formatEntry(severity.WARNING, channel.DEV, t5, 4, "clog_test.go", 140, ``, "warning")
-	contents += formatEntry(severity.ERROR, channel.DEV, t6, 5, "clog_test.go", 141, ``, "error")
-	contents += formatEntry(severity.FATAL, channel.DEV, t7, 6, "clog_test.go", 142, ``, "fatal\nstack\ntrace")
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 7, "clog_test.go", 143, ``, tooLongEntry)
-
-	// Regression test for #56873.
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 8, "clog_test.go", 144, `sometags`, "foo")
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
-	// Different channel.
-	contents += formatEntry(severity.INFO, channel.SESSIONS, t9, 10, "clog_test.go", 146, ``, "info")
-	// Ensure that IPv6 addresses in tags get parsed properly.
-	contents += formatEntry(severity.INFO, channel.DEV, t10, 11, "clog_test.go", 147, `client=[1::]:2`, "foo")
-	// Ensure that empty messages don't wreak havoc.
-	contents += formatEntry(severity.INFO, channel.DEV, t11, 12, "clog_test.go", 148, "", "")
-
-	readAllEntries := func(contents string) []logpb.Entry {
-		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
-		var entries []logpb.Entry
-		var entry logpb.Entry
-		for {
-			if err := decoder.Decode(&entry); err != nil {
-				if err == io.EOF {
-					break
-				}
-				t.Fatal(err)
-			}
-			entries = append(entries, entry)
-		}
-		return entries
-	}
-
-	entries := readAllEntries(contents)
-	expected := []logpb.Entry{
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t1.UnixNano(),
-			Goroutine: 0,
-			File:      `clog_test.go`,
-			Line:      136,
-			Message:   `info`,
-			Counter:   2,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t2.UnixNano(),
-			Goroutine: 1,
-			File:      `clog_test.go`,
-			Line:      137,
-			Message: `multi-
-line`,
-			Counter: 3,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t3.UnixNano(),
-			Goroutine: 2,
-			File:      `clog_test.go`,
-			Line:      138,
-			Message:   reallyLongEntry,
-			Counter:   4,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t4.UnixNano(),
-			Goroutine: 3,
-			File:      `clog_test.go`,
-			Line:      139,
-			Message:   tooLongEntry[:maxMessageLength],
-			Counter:   5,
-		},
-		{
-			Severity:  severity.WARNING,
-			Channel:   channel.DEV,
-			Time:      t5.UnixNano(),
-			Goroutine: 4,
-			File:      `clog_test.go`,
-			Line:      140,
-			Message:   `warning`,
-			Counter:   6,
-		},
-		{
-			Severity:  severity.ERROR,
-			Channel:   channel.DEV,
-			Time:      t6.UnixNano(),
-			Goroutine: 5,
-			File:      `clog_test.go`,
-			Line:      141,
-			Message:   `error`,
-			Counter:   7,
-		},
-		{
-			Severity:  severity.FATAL,
-			Channel:   channel.DEV,
-			Time:      t7.UnixNano(),
-			Goroutine: 6,
-			File:      `clog_test.go`,
-			Line:      142,
-			Message: `fatal
-stack
-trace`,
-			Counter: 8,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 7,
-			File:      `clog_test.go`,
-			Line:      143,
-			Message:   tooLongEntry[:maxMessageLength],
-			Counter:   9,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 8,
-			File:      `clog_test.go`,
-			Line:      144,
-			Tags:      `sometags`,
-			Message:   `foo`,
-			Counter:   10,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 9,
-			File:      `clog_test.go`,
-			Line:      145,
-			Message:   `bar`,
-			Counter:   11,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.SESSIONS,
-			Time:      t9.UnixNano(),
-			Goroutine: 10,
-			File:      `clog_test.go`,
-			Line:      146,
-			Message:   `info`,
-			Counter:   12,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t10.UnixNano(),
-			Goroutine: 11,
-			File:      `clog_test.go`,
-			Line:      147,
-			Tags:      `client=[1::]:2`,
-			Message:   `foo`,
-			Counter:   13,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t11.UnixNano(),
-			Goroutine: 12,
-			File:      `clog_test.go`,
-			Line:      148,
-			Tags:      ``,
-			Message:   ``,
-			Counter:   14,
-		},
-	}
-	if !reflect.DeepEqual(expected, entries) {
-		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
-	}
-
-	entries = readAllEntries("file header\n\n\n" + contents)
-	if !reflect.DeepEqual(expected, entries) {
-		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
 	}
 }
 
@@ -537,17 +311,84 @@ func TestListLogFiles(t *testing.T) {
 	}
 }
 
-func TestGetLogReader(t *testing.T) {
+func TestFilePermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ScopeWithoutShowLogs(t).Close(t)
 
+	fileMode := os.FileMode(0o400) // not the default 0o644
+
+	fs := debugLog.getFileSink()
+	defer func(p os.FileMode) { fs.filePermissions = p }(fs.filePermissions)
+	fs.filePermissions = fileMode
+
 	Info(context.Background(), "x")
-	info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
+
+	sb, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
+	if !ok {
+		t.Fatalf("buffer wasn't created")
+	}
+
+	results, err := ListLogFiles()
+	if err != nil {
+		t.Fatalf("error in ListLogFiles: %v", err)
+	}
+
+	expectedName := filepath.Base(sb.file.Name())
+	foundExpected := false
+	for _, r := range results {
+		if r.Name != expectedName {
+			continue
+		}
+		foundExpected = true
+		if os.FileMode(r.FileMode) != fileMode {
+			t.Errorf("Logfile %v has file mode %v, expected %v",
+				expectedName, os.FileMode(r.FileMode), fileMode)
+		}
+	}
+	if !foundExpected {
+		t.Fatalf("unexpected results: %q", results)
+	}
+}
+
+func TestGetLogReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	// Create two log directories.
+	dir1 := filepath.Join(sc.logDir, "dir1")
+	require.NoError(t, os.MkdirAll(dir1, 0755))
+
+	// Create a config with two groups in separate log directories.
+	config := logconfig.DefaultConfig()
+	config.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"g1": {
+			FileDefaults: logconfig.FileDefaults{Dir: &dir1},
+			Channels:     logconfig.SelectChannels(channel.OPS),
+		},
+	}
+
+	// Validate and apply the config.
+	require.NoError(t, config.Validate(&sc.logDir))
+	TestingResetActive()
+	cleanupFn, err := ApplyConfig(config)
+	require.NoError(t, err)
+	defer cleanupFn()
+
+	t.Logf("applied logging configuration:\n  %s\n",
+		strings.TrimSpace(strings.ReplaceAll(DescribeAppliedConfig(), "\n", "\n  ")))
+
+	// Force creation of a file on the default sink.
+	Info(context.Background(), "x")
+	fs := debugLog.getFileSink()
+	info, ok := fs.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
 	infoName := filepath.Base(info.file.Name())
 
+	// Create some relative path. We'll check below these cannot be
+	// accessed.
 	curDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -557,69 +398,83 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir := debugLog.getFileSink().mu.logDir
+	// Directory for the default sink.
+	dir := fs.mu.logDir
 	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
-	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	otherFile.Close()
+
+	// Some arbitrary non-log file.
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir, "other.txt"), nil, 0644))
 	relPathFromLogDir := strings.Join([]string{"..", filepath.Base(dir), infoName}, string(os.PathSeparator))
 
+	cntr := 0
+	genFileName := func(prefix string) string {
+		cntr++
+		return fileNameConstants.program + prefix + ".roach0.root.2015-09-25T19_24_19Z." + fmt.Sprintf("%05d", cntr) + ".log"
+	}
+
+	// A log file in a non-default directory.
+	fname1 := genFileName("-g1")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1, fname1), nil, 0644))
+
+	// A log file that matches the file pattern for the default sink,
+	// in a non-default directory.
+	fname2 := genFileName("")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir1, fname2), nil, 0644))
+	fname3 := genFileName("-g1")
+	require.NoError(t, ioutil.WriteFile(filepath.Join(dir, fname3), nil, 0644))
+
+	// Fake symlink to check the symlink error below.
+	fname4 := genFileName("")
+	createSymlink("bogus.log", filepath.Join(dir, fname4))
+
 	testCases := []struct {
-		filename           string
-		expErrRestricted   string
-		expErrUnrestricted string
+		filename         string
+		expErrRestricted string
 	}{
-		// File is not specified (trying to open a directory instead).
-		{dir, "pathnames must be basenames", "not a regular file"},
-		// Absolute filename is specified.
-		{info.file.Name(), "pathnames must be basenames", ""},
-		// Symlink to a log file.
-		{filepath.Join(dir, removePeriods(program)+".log"), "pathnames must be basenames", ""},
-		// Symlink relative to logDir.
-		{removePeriods(program) + ".log", "symlinks are not allowed", ""},
-		// Non-log file.
-		{"other.txt", "malformed log filename", "malformed log filename"},
-		// Non-existent file matching RE.
-		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file", "no such file"},
 		// Base filename is specified.
-		{infoName, "", ""},
+		{infoName, ""},
+		{fname1, ""},
+		// File exists but in a different directory than what the sink
+		// configuration indicates. It is invisible to the API.
+		{fname2, "no such file"},
+		{fname3, "no such file"},
+		// File is not specified (trying to open a directory instead).
+		{dir, "pathnames must be basenames"},
+		// Absolute filename is specified.
+		{info.file.Name(), "pathnames must be basenames"},
+		// Symlink to a log file.
+		{filepath.Join(dir, fileNameConstants.program+".log"), "pathnames must be basenames"},
+		// Symlink relative to logDir.
+		{fname4, "symlinks are not allowed"},
+		// Non-log file.
+		{"other.txt", "malformed log filename"},
+		// Non-existent file matching RE.
+		{fileNameConstants.program + ".roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file"},
 		// Relative path with directory components.
-		{relPathFromCurDir, "pathnames must be basenames", ""},
+		{relPathFromCurDir, "pathnames must be basenames"},
 		// Relative path within the logs directory.
-		{relPathFromLogDir, "pathnames must be basenames", ""},
+		{relPathFromLogDir, "pathnames must be basenames"},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.filename, func(t *testing.T) {
-			for _, restricted := range []bool{true, false} {
-				t.Run(fmt.Sprintf("restricted=%t", restricted), func(t *testing.T) {
-					var expErr string
-					if restricted {
-						expErr = test.expErrRestricted
-					} else {
-						expErr = test.expErrUnrestricted
-					}
-					reader, err := GetLogReader(test.filename, restricted)
-					if expErr == "" {
-						if err != nil {
-							t.Errorf("expected ok, got %s", err)
-						}
-					} else {
-						if err == nil {
-							t.Errorf("expected error %s; got nil", expErr)
-						} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
-							t.Errorf("expected error %s; got %v", expErr, err)
-						}
-					}
-					if reader != nil {
-						reader.Close()
-					}
-				})
-
+			expErr := test.expErrRestricted
+			reader, err := GetLogReader(test.filename)
+			if expErr == "" {
+				if err != nil {
+					t.Errorf("expected ok, got %s", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected error %s; got nil", expErr)
+				} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
+					t.Errorf("expected error %s; got %v", expErr, err)
+				}
+			}
+			if reader != nil {
+				reader.Close()
 			}
 		})
 	}
@@ -750,7 +605,7 @@ func TestFileSeverityFilter(t *testing.T) {
 
 	var debugFileSinkInfo *sinkInfo
 	for _, si := range debugLog.sinkInfos {
-		si.threshold = severity.ERROR
+		si.threshold.set(channel.DEV, severity.ERROR)
 		if _, ok := si.sink.(*fileSink); ok {
 			debugFileSinkInfo = si
 		}
@@ -860,14 +715,14 @@ func TestLogEntryPropagation(t *testing.T) {
 	l := logging.getLogger(channel.DEV)
 	for _, si := range l.sinkInfos {
 		if si.sink == &logging.stderrSink {
-			si.threshold.SetValue(severity.INFO)
+			si.threshold.set(channel.DEV, severity.INFO)
+
+			// Make stderr non-critical.
+			defer func(prevCriticality bool, si *sinkInfo) { si.criticality = prevCriticality }(si.criticality, si)
+			si.criticality = false
+			break
 		}
 	}
-
-	// Make stderr non-critical.
-	// We assume that the stderr sink is the first one.
-	defer func(prevCriticality bool) { debugLog.sinkInfos[0].criticality = prevCriticality }(debugLog.sinkInfos[0].criticality)
-	debugLog.sinkInfos[0].criticality = false
 
 	// Now emit the log message. If criticality is respected, the
 	// failure to write on stderr is graceful and the message gets

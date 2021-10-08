@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -151,6 +152,14 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 				a.pred.prepareRow(a.run.out, a.run.leftRow, rrow)
 				return true, nil
 			}
+
+			// We're either out of right side rows or we broke out of the loop
+			// before consuming all right rows because we found a match for an
+			// anti or semi join. Clear the right rows to prepare them for the
+			// next left row.
+			if err := a.clearRightRows(params); err != nil {
+				return false, err
+			}
 		}
 		// We're out of right side rows. Reset the match state for next time.
 		foundAMatch := a.run.leftRowFoundAMatch
@@ -217,20 +226,23 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 	}
 }
 
+// clearRightRows clears rightRows and resets rightRowsIterator. This function
+// must be called before reusing rightRows and rightRowIterator.
+func (a *applyJoinNode) clearRightRows(params runParams) error {
+	if err := a.run.rightRows.clear(params.ctx); err != nil {
+		return err
+	}
+	a.run.rightRowsIterator.close()
+	a.run.rightRowsIterator = nil
+	return nil
+}
+
 // runRightSidePlan runs a planTop that's been generated based on the
 // re-optimized right hand side of the apply join, stashing the result in
 // a.run.rightRows, ready for retrieval. An error indicates that something went
 // wrong during execution of the right hand side of the join, and that we should
 // completely give up on the outer join.
 func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planComponents) error {
-	// Prepare rightRows state for reuse.
-	if err := a.run.rightRows.clear(params.ctx); err != nil {
-		return err
-	}
-	if a.run.rightRowsIterator != nil {
-		a.run.rightRowsIterator.close()
-		a.run.rightRowsIterator = nil
-	}
 	if err := runPlanInsidePlan(params, plan, &a.run.rightRows); err != nil {
 		return err
 	}
@@ -256,6 +268,23 @@ func runPlanInsidePlan(
 	defer recv.Release()
 
 	if len(plan.subqueryPlans) != 0 {
+		// We currently don't support cases when both the "inner" and the
+		// "outer" plans have subqueries due to limitations of how we're
+		// propagating the results of the subqueries.
+		if len(params.p.curPlan.subqueryPlans) != 0 {
+			return unimplemented.NewWithIssue(66447, `apply joins with subqueries in the "inner" and "outer" contexts are not supported`)
+		}
+		// Right now curPlan.subqueryPlans are the subqueries from the "outer"
+		// plan (and we know there are none given the check above). If parts of
+		// the "inner" plan refer to the subqueries, we know that they must
+		// refer to the "inner" subqueries. To allow for that to happen we have
+		// to manually replace the subqueries on the planner's curPlan and
+		// restore the original state before exiting.
+		oldSubqueries := params.p.curPlan.subqueryPlans
+		params.p.curPlan.subqueryPlans = plan.subqueryPlans
+		defer func() {
+			params.p.curPlan.subqueryPlans = oldSubqueries
+		}()
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).

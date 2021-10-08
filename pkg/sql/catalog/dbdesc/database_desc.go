@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -45,6 +46,10 @@ type immutable struct {
 type Mutable struct {
 	immutable
 	ClusterVersion *immutable
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // SafeMessage makes immutable a SafeMessager.
@@ -94,9 +99,6 @@ func (desc *immutable) IsUncommittedVersion() bool {
 func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
-
-// NameResolutionResult implements the Descriptor interface.
-func (desc *immutable) NameResolutionResult() {}
 
 // GetAuditMode is part of the DescriptorProto interface.
 // This is a stub until per-database auditing is enabled.
@@ -183,6 +185,9 @@ func (desc *immutable) ForEachSchemaInfo(
 // given name, 0 otherwise.
 func (desc *immutable) GetSchemaID(name string) descpb.ID {
 	info := desc.Schemas[name]
+	if info.Dropped {
+		return descpb.InvalidID
+	}
 	return info.ID
 }
 
@@ -208,7 +213,12 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
+	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Database))
+	// The DefaultPrivilegeDescriptor may be nil.
+	if desc.GetDefaultPrivileges() != nil {
+		// Validate the default privilege descriptor.
+		vea.Report(catprivilege.ValidateDefaultPrivileges(*desc.GetDefaultPrivileges()))
+	}
 
 	if desc.IsMultiRegion() {
 		desc.validateMultiRegion(vea)
@@ -225,15 +235,19 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID())
-	if id, err := desc.MultiRegionEnumID(); err == nil {
+	if desc.IsMultiRegion() {
+		id, err := desc.MultiRegionEnumID()
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
 		ids.Add(id)
 	}
 	for _, schema := range desc.Schemas {
 		ids.Add(schema.ID)
 	}
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.
@@ -285,14 +299,6 @@ func (desc *immutable) ValidateTxnCommit(
 		}
 	}
 }
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-// TODO (rohany): I don't want to keep this here, but it seems to be used
-//  by backup only for the fake resolution that occurs in backup. Is it possible
-//  to have this implementation only visible there? Maybe by creating a type
-//  alias for database descriptor in the backupccl package, and then defining
-//  SchemaMeta on it?
-func (desc *immutable) SchemaMeta() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
@@ -392,4 +398,62 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 		RegionEnumID:  config.RegionEnumID(),
 	}
 	return nil
+}
+
+// SetRegionConfig sets the region configuration of a database descriptor.
+func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig) {
+	desc.RegionConfig = cfg
+}
+
+// SetPlacement sets the placement on the region config for a database
+// descriptor.
+func (desc *Mutable) SetPlacement(placement descpb.DataPlacement) {
+	desc.RegionConfig.Placement = placement
+}
+
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *Mutable) HasPostDeserializationChanges() bool {
+	return desc.changed
+}
+
+// GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
+func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
+	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
+	if defaultPrivilegeDescriptor == nil {
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
+	}
+	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
+}
+
+// GetMutableDefaultPrivilegeDescriptor returns a catprivilege.Mutable.
+func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *catprivilege.Mutable {
+	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
+	if defaultPrivilegeDescriptor == nil {
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
+	}
+	return catprivilege.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
+}
+
+// SetDefaultPrivilegeDescriptor sets the default privilege descriptor
+// for the database.
+func (desc *Mutable) SetDefaultPrivilegeDescriptor(
+	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
+) {
+	desc.DefaultPrivileges = defaultPrivilegeDescriptor
+}
+
+// maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the
+// database itself which was added due to a bug in prior versions when dropping any user-defined schema.
+// The bug inserted an entry for the database rather than the schema being dropped. This function fixes the
+// problem by deleting the erroneous entry.
+func maybeRemoveDroppedSelfEntryFromSchemas(dbDesc *descpb.DatabaseDescriptor) bool {
+	if dbDesc == nil {
+		return false
+	}
+	if sc, ok := dbDesc.Schemas[dbDesc.Name]; ok && sc.ID == dbDesc.ID {
+		delete(dbDesc.Schemas, dbDesc.Name)
+		return true
+	}
+	return false
 }

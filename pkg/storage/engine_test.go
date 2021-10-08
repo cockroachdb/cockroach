@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -582,10 +580,7 @@ func TestEngineMustExist(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
 
-		_, err := NewEngine(0, base.StorageConfig{
-			Dir:       tempDir,
-			MustExist: true,
-		})
+		_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
 		if err == nil {
 			t.Fatal("expected error related to missing directory")
 		}
@@ -790,11 +785,8 @@ func TestFlushNumSSTables(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m, err := engine.GetMetrics()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m.NumSSTables == 0 {
+			m := engine.GetMetrics()
+			if m.NumSSTables() == 0 {
 				t.Fatal("expected non-zero sstables, got 0")
 			}
 		})
@@ -863,6 +855,37 @@ func TestEngineScan1(t *testing.T) {
 				}
 				ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
 			}
+
+			// Test iterator stats.
+			ro := engine.NewReadOnly()
+			iter := ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
+			for {
+				valid, err := iter.Valid()
+				require.NoError(t, err)
+				if !valid {
+					break
+				}
+				iter.Next()
+			}
+			stats := iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
+			iter.Close()
+			iter = ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			// pebble.Iterator is reused, but stats are reset.
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
+			iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
+			iter.Close()
+			ro.Close()
 		})
 	}
 }
@@ -1157,17 +1180,10 @@ func TestCreateCheckpoint(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	opts := DefaultPebbleOptions()
-	db, err := NewPebble(
+	db, err := Open(
 		context.Background(),
-		PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-				Dir:      dir,
-			},
-			Opts: opts,
-		},
-	)
+		Filesystem(dir),
+		Settings(cluster.MakeTestingClusterSettings()))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -1192,19 +1208,23 @@ func TestIngestDelayLimit(t *testing.T) {
 	max, ramp := time.Second*5, time.Second*5/10
 
 	for _, tc := range []struct {
-		exp     time.Duration
-		metrics Metrics
+		exp           time.Duration
+		fileCount     int64
+		sublevelCount int32
 	}{
-		{0, Metrics{}},
-		{0, Metrics{L0FileCount: 19, L0SublevelCount: -1}},
-		{0, Metrics{L0FileCount: 20, L0SublevelCount: -1}},
-		{ramp, Metrics{L0FileCount: 21, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: 22}},
-		{ramp * 2, Metrics{L0FileCount: 55, L0SublevelCount: 22}},
-		{max, Metrics{L0FileCount: 55, L0SublevelCount: -1}},
+		{0, 0, 0},
+		{0, 19, -1},
+		{0, 20, -1},
+		{ramp, 21, -1},
+		{ramp * 2, 22, -1},
+		{ramp * 2, 22, 22},
+		{ramp * 2, 55, 22},
+		{max, 55, -1},
 	} {
-		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.metrics))
+		var m pebble.Metrics
+		m.Levels[0].NumFiles = tc.fileCount
+		m.Levels[0].Sublevels = tc.sublevelCount
+		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &m))
 	}
 }
 
@@ -1265,7 +1285,7 @@ func TestEngineFS(t *testing.T) {
 				"9e: list-dir /dir1 == bar,baz",
 				"9f: delete /dir1/bar",
 				"9g: delete /dir1/baz",
-				"9h: delete-dir /dir1",
+				"9h: delete /dir1",
 			}
 
 			var f fs.File
@@ -1306,8 +1326,6 @@ func TestEngineFS(t *testing.T) {
 					err = e.Rename(s[1], s[2])
 				case "create-dir":
 					err = e.MkdirAll(s[1])
-				case "delete-dir":
-					err = e.RemoveDir(s[1])
 				case "list-dir":
 					result, err := e.List(s[1])
 					if err != nil {
@@ -1389,20 +1407,10 @@ type engineImpl struct {
 // These FS implementations are not in-memory.
 var engineRealFSImpls = []engineImpl{
 	{"pebble", func(t *testing.T, dir string) Engine {
-
-		opts := DefaultPebbleOptions()
-		opts.FS = vfs.Default
-		opts.Cache = pebble.NewCache(testCacheSize)
-		defer opts.Cache.Unref()
-
-		db, err := NewPebble(
+		db, err := Open(
 			context.Background(),
-			PebbleConfig{
-				StorageConfig: base.StorageConfig{
-					Dir: dir,
-				},
-				Opts: opts,
-			})
+			Filesystem(dir),
+			CacheSize(testCacheSize))
 		if err != nil {
 			t.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 		}
@@ -1504,13 +1512,8 @@ func TestSupportsPrev(t *testing.T) {
 	}
 	t.Run("pebble", func(t *testing.T) {
 
-		eng := newPebbleInMem(
-			context.Background(),
-			roachpb.Attributes{},
-			1<<20,   /* cacheSize */
-			512<<20, /* storeSize */
-			nil,     /* settings */
-		)
+		eng, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
+		require.NoError(t, err)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
@@ -1633,14 +1636,9 @@ func TestScanSeparatedIntents(t *testing.T) {
 
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
-			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := newPebbleInMem(
-				ctx,
-				roachpb.Attributes{},
-				1<<20,   /* cacheSize */
-				512<<20, /* storeSize */
-				settings,
-			)
+			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
+				SetSeparatedIntents(!enableSeparatedIntents))
+			require.NoError(t, err)
 			defer eng.Close()
 
 			for _, key := range keys {

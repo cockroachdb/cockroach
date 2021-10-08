@@ -11,7 +11,6 @@
 package storage
 
 import (
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -65,6 +64,7 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 			require.Equal(t, b1, b2)
 			require.True(t, eKey.IsLockTableKey())
 			require.False(t, eKey.IsMVCCKey())
+			require.NoError(t, eKey.Validate())
 			eKeyDecoded, ok := DecodeEngineKey(b2)
 			require.True(t, ok)
 			keyPart, ok := GetKeyPartFromEngineKey(b2)
@@ -72,6 +72,7 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 			require.Equal(t, eKeyDecoded.Key, roachpb.Key(keyPart))
 			require.True(t, eKeyDecoded.IsLockTableKey())
 			require.False(t, eKeyDecoded.IsMVCCKey())
+			require.NoError(t, eKeyDecoded.Validate())
 			keyDecoded, err := eKeyDecoded.ToLockTableKey()
 			require.NoError(t, err)
 			require.Equal(t, test.key, keyDecoded)
@@ -91,25 +92,7 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			var encodedTS []byte
-			if !test.key.Timestamp.IsEmpty() {
-				var size int
-				if test.key.Timestamp.Synthetic {
-					size = 13
-				} else if test.key.Timestamp.Logical != 0 {
-					size = 12
-				} else {
-					size = 8
-				}
-				encodedTS = make([]byte, size)
-				binary.BigEndian.PutUint64(encodedTS, uint64(test.key.Timestamp.WallTime))
-				if test.key.Timestamp.Logical != 0 {
-					binary.BigEndian.PutUint32(encodedTS[8:], uint32(test.key.Timestamp.Logical))
-				}
-				if test.key.Timestamp.Synthetic {
-					encodedTS[12] = 1
-				}
-			}
+			encodedTS := encodeTimestamp(test.key.Timestamp)
 			eKey := EngineKey{Key: test.key.Key, Version: encodedTS}
 			b1 := eKey.Encode()
 			require.Equal(t, len(b1), eKey.EncodedLen())
@@ -121,10 +104,12 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 			require.Equal(t, b1, b2)
 			require.False(t, eKey.IsLockTableKey())
 			require.True(t, eKey.IsMVCCKey())
+			require.NoError(t, eKey.Validate())
 			eKeyDecoded, ok := DecodeEngineKey(b2)
 			require.True(t, ok)
 			require.False(t, eKeyDecoded.IsLockTableKey())
 			require.True(t, eKeyDecoded.IsMVCCKey())
+			require.NoError(t, eKeyDecoded.Validate())
 			keyDecoded, err := eKeyDecoded.ToMVCCKey()
 			require.NoError(t, err)
 			require.Equal(t, test.key, keyDecoded)
@@ -137,6 +122,63 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, k3, []byte(test.key.Key))
 			require.Equal(t, ts, encodedTS)
+		})
+	}
+}
+
+func TestEngineKeyValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	uuid1 := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+	testCases := []struct {
+		key     interface{}
+		invalid bool
+	}{
+		// Valid MVCCKeys.
+		{key: MVCCKey{Key: roachpb.Key("a")}},
+		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
+		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
+
+		// Valid LockTableKeys.
+		{
+			key: LockTableKey{
+				Key:      roachpb.Key("foo"),
+				Strength: lock.Exclusive,
+				TxnUUID:  uuid1[:],
+			},
+		},
+		{
+			key: LockTableKey{
+				Key:      keys.RangeDescriptorKey(roachpb.RKey("bar")),
+				Strength: lock.Exclusive,
+				TxnUUID:  uuid1[:],
+			},
+		},
+
+		// Invalid keys - versions of various invalid lengths.
+		{key: EngineKey{Key: roachpb.Key("foo"), Version: make([]byte, 1)}, invalid: true},
+		{key: EngineKey{Key: roachpb.Key("bar"), Version: make([]byte, 7)}, invalid: true},
+		{key: EngineKey{Key: roachpb.Key("baz"), Version: make([]byte, 14)}, invalid: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			var ek EngineKey
+			switch k := tc.key.(type) {
+			case EngineKey:
+				ek = k
+			case MVCCKey:
+				ek = EngineKey{Key: k.Key, Version: encodeTimestamp(k.Timestamp)}
+			case LockTableKey:
+				key, _ := k.ToEngineKey(nil)
+				ek = key
+			}
+
+			if err := ek.Validate(); err != nil {
+				require.True(t, tc.invalid)
+				return
+			}
+			require.False(t, tc.invalid)
 		})
 	}
 }

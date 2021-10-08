@@ -124,7 +124,7 @@ semi-join (hash)
  │    ├── key: (1-3)
  │    └── fd: (1-3)-->(4)
  ├── project-set
- │    ├── columns: unnest:6 unnest:7
+ │    ├── columns: unnest:7 unnest:8
  │    ├── stable
  │    ├── values
  │    │    ├── cardinality: [1 - 1]
@@ -134,8 +134,8 @@ semi-join (hash)
  │         ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
  │         └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
  └── filters
-      ├── unnest:6 = a:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── unnest:7 = b:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      ├── unnest:7 = a:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── unnest:8 = b:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 assign-placeholders-opt query-args=('{1\x2c 2}','{3\x2c 4}')
 SELECT * FROM abcd WHERE (a, b) IN (
@@ -149,18 +149,18 @@ project
  ├── key: (1-3)
  ├── fd: (1-3)-->(4)
  └── inner-join (lookup abcd)
-      ├── columns: a:1!null b:2!null c:3!null d:4 unnest:6!null unnest:7!null
-      ├── key columns: [6 7] = [1 2]
+      ├── columns: a:1!null b:2!null c:3!null d:4 unnest:7!null unnest:8!null
+      ├── key columns: [7 8] = [1 2]
       ├── stable
-      ├── key: (3,6,7)
-      ├── fd: (1-3)-->(4), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+      ├── key: (3,7,8)
+      ├── fd: (1-3)-->(4), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
       ├── distinct-on
-      │    ├── columns: unnest:6 unnest:7
-      │    ├── grouping columns: unnest:6 unnest:7
+      │    ├── columns: unnest:7 unnest:8
+      │    ├── grouping columns: unnest:7 unnest:8
       │    ├── stable
-      │    ├── key: (6,7)
+      │    ├── key: (7,8)
       │    └── project-set
-      │         ├── columns: unnest:6 unnest:7
+      │         ├── columns: unnest:7 unnest:8
       │         ├── stable
       │         ├── values
       │         │    ├── cardinality: [1 - 1]

@@ -1019,7 +1019,7 @@ ap35145
 statement ok
 DROP DATABASE d35145
 
-query error database "d35145" does not exist
+query error relation "pg_settings" does not exist
 EXECUTE display_appname
 
 statement ok
@@ -1035,7 +1035,7 @@ ap35145
 statement ok
 CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
 
-query error database "d35145_2" does not exist
+query error relation "pg_settings" does not exist
 EXECUTE display_appname
 
 # Check what happens when the stmt is executed over no db whatsoever.
@@ -1171,14 +1171,14 @@ select
  ├── columns: k:1 str:2
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1064.43
+ ├── cost: 1074.45
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── scan t2
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1054.41
+ │    ├── cost: 1064.42
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -1381,3 +1381,13 @@ DROP TABLE greeting_table
 # drop the type using prepared statement.
 statement ok
 EXECUTE enum_drop
+
+# Regression test for #64765.
+statement ok
+CREATE TABLE t64765 (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
+
+statement ok
+EXECUTE q64765(1, 1)

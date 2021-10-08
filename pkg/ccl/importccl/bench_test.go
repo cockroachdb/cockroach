@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,8 +42,9 @@ type tableSSTable struct {
 	sstData []byte
 }
 
+//BenchmarkImportWorkload/tpcc/warehouses=1/WriteAndLink-8         18        74032204 ns/op     324.94 MB/s
+//BenchmarkImportWorkload/tpcc/warehouses=1/AddSStable-8           1       2230451598 ns/op      10.79 MB/s
 func BenchmarkImportWorkload(b *testing.B) {
-	skip.WithIssue(b, 41932, "broken due to adding keys out-of-order to an sstable")
 	skip.UnderShort(b, "skipping long benchmark")
 
 	dir, cleanup := testutils.TempDir(b)
@@ -91,18 +91,14 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(bytes)
 
 	ctx := context.Background()
-	cache := pebble.NewCache(server.DefaultCacheSize)
-	defer cache.Unref()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		cfg := storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Dir: filepath.Join(dir, `pebble`, timeutil.Now().String())}}
-		cfg.Opts = storage.DefaultPebbleOptions()
-		cfg.Opts.Cache = cache
-		db, err := storage.NewPebble(context.Background(), cfg)
+		db, err := storage.Open(
+			context.Background(),
+			storage.Filesystem(filepath.Join(dir, `pebble`, timeutil.Now().String())),
+			storage.CacheSize(server.DefaultCacheSize))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -150,6 +146,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(totalBytes / int64(b.N))
 }
 
+//BenchmarkConvertToKVs/tpcc/warehouses=1-8         1        3558824936 ns/op          22.46 MB/s
 func BenchmarkConvertToKVs(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 
@@ -178,8 +175,12 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			defer close(kvCh)
 			wc := importccl.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
-			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
-			return wc.Worker(ctx, evalCtx)
+			evalCtx := &tree.EvalContext{
+				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+				Codec:            keys.SystemSQLCodec,
+			}
+			semaCtx := tree.MakeSemaContext()
+			return wc.Worker(ctx, evalCtx, &semaCtx)
 		})
 		for kvBatch := range kvCh {
 			for i := range kvBatch.KVs {
@@ -193,32 +194,4 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	}
 	b.StopTimer()
 	b.SetBytes(bytes)
-}
-
-func BenchmarkConvertToSSTable(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-
-	tpccGen := tpcc.FromWarehouses(1)
-	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
-		benchmarkConvertToSSTable(b, tpccGen)
-	})
-}
-
-func benchmarkConvertToSSTable(b *testing.B, g workload.Generator) {
-	const tableID = descpb.ID(keys.MinUserDescID)
-	now := timeutil.Now()
-
-	var totalBytes int64
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, table := range g.Tables() {
-			sst, err := format.ToSSTable(table, tableID, now)
-			if err != nil {
-				b.Fatal(err)
-			}
-			totalBytes += int64(len(sst))
-		}
-	}
-	b.StopTimer()
-	b.SetBytes(totalBytes / int64(b.N))
 }

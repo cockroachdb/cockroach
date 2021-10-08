@@ -13,7 +13,6 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
-import "google/protobuf/timestamp.proto";
 
 // This file contains common payloads to multiple event types.
 //
@@ -35,7 +34,8 @@ message CommonEventDetails {
 // SQL events.
 message CommonSQLEventDetails {
   // A normalized copy of the SQL statement that triggered the event.
-  string statement = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // The statement string contains a mix of sensitive and non-sensitive details (it is redactable).
+  string statement = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
 
   // The statement tag. This is separate from the statement string,
   // since the statement string can contain sensitive information. The
@@ -43,7 +43,8 @@ message CommonSQLEventDetails {
   string tag = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // The user account that triggered the event.
-  string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The special usernames `root` and `node` are not considered sensitive.
+  string user = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:root|node\""];
 
   // The primary object descriptor affected by the operation. Set to zero for operations
   // that don't affect descriptors.
@@ -52,7 +53,8 @@ message CommonSQLEventDetails {
   // The application name for the session where the event was emitted.
   // This is included in the event to ease filtering of logging output
   // by application.
-  string application_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Application names starting with a dollar sign (`$`) are not considered sensitive.
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:\\$.*\""];
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];

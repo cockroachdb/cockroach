@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -145,9 +146,8 @@ func TestOutboxInbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Set up the RPC layer.
-	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
@@ -157,14 +157,15 @@ func TestOutboxInbox(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	type cancellationType int
 	const (
-		// In this scenario, no cancellation happens and all the data is pushed from
-		// the Outbox to the Inbox.
+		// In this scenario, no cancellation happens and all the data is pushed
+		// from the Outbox to the Inbox.
 		noCancel cancellationType = iota
-		// streamCtxCancel models a scenario in which the Outbox host cancels the
-		// flow.
+		// streamCtxCancel models a scenario in which the Outbox host cancels
+		// the flow.
 		streamCtxCancel
 		// readerCtxCancel models a scenario in which the Inbox host cancels the
-		// flow. This is considered a graceful termination.
+		// flow. This is considered a graceful termination, and the flow context
+		// isn't canceled.
 		readerCtxCancel
 		// transportBreaks models a scenario in which the transport breaks.
 		transportBreaks
@@ -197,7 +198,7 @@ func TestOutboxInbox(t *testing.T) {
 		}()
 	}
 
-	streamCtx, streamCancelFn := context.WithCancel(ctx)
+	streamCtx, streamCancelFn := context.WithCancel(context.Background())
 	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
@@ -211,9 +212,9 @@ func TestOutboxInbox(t *testing.T) {
 			typs        = []*types.T{types.Int}
 			inputBuffer = colexecop.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
-			// generator to be used in the Outbox goroutine (to avoid races). These
-			// sleep variables enable a sleep for up to half a millisecond with a .25
-			// probability before cancellation.
+			// generator to be used in the Outbox goroutine (to avoid races).
+			// These sleep variables enable a sleep for up to half a millisecond
+			// with a .25 probability before cancellation.
 			sleepBeforeCancellation = rng.Float64() <= 0.25
 			sleepTime               = time.Microsecond * time.Duration(rng.Intn(500))
 			// stopwatch is used to measure how long it takes for the outbox to
@@ -222,9 +223,9 @@ func TestOutboxInbox(t *testing.T) {
 			transportBreaksProducerSleep = 4 * time.Second
 		)
 
-		// Test random selection as the Outbox should be deselecting before sending
-		// over data. Nulls and types are not worth testing as those are tested in
-		// colserde.
+		// Test random selection as the Outbox should be deselecting before
+		// sending over data. Nulls and types are not worth testing as those are
+		// tested in colserde.
 		args := coldatatestutils.RandomDataOpArgs{
 			DeterministicTyps: typs,
 			NumBatches:        64,
@@ -235,8 +236,8 @@ func TestOutboxInbox(t *testing.T) {
 		}
 
 		if cancellationScenario != noCancel {
-			// Crank up the number of batches so cancellation always happens in the
-			// middle of execution (or before).
+			// Crank up the number of batches so cancellation always happens in
+			// the middle of execution (or before).
 			args.NumBatches = math.MaxInt64
 			if cancellationScenario == transportBreaks {
 				// Insert an artificial sleep in order to simulate that the
@@ -252,46 +253,53 @@ func TestOutboxInbox(t *testing.T) {
 				args.BatchAccumulator = nil
 			}
 		}
-		inputMemAcc := testMemMonitor.MakeBoundAccount()
-		defer inputMemAcc.Close(ctx)
-		input := coldatatestutils.NewRandomDataOp(
-			colmem.NewAllocator(ctx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
-		)
-
-		outboxMemAcc := testMemMonitor.MakeBoundAccount()
-		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(
-			colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-			input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
-		)
-		require.NoError(t, err)
-
-		inboxMemAcc := testMemMonitor.MakeBoundAccount()
-		defer inboxMemAcc.Close(ctx)
-		inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
-		require.NoError(t, err)
-
-		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
 		var (
-			canceled uint32
-			wg       sync.WaitGroup
+			flowCtxCanceled uint32
+			// Because the outboxCtx must be a child of the flow context, we
+			// assume that if flowCtxCanceled is non-zero, then
+			// outboxCtxCanceled is too and don't check that explicitly.
+			outboxCtxCanceled uint32
+			wg                sync.WaitGroup
 		)
 		wg.Add(1)
 		go func() {
+			flowCtx, flowCtxCancelFn := context.WithCancel(context.Background())
+			flowCtxCancel := func() {
+				atomic.StoreUint32(&flowCtxCanceled, 1)
+				flowCtxCancelFn()
+			}
+			outboxCtx, outboxCtxCancelFn := context.WithCancel(flowCtx)
+			outboxCtxCancel := func() {
+				atomic.StoreUint32(&outboxCtxCanceled, 1)
+				outboxCtxCancelFn()
+			}
+
+			inputMemAcc := testMemMonitor.MakeBoundAccount()
+			defer inputMemAcc.Close(outboxCtx)
+			input := coldatatestutils.NewRandomDataOp(
+				colmem.NewAllocator(outboxCtx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
+			)
+			outboxMemAcc := testMemMonitor.MakeBoundAccount()
+			defer outboxMemAcc.Close(outboxCtx)
+			outbox, err := NewOutbox(
+				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
+				colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
+			)
+			require.NoError(t, err)
+
 			// There is a bit of trickery going on here with the context
 			// management caused by the fact that we're using an internal
 			// runWithStream method rather than exported Run method. The goal is
 			// to create a context of the node on which the outbox runs and keep
 			// it different from the streamCtx. This matters in
 			// 'transportBreaks' scenario.
-			var flowCtxCancel context.CancelFunc
-			outbox.runnerCtx, flowCtxCancel = context.WithCancel(ctx)
-			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, func() { atomic.StoreUint32(&canceled, 1) })
+			outbox.runnerCtx = outboxCtx
+			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, outboxCtxCancel)
 			wg.Done()
 		}()
 
-		readerCtx, readerCancelFn := context.WithCancel(ctx)
+		readerCtx, readerCancelFn := context.WithCancel(context.Background())
 		wg.Add(1)
 		go func() {
 			if sleepBeforeCancellation {
@@ -311,14 +319,21 @@ func TestOutboxInbox(t *testing.T) {
 			wg.Done()
 		}()
 
+		inboxMemAcc := testMemMonitor.MakeBoundAccount()
+		defer inboxMemAcc.Close(readerCtx)
+		inbox, err := NewInbox(colmem.NewAllocator(readerCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+		require.NoError(t, err)
+
+		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
+
 		// Use a deselector op to verify that the Outbox gets rid of the selection
 		// vector.
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
-		defer deselectorMemAcc.Close(ctx)
+		defer deselectorMemAcc.Close(readerCtx)
 		inputBatches := colexecutils.NewDeselectorOp(
-			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
+			colmem.NewAllocator(readerCtx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
-		inputBatches.Init(ctx)
+		inputBatches.Init(readerCtx)
 		outputBatches := colexecop.NewBatchBuffer()
 		var readerErr error
 		for {
@@ -342,11 +357,9 @@ func TestOutboxInbox(t *testing.T) {
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
 						for i := range typs {
 							batchCopy.ColVec(i).Copy(
-								coldata.CopySliceArgs{
-									SliceArgs: coldata.SliceArgs{
-										Src:       outputBatch.ColVec(i),
-										SrcEndIdx: outputBatch.Length(),
-									},
+								coldata.SliceArgs{
+									Src:       outputBatch.ColVec(i),
+									SrcEndIdx: outputBatch.Length(),
 								},
 							)
 						}
@@ -369,14 +382,16 @@ func TestOutboxInbox(t *testing.T) {
 		// Verify expected state.
 		switch cancellationScenario {
 		case noCancel:
-			// Verify that the Outbox terminated gracefully (did not cancel its flow).
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Verify that the Outbox terminated gracefully (did not cancel the
+			// flow context).
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCtxCanceled) == 1)
 			// And the Inbox did as well.
 			require.NoError(t, streamHandlerErr)
 			require.NoError(t, readerErr)
 
-			// If no cancellation happened, the output can be fully verified against
-			// the input.
+			// If no cancellation happened, the output can be fully verified
+			// against the input.
 			for batchNum := 0; ; batchNum++ {
 				outputBatch := outputBatches.Next()
 				inputBatch := inputBatches.Next()
@@ -394,17 +409,17 @@ func TestOutboxInbox(t *testing.T) {
 				}
 			}
 		case streamCtxCancel:
-			// If the stream context gets canceled, GRPC should take care of closing
-			// and cleaning up the stream. The Inbox stream handler should have
-			// received the context cancellation and returned.
+			// If the stream context gets canceled, gRPC should take care of
+			// closing and cleaning up the stream. The Inbox stream handler
+			// should have received the context cancellation and returned.
 			require.Regexp(t, "context canceled", streamHandlerErr)
 			// The Inbox propagates this cancellation on its host.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			// Recving on a canceled stream produces a context canceled error, but
-			// Sending produces an EOF, that should have triggered a flow context
-			// cancellation (which is redundant) in the Outbox.
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			// Recving on a canceled stream produces a context canceled error
+			// which prompts the watchdog goroutine of the outbox to cancel the
+			// flow.
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
 		case readerCtxCancel:
 			// If the reader context gets canceled, it is treated as a graceful
 			// termination of the stream, so we expect no error from the stream
@@ -413,12 +428,14 @@ func TestOutboxInbox(t *testing.T) {
 			// The Inbox should still propagate this error upwards.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			// The cancellation should have been communicated to the Outbox, resulting
-			// in a Send EOF and a flow cancellation on the Outbox's host.
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			// The cancellation should have been communicated to the Outbox,
+			// resulting in the watchdog goroutine canceling the outbox context
+			// (but not the flow).
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCtxCanceled) == 1)
 		case transportBreaks:
 			// If the transport breaks, the scenario is very similar to
-			// streamCtxCancel. GRPC will cancel the stream handler's context.
+			// streamCtxCancel. gRPC will cancel the stream handler's context.
 			stopwatch.Stop()
 			// We expect that the outbox exits much sooner than it receives the
 			// next batch from its input in this scenario.
@@ -426,7 +443,7 @@ func TestOutboxInbox(t *testing.T) {
 			require.True(t, testutils.IsError(streamHandlerErr, "context canceled"), streamHandlerErr)
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
 		}
 	})
 }
@@ -474,7 +491,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	defer outboxMemAcc.Close(outboxHostCtx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
-		outboxInput, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
+		colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
 	)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
@@ -645,13 +662,19 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			}
 			outbox, err := NewOutbox(
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-				input, typs, nil /* getStats */, []colexecop.MetadataSource{
-					colexectestutils.CallbackMetadataSource{
-						DrainMetaCb: func() []execinfrapb.ProducerMetadata {
-							return expectedMetadata
+				colexecargs.OpWithMetaInfo{
+					Root: input,
+					MetadataSources: []colexecop.MetadataSource{
+						colexectestutils.CallbackMetadataSource{
+							DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+								return expectedMetadata
+							},
 						},
 					},
-				}, nil /* toClose */)
+				},
+				typs,
+				nil, /* getStats */
+			)
 			require.NoError(t, err)
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -660,12 +683,17 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			require.NoError(t, err)
 
 			var (
-				canceled uint32
-				wg       sync.WaitGroup
+				flowCanceled, outboxCanceled uint32
+				wg                           sync.WaitGroup
 			)
 			wg.Add(1)
 			go func() {
-				outbox.runWithStream(ctx, clientStream, nil /* flowCtxCancel */, func() { atomic.StoreUint32(&canceled, 1) })
+				outbox.runWithStream(
+					ctx,
+					clientStream,
+					func() { atomic.StoreUint32(&flowCanceled, 1) },
+					func() { atomic.StoreUint32(&outboxCanceled, 1) },
+				)
 				wg.Done()
 			}()
 
@@ -676,9 +704,10 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			wg.Wait()
 			require.NoError(t, <-streamHanderErrCh)
-			// Require that the outbox did not cancel the flow, this is a graceful
-			// drain.
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Require that the outbox did not cancel the flow and did cancel
+			// the outbox since this is a graceful drain.
+			require.True(t, atomic.LoadUint32(&flowCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCanceled) == 1)
 
 			// Verify that we received the expected metadata.
 			if tc.verifyExpectedMetadata != nil {
@@ -727,7 +756,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
+		colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
 	require.NoError(b, err)
 
@@ -792,7 +821,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
+		colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
 	require.NoError(t, err)
 

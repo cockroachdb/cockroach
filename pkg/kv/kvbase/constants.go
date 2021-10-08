@@ -17,3 +17,7 @@ const FollowerReadServingMsg = "serving via follower read"
 // RoutingRequestLocallyMsg is a log message that needs to be used for tests in
 // other packages.
 const RoutingRequestLocallyMsg = "sending request to local client"
+
+// SpawningHeartbeatLoopMsg is a log message that needs to be used for tests in
+// other packages.
+const SpawningHeartbeatLoopMsg = "coordinator spawns heartbeat loop"

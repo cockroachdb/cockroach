@@ -173,7 +173,8 @@ func TestPingInterceptors(t *testing.T) {
 	)
 
 	errBoomSend := errors.Handled(errors.New("boom due to onSendPing"))
-	errBoomRecv := status.Error(codes.FailedPrecondition, "boom due to onHandlePing")
+	recvMsg := "boom due to onHandlePing"
+	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -212,7 +213,11 @@ func TestPingInterceptors(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 	{
 		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, SystemClass).Connect(ctx)
-		require.Equal(t, errBoomRecv, errors.Cause(err))
+		require.True(t, errors.HasType(err, errBoomRecv))
+		status, ok := status.FromError(errors.UnwrapAll(err))
+		require.True(t, ok)
+		require.Equal(t, codes.FailedPrecondition, status.Code())
+		require.Equal(t, recvMsg, status.Message())
 	}
 }
 
@@ -253,6 +258,24 @@ func (*internalServer) ResetQuorum(
 func (*internalServer) Join(
 	context.Context, *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
 	panic("unimplemented")
 }
 
@@ -657,7 +680,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err := stopper.RunAsyncTask(ctx, "busyloop-closer", func(ctx context.Context) {
 		for {
 			if _, err := closeConns(); err != nil {
-				log.Health.Warningf(ctx, "%v", err)
+				log.Warningf(ctx, "%v", err)
 			}
 			select {
 			case <-done:

@@ -12,11 +12,11 @@
 package tabledesc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -42,9 +42,6 @@ type wrapper struct {
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
 
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*wrapper) NameResolutionResult() {}
-
 // IsUncommittedVersion implements the catalog.Descriptor interface.
 func (*wrapper) IsUncommittedVersion() bool {
 	return false
@@ -54,6 +51,16 @@ func (*wrapper) IsUncommittedVersion() bool {
 // this descriptor post deserialization.
 func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {
 	return desc.postDeserializationChanges
+}
+
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *wrapper) HasPostDeserializationChanges() bool {
+	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
+		desc.postDeserializationChanges.UpgradedFormatVersion ||
+		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
+		desc.postDeserializationChanges.UpgradedNamespaceName ||
+		desc.postDeserializationChanges.UpgradedPrivileges
 }
 
 // ActiveChecks returns a list of all check constraints that should be enforced
@@ -152,6 +159,69 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// UpdateIndexPartitioning applies the new partition and adjusts the column info
+// for the specified index descriptor. Returns false iff this was a no-op.
+func UpdateIndexPartitioning(
+	idx *descpb.IndexDescriptor,
+	isIndexPrimary bool,
+	newImplicitCols []catalog.Column,
+	newPartitioning descpb.PartitioningDescriptor,
+) bool {
+	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
+	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
+	numCols := len(idx.KeyColumnIDs)
+	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
+	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
+	newColumnNames := make([]string, len(newImplicitCols), newCap)
+	newColumnDirections := make([]descpb.IndexDescriptor_Direction, len(newImplicitCols), newCap)
+	for i, col := range newImplicitCols {
+		newColumnIDs[i] = col.GetID()
+		newColumnNames[i] = col.GetName()
+		newColumnDirections[i] = descpb.IndexDescriptor_ASC
+		if isNoOp &&
+			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
+				idx.KeyColumnNames[i] != newColumnNames[i] ||
+				idx.KeyColumnDirections[i] != newColumnDirections[i]) {
+			isNoOp = false
+		}
+	}
+	if isNoOp {
+		return false
+	}
+	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
+	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
+	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
+	idx.Partitioning = newPartitioning
+	if !isIndexPrimary {
+		return true
+	}
+
+	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(idx.StoreColumnIDs))
+	newStoreColumnNames := make([]string, 0, len(idx.StoreColumnNames))
+	for i := range idx.StoreColumnIDs {
+		id := idx.StoreColumnIDs[i]
+		name := idx.StoreColumnNames[i]
+		found := false
+		for _, newColumnName := range newColumnNames {
+			if newColumnName == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newStoreColumnIDs = append(newStoreColumnIDs, id)
+			newStoreColumnNames = append(newStoreColumnNames, name)
+		}
+	}
+	idx.StoreColumnIDs = newStoreColumnIDs
+	idx.StoreColumnNames = newStoreColumnNames
+	if len(idx.StoreColumnNames) == 0 {
+		idx.StoreColumnIDs = nil
+		idx.StoreColumnNames = nil
+	}
+	return true
 }
 
 // GetPrimaryIndex returns the primary index in the form of a catalog.Index
@@ -325,10 +395,20 @@ func (desc *wrapper) NonDropColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().nonDrop
 }
 
-// VisibleColumns returns a slice of Column interfaces containing the
-// table's visible columns , in the canonical order.
+// VisibleColumns returns a slice of Column interfaces containing the table's
+// visible columns, in the canonical order. Visible columns are public columns
+// with Hidden=false and Inaccessible=false. See ColumnDescriptor.Hidden and
+// ColumnDescriptor.Inaccessible for more details.
 func (desc *wrapper) VisibleColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().visible
+}
+
+// AccessibleColumns returns a slice of Column interfaces containing the table's
+// accessible columns, in the canonical order. Accessible columns are public
+// columns with Inaccessible=false. See ColumnDescriptor.Inaccessible for more
+// details.
+func (desc *wrapper) AccessibleColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().accessible
 }
 
 // UserDefinedTypeColumns returns a slice of Column interfaces
@@ -362,11 +442,12 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 			return col, nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
 }
 
 // FindColumnWithName returns the first column found whose name matches the
-// provided target ID, in the canonical order.
+// provided target name, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {

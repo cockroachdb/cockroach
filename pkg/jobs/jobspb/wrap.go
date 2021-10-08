@@ -11,12 +11,15 @@
 package jobspb
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 // JobID is the ID of a job.
@@ -24,6 +27,9 @@ type JobID int64
 
 // InvalidJobID is the zero value for JobID corresponding to no job.
 const InvalidJobID JobID = 0
+
+// SafeValue implements the redact.SafeValue interface.
+func (j JobID) SafeValue() {}
 
 // Details is a marker interface for job details proto structs.
 type Details interface{}
@@ -37,6 +43,8 @@ var _ Details = SchemaChangeGCDetails{}
 var _ Details = StreamIngestionDetails{}
 var _ Details = NewSchemaChangeDetails{}
 var _ Details = MigrationDetails{}
+var _ Details = AutoSpanConfigReconciliationDetails{}
+var _ Details = ImportDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -50,10 +58,31 @@ var _ ProgressDetails = SchemaChangeGCProgress{}
 var _ ProgressDetails = StreamIngestionProgress{}
 var _ ProgressDetails = NewSchemaChangeProgress{}
 var _ ProgressDetails = MigrationProgress{}
+var _ ProgressDetails = AutoSpanConfigReconciliationDetails{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
 	return DetailsType(p.Details)
+}
+
+// Import base which is in the generated proto field but won't get picked up
+// by bazel if it were not imported in a non-generated file.
+var _ base.SQLInstanceID
+
+// AutoStatsName is the name to use for statistics created automatically.
+// The name is chosen to be something that users are unlikely to choose when
+// running CREATE STATISTICS manually.
+const AutoStatsName = "__auto__"
+
+// ImportStatsName is the name to use for statistics created automatically
+// during import.
+const ImportStatsName = "__import__"
+
+// AutomaticJobTypes is a list of automatic job types that currently exist.
+var AutomaticJobTypes = [...]Type{
+	TypeAutoCreateStats,
+	TypeAutoSpanConfigReconciliation,
+	TypeAutoSQLStatsCompaction,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -71,7 +100,7 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeChangefeed
 	case *Payload_CreateStats:
 		createStatsName := d.CreateStats.Name
-		if createStatsName == stats.AutoStatsName {
+		if createStatsName == AutoStatsName {
 			return TypeAutoCreateStats
 		}
 		return TypeCreateStats
@@ -85,6 +114,10 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeNewSchemaChange
 	case *Payload_Migration:
 		return TypeMigration
+	case *Payload_AutoSpanConfigReconciliation:
+		return TypeAutoSpanConfigReconciliation
+	case *Payload_AutoSQLStatsCompaction:
+		return TypeAutoSQLStatsCompaction
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -121,6 +154,10 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationProgress:
 		return &Progress_Migration{Migration: &d}
+	case AutoSpanConfigReconciliationProgress:
+		return &Progress_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
+	case AutoSQLStatsCompactionProgress:
+		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -152,6 +189,10 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.NewSchemaChange
 	case *Payload_Migration:
 		return *d.Migration
+	case *Payload_AutoSpanConfigReconciliation:
+		return *d.AutoSpanConfigReconciliation
+	case *Payload_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -183,6 +224,10 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.NewSchemaChange
 	case *Progress_Migration:
 		return *d.Migration
+	case *Progress_AutoSpanConfigReconciliation:
+		return *d.AutoSpanConfigReconciliation
+	case *Progress_AutoSQLStatsCompaction:
+		return *d.AutoSQLStatsCompaction
 	default:
 		return nil
 	}
@@ -227,6 +272,10 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationDetails:
 		return &Payload_Migration{Migration: &d}
+	case AutoSpanConfigReconciliationDetails:
+		return &Payload_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
+	case AutoSQLStatsCompactionDetails:
+		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -262,7 +311,17 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 13
+const NumJobTypes = 15
+
+// MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
+func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
+	var err error
+	p.SinkURI, err = cloud.SanitizeExternalStorageURI(p.SinkURI, nil)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(p)
+}
 
 func init() {
 	if len(Type_name) != NumJobTypes {

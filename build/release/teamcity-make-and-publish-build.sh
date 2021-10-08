@@ -16,17 +16,17 @@ is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo ""
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET-cockroach-builds}"
-  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
-  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+  # Used for docker login for gcloud
+  gcr_hostname="us-docker.pkg.dev"
 else
   bucket="${BUCKET:-cockroach-builds-test}"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   build_name="${build_name}.dryrun"
+  gcr_hostname="us.gcr.io"
 fi
-
-# Used for docker login for gcloud
-gcr_hostname="us.gcr.io"
 
 cat << EOF
 
@@ -78,7 +78,7 @@ tc_end_block "Make and push docker image"
 tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 configure_git_ssh_key
-push_to_git ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
+git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
 tc_end_block "Push release tag to github.com/cockroachdb/cockroach"
 
 
@@ -104,6 +104,6 @@ EOF
 
 if [[ -n "${is_custom_build}" ]] ; then
   tc_start_block "Delete custombuild tag"
-  push_to_git ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
+  git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
   tc_end_block "Delete custombuild tag"
 fi

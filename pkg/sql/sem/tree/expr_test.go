@@ -86,12 +86,14 @@ func TestStringConcat(t *testing.T) {
 			continue
 		}
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
-		expected := tree.NewDString(tree.AsStringWithFlags(d, tree.FmtPgwireText))
-		concatExprLeft := tree.NewTypedBinaryExpr(tree.Concat, tree.NewDString(""), d, types.String)
+		expected, err := tree.PerformCast(&evalCtx, d, types.String)
+		require.NoError(t, err)
+		concatOp := tree.MakeBinaryOperator(tree.Concat)
+		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
 		resLeft, err := concatExprLeft.Eval(&evalCtx)
 		require.NoError(t, err)
 		require.Equal(t, expected, resLeft)
-		concatExprRight := tree.NewTypedBinaryExpr(tree.Concat, d, tree.NewDString(""), types.String)
+		concatExprRight := tree.NewTypedBinaryExpr(concatOp, d, tree.NewDString(""), types.String)
 		resRight, err := concatExprRight.Eval(&evalCtx)
 		require.NoError(t, err)
 		require.Equal(t, expected, resRight)

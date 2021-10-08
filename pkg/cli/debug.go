@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -24,12 +25,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -47,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,8 +63,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/ttycolor"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -73,7 +80,7 @@ var debugKeysCmd = &cobra.Command{
 Pretty-prints all keys in a store.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugKeys),
+	RunE: clierrorplus.MaybeDecorateError(runDebugKeys),
 }
 
 var debugBallastCmd = &cobra.Command{
@@ -127,6 +134,17 @@ type OpenEngineOptions struct {
 	MustExist bool
 }
 
+func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
+	var cfgOpts []storage.ConfigOption
+	if opts.ReadOnly {
+		cfgOpts = append(cfgOpts, storage.ReadOnly)
+	}
+	if opts.MustExist {
+		cfgOpts = append(cfgOpts, storage.MustExist)
+	}
+	return cfgOpts
+}
+
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (storage.Engine, error) {
@@ -140,32 +158,13 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	if err != nil {
 		return nil, err
 	}
-
-	storageConfig := base.StorageConfig{
-		Settings:  serverCfg.Settings,
-		Dir:       dir,
-		MustExist: opts.MustExist,
-	}
-	if PopulateRocksDBConfigHook != nil {
-		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
-			return nil, err
-		}
-	}
-
-	var db storage.Engine
-
-	cfg := storage.PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
-	defer cfg.Opts.Cache.Unref()
-
-	cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
-	cfg.Opts.ReadOnly = opts.ReadOnly
-
-	db, err = storage.NewPebble(context.Background(), cfg)
-
+	db, err := storage.Open(context.Background(),
+		storage.Filesystem(dir),
+		storage.MaxOpenFiles(int(maxOpenFiles)),
+		storage.CacheSize(server.DefaultCacheSize),
+		storage.Settings(serverCfg.Settings),
+		storage.Hook(PopulateRocksDBConfigHook),
+		storage.CombineOptions(opts.configOptions()...))
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +180,56 @@ func printKey(kv storage.MVCCKeyValue) (bool, error) {
 	}
 	fmt.Printf("\n")
 	return false, nil
+}
+
+func transactionPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+	if err != nil {
+		return false
+	}
+	return keys.LocalTransactionSuffix.Equal(suffix)
+}
+
+func intentPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return false
+	}
+	return meta.Txn != nil
+}
+
+var keyTypeParams = map[keyTypeFilter]struct {
+	predicate      func(kv storage.MVCCKeyValue) bool
+	minKey, maxKey storage.MVCCKey
+}{
+	showAll: {
+		predicate: func(kv storage.MVCCKeyValue) bool { return true },
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
+	showTxns: {
+		predicate: transactionPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKey{Key: keys.LocalMax},
+	},
+	showValues: {
+		predicate: func(kv storage.MVCCKeyValue) bool {
+			return kv.Key.IsValue()
+		},
+		minKey: storage.NilKey,
+		maxKey: storage.MVCCKeyMax,
+	},
+	showIntents: {
+		predicate: intentPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
 }
 
 func runDebugKeys(cmd *cobra.Command, args []string) error {
@@ -220,18 +269,29 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			}
 			return strings.Join(pairs, ", "), nil
 		}
-		kvserver.DebugSprintKeyValueDecoders = append(kvserver.DebugSprintKeyValueDecoders, fn)
+		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
 	if debugCtx.values {
 		printer = func(kv storage.MVCCKeyValue) (bool, error) {
-			kvserver.PrintKeyValue(kv)
+			kvserver.PrintMVCCKeyValue(kv)
 			return false, nil
 		}
 	}
 
+	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
+	if debugCtx.startKey.Equal(storage.NilKey) {
+		debugCtx.startKey = keyTypeOptions.minKey
+	}
+	if debugCtx.endKey.Equal(storage.NilKey) {
+		debugCtx.endKey = keyTypeOptions.maxKey
+	}
+
 	results := 0
 	iterFunc := func(kv storage.MVCCKeyValue) error {
+		if !keyTypeOptions.predicate(kv) {
+			return nil
+		}
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -271,15 +331,17 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	ballastFile := args[0] // we use cobra.ExactArgs(1)
 	dataDirectory := filepath.Dir(ballastFile)
 
-	fs, err := sysutil.StatFS(dataDirectory)
+	du, err := vfs.Default.GetDiskUsage(dataDirectory)
 	if err != nil {
 		return errors.Wrapf(err, "failed to stat filesystem %s", dataDirectory)
 	}
-	total := fs.TotalBlocks * fs.BlockSize
-	free := fs.AvailBlocks * fs.BlockSize
 
-	used := total - free
-	var targetUsage int64
+	// Use a 'usedBytes' calculation that counts disk space reserved for the
+	// root user as used. The UsedBytes value returned by GetDiskUsage is
+	// the true count of currently allocated bytes.
+	usedBytes := du.TotalBytes - du.AvailBytes
+
+	var targetUsage uint64
 	p := debugCtx.ballastSize.Percent
 	if math.Abs(p) > 100 {
 		return errors.Errorf("absolute percentage value %f greater than 100", p)
@@ -291,36 +353,41 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	switch {
 	case p > 0:
 		fillRatio := p / float64(100)
-		targetUsage = used + int64((fillRatio)*float64(total))
+		targetUsage = usedBytes + uint64((fillRatio)*float64(du.TotalBytes))
 	case p < 0:
 		// Negative means leave the absolute %age of disk space.
 		fillRatio := 1.0 + (p / float64(100))
-		targetUsage = int64((fillRatio) * float64(total))
+		targetUsage = uint64((fillRatio) * float64(du.TotalBytes))
 	case b > 0:
-		targetUsage = used + b
+		targetUsage = usedBytes + uint64(b)
 	case b < 0:
 		// Negative means leave that many bytes of disk space.
-		targetUsage = total + b
+		targetUsage = du.TotalBytes - uint64(-b)
 	default:
 		return errors.New("expected exactly one of percentage or bytes non-zero, found none")
 	}
-	if used > targetUsage {
+	if usedBytes > targetUsage {
 		return errors.Errorf(
 			"Used space %s already more than needed to be filled %s\n",
-			humanizeutil.IBytes(used),
-			humanizeutil.IBytes(targetUsage),
+			humanize.IBytes(usedBytes),
+			humanize.IBytes(targetUsage),
 		)
 	}
-	if used == targetUsage {
+	if usedBytes == targetUsage {
 		return nil
 	}
-	ballastSize := targetUsage - used
+	ballastSize := targetUsage - usedBytes
 
-	// Note: CreateLargeFile fails if the target file already
-	// exists. This is a feature; we have seen users mistakenly applying
-	// the `ballast` command directly to block devices, thereby trashing
-	// their filesystem.
-	if err := sysutil.CreateLargeFile(ballastFile, ballastSize); err != nil {
+	// Note: We intentionally fail if the target file already exists. This is
+	// a feature; we have seen users mistakenly applying the `ballast` command
+	// directly to block devices, thereby trashing their filesystem.
+	if _, err := os.Stat(ballastFile); err == nil {
+		return os.ErrExist
+	} else if !oserror.IsNotExist(err) {
+		return errors.Wrap(err, "stating ballast file")
+	}
+
+	if err := sysutil.ResizeLargeFile(ballastFile, int64(ballastSize)); err != nil {
 		return errors.Wrap(err, "error allocating ballast file")
 	}
 	return nil
@@ -335,7 +402,7 @@ state like the raft HardState. With --replicated, only includes data covered by
  the consistency checker.
 `,
 	Args: cobra.ExactArgs(2),
-	RunE: MaybeDecorateGRPCError(runDebugRangeData),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRangeData),
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
@@ -382,7 +449,7 @@ var debugRangeDescriptorsCmd = &cobra.Command{
 Prints all range descriptors in a store with a history of changes.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugRangeDescriptors),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRangeDescriptors),
 }
 
 func loadRangeDescriptor(
@@ -445,7 +512,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 			return nil
 		}
-		kvserver.PrintKeyValue(kv)
+		kvserver.PrintMVCCKeyValue(kv)
 		return nil
 	})
 }
@@ -516,7 +583,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		kvserver.PrintKeyValue(storage.MVCCKeyValue{
+		kvserver.PrintMVCCKeyValue(storage.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -553,7 +620,7 @@ var debugRaftLogCmd = &cobra.Command{
 Prints all log entries in a store for the given range.
 `,
 	Args: cobra.ExactArgs(2),
-	RunE: MaybeDecorateGRPCError(runDebugRaftLog),
+	RunE: clierrorplus.MaybeDecorateError(runDebugRaftLog),
 }
 
 func runDebugRaftLog(cmd *cobra.Command, args []string) error {
@@ -579,7 +646,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 
 	// NB: raft log does not have intents.
 	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv storage.MVCCKeyValue) error {
-		kvserver.PrintKeyValue(kv)
+		kvserver.PrintMVCCKeyValue(kv)
 		return nil
 	})
 }
@@ -598,7 +665,7 @@ Uses a configurable GC policy, with a default 24 hour TTL, for old versions and
 2 hour intent resolution threshold.
 `,
 	Args: cobra.RangeArgs(1, 4),
-	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
+	RunE: clierrorplus.MaybeDecorateError(runDebugGCCmd),
 }
 
 func runDebugGCCmd(cmd *cobra.Command, args []string) error {
@@ -606,8 +673,9 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	var rangeID roachpb.RangeID
-	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
+	gcTTL := 24 * time.Hour
 	intentAgeThreshold := gc.IntentAgeThreshold.Default()
+	intentBatchSize := gc.MaxIntentsPerCleanupBatch.Default()
 
 	if len(args) > 3 {
 		var err error
@@ -616,10 +684,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(args) > 2 {
-		var err error
-		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
+		gcTTLInSeconds, err := parsePositiveInt(args[2])
+		if err != nil {
 			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
 		}
+		gcTTL = time.Duration(gcTTLInSeconds) * time.Second
 	}
 	if len(args) > 1 {
 		var err error
@@ -669,14 +738,14 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		policy := zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)}
 		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		thresh := gc.CalculateThreshold(now, policy)
+		thresh := gc.CalculateThreshold(now, gcTTL)
 		info, err := gc.Run(
 			context.Background(),
 			&desc, snap,
-			now, thresh, intentAgeThreshold, policy,
-			gc.NoopGCer{},
+			now, thresh,
+			gc.RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: intentBatchSize},
+			gcTTL, gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
 		)
@@ -689,7 +758,9 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugPebbleCmd = &cobra.Command{
+// DebugPebbleCmd is the root of all debug pebble commands.
+// Exported to allow modification by CCL code.
+var DebugPebbleCmd = &cobra.Command{
 	Use:   "pebble [command]",
 	Short: "run a Pebble introspection tool command",
 	Long: `
@@ -717,7 +788,7 @@ var debugCompactCmd = &cobra.Command{
 Compact the sstables in a store.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugCompact),
+	RunE: clierrorplus.MaybeDecorateError(runDebugCompact),
 }
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
@@ -737,9 +808,27 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		fmt.Printf("approximate reported database size before compaction: %s\n", humanizeutil.IBytes(int64(approxBytesBefore)))
 	}
 
-	if err := db.Compact(); err != nil {
-		return errors.Wrap(err, "while compacting")
+	// Begin compacting the store in a separate goroutine.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- errors.Wrap(db.Compact(), "while compacting")
+	}()
+
+	// Print the current LSM every minute.
+	ticker := time.NewTicker(time.Minute)
+	for done := false; !done; {
+		select {
+		case <-ticker.C:
+			fmt.Printf("%s\n", db.GetMetrics())
+		case err := <-errCh:
+			ticker.Stop()
+			if err != nil {
+				return err
+			}
+			done = true
+		}
 	}
+	fmt.Printf("%s\n", db.GetMetrics())
 
 	{
 		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
@@ -761,7 +850,7 @@ Can connect to a running server to get the values or can be provided with
 a JSON file captured from a node's /_status/gossip/ debug endpoint.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runDebugGossipValues),
+	RunE: clierrorplus.MaybeDecorateError(runDebugGossipValues),
 }
 
 func runDebugGossipValues(cmd *cobra.Command, args []string) error {
@@ -885,7 +974,7 @@ var debugSyncBenchCmd = &cobra.Command{
 `,
 	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
-	RunE:   MaybeDecorateGRPCError(runDebugSyncBench),
+	RunE:   clierrorplus.MaybeDecorateError(runDebugSyncBench),
 }
 
 var syncBenchOpts = syncbench.Options{
@@ -904,7 +993,7 @@ func runDebugSyncBench(cmd *cobra.Command, args []string) error {
 
 var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
 	Use:   "unsafe-remove-dead-replicas --dead-store-ids=[store ID,...] [path]",
-	Short: "Unsafely remove all other replicas from the given range",
+	Short: "Unsafely attempt to recover a range that has lost quorum",
 	Long: `
 
 This command is UNSAFE and should only be used with the supervision of
@@ -913,48 +1002,60 @@ after multiple node failures. The recovered data is not guaranteed to
 be consistent. If a suitable backup exists, restore it instead of
 using this tool.
 
-The --dead-store-ids flag takes a comma-separated list of dead store
-IDs and scans this store for any ranges whose only live replica is on
-this store. These range descriptors will be edited to forcibly remove
-the dead stores, allowing the range to recover from this single
-replica.
+The --dead-store-ids flag takes a comma-separated list of dead store IDs and
+scans this store for any ranges unable to make progress (as indicated by the
+remaining replicas not marked as dead). For each such replica in which the local
+store is the voter with the highest StoreID, the range descriptors will be (only
+when run on that store) rewritten in-place to reflect a replication
+configuration in which the local store is the sole voter (and thus able to make
+progress).
+
+The intention is for the tool to be run against all stores in the cluster, which
+will attempt to recover all ranges in the system for which such an operation is
+necessary. This is the safest and most straightforward option, but incurs global
+downtime. When availability problems are isolated to a small number of ranges,
+it is also possible to restrict the set of nodes to be restarted (all nodes that
+have a store that has the highest voting StoreID in one of the ranges that need
+to be recovered), and to perform the restarts one-by-one (assuming system ranges
+are not affected). With this latter strategy, restarts of additional replicas
+may still be necessary, owing to the fact that the former leaseholder's epoch
+may still be live, even though that leaseholder may now be on the "unrecovered"
+side of the range and thus still unavailable. This case can be detected via the
+range status of the affected range(s) and by restarting the listed leaseholder.
 
 This command will prompt for confirmation before committing its changes.
 
-It is safest to run this command while all nodes are stopped. In some
-circumstances it may be possible to run it while some nodes are still
-running provided all nodes containing replicas of nodes that have lost
-quorum are stopped.
-
-It is recommended to take a filesystem-level backup or snapshot of the
-nodes to be affected before running this command (remember that it is
-not safe to take a filesystem-level backup of a running node, but it is
-possible while the node is stopped)
-
 WARNINGS
 
-This tool will cause previously committed data to be lost. It does not
-preserve atomicity of transactions, so further inconsistencies and
-undefined behavior may result. Before proceeding at the yes/no prompt,
-review the ranges that are affected to consider the possible impact
-of inconsistencies. Further remediation may be necessary after running
-this tool, including dropping and recreating affected indexes, or in the
-worst case creating a new backup or export of this cluster's data for
-restoration into a brand new cluster. Because of the latter possibilities,
-this tool is a slower means of disaster recovery than restoring from
-a backup.
+This tool may cause previously committed data to be lost. It does not preserve
+atomicity of transactions, so further inconsistencies and undefined behavior may
+result. In the worst case, a corruption of the cluster-internal metadata may
+occur, which would complicate the recovery further. It is recommended to take a
+filesystem-level backup or snapshot of the nodes to be affected before running
+this command (it is not safe to take a filesystem-level backup of a running
+node, but it is possible while the node is stopped). A cluster that had this
+tool used against it is no longer fit for production use. It must be
+re-initialized from a backup.
 
-Must only be used when the dead stores are lost and unrecoverable. If
-the dead stores were to rejoin the cluster after this command was
-used, data may be corrupted.
+Before proceeding at the yes/no prompt, review the ranges that are affected to
+consider the possible impact of inconsistencies. Further remediation may be
+necessary after running this tool, including dropping and recreating affected
+indexes, or in the worst case creating a new backup or export of this cluster's
+data for restoration into a brand new cluster. Because of the latter
+possibilities, this tool is a slower means of disaster recovery than restoring
+from a backup.
 
-After this command is used, the node should not be restarted until at
-least 10 seconds have passed since it was stopped. Restarting it too
-early may lead to things getting stuck (if it happens, it can be fixed
-by restarting a second time).
+Must only be used when the dead stores are lost and unrecoverable. If the dead
+stores were to rejoin the cluster after this command was used, data may be
+corrupted.
+
+After this command is used, the node should not be restarted until at least 10
+seconds have passed since it was stopped. Restarting it too early may lead to
+things getting stuck (if it happens, it can be fixed by restarting a second
+time).
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugUnsafeRemoveDeadReplicas),
+	RunE: clierrorplus.MaybeDecorateError(runDebugUnsafeRemoveDeadReplicas),
 }
 
 var removeDeadReplicasOpts struct {
@@ -1023,56 +1124,79 @@ func removeDeadReplicas(
 	var newDescs []roachpb.RangeDescriptor
 
 	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
-		hasSelf := false
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().Descriptors()
-		maxLivePeer := roachpb.StoreID(-1)
+		maxLiveVoter := roachpb.StoreID(-1)
 		for _, rep := range allReplicas {
-			if rep.StoreID == storeIdent.StoreID {
-				hasSelf = true
-			}
 			if _, ok := deadStoreIDs[rep.StoreID]; ok {
 				numDeadPeers++
-			} else {
-				if rep.StoreID > maxLivePeer {
-					maxLivePeer = rep.StoreID
-				}
+				continue
+			}
+			// The designated survivor will be the voter with the highest storeID.
+			// Note that an outgoing voter cannot be designated, as the only
+			// replication change it could make is to turn itself into a learner, at
+			// which point the range is completely messed up.
+			//
+			// Note: a better heuristic might be to choose the leaseholder store, not
+			// the largest store, as this avoids the problem of requests still hanging
+			// after running the tool in a rolling-restart fashion (when the lease-
+			// holder is under a valid epoch and was ont chosen as designated
+			// survivor). However, this choice is less deterministic, as leaseholders
+			// are more likely to change than replication configs. The hanging would
+			// independently be fixed by the below issue, so staying with largest store
+			// is likely the right choice. See:
+			//
+			// https://github.com/cockroachdb/cockroach/issues/33007
+			if rep.IsVoterNewConfig() && rep.StoreID > maxLiveVoter {
+				maxLiveVoter = rep.StoreID
 			}
 		}
-		if hasSelf && numDeadPeers > 0 && storeIdent.StoreID == maxLivePeer {
-			canMakeProgress := desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
-				_, ok := deadStoreIDs[rep.StoreID]
-				return !ok
-			})
-			if canMakeProgress {
-				return nil
-			}
 
-			// Rewrite the range as having a single replica. The winning
-			// replica is picked arbitrarily: the one with the highest store
-			// ID. This is not always the best option: it may lose writes
-			// that were committed on another surviving replica that had
-			// applied more of the raft log. However, in practice when we
-			// have multiple surviving replicas but still need this tool
-			// (because the replication factor was 4 or higher), we see that
-			// the logs are nearly always in sync and the choice doesn't
-			// matter. Correctly picking the replica with the longer log
-			// would complicate the use of this tool.
-			newDesc := desc
-			// Rewrite the replicas list. Bump the replica ID so that in
-			// case there are other surviving nodes that were members of the
-			// old incarnation of the range, they no longer recognize this
-			// revived replica (because they are not in sync with it).
-			replicas := []roachpb.ReplicaDescriptor{{
-				NodeID:    storeIdent.NodeID,
-				StoreID:   storeIdent.StoreID,
-				ReplicaID: desc.NextReplicaID,
-			}}
-			newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-			newDesc.NextReplicaID++
-			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
-			newDescs = append(newDescs, newDesc)
+		// If there's no dead peer in this group (so can't hope to fix
+		// anything by rewriting the descriptor) or the current store is not the
+		// one we want to turn into the sole voter, don't do anything.
+		if numDeadPeers == 0 {
+			return nil
 		}
+		if storeIdent.StoreID != maxLiveVoter {
+			fmt.Printf("not designated survivor, skipping: %s\n", &desc)
+			return nil
+		}
+
+		// The replica thinks it can make progress anyway, so we leave it alone.
+		if desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
+			_, ok := deadStoreIDs[rep.StoreID]
+			return !ok
+		}) {
+			fmt.Printf("replica has not lost quorum, skipping: %s\n", &desc)
+			return nil
+		}
+
+		// We're the designated survivor and the range does not to be recovered.
+		//
+		// Rewrite the range as having a single replica. The winning replica is
+		// picked arbitrarily: the one with the highest store ID. This is not always
+		// the best option: it may lose writes that were committed on another
+		// surviving replica that had applied more of the raft log. However, in
+		// practice when we have multiple surviving replicas but still need this
+		// tool (because the replication factor was 4 or higher), we see that the
+		// logs are nearly always in sync and the choice doesn't matter. Correctly
+		// picking the replica with the longer log would complicate the use of this
+		// tool.
+		newDesc := desc
+		// Rewrite the replicas list. Bump the replica ID so that in case there are
+		// other surviving nodes that were members of the old incarnation of the
+		// range, they no longer recognize this revived replica (because they are
+		// not in sync with it).
+		replicas := []roachpb.ReplicaDescriptor{{
+			NodeID:    storeIdent.NodeID,
+			StoreID:   storeIdent.StoreID,
+			ReplicaID: desc.NextReplicaID,
+		}}
+		newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+		newDesc.NextReplicaID++
+		fmt.Printf("replica has lost quorum, recovering: %s -> %s\n", &desc, &newDesc)
+		newDescs = append(newDescs, newDesc)
 		return nil
 	})
 	if err != nil {
@@ -1129,19 +1253,43 @@ func removeDeadReplicas(
 			}
 			intent := wiErr.Intents[0]
 			// We rely on the property that transactions involving the range
-			// descriptor always start on the range-local descriptor's key.
-			// This guarantees that when the transaction commits, the intent
-			// will be resolved synchronously. If we see an intent on this
-			// key, we know that the transaction did not commit and we can
-			// abort it.
+			// descriptor always start on the range-local descriptor's key. When there
+			// is an intent, this means that it is likely that the transaction did not
+			// commit, so we abort the intent.
 			//
-			// TODO(nvanbenschoten): This need updating for parallel
-			// commits. If the transaction record is in the STAGING state,
-			// we can't just delete it. Simplest solution to this is to
-			// avoid parallel commits for membership change transactions; if
-			// we can't do that I don't think we'll be able to recover them
-			// with an offline tool.
-			fmt.Printf("Conflicting intent found on %s. Aborting txn %s to resolve.\n", key, intent.Txn.ID)
+			// However, this is not guaranteed. For one, applying a command is not
+			// synced to disk, so in theory whichever store becomes the designated
+			// survivor may temporarily have "forgotten" that the transaction
+			// committed in its applied state (it would still have the committed log
+			// entry, as this is durable state, so it would come back once the node
+			// was running, but we don't see that materialized state in
+			// unsafe-remove-dead-replicas). This is unlikely to be a problem in
+			// practice, since we assume that the store was shut down gracefully and
+			// besides, the write likely had plenty of time to make it to durable
+			// storage. More troubling is the fact that the designated survivor may
+			// simply not yet have learned that the transaction committed; it may not
+			// have been in the quorum and could've been slow to catch up on the log.
+			// It may not even have the intent; in theory the remaining replica could
+			// have missed any number of transactions on the range descriptor (even if
+			// they are in the log, they may not yet be applied, and the replica may
+			// not yet have learned that they are committed). This is particularly
+			// troubling when we miss a split, as the right-hand side of the split
+			// will exist in the meta ranges and could even be able to make progress.
+			// For yet another thing to worry about, note that the determinism (across
+			// different nodes) assumed in this tool can easily break down in similar
+			// ways (not all stores are going to have the same view of what the
+			// descriptors are), and so multiple replicas of a range may declare
+			// themselves the designated survivor. Long story short, use of this tool
+			// with or without the presence of an intent can - in theory - really
+			// tear the cluster apart.
+			//
+			// A solution to this would require a global view, where in a first step
+			// we collect from each store in the cluster the replicas present and
+			// compute from that a "recovery plan", i.e. set of replicas that will
+			// form the recovered keyspace. We may then find that no such recovery
+			// plan is trivially achievable, due to any of the above problems. But
+			// in the common case, we do expect one to exist.
+			fmt.Printf("aborting intent: %s (txn %s)\n", key, intent.Txn.ID)
 
 			// A crude form of the intent resolution process: abort the
 			// transaction by deleting its record.
@@ -1174,7 +1322,7 @@ func removeDeadReplicas(
 	return batch, nil
 }
 
-var debugMergeLogsCommand = &cobra.Command{
+var debugMergeLogsCmd = &cobra.Command{
 	Use:   "merge-logs <log file globs>",
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
@@ -1202,6 +1350,8 @@ var debugMergeLogsOpts = struct {
 	prefix         string
 	keepRedactable bool
 	redactInput    bool
+	format         string
+	useColor       forceColor
 }{
 	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
@@ -1215,11 +1365,138 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
 
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to, inputEditMode)
+		args, o.file, o.program, o.from, o.to, inputEditMode, o.format)
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
+
+	// Only auto-detect if auto-detection is needed, as it may fail with an error.
+	autoDetect := func(outStream io.Writer) (ttycolor.Profile, error) {
+		if f, ok := outStream.(*os.File); ok {
+			// If the output is a terminal, auto-detect the color scheme based
+			// on that.
+			return ttycolor.DetectProfile(f)
+		}
+		return nil, nil
+	}
+	outStream := cmd.OutOrStdout()
+	var cp ttycolor.Profile
+	// Now choose the color profile depending on the user option.
+	switch o.useColor {
+	case forceColorOff:
+		// Nothing to do, cp stays nil.
+	case forceColorOn:
+		// If there was a color profile auto-detected, we want
+		// to use that as it will be tailored to the output terminal.
+		var err error
+		cp, err = autoDetect(outStream)
+		if err != nil || cp == nil {
+			// The user requested "forcing" the color mode but
+			// auto-detection failed. Ignore the error and use a best guess.
+			cp = ttycolor.Profile8
+		}
+	case forceColorAuto:
+		var err error
+		cp, err = autoDetect(outStream)
+		if err != nil {
+			return err
+		}
+	}
+
+	return writeLogStream(s, outStream, o.filter, o.prefix, o.keepRedactable, cp)
+}
+
+var debugIntentCount = &cobra.Command{
+	Use:   "intent-count <store directory>",
+	Short: "return a count of intents in directory",
+	Long: `
+Returns a count of interleaved and separated intents in the store directory.
+Used to investigate stores with lots of unresolved intents, or to confirm
+if the migration away from interleaved intents was successful.
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runDebugIntentCount,
+}
+
+func runDebugIntentCount(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	var interleavedIntentCount, separatedIntentCount int
+	var keysCount uint64
+	var wg sync.WaitGroup
+	closer := make(chan bool)
+
+	wg.Add(1)
+	_ = stopper.RunAsyncTask(ctx, "intent-count-progress-indicator", func(ctx context.Context) {
+		defer wg.Done()
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		select {
+		case <-ticker.C:
+			fmt.Printf("scanned %d keys\n", atomic.LoadUint64(&keysCount))
+		case <-ctx.Done():
+			return
+		case <-closer:
+			return
+		}
+	})
+
+	iter := db.NewEngineIterator(storage.IterOptions{
+		LowerBound: roachpb.KeyMin,
+		UpperBound: roachpb.KeyMax,
+	})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	var meta enginepb.MVCCMetadata
+	for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+		key, err := iter.EngineKey()
+		if err != nil {
+			return err
+		}
+		atomic.AddUint64(&keysCount, 1)
+		if key.IsLockTableKey() {
+			separatedIntentCount++
+			continue
+		}
+		if !key.IsMVCCKey() {
+			continue
+		}
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return err
+		}
+		if !mvccKey.Timestamp.IsEmpty() {
+			continue
+		}
+		val := iter.UnsafeValue()
+		if err := protoutil.Unmarshal(val, &meta); err != nil {
+			return err
+		}
+		if meta.IsInline() {
+			continue
+		}
+		interleavedIntentCount++
+	}
+	if err != nil {
+		return err
+	}
+	close(closer)
+	wg.Wait()
+	fmt.Printf("interleaved intents: %d\nseparated intents: %d\n",
+		interleavedIntentCount, separatedIntentCount)
+	return nil
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1229,10 +1506,12 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
+	debugIntentCount,
 	debugKeysCmd,
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
+	debugUnsafeRemoveDeadReplicasCmd,
 }
 
 // All other debug commands go here.
@@ -1246,10 +1525,9 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugTimeSeriesDumpCmd,
 	debugSyncBenchCmd,
 	debugSyncTestCmd,
-	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
-	debugMergeLogsCommand,
+	debugMergeLogsCmd,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
@@ -1278,7 +1556,7 @@ func (m mvccValueFormatter) Format(f fmt.State, c rune) {
 		errors.FormatError(m.err, f, c)
 		return
 	}
-	fmt.Fprint(f, kvserver.SprintKeyValue(m.kv, false /* printKey */))
+	fmt.Fprint(f, kvserver.SprintMVCCKeyValue(m.kv, false /* printKey */))
 }
 
 // lockValueFormatter is a fmt.Formatter for lock values.
@@ -1290,6 +1568,12 @@ type lockValueFormatter struct {
 func (m lockValueFormatter) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, kvserver.SprintIntent(m.value))
 }
+
+// pebbleToolFS is the vfs.FS that the pebble tool should use.
+// It is necessary because an FS must be passed to tool.New before
+// the command line flags are parsed (i.e. before we can determine
+// if we have an encrypted FS).
+var pebbleToolFS = &swappableFS{vfs.Default}
 
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
@@ -1315,14 +1599,22 @@ func init() {
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.EngineComparer))
-	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
-	DebugCmd.AddCommand(debugPebbleCmd)
+		tool.DefaultComparer(storage.EngineComparer),
+		tool.FS(&absoluteFS{pebbleToolFS}),
+	)
+	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	initPebbleCmds(DebugPebbleCmd)
+	DebugCmd.AddCommand(DebugPebbleCmd)
 
 	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
 	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
 	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
+
+	debugStatementBundleCmd.AddCommand(statementBundleRecreateCmd)
+	DebugCmd.AddCommand(debugStatementBundleCmd)
+
+	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
 
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
@@ -1336,7 +1628,7 @@ func init() {
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
 
-	f = debugMergeLogsCommand.Flags()
+	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
 		"time before which messages should be filtered")
 	// TODO(knz): the "to" should be named "until" - it's a time boundary, not a space boundary.
@@ -1355,13 +1647,64 @@ func init() {
 		"keep the output log file redactable")
 	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
 		"redact the input files to remove sensitive information")
+	f.StringVar(&debugMergeLogsOpts.format, "format", "",
+		"log format of the input files")
+	f.Var(&debugMergeLogsOpts.useColor, "color",
+		"force use of TTY escape codes to colorize the output")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
 		"fully qualified name of the proto to decode")
-	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", true,
+	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", false,
 		"encode default values for every field")
 
 	f = debugCheckLogConfigCmd.Flags()
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
+
+	f = debugTimeSeriesDumpCmd.Flags()
+	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
+	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
+	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+}
+
+func initPebbleCmds(cmd *cobra.Command) {
+	for _, c := range cmd.Commands() {
+		wrapped := c.PreRunE
+		c.PreRunE = func(cmd *cobra.Command, args []string) error {
+			if wrapped != nil {
+				if err := wrapped(cmd, args); err != nil {
+					return err
+				}
+			}
+			return pebbleCryptoInitializer()
+		}
+		initPebbleCmds(c)
+	}
+}
+
+func pebbleCryptoInitializer() error {
+	storageConfig := base.StorageConfig{
+		Settings: serverCfg.Settings,
+		Dir:      serverCfg.Stores.Specs[0].Path,
+	}
+
+	if PopulateRocksDBConfigHook != nil {
+		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
+			return err
+		}
+	}
+
+	cfg := storage.PebbleConfig{
+		StorageConfig: storageConfig,
+		Opts:          storage.DefaultPebbleOptions(),
+	}
+
+	// This has the side effect of storing the encrypted FS into cfg.Opts.FS.
+	_, _, err := storage.ResolveEncryptedEnvOptions(&cfg)
+	if err != nil {
+		return err
+	}
+
+	pebbleToolFS.set(cfg.Opts.FS)
+	return nil
 }

@@ -50,10 +50,10 @@ pq: only users with the admin role are allowed to perform full cluster backups
 exec-sql user=testuser
 BACKUP DATABASE d2 TO 'nodelocal://0/d2'
 ----
-pq: user testuser does not have SELECT privilege on database d2
+pq: user testuser does not have CONNECT privilege on database d2
 
 exec-sql
-GRANT SELECT ON DATABASE d2 TO testuser;
+GRANT CONNECT ON DATABASE d2 TO testuser;
 ----
 
 # Table backup as a non-admin user should have SELECT privileges.
@@ -114,8 +114,11 @@ CREATE DATABASE d;
 CREATE USER testuser;
 GRANT SELECT ON DATABASE d TO testuser;
 ----
+NOTICE: GRANT SELECT ON DATABASE is deprecated.
+This statement was automatically converted to USE d; ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
+Please use ALTER DEFAULT PRIVILEGES going forward
 
 exec-sql user=testuser
 BACKUP DATABASE d TO 'nodelocal://0/test3'
 ----
-pq: only users with the admin role are allowed to BACKUP to the specified nodelocal URI
+pq: user testuser does not have CONNECT privilege on database d

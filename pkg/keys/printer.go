@@ -171,7 +171,7 @@ var (
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangePriorReadSummary", suffix: LocalRangePriorReadSummarySuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
-		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
+		{name: "RangeGCThreshold", suffix: LocalRangeGCThresholdSuffix},
 		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},
 	}
 
@@ -183,6 +183,7 @@ var (
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
+		{name: "RangeProbe", suffix: LocalRangeProbeSuffix, atEnd: true},
 	}
 )
 
@@ -194,7 +195,6 @@ var constSubKeyDict = []struct {
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
-	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
 }
 
@@ -238,7 +238,6 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 		if strings.HasPrefix(input, s.name) {
 			switch {
 			case
-				s.key.Equal(localStoreSuggestedCompactionSuffix),
 				s.key.Equal(localStoreNodeTombstoneSuffix),
 				s.key.Equal(localStoreCachedSettingsSuffix):
 				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
@@ -706,7 +705,7 @@ func init() {
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
-// If the end key is empty, the outut is of the form:
+// If the end key is empty, the output is of the form:
 //    start
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.

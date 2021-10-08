@@ -12,6 +12,7 @@ package colexecbase
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -84,6 +85,10 @@ func (b *projectingBatch) AppendCol(col coldata.Vec) {
 
 func (b *projectingBatch) ReplaceCol(col coldata.Vec, idx int) {
 	b.Batch.ReplaceCol(col, int(b.projection[idx]))
+}
+
+func (b *projectingBatch) String() string {
+	return strings.Join(coldata.VecsToStringWithRowPrefix(b.ColVecs(), b.Length(), b.Selection(), "" /* prefix */), "\n")
 }
 
 // NewSimpleProjectOp returns a new simpleProjectOp that applies a simple

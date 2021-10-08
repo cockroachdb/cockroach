@@ -22,7 +22,6 @@ import (
 )
 
 func TestTrace(t *testing.T) {
-
 	for _, tc := range []struct {
 		name  string
 		init  func(context.Context) (context.Context, *tracing.Span)
@@ -38,7 +37,7 @@ func TestTrace(t *testing.T) {
 				return ctxWithSpan, sp
 			},
 			check: func(t *testing.T, _ context.Context, sp *tracing.Span) {
-				if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+				if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: test1
@@ -55,8 +54,8 @@ func TestTrace(t *testing.T) {
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
 				tr := tracing.NewTracer()
 				st := cluster.MakeTestingClusterSettings()
-				tracing.ZipkinCollector.Override(&st.SV, "127.0.0.1:9000000")
-				tr.Configure(&st.SV)
+				tracing.ZipkinCollector.Override(ctx, &st.SV, "127.0.0.1:9000000")
+				tr.Configure(ctx, &st.SV)
 				return tr.StartSpanCtx(context.Background(), "foo")
 			},
 			check: func(t *testing.T, ctx context.Context, sp *tracing.Span) {
@@ -106,7 +105,7 @@ func TestTraceWithTags(t *testing.T) {
 	log.Info(ctxWithSpan, "log")
 
 	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+	if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: [tag=1] test1

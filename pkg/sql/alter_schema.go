@@ -53,23 +53,24 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()
 	}
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
-	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, string(n.Schema.SchemaName), true /* required */)
+	schema, err := p.Descriptors().GetSchemaByName(ctx, p.txn, db,
+		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
+			Required:       true,
+			RequireMutable: true,
+		})
 	if err != nil {
 		return nil, err
 	}
-	if !found {
-		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "schema %q does not exist", n.Schema.String())
-	}
-	switch schema.Kind {
+	switch schema.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		desc := schema.Desc.(*schemadesc.Mutable)
+		desc := schema.(*schemadesc.Mutable)
 		// The user must be a superuser or the owner of the schema to modify it.
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -134,23 +135,6 @@ func (p *planner) alterSchemaOwner(
 ) error {
 	oldOwner := scDesc.GetPrivileges().Owner()
 
-	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner); err != nil {
-		return err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
-		return nil
-	}
-
-	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
-}
-
-// checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
-// Called in ALTER SCHEMA and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterSchemaAndSetNewOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner security.SQLUsername,
-) error {
 	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err
 	}
@@ -164,13 +148,35 @@ func (p *planner) checkCanAlterSchemaAndSetNewOwner(
 		return err
 	}
 
+	if err := p.setNewSchemaOwner(ctx, parentDBDesc.(*dbdesc.Mutable), scDesc, newOwner); err != nil {
+		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == oldOwner {
+		return nil
+	}
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
+}
+
+// setNewSchemaOwner handles setting a new schema owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+func (p *planner) setNewSchemaOwner(
+	ctx context.Context,
+	dbDesc *dbdesc.Mutable,
+	scDesc *schemadesc.Mutable,
+	newOwner security.SQLUsername,
+) error {
 	// Update the owner of the schema.
 	privs := scDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	qualifiedSchemaName, err := p.getQualifiedSchemaName(ctx, scDesc)
-	if err != nil {
-		return err
+	qualifiedSchemaName := &tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(dbDesc.GetName()),
+		SchemaName:      tree.Name(scDesc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
 	}
 
 	return p.logEvent(ctx,
@@ -203,7 +209,7 @@ func (p *planner) renameSchema(
 	desc.SetName(newName)
 
 	// Write a new namespace entry for the new name.
-	nameKey := catalogkeys.NewSchemaKey(desc.ParentID, newName).Key(p.execCfg.Codec)
+	nameKey := catalogkeys.MakeSchemaNameKey(p.execCfg.Codec, desc.ParentID, newName)
 	b := p.txn.NewBatch()
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, desc.ID)

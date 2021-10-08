@@ -53,10 +53,10 @@ SELECT max(price) FROM products WHERE units_sold > 1500
 ```
 
 Only the last query can utilize the partial index `popular_products`. Its filter
-expression, `units_sold > 1500`, _implies_ the predicate expression, `units_sold
-> 1000`. Every value for `units_sold` that is greater than `1500` is also
-greater than `1000`. Stated differently, the predicate expression _contains_ the
-filter expression.
+expression, `units_sold > 1500`, _implies_ the predicate expression,
+`units_sold > 1000`. Every value for `units_sold` that is greater than `1500` is
+also greater than `1000`. Stated differently, the predicate expression
+_contains_ the filter expression.
 
 Note that CRDB, like Postgres, will perform a best-effort attempt to prove that
 a query filter expression implies a partial index predicate. It is not

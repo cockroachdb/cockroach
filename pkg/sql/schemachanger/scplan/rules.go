@@ -11,7 +11,6 @@
 package scplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -24,7 +23,7 @@ func columnInSecondaryIndex(this *scpb.Column, that *scpb.SecondaryIndex) bool {
 func columnInPrimaryIndex(this *scpb.Column, that *scpb.PrimaryIndex) bool {
 	return this.TableID == that.TableID &&
 		indexContainsColumn(&that.Index, this.Column.ID) ||
-		columnsContainsID(that.StoreColumnIDs, this.Column.ID)
+		columnsContainsID(that.Index.StoreColumnIDs, this.Column.ID)
 }
 
 func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool {
@@ -34,6 +33,153 @@ func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool
 func primaryIndexesReferenceEachOther(this, that *scpb.PrimaryIndex) bool {
 	return this.TableID == that.TableID &&
 		this.OtherPrimaryIndexID == that.Index.ID
+}
+
+func typeReferenceIsFromThisView(this *scpb.View, that *scpb.TypeReference) bool {
+	return this.TableID == that.DescID
+}
+
+func thatViewDependsOnThisView(this *scpb.View, that *scpb.View) bool {
+	for _, dep := range this.DependedOnBy {
+		if dep == that.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func tableReferencesView(this *scpb.Table, that *scpb.View) bool {
+	for _, dep := range that.DependsOn {
+		if dep == this.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func tableReferencesType(this *scpb.Table, that *scpb.TypeReference) bool {
+	return this.TableID == that.DescID
+}
+
+func outFkOriginatesFromTable(this *scpb.Table, that *scpb.OutboundForeignKey) bool {
+	return this.TableID == that.OriginID
+}
+
+func inFkReferencesTable(this *scpb.Table, that *scpb.OutboundForeignKey) bool {
+	return this.TableID == that.ReferenceID
+}
+
+func indexReferencesTable(this *scpb.Table, that *scpb.SecondaryIndex) bool {
+	return that.TableID == this.TableID
+}
+
+func seqOwnedByReferencesTable(this *scpb.Table, that *scpb.SequenceOwnedBy) bool {
+	return this.TableID == that.OwnerTableID
+}
+
+func seqOwnedByReferencesSeq(this *scpb.SequenceOwnedBy, that *scpb.Sequence) bool {
+	return this.SequenceID == that.SequenceID
+}
+
+func tableReferencesDefaultExpression(this *scpb.Table, that *scpb.DefaultExpression) bool {
+	return this.TableID == that.TableID
+}
+
+func tableReferencedByDependedOnBy(this *scpb.Table, that *scpb.RelationDependedOnBy) bool {
+	return this.TableID == that.DependedOnBy
+}
+
+func defaultExprReferencesColumn(this *scpb.Sequence, that *scpb.DefaultExpression) bool {
+	for _, seq := range that.UsesSequenceIDs {
+		if seq == this.SequenceID {
+			return true
+		}
+	}
+	return false
+}
+
+func schemaDependsOnTable(this *scpb.Schema, that *scpb.Table) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func schemaDependsOnView(this *scpb.Schema, that *scpb.View) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func schemaDependsOnSequence(this *scpb.Schema, that *scpb.Sequence) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.SequenceID {
+			return true
+		}
+	}
+	return false
+}
+
+func schemaDependsOnType(this *scpb.Schema, that *scpb.Type) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TypeID {
+			return true
+		}
+	}
+	return false
+}
+
+func databaseDependsOnTable(this *scpb.Database, that *scpb.Table) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func databaseDependsOnView(this *scpb.Database, that *scpb.View) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func databaseDependsOnSequence(this *scpb.Database, that *scpb.Sequence) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.SequenceID {
+			return true
+		}
+	}
+	return false
+}
+
+func databaseDependsOnType(this *scpb.Database, that *scpb.Type) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TypeID {
+			return true
+		}
+	}
+	return false
+}
+
+func databaseDependsOnSchema(this *scpb.Database, that *scpb.Type) bool {
+	for _, descID := range this.DependentObjects {
+		if descID == that.TypeID {
+			return true
+		}
+	}
+	return false
+}
+func typeHasReference(this *scpb.Type, that *scpb.TypeReference) bool {
+	return this.TypeID == that.TypeID
 }
 
 func sameDirection(a, b scpb.Target_Direction) bool {
@@ -58,35 +204,554 @@ func directionsMatch(thisDir, thatDir scpb.Target_Direction) func(a, b scpb.Targ
 }
 
 var rules = map[scpb.Element]targetRules{
-	(*scpb.Column)(nil): {
+	(*scpb.Database)(nil): {
 		deps: targetDepRules{
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_ONLY: {
 				{
 					dirPredicate: sameDirection,
-					thatState:    scpb.State_DELETE_AND_WRITE_ONLY,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    databaseDependsOnTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    databaseDependsOnView,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    databaseDependsOnSequence,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    databaseDependsOnType,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    databaseDependsOnSchema,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Database, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_DELETE_ONLY,
+					op: func(this *scpb.Database) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.DatabaseID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.Status_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Database, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.DatabaseID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.Database) []scop.Op {
+						ops := []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.DatabaseID},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Schema)(nil): {
+		deps: targetDepRules{
+			scpb.Status_DELETE_ONLY: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    schemaDependsOnTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    schemaDependsOnView,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    schemaDependsOnSequence,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    schemaDependsOnType,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Schema, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_DELETE_ONLY,
+					op: func(this *scpb.Schema) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.SchemaID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.Status_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Schema, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SchemaID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.Schema) []scop.Op {
+						ops := []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.SchemaID},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.SequenceOwnedBy)(nil): {
+		deps: targetDepRules{
+			scpb.Status_ABSENT: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_DELETE_ONLY,
+					predicate:    seqOwnedByReferencesSeq,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.SequenceOwnedBy, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.SequenceOwnedBy) scop.Op {
+						return &scop.RemoveSequenceOwnedBy{
+							TableID: this.SequenceID,
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.RelationDependedOnBy)(nil): {
+		deps: targetDepRules{},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.RelationDependedOnBy, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.RelationDependedOnBy) scop.Op {
+						return &scop.RemoveRelationDependedOnBy{
+							TableID:      this.TableID,
+							DependedOnBy: this.DependedOnBy,
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.TypeReference)(nil): {
+		deps: targetDepRules{},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.TypeReference, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
+							!flags.CreatedDescriptorIDs.Contains(this.DescID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.TypeReference) scop.Op {
+						return &scop.RemoveTypeBackRef{
+							TypeID: this.TypeID,
+							DescID: this.DescID,
+						}
+					},
+				},
+			},
+		},
+		forward: targetOpRules{
+			scpb.Status_ABSENT: {
+				{
+					predicate: func(this *scpb.TypeReference, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
+							!flags.CreatedDescriptorIDs.Contains(this.DescID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_PUBLIC,
+					op: func(this *scpb.TypeReference) scop.Op {
+						return &scop.AddTypeBackRef{
+							TypeID: this.TypeID,
+							DescID: this.DescID,
+						}
+					},
+				},
+			},
+		},
+	},
+	(*scpb.DefaultExpression)(nil): {
+		deps: targetDepRules{},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.DefaultExpression, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.DefaultExpression) []scop.Op {
+						return []scop.Op{
+							&scop.RemoveColumnDefaultExpression{
+								TableID:  this.TableID,
+								ColumnID: this.ColumnID,
+							},
+							&scop.UpdateRelationDeps{
+								TableID: this.TableID,
+							},
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Type)(nil): {
+		deps: targetDepRules{
+			scpb.Status_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_DELETE_ONLY,
+					predicate:    typeHasReference,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Type, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_DELETE_ONLY,
+					op: func(this *scpb.Type) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.TypeID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.Status_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Type, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.Type) []scop.Op {
+						ops := []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.TypeID},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Sequence)(nil): {
+		deps: targetDepRules{
+			scpb.Status_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    defaultExprReferencesColumn,
+				},
+			},
+		},
+
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Sequence, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.Sequence) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.SequenceID,
+							},
+							&scop.DrainDescriptorName{
+								TableID: this.SequenceID,
+							},
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.SequenceID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.View)(nil): {
+		deps: targetDepRules{
+			scpb.Status_ABSENT: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    thatViewDependsOnThisView,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    typeReferenceIsFromThisView,
+				},
+			},
+		},
+
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.View, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.View) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.TableID,
+							},
+							&scop.DrainDescriptorName{TableID: this.TableID},
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.TableID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.OutboundForeignKey)(nil): {
+		deps: nil,
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.OutboundForeignKey, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.OutboundForeignKey) scop.Op {
+						return &scop.DropForeignKeyRef{
+							TableID:  this.OriginID,
+							Name:     this.Name,
+							Outbound: true,
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.InboundForeignKey)(nil): {
+		deps: nil,
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.InboundForeignKey, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_ABSENT,
+					op: func(this *scpb.InboundForeignKey) scop.Op {
+						return &scop.DropForeignKeyRef{
+							TableID:  this.OriginID,
+							Name:     this.Name,
+							Outbound: false,
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Table)(nil): {
+		deps: targetDepRules{
+			scpb.Status_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    indexReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    outFkOriginatesFromTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    inFkReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    tableReferencesView,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    tableReferencesType,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    seqOwnedByReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    tableReferencesDefaultExpression,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_ABSENT,
+					predicate:    tableReferencedByDependedOnBy,
+				},
+			},
+		},
+
+		backwards: targetOpRules{
+			scpb.Status_PUBLIC: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus:    scpb.Status_ABSENT,
+					nonRevertible: true,
+					op: func(this *scpb.Table) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.TableID,
+							},
+							&scop.DrainDescriptorName{TableID: this.TableID},
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.TableID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Column)(nil): {
+		deps: targetDepRules{
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_DELETE_AND_WRITE_ONLY,
 					predicate:    columnInSecondaryIndex,
 				},
 				{
 					dirPredicate: sameDirection,
-					thatState:    scpb.State_DELETE_AND_WRITE_ONLY,
+					thatStatus:   scpb.Status_DELETE_AND_WRITE_ONLY,
 					predicate:    columnInPrimaryIndex,
 				},
 			},
-			scpb.State_PUBLIC: {
+			scpb.Status_PUBLIC: {
 				{
 					dirPredicate: bothDirectionsEqual(scpb.Target_ADD),
-					thatState:    scpb.State_PUBLIC,
+					thatStatus:   scpb.Status_PUBLIC,
 					predicate:    columnInSecondaryIndex,
 				},
 				{
 					dirPredicate: bothDirectionsEqual(scpb.Target_ADD),
-					thatState:    scpb.State_PUBLIC,
+					thatStatus:   scpb.Status_PUBLIC,
 					predicate:    columnInPrimaryIndex,
 				},
 			},
 		},
 		forward: targetOpRules{
-			scpb.State_ABSENT: {
+			scpb.Status_ABSENT: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
@@ -94,9 +759,9 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeAddedColumnDeleteOnly{
+						return &scop.MakeAddedColumnDeleteOnly{
 							TableID:    this.TableID,
 							FamilyID:   this.FamilyID,
 							FamilyName: this.FamilyName,
@@ -105,7 +770,7 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 			},
-			scpb.State_DELETE_ONLY: {
+			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
@@ -113,20 +778,21 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
+					nextStatus:    scpb.Status_DELETE_AND_WRITE_ONLY,
+					nonRevertible: true,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeAddedColumnDeleteAndWriteOnly{
+						return &scop.MakeAddedColumnDeleteAndWriteOnly{
 							TableID:  this.TableID,
 							ColumnID: this.Column.ID,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
-					nextState: scpb.State_PUBLIC,
+					nextStatus: scpb.Status_PUBLIC,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeColumnPublic{
+						return &scop.MakeColumnPublic{
 							TableID:  this.TableID,
 							ColumnID: this.Column.ID,
 						}
@@ -135,18 +801,18 @@ var rules = map[scpb.Element]targetRules{
 			},
 		},
 		backwards: targetOpRules{
-			scpb.State_PUBLIC: {
+			scpb.Status_PUBLIC: {
 				{
-					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
+					nextStatus: scpb.Status_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeDroppedColumnDeleteAndWriteOnly{
+						return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 							TableID:  this.TableID,
 							ColumnID: this.Column.ID,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
 						return !flags.CreatedDescriptorIDs.Contains(this.TableID) &&
@@ -155,20 +821,20 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeDroppedColumnDeleteOnly{
+						return &scop.MakeDroppedColumnDeleteOnly{
 							TableID:  this.TableID,
 							ColumnID: this.Column.ID,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_ONLY: {
+			scpb.Status_DELETE_ONLY: {
 				{
-					nextState: scpb.State_ABSENT,
+					nextStatus: scpb.Status_ABSENT,
 					op: func(this *scpb.Column) scop.Op {
-						return scop.MakeColumnAbsent{
+						return &scop.MakeColumnAbsent{
 							TableID:  this.TableID,
 							ColumnID: this.Column.ID,
 						}
@@ -179,28 +845,28 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.PrimaryIndex)(nil): {
 		deps: targetDepRules{
-			scpb.State_PUBLIC: {
+			scpb.Status_PUBLIC: {
 				{
 					dirPredicate: directionsMatch(scpb.Target_ADD, scpb.Target_DROP),
-					thatState:    scpb.State_DELETE_AND_WRITE_ONLY,
+					thatStatus:   scpb.Status_DELETE_AND_WRITE_ONLY,
 					predicate:    primaryIndexesReferenceEachOther,
 				},
 			},
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					dirPredicate: directionsMatch(scpb.Target_DROP, scpb.Target_ADD),
-					thatState:    scpb.State_PUBLIC,
+					thatStatus:   scpb.Status_PUBLIC,
 					predicate:    primaryIndexesReferenceEachOther,
 				},
 				{
 					dirPredicate: bothDirectionsEqual(scpb.Target_DROP),
-					thatState:    scpb.State_DELETE_AND_WRITE_ONLY,
+					thatStatus:   scpb.Status_DELETE_AND_WRITE_ONLY,
 					predicate:    primaryIndexContainsColumn,
 				},
 			},
 		},
 		forward: targetOpRules{
-			scpb.State_ABSENT: {
+			scpb.Status_ABSENT: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
@@ -208,20 +874,16 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						idx := this.Index
-						idx.StoreColumnNames = this.StoreColumnNames
-						idx.StoreColumnIDs = this.StoreColumnIDs
-						idx.EncodingType = descpb.PrimaryIndexEncoding
-						return scop.MakeAddedIndexDeleteOnly{
+						return &scop.MakeAddedIndexDeleteOnly{
 							TableID: this.TableID,
-							Index:   idx,
+							Index:   this.Index,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_ONLY: {
+			scpb.Status_DELETE_ONLY: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
@@ -229,16 +891,16 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
+					nextStatus: scpb.Status_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.MakeAddedIndexDeleteAndWriteOnly{
+						return &scop.MakeAddedIndexDeleteAndWriteOnly{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					// If this index is unique (which primary indexes should be) and
 					// there's not already a covering primary index, then we'll need to
@@ -248,29 +910,29 @@ var rules = map[scpb.Element]targetRules{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
 						return this.Index.Unique
 					},
-					nextState: scpb.State_BACKFILLED,
+					nextStatus: scpb.Status_BACKFILLED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.BackfillIndex{
+						return &scop.BackfillIndex{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
 					},
 				},
 				{
-					nextState: scpb.State_VALIDATED,
+					nextStatus: scpb.Status_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.BackfillIndex{
+						return &scop.BackfillIndex{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
 					},
 				},
 			},
-			scpb.State_BACKFILLED: {
+			scpb.Status_BACKFILLED: {
 				{
-					nextState: scpb.State_VALIDATED,
+					nextStatus: scpb.Status_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.ValidateUniqueIndex{
+						return &scop.ValidateUniqueIndex{
 							TableID:        this.TableID,
 							PrimaryIndexID: this.OtherPrimaryIndexID,
 							IndexID:        this.Index.ID,
@@ -278,11 +940,11 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 			},
-			scpb.State_VALIDATED: {
+			scpb.Status_VALIDATED: {
 				{
-					nextState: scpb.State_PUBLIC,
+					nextStatus: scpb.Status_PUBLIC,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.MakeAddedPrimaryIndexPublic{
+						return &scop.MakeAddedPrimaryIndexPublic{
 							TableID: this.TableID,
 							Index:   this.Index,
 						}
@@ -291,7 +953,7 @@ var rules = map[scpb.Element]targetRules{
 			},
 		},
 		backwards: targetOpRules{
-			scpb.State_PUBLIC: {
+			scpb.Status_PUBLIC: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
@@ -299,21 +961,17 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
+					nextStatus: scpb.Status_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						// Most of this logic is taken from MakeMutationComplete().
-						idx := this.Index
-						idx.StoreColumnIDs = this.StoreColumnIDs
-						idx.StoreColumnNames = this.StoreColumnNames
-						idx.EncodingType = descpb.PrimaryIndexEncoding
-						return scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
+						return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
 							TableID: this.TableID,
-							Index:   idx,
+							Index:   this.Index,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_AND_WRITE_ONLY: {
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
@@ -321,20 +979,20 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.MakeDroppedIndexDeleteOnly{
+						return &scop.MakeDroppedIndexDeleteOnly{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
 					},
 				},
 			},
-			scpb.State_DELETE_ONLY: {
+			scpb.Status_DELETE_ONLY: {
 				{
-					nextState: scpb.State_ABSENT,
+					nextStatus: scpb.Status_ABSENT,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.MakeIndexAbsent{
+						return &scop.MakeIndexAbsent{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}

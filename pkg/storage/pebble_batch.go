@@ -16,7 +16,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,19 +36,21 @@ type pebbleBatch struct {
 	// need separate iterators for EngineKey and MVCCKey iteration since
 	// iterators that make separated locks/intents look as interleaved need to
 	// use both simultaneously.
-	// When the first iterator is initialized, the underlying *pebble.Iterator
-	// is stashed in iter, so that subsequent iterator initialization can use
-	// Iterator.Clone to use the same underlying engine state. This relies on
-	// the fact that all pebbleIterators created here are marked as reusable,
-	// which causes pebbleIterator.Close to not close iter. iter will be closed
-	// when pebbleBatch.Close is called.
-	prefixIter       pebbleIterator
-	normalIter       pebbleIterator
-	prefixEngineIter pebbleIterator
-	normalEngineIter pebbleIterator
-	iter             cloneableIter
-	writeOnly        bool
-	closed           bool
+	// When the first iterator is initialized, or when
+	// PinEngineStateForIterators is called (whichever happens first), the
+	// underlying *pebble.Iterator is stashed in iter, so that subsequent
+	// iterator initialization can use Iterator.Clone to use the same underlying
+	// engine state. This relies on the fact that all pebbleIterators created
+	// here are marked as reusable, which causes pebbleIterator.Close to not
+	// close iter. iter will be closed when pebbleBatch.Close is called.
+	prefixIter                         pebbleIterator
+	normalIter                         pebbleIterator
+	prefixEngineIter                   pebbleIterator
+	normalEngineIter                   pebbleIterator
+	iter                               cloneableIter
+	writeOnly                          bool
+	closed                             bool
+	overrideTxnDidNotUpdateMetaToFalse bool
 
 	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
@@ -66,7 +67,11 @@ var pebbleBatchPool = sync.Pool{
 
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
-	db *pebble.DB, batch *pebble.Batch, writeOnly bool, settings *cluster.Settings,
+	db *pebble.DB,
+	batch *pebble.Batch,
+	writeOnly bool,
+	disableSeparatedIntents bool,
+	overrideTxnDidNotUpdateMetaToFalse bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -94,9 +99,12 @@ func newPebbleBatch(
 			reusable:      true,
 		},
 		writeOnly: writeOnly,
+		// A batch is not long-lived, so using the same value (which could be
+		// slightly stale) is fine for the lifetime of the batch. Staleness is not
+		// a correctness issue.
+		overrideTxnDidNotUpdateMetaToFalse: overrideTxnDidNotUpdateMetaToFalse,
 	}
-	pb.wrappedIntentWriter =
-		wrapIntentWriter(context.Background(), pb, settings, false /* isLongLived */)
+	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb, disableSeparatedIntents)
 	return pb
 }
 
@@ -129,13 +137,8 @@ func (p *pebbleBatch) Closed() bool {
 
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleBatch) ExportMVCCToSst(
-	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
-	exportAllRevisions bool,
-	targetSize, maxSize uint64,
-	useTBI bool,
-	dest io.WriteCloser,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	panic("unimplemented")
 }
 
@@ -299,6 +302,18 @@ func (p *pebbleBatch) ConsistentIterators() bool {
 	return true
 }
 
+// PinEngineStateForIterators implements the Batch interface.
+func (p *pebbleBatch) PinEngineStateForIterators() error {
+	if p.iter == nil {
+		if p.batch.Indexed() {
+			p.iter = p.batch.NewIter(nil)
+		} else {
+			p.iter = p.db.NewIter(nil)
+		}
+	}
+	return nil
+}
+
 // NewMVCCIterator implements the Batch interface.
 func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	var batch pebble.Batch
@@ -460,9 +475,9 @@ func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
 	return p.batch.Set(p.buf, value, nil)
 }
 
-// SafeToWriteSeparatedIntents implements the Batch interface.
-func (p *pebbleBatch) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
-	return p.wrappedIntentWriter.safeToWriteSeparatedIntents(ctx)
+// OverrideTxnDidNotUpdateMetaToFalse implements the Batch interface.
+func (p *pebbleBatch) OverrideTxnDidNotUpdateMetaToFalse(_ context.Context) bool {
+	return p.overrideTxnDidNotUpdateMetaToFalse
 }
 
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
@@ -502,6 +517,11 @@ func (p *pebbleBatch) Commit(sync bool) error {
 // Empty implements the Batch interface.
 func (p *pebbleBatch) Empty() bool {
 	return p.batch.Count() == 0
+}
+
+// Count implements the Batch interface.
+func (p *pebbleBatch) Count() uint32 {
+	return p.batch.Count()
 }
 
 // Len implements the Batch interface.

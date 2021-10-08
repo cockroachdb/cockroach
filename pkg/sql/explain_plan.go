@@ -53,11 +53,13 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	// Determine the "distribution" and "vectorized" values, which we will emit as
 	// special rows.
 
+	// Note that we delay adding the annotation about the distribution until
+	// after the plan is finalized (when the physical plan is successfully
+	// created).
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+		params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
 	)
-	ob.AddDistribution(distribution.String())
 
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
@@ -76,15 +78,17 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 			return err
 		}
+		ob.AddDistribution(distribution.String())
 		// For regular EXPLAIN, simply skip emitting the "vectorized" information.
 	} else {
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
-		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
+		distSQLPlanner.finalizePlanWithRowCount(planCtx, physicalPlan, plan.mainRowCount)
+		ob.AddDistribution(physicalPlan.Distribution.String())
 		flows := physicalPlan.GenerateFlowSpecs()
-		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p, &distSQLPlanner.rpcCtx.ClusterID)
+		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
-		ctxSessionData := flowCtx.EvalCtx.SessionData
+		ctxSessionData := flowCtx.EvalCtx.SessionData()
 		var willVectorize bool
 		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 			willVectorize = false
@@ -231,5 +235,8 @@ func newPhysPlanForExplainPurposes(
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.PhysicalPlan, nil
 	}
-	return distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	// Release the resources right away since we won't be running the plan.
+	planCtx.getCleanupFunc()()
+	return physPlan, err
 }

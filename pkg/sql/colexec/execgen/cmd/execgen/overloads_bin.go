@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var binaryOpDecMethod = map[tree.BinaryOperator]string{
+var binaryOpDecMethod = map[tree.BinaryOperatorSymbol]string{
 	tree.Plus:     "Add",
 	tree.Minus:    "Sub",
 	tree.Mult:     "Mul",
@@ -35,13 +35,13 @@ var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Pow:      "Pow",
 }
 
-var binaryOpFloatMethod = map[tree.BinaryOperator]string{
+var binaryOpFloatMethod = map[tree.BinaryOperatorSymbol]string{
 	tree.FloorDiv: "math.Trunc",
 	tree.Mod:      "math.Mod",
 	tree.Pow:      "math.Pow",
 }
 
-var binaryOpDecCtx = map[tree.BinaryOperator]string{
+var binaryOpDecCtx = map[tree.BinaryOperatorSymbol]string{
 	tree.Plus:     "ExactCtx",
 	tree.Minus:    "ExactCtx",
 	tree.Mult:     "ExactCtx",
@@ -103,12 +103,12 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
 // that implement that comparison between two values of the same type (meaning
 // they have the same family and width).
-var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*oneArgOverload, len(execgen.BinaryOpName))
+var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperatorSymbol][]*oneArgOverload, len(execgen.BinaryOpName))
 
-var binOpOutputTypes = make(map[tree.BinaryOperator]map[typePair]*types.T)
+var binOpOutputTypes = make(map[tree.BinaryOperatorSymbol]map[typePair]*types.T)
 
 func registerBinOpOutputTypes() {
-	populateBinOpIntOutputTypeOnIntArgs := func(binOp tree.BinaryOperator) {
+	populateBinOpIntOutputTypeOnIntArgs := func(binOp tree.BinaryOperatorSymbol) {
 		for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Int
@@ -117,14 +117,14 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Bit binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.Bitand, tree.Bitor, tree.Bitxor} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Bitand, tree.Bitor, tree.Bitxor} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 	}
 
 	// Simple arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
@@ -178,7 +178,7 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Other arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.FloorDiv, tree.Mod, tree.Pow} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.FloorDiv, tree.Mod, tree.Pow} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
@@ -195,7 +195,7 @@ func registerBinOpOutputTypes() {
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
 
-	for _, binOp := range []tree.BinaryOperator{tree.LShift, tree.RShift} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.LShift, tree.RShift} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -230,7 +230,7 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Concat][typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}] = types.Jsonb
 }
 
-func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
+func newBinaryOverloadBase(op tree.BinaryOperatorSymbol) *overloadBase {
 	opStr := op.String()
 	switch op {
 	case tree.Bitxor:
@@ -260,7 +260,7 @@ func populateBinOpOverloads() {
 	// Also note that we're sorting all operators in order to have the
 	// generated code not change when the order of iteration over map
 	// tree.BinOps changes.
-	var allBinaryOperators []tree.BinaryOperator
+	var allBinaryOperators []tree.BinaryOperatorSymbol
 	for binOp := range tree.BinOps {
 		allBinaryOperators = append(allBinaryOperators, binOp)
 	}
@@ -300,9 +300,9 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 				var r = []byte{}
 				r = append(r, %s...)
 				r = append(r, %s...)
-				%s
+				%s.Set(%s, r)
 			}
-			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r"))
+			`, leftElem, rightElem, caller, idx)
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -310,7 +310,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
-func checkRightIsZero(binOp tree.BinaryOperator) bool {
+func checkRightIsZero(binOp tree.BinaryOperatorSymbol) bool {
 	// TODO(yuzefovich): introduce a new operator that would check whether a
 	// vector contains a zero value so that the division didn't have to do the
 	// check. This is likely to be more performant.
@@ -769,7 +769,7 @@ func (j jsonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 		// JSON path (stored at "_path") is non-nil.
 		getJSONFetchPath := func(handleNonNilPath string) string {
 			return fmt.Sprintf(`
-_path, _err := tree.GetJSONPath(%[3]s, *tree.MustBeDArray(%[4]s.(*coldataext.Datum).Datum))
+_path, _err := tree.GetJSONPath(%[3]s, *tree.MustBeDArray(%[4]s.(tree.Datum)))
 if _err != nil {
     colexecerror.ExpectedError(_err)
 }
@@ -803,15 +803,25 @@ if _path == nil {
 	}
 }
 
+// timestampRangeCheck should be added at the end of operations that modify and
+// return timestamps in order to ensure that the vectorized engine returns the
+// same errors as the row engine. The range check expects the timestamp to be
+// stored in a local variable named 't_res'.
+const timestampRangeCheck = `	
+rounded_res := t_res.Round(time.Microsecond)
+if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+}`
+
 func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s)`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s)`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		case tree.Minus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s.Mul(-1))`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s.Mul(-1))`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -824,8 +834,8 @@ func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[3]s, %[2]s)`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[2]s, %[1]s)`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -942,35 +952,43 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 // be used to do any setup (like converting non-datum element to its datum
 // equivalent)
 // - targetElem - same as targetElem parameter in assignFunc signature
-// - leftColdataExtDatum - the variable name of the left datum element that
-// must be of *coldataext.Datum type
-// - rightDatumElem - the variable name of the right datum element which could
-// be *coldataext.Datum, tree.Datum, or nil.
-func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumElem string) string {
-	vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
-	if err != nil {
-		return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
-	}
-	return fmt.Sprintf(`
+// - leftDatumElem and rightDatumElem - the variable names of the left and right
+// datum elements that must be convertable to tree.Datum type.
+func executeBinOpOnDatums(prelude, targetElem, leftDatumElem, rightDatumElem string) string {
+	codeBlock := fmt.Sprintf(`
 			%s
-			_res, err := %s.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, %s)
+			_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, %s.(tree.Datum), %s.(tree.Datum))
 			if err != nil {
 				colexecerror.ExpectedError(err)
-			}
+			}`, prelude, leftDatumElem, rightDatumElem,
+	)
+	if regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
+		// targetElem is of the form 'vec[i]'.
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+		codeBlock += fmt.Sprintf(`
 			if _res == tree.DNull {
 				_outNulls.SetNull(%s)
 			}
-			%s
-		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable,
-		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
-	)
+			%s.Set(%s, _res)
+			`, idxVariable, vecVariable, idxVariable,
+		)
+	} else {
+		// targetElem is assumed to simply be the same type as res.
+		codeBlock += fmt.Sprintf(`
+			%s = _res
+    	`, targetElem,
+		)
+	}
+	return codeBlock
 }
 
 func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		return executeBinOpOnDatums(
-			"" /* prelude */, targetElem,
-			leftElem+".(*coldataext.Datum)", rightElem,
+			"" /* prelude */, targetElem, leftElem, rightElem,
 		)
 	}
 }
@@ -978,7 +996,9 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 // convertNativeToDatum returns a string that converts nativeElem to a
 // tree.Datum that is stored in local variable named datumElemVarName.
 func convertNativeToDatum(
-	op tree.BinaryOperator, canonicalTypeFamily types.Family, nativeElem, datumElemVarName string,
+	op tree.BinaryOperatorSymbol,
+	canonicalTypeFamily types.Family,
+	nativeElem, datumElemVarName string,
 ) string {
 	var runtimeConversion string
 	switch canonicalTypeFamily {
@@ -1028,26 +1048,16 @@ func (c datumNonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 			op.BinOp, op.lastArgTypeOverload.CanonicalTypeFamily, rightElem, rightDatumElem,
 		)
 		return executeBinOpOnDatums(
-			prelude, targetElem,
-			leftElem+".(*coldataext.Datum)", rightDatumElem,
+			prelude, targetElem, leftElem, rightDatumElem,
 		)
 	}
 }
 
 func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-		const (
-			leftDatumElem       = "_nonDatumArgAsDatum"
-			leftColdataExtDatum = "_nonDatumArgAsColdataExtDatum"
-		)
-		prelude := fmt.Sprintf(`
-			%s
-			%s := &coldataext.Datum{Datum: %s}
-			`,
-			convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
-			leftColdataExtDatum, leftDatumElem,
-		)
-		return executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightElem)
+		const leftDatumElem = "_nonDatumArgAsDatum"
+		prelude := convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem)
+		return executeBinOpOnDatums(prelude, targetElem, leftDatumElem, rightElem)
 	}
 }
 

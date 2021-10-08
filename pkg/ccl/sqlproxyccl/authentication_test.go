@@ -95,9 +95,9 @@ func TestAuthenticateError(t *testing.T) {
 
 	err := authenticate(srv, cli)
 	require.Error(t, err)
-	codeErr := (*CodeError)(nil)
+	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, CodeAuthFailed, codeErr.code)
+	require.Equal(t, codeAuthFailed, codeErr.code)
 }
 
 func TestAuthenticateUnexpectedMessage(t *testing.T) {
@@ -117,7 +117,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 
 	err := authenticate(srv, cli)
 	require.Error(t, err)
-	codeErr := (*CodeError)(nil)
+	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, CodeBackendDisconnected, codeErr.code)
+	require.Equal(t, codeBackendDisconnected, codeErr.code)
 }

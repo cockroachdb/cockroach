@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -70,8 +70,8 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			1, 2, 3, 4, 5, 6, 7, 8, 9;
 		`
 		return parse(fmt.Sprintf(showTablePartitionsQuery,
-			lex.EscapeSQLString(resName.Table()),
-			lex.EscapeSQLString(resName.Catalog()),
+			lexbase.EscapeSQLString(resName.Table()),
+			lexbase.EscapeSQLString(resName.Catalog()),
 			resName.CatalogName.String()))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
@@ -105,7 +105,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			tables.name, partitions.name, 1, 4, 5, 6, 7, 8, 9;
 		`
 		// Note: n.Database.String() != string(n.Database)
-		return parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lex.EscapeSQLString(string(n.Database))))
+		return parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lexbase.EscapeSQLString(string(n.Database))))
 	}
 
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
@@ -165,8 +165,8 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		1, 2, 3, 4, 5, 6, 7, 8, 9;
 	`
 	return parse(fmt.Sprintf(showIndexPartitionsQuery,
-		lex.EscapeSQLString(n.Index.Index.String()),
-		lex.EscapeSQLString(resName.Table()),
+		lexbase.EscapeSQLString(n.Index.Index.String()),
+		lexbase.EscapeSQLString(resName.Table()),
 		resName.Table(),
 		n.Index.Index.String(),
 		// note: CatalogName.String() != Catalog()

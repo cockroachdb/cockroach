@@ -20,7 +20,7 @@ CREATE TABLE c1 (
   a INT,
   b INT,
   PRIMARY KEY (a,b)
-) INTERLEAVE IN PARENT p1 (a, b)
+)
 
 statement ok
 CREATE TABLE p2 (
@@ -29,7 +29,7 @@ CREATE TABLE p2 (
 )
 
 statement ok
-CREATE INDEX p2_id ON p2 (i, d) INTERLEAVE IN PARENT p2 (i)
+CREATE INDEX p2_id ON p2 (i, d)
 
 statement ok
 CREATE TABLE bytes_t (a BYTES PRIMARY KEY)
@@ -99,10 +99,9 @@ ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p1]
 ----
-start_key    end_key      replicas  lease_holder
-NULL         /2           {1}       1
-/2           /2/1/#/54/1  {2}       2
-/2/1/#/54/1  NULL         {3}       3
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         NULL     {3}       3
 
 # Indexes
 
@@ -119,11 +118,10 @@ NULL       /0       {3}       3
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p2]
 ----
-start_key  end_key    replicas  lease_holder
-NULL       /0         {1}       1
-/0         /2         {1}       1
-/2         /2/#/55/2  {2}       2
-/2/#/55/2  NULL       {3}       3
+start_key  end_key  replicas  lease_holder
+NULL       /0       {1}       1
+/0         /2       {1}       1
+/2         NULL     {3}       3
 
 ###############
 # Query tests #
@@ -195,7 +193,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#/54/1/#
+      spans: -/3/3/#
 
 # Table p2 with interleaved index.
 
@@ -222,28 +220,28 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2] WHERE info LIKE '%spans%'
 ----
-      spans: /1/#/55/2/2-
+      spans: /1/2-
 
 # Upper bound (i <= 6 AND d <= 5)
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5] WHERE info LIKE '%spans%'
 ----
-      spans: -/6/#/55/2/6
+      spans: -/6/6
 
 # IS NULL
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL] WHERE info LIKE '%spans%'
 ----
-      spans: /1/#/55/2/NULL-
+      spans: /1/NULL-
 
 # IS NOT NULL
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL] WHERE info LIKE '%spans%'
 ----
-      spans: /1/#/55/2/!NULL-
+      spans: /1/!NULL-
 
 # String table
 

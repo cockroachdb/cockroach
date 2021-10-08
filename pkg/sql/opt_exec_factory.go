@@ -13,7 +13,6 @@ package sql
 import (
 	"bytes"
 	"compress/zlib"
-	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -96,7 +95,8 @@ func (ef *execFactory) ConstructScan(
 	// users might be able to access a view that uses a higher privilege table.
 	ef.planner.skipSelectPrivilegeChecks = true
 	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
-	if err := scan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := scan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -129,6 +129,14 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	scan.localityOptimized = params.LocalityOptimized
+	if !ef.isExplain {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
+	}
+
 	return scan, nil
 }
 
@@ -295,10 +303,33 @@ func (ef *execFactory) ConstructSerializingProject(
 			for i := range inputCols {
 				inputCols[i].Name = colNames[i]
 			}
+			// TODO(yuzefovich): if n is not a renderNode, we won't serialize
+			// it, but this is breaking the contract of
+			// ConstructSerializingProject. We should clean this up, but in the
+			// mean time it seems acceptable given that the method is called
+			// only for the root node.
+			if r, ok := n.(*renderNode); ok {
+				r.serialize = true
+			}
 			return n, nil
 		}
 	}
-	return constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	res, err := constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	if err != nil {
+		return nil, err
+	}
+	switch r := res.(type) {
+	case *renderNode:
+		r.serialize = true
+	case *spoolNode:
+		// If we pulled up a spoolNode, we don't need to materialize the
+		// ordering (because all mutations are currently not distributed).
+		// TODO(yuzefovich): evaluate whether we still need to push renderings
+		// through the spoolNode.
+	default:
+		return nil, errors.AssertionFailedf("unexpected planNode type %T in ConstructSerializingProject", res)
+	}
+	return res, nil
 }
 
 // ConstructRender is part of the exec.Factory interface.
@@ -495,24 +526,46 @@ func (ef *execFactory) ConstructDistinct(
 	}, nil
 }
 
-// ConstructSetOp is part of the exec.Factory interface.
-func (ef *execFactory) ConstructSetOp(
+// ConstructHashSetOp is part of the exec.Factory interface.
+func (ef *execFactory) ConstructHashSetOp(
+	typ tree.UnionType, all bool, left, right exec.Node,
+) (exec.Node, error) {
+	return ef.planner.newUnionNode(
+		typ, all, left.(planNode), right.(planNode), nil, nil, 0, /* hardLimit */
+	)
+}
+
+// ConstructStreamingSetOp is part of the exec.Factory interface.
+func (ef *execFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
+	streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
-	hardLimit uint64,
 ) (exec.Node, error) {
-	if hardLimit != 0 && (typ != tree.UnionOp || !all) {
-		return nil, errors.AssertionFailedf("a hard limit on a set operator is only supported for UNION ALL")
-	}
-	if hardLimit > 1 {
-		return nil, errors.AssertionFailedf(
-			"locality optimized search is not yet supported for more than one row at a time",
-		)
-	}
 	return ef.planner.newUnionNode(
-		typ, all, left.(planNode), right.(planNode), ReqOrdering(reqOrdering), hardLimit,
+		typ,
+		all,
+		left.(planNode),
+		right.(planNode),
+		streamingOrdering,
+		ReqOrdering(reqOrdering),
+		0, /* hardLimit */
+	)
+}
+
+// ConstructUnionAll is part of the exec.Factory interface.
+func (ef *execFactory) ConstructUnionAll(
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+) (exec.Node, error) {
+	return ef.planner.newUnionNode(
+		tree.UnionOp,
+		true, /* all */
+		left.(planNode),
+		right.(planNode),
+		colinfo.ColumnOrdering(reqOrdering),
+		ReqOrdering(reqOrdering),
+		hardLimit,
 	)
 }
 
@@ -557,7 +610,8 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -589,6 +643,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
 	lookupExpr tree.TypedExpr,
+	remoteLookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isSecondJoinInPairedJoiner bool,
@@ -603,7 +658,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -611,6 +667,14 @@ func (ef *execFactory) ConstructLookupJoin(
 	if locking != nil {
 		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
+
+	if !ef.isExplain {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	n := &lookupJoinNode{
@@ -628,6 +692,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
 	if lookupExpr != nil {
 		n.lookupExpr = pred.iVarHelper.Rebind(lookupExpr)
+	}
+	if remoteLookupExpr != nil {
+		n.remoteLookupExpr = pred.iVarHelper.Rebind(remoteLookupExpr)
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = pred.iVarHelper.Rebind(onCond)
@@ -674,7 +741,8 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// Set up a scanNode that we won't actually use, just to get the needed
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	if err := tableScan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -725,10 +793,19 @@ func (ef *execFactory) ConstructInvertedJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
+
+	if !ef.isExplain {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
+	}
 
 	n := &invertedJoinNode{
 		input:                     input.(planNode),
@@ -781,8 +858,17 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan := ef.planner.Scan()
-	if err := scan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := scan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
+	}
+
+	if !ef.isExplain {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tableDesc.GetID()),
+			IndexID: roachpb.IndexID(index.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	scan.index = index
@@ -899,6 +985,18 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
+// ConstructTopK is part of the execFactory interface.
+func (ef *execFactory) ConstructTopK(
+	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+) (exec.Node, error) {
+	return &topKNode{
+		plan:                 input.(planNode),
+		k:                    k,
+		ordering:             colinfo.ColumnOrdering(ordering),
+		alreadyOrderedPrefix: alreadyOrderedPrefix,
+	}, nil
+}
+
 // ConstructMax1Row is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
 	plan := input.(planNode)
@@ -1005,13 +1103,17 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+	root exec.Node,
+	subqueries []exec.Subquery,
+	cascades []exec.Cascade,
+	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, checks)
+	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
@@ -1187,8 +1289,17 @@ func (ef *execFactory) ConstructInsert(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, cols, ef.planner.alloc,
+		ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		cols,
+		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1253,8 +1364,17 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, cols, ef.planner.alloc,
+		ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		cols,
+		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1350,6 +1470,7 @@ func (ef *execFactory) ConstructUpdate(
 	}
 
 	// Create the table updater, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1359,6 +1480,9 @@ func (ef *execFactory) ConstructUpdate(
 		fetchCols,
 		row.UpdaterDefault,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1452,6 +1576,7 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
+	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
 		ctx,
 		ef.planner.txn,
@@ -1459,6 +1584,9 @@ func (ef *execFactory) ConstructUpsert(
 		tabDesc,
 		insertCols,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1474,6 +1602,9 @@ func (ef *execFactory) ConstructUpsert(
 		fetchCols,
 		row.UpdaterDefault,
 		ef.planner.alloc,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1545,7 +1676,15 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
-	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchCols)
+	internal := ef.planner.SessionData().Internal
+	rd := row.MakeDeleter(
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		fetchCols,
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
+	)
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
@@ -1840,11 +1979,26 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 
 // ConstructControlJobs is part of the exec.Factory interface.
 func (ef *execFactory) ConstructControlJobs(
-	command tree.JobCommand, input exec.Node,
+	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
+	reasonDatum, err := reason.Eval(ef.planner.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
+	var reasonStr string
+	if reasonDatum != tree.DNull {
+		reasonStrDatum, ok := reasonDatum.(*tree.DString)
+		if !ok {
+			return nil, errors.Errorf("expected string value for the reason")
+		}
+		reasonStr = string(*reasonStrDatum)
+	}
+
 	return &controlJobsNode{
 		rows:          input.(planNode),
 		desiredStatus: jobCommandToDesiredStatus[command],
+		reason:        reasonStr,
 	}, nil
 }
 

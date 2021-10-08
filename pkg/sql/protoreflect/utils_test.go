@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -61,11 +62,11 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 		{ // Message with an array and other embedded descriptors
 			pbname: "cockroach.sql.sqlbase.IndexDescriptor",
 			message: &descpb.IndexDescriptor{
-				Name:             "myidx",
-				ID:               500,
-				Unique:           true,
-				ColumnNames:      []string{"foo", "bar", "buz"},
-				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Name:                "myidx",
+				ID:                  500,
+				Unique:              true,
+				KeyColumnNames:      []string{"foo", "bar", "buz"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				GeoConfig: geoindex.Config{
 					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
 						MinLevel: 123,
@@ -82,9 +83,11 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 			// nested inside other message; with maps
 			pbname: "cockroach.util.tracing.tracingpb.RecordedSpan",
 			message: &tracingpb.RecordedSpan{
-				TraceID:            123,
-				Tags:               map[string]string{"one": "1", "two": "2", "three": "3"},
-				InternalStructured: []*pbtypes.Any{makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"})},
+				TraceID: 123,
+				Tags:    map[string]string{"one": "1", "two": "2", "three": "3"},
+				StructuredRecords: []tracingpb.StructuredRecord{{
+					Time:    timeutil.Now(),
+					Payload: makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"})}},
 			},
 		},
 		{ // Message deeply nested inside other message

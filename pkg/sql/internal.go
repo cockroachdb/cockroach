@@ -61,10 +61,10 @@ type InternalExecutor struct {
 	// InternalExecutor will contribute to.
 	memMetrics MemoryMetrics
 
-	// sessionData, if not nil, represents the session variables used by
+	// sessionDataStack, if not nil, represents the session variable stack used by
 	// statements executed on this internalExecutor. Note that queries executed
-	// by the executor will run on copies of this data.
-	sessionData *sessiondata.SessionData
+	// by the executor will run on copies of the top element of this data.
+	sessionDataStack *sessiondata.Stack
 
 	// syntheticDescriptors stores the synthetic descriptors to be injected into
 	// each query/statement's descs.Collection upon initialization.
@@ -116,12 +116,18 @@ func MakeInternalExecutor(
 }
 
 // SetSessionData binds the session variables that will be used by queries
-// performed through this executor from now on.
+// performed through this executor from now on. This creates a new session stack.
+// It is recommended to use SetSessionDataStack.
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionData = sessionData
+	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+}
+
+// SetSessionDataStack binds the session variable stack to the internal executor.
+func (ie *InternalExecutor) SetSessionDataStack(sessionDataStack *sessiondata.Stack) {
+	ie.sessionDataStack = sessionDataStack
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -167,25 +173,25 @@ func (ie *InternalExecutor) initConnEx(
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
 	}
-	appStats := ie.s.sqlStats.getStatsForApplication(appStatsBucketName)
+	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
 
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
-			appStats,
+			applicationStats,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.mon,
@@ -193,9 +199,10 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			txn,
 			ie.syntheticDescriptors,
-			appStats,
+			applicationStats,
 		)
 	}
+
 	ex.executorType = executorTypeInternal
 
 	wg.Add(1)
@@ -394,6 +401,20 @@ func (ie *InternalExecutor) QueryBufferedEx(
 	return datums, err
 }
 
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+// ResultColumns of the input query.
+func (ie *InternalExecutor) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	datums, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	return datums, cols, err
+}
+
 func (ie *InternalExecutor) queryInternalBuffered(
 	ctx context.Context,
 	opName string,
@@ -574,17 +595,18 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	opName string,
 ) sessiondata.InternalExecutorOverride {
-	if ie.sessionData == nil {
+	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
 			User:            security.RootUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.InternalExecutorOverride{}
-	if ie.sessionData.User().Undefined() {
+	sd := ie.sessionDataStack.Top()
+	if sd.User().Undefined() {
 		o.User = security.RootUserName()
 	}
-	if ie.sessionData.ApplicationName == "" {
+	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
@@ -614,14 +636,14 @@ func (ie *InternalExecutor) execInternal(
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
-	if ie.sessionData != nil {
+	if ie.sessionDataStack != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
-		sdCopy := *ie.sessionData
-		sd = &sdCopy
+		sd = ie.sessionDataStack.Top().Clone()
 	} else {
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
 	applyOverrides(sessionDataOverride, sd)
+	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
 	}

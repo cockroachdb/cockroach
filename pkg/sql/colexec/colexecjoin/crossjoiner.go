@@ -79,7 +79,12 @@ var _ colexecop.ClosableOperator = &crossJoiner{}
 var _ colexecop.ResettableOperator = &crossJoiner{}
 
 func (c *crossJoiner) Init(ctx context.Context) {
-	c.init(ctx)
+	if !c.joinHelper.init(ctx) {
+		return
+	}
+	// Note that c.joinHelper.Ctx might contain an updated context, so we use
+	// that rather than ctx.
+	c.crossJoinerBase.init(c.joinHelper.Ctx)
 }
 
 func (c *crossJoiner) Next() coldata.Batch {
@@ -88,20 +93,18 @@ func (c *crossJoiner) Next() coldata.Batch {
 		c.setupForBuilding()
 	}
 	if c.numTotalOutputTuples == c.numAlreadyEmitted {
-		if err := c.Close(c.Ctx); err != nil {
+		if err := c.Close(); err != nil {
 			colexecerror.InternalError(err)
 		}
 		return coldata.ZeroBatch
 	}
-	// TODO(yuzefovich): refactor willEmit calculation when ResetMaybeReallocate
-	// is updated.
 	willEmit := c.numTotalOutputTuples - c.numAlreadyEmitted
-	if willEmit > coldata.BatchSize() {
-		willEmit = coldata.BatchSize()
-	}
 	c.output, _ = c.unlimitedAllocator.ResetMaybeReallocate(
 		c.outputTypes, c.output, willEmit, c.maxOutputBatchMemSize,
 	)
+	if willEmit > c.output.Capacity() {
+		willEmit = c.output.Capacity()
+	}
 	if c.joinType.ShouldIncludeLeftColsInOutput() {
 		if c.isLeftAllNulls {
 			setAllNulls(c.output.ColVecs()[:len(c.left.types)], willEmit)
@@ -300,6 +303,7 @@ func newCrossJoinerBase(
 }
 
 type crossJoinerBase struct {
+	initHelper   colexecop.InitHelper
 	joinType     descpb.JoinType
 	left, right  cjState
 	builderState struct {
@@ -310,6 +314,10 @@ type crossJoinerBase struct {
 		rightColOffset int
 	}
 	output coldata.Batch
+}
+
+func (b *crossJoinerBase) init(ctx context.Context) {
+	b.initHelper.Init(ctx)
 }
 
 func (b *crossJoinerBase) setupBuilder() {
@@ -428,7 +436,8 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 	b.builderState.right.reset()
 }
 
-func (b *crossJoinerBase) Close(ctx context.Context) error {
+func (b *crossJoinerBase) Close() error {
+	ctx := b.initHelper.EnsureCtx()
 	var lastErr error
 	if b.left.tuples != nil {
 		lastErr = b.left.tuples.Close(ctx)

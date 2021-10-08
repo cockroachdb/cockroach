@@ -1,0 +1,71 @@
+@import "../core/index.module";
+
+.search-form {
+  width: 280px;
+  height: 40px;
+  :global(.ant-input-affix-wrapper) {
+    height: 40px;
+    &:hover {
+      :global(.ant-input:not(.ant-input-disabled)) {
+        border-color: $colors--primary-blue-3;
+        border-right-width: 2px !important;
+      }
+    }
+  }
+  :global(.ant-btn) {
+    margin: 0;
+    padding: 0;
+    width: auto;
+    height: auto;
+    border: none;
+    font-size: 14px;
+  }
+  .prefix-icon {
+    color: $colors--neutral-6;
+    width: 12px;
+    &:hover {
+      color: $colors--neutral-6;
+    }
+  }
+  .suffix-icon {
+    width: 10px;
+    vertical-align: middle;
+  }
+  .clear-search {
+    color: $colors--neutral-7;
+    &:hover {
+      color: $colors--neutral-7;
+    }
+  }
+  .submit-search {
+    font-family: $font-family--base;
+    font-size: 14px;
+    color: $colors--neutral-6;
+    line-height: 0 !important;
+    &:hover {
+      color: $colors--neutral-6;
+    }
+  }
+  :global(.ant-input) {
+    font-size: 14px;
+    font-family: $font-family--base;
+    color: $colors--neutral-8;
+    border-radius: 3px;
+    &:focus {
+      box-shadow: 0 0 2px 4px rgba(224, 238, 251, 1);
+      border: 2px solid $colors--primary-blue-3;
+      border-right-width: 2px !important;
+    }
+    &:not(:first-child) {
+      padding-left: 35px;
+      padding-right: 60px;
+    }
+  }
+  .submitted {
+    :global(.ant-input) {
+      &:not(:first-child) {
+        padding-right: 40px;
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ go_library(
         "dir.go",
         "error.go",
         "files.go",
+        "hook.go",
         "keys.go",
         "net.go",
         "pprof.go",
@@ -22,9 +23,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util",
         "//pkg/util/fileutil",
         "//pkg/util/log",
         "//pkg/util/retry",
@@ -40,6 +42,7 @@ go_test(
     name = "testutils_test",
     size = "small",
     srcs = [
+        "hook_test.go",
         "net_test.go",
         "soon_test.go",
     ],
@@ -51,5 +54,6 @@ go_test(
         "//pkg/util/netutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

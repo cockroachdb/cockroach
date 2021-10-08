@@ -1,5 +1,10 @@
 # LogicTest: local 3node-tenant
 
+query T
+SHOW is_superuser
+----
+on
+
 query TTT colnames
 SHOW USERS
 ----
@@ -93,12 +98,28 @@ user3     ·        {}
 statement error no username specified
 CREATE USER ""
 
-query TTT
-SELECT current_user, session_user, user
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
 ----
-root  root  root
+root  root  root  root  root
+
+statement ok
+CREATE USER testuser2;
+GRANT admin TO testuser2
+
+user testuser2
+
+query T
+SHOW is_superuser
+----
+on
 
 user testuser
+
+query T
+SHOW is_superuser
+----
+off
 
 statement error pq: user testuser does not have CREATEROLE privilege
 CREATE USER user4
@@ -109,10 +130,10 @@ UPSERT INTO system.users VALUES (user1, 'newpassword', false)
 statement error pq: user testuser does not have SELECT privilege on relation user
 SHOW USERS
 
-query TTT
-SELECT current_user, session_user, user
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
 ----
-testuser  testuser  testuser
+testuser  testuser  testuser  testuser  testuser
 
 statement ok
 SET SESSION AUTHORIZATION DEFAULT
@@ -156,6 +177,11 @@ user4     NOLOGIN     NULL
 user5     NOLOGIN     NULL
 
 user testuser
+
+query T
+SHOW is_superuser
+----
+off
 
 statement ok
 DROP ROLE user4

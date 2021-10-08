@@ -76,8 +76,8 @@ type AggregateFunc interface {
 	// Compute computes the aggregation on the input batch.
 	// Note: the implementations should be careful to account for their memory
 	// usage.
-	// Note: inputLen is assumed to be greater than zero.
-	Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int)
+	// Note: endIdx is assumed to be greater than zero.
+	Compute(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int)
 
 	// Flush flushes the result of aggregation on the last group. It should be
 	// called once after input batches have been Compute()'d. outputIdx is only
@@ -141,7 +141,7 @@ func (o *orderedAggregateFuncBase) Reset() {
 	o.isFirstGroup = true
 }
 
-type hashAggregateFuncBase struct {
+type unorderedAggregateFuncBase struct {
 	allocator *colmem.Allocator
 	// vec is the output vector of this function.
 	vec coldata.Vec
@@ -149,25 +149,25 @@ type hashAggregateFuncBase struct {
 	nulls *coldata.Nulls
 }
 
-func (h *hashAggregateFuncBase) Init(_ []bool) {}
+func (h *unorderedAggregateFuncBase) Init(_ []bool) {}
 
-func (h *hashAggregateFuncBase) SetOutput(vec coldata.Vec) {
+func (h *unorderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
 	h.vec = vec
 	h.nulls = vec.Nulls()
 }
 
-func (h *hashAggregateFuncBase) CurrentOutputIndex() int {
-	colexecerror.InternalError(errors.AssertionFailedf("CurrentOutputIndex called with hash aggregation"))
+func (h *unorderedAggregateFuncBase) CurrentOutputIndex() int {
+	colexecerror.InternalError(errors.AssertionFailedf("CurrentOutputIndex called with unordered aggregation"))
 	// This code is unreachable, but the compiler cannot infer that.
 	return 0
 }
 
-func (h *hashAggregateFuncBase) SetOutputIndex(int) {
-	colexecerror.InternalError(errors.AssertionFailedf("SetOutputIndex called with hash aggregation"))
+func (h *unorderedAggregateFuncBase) SetOutputIndex(int) {
+	colexecerror.InternalError(errors.AssertionFailedf("SetOutputIndex called with unordered aggregation"))
 }
 
-func (h *hashAggregateFuncBase) HandleEmptyInputScalar() {
-	colexecerror.InternalError(errors.AssertionFailedf("HandleEmptyInputScalar called with hash aggregation"))
+func (h *unorderedAggregateFuncBase) HandleEmptyInputScalar() {
+	colexecerror.InternalError(errors.AssertionFailedf("HandleEmptyInputScalar called with unordered aggregation"))
 }
 
 // aggregateFuncAlloc is an aggregate function allocator that pools allocations
@@ -198,14 +198,34 @@ type AggregateFuncsAlloc struct {
 	aggFuncAllocs []aggregateFuncAlloc
 }
 
+// AggKind represents the context in which an aggregate function is executed -
+// in a grouping or a window context. If grouping, the strategy can be either
+// "Hash" or "Ordered".
+type AggKind uint8
+
+const (
+	// HashAggKind indicates the hash strategy of executing an aggregate function
+	// in a grouping context.
+	HashAggKind AggKind = iota
+	// OrderedAggKind indicates the ordered strategy of executing an aggregate
+	// function in a grouping context.
+	OrderedAggKind
+	// WindowAggKind indicates that an aggregate function is being executed as a
+	// window function.
+	WindowAggKind
+)
+
 // NewAggregateFuncsAlloc returns a new AggregateFuncsAlloc.
 func NewAggregateFuncsAlloc(
-	args *NewAggregatorArgs, allocSize int64, isHashAgg bool,
+	args *NewAggregatorArgs,
+	aggregations []execinfrapb.AggregatorSpec_Aggregation,
+	allocSize int64,
+	aggKind AggKind,
 ) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecop.Closers, error) {
-	funcAllocs := make([]aggregateFuncAlloc, len(args.Spec.Aggregations))
+	funcAllocs := make([]aggregateFuncAlloc, len(aggregations))
 	var toClose colexecop.Closers
 	var vecIdxsToConvert []int
-	for _, aggFn := range args.Spec.Aggregations {
+	for _, aggFn := range aggregations {
 		if !IsAggOptimized(aggFn.Func) {
 			for _, vecIdx := range aggFn.ColIdx {
 				found := false
@@ -227,89 +247,149 @@ func NewAggregateFuncsAlloc(
 		// for the default aggregate functions.
 		inputArgsConverter = colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert, false /* willRelease */)
 	}
-	for i, aggFn := range args.Spec.Aggregations {
+	for i, aggFn := range aggregations {
 		var err error
 		switch aggFn.Func {
 		case execinfrapb.AnyNotNull:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i], err = newAnyNotNullHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				colexecerror.InternalError(errors.AssertionFailedf("anyNotNull window aggregate not supported"))
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.Avg:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i], err = newAvgHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i], err = newAvgOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i], err = newAvgWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.Sum:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i], err = newSumHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i], err = newSumOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i], err = newSumWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.SumInt:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i], err = newSumIntHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i], err = newSumIntOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i], err = newSumIntWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.ConcatAgg:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newConcatHashAggAlloc(args.Allocator, allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newConcatWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.CountRows:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newCountRowsHashAggAlloc(args.Allocator, allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newCountRowsWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.Count:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newCountHashAggAlloc(args.Allocator, allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newCountOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newCountWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.Min:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newMinHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newMinOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newMinWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.Max:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newMaxHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newMaxOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newMaxWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.BoolAnd:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newBoolAndWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		case execinfrapb.BoolOr:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newBoolOrWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 		// NOTE: if you're adding an implementation of a new aggregate
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
 		default:
-			if isHashAgg {
+			switch aggKind {
+			case HashAggKind:
 				funcAllocs[i] = newDefaultHashAggAlloc(
 					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
 					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
-			} else {
+			case OrderedAggKind:
 				funcAllocs[i] = newDefaultOrderedAggAlloc(
 					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
 					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
+			case WindowAggKind:
+				colexecerror.InternalError(errors.AssertionFailedf("default window aggregate not supported"))
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
 			toClose = append(toClose, funcAllocs[i].(colexecop.Closer))
 		}

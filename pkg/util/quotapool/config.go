@@ -37,18 +37,24 @@ func OnAcquisition(f AcquisitionFunc) Option {
 	})
 }
 
-// OnWaitFunc is the prototype for functions called to notify the start or
+// OnWaitStartFunc is the prototype for functions called to notify the start or
 // finish of a waiting period when a request is blocked.
-type OnWaitFunc func(
+type OnWaitStartFunc func(
 	ctx context.Context, poolName string, r Request,
 )
 
-// OnWait creates an Option to configure two callbacks which are called when a
-// request blocks and has to wait for quota (at the start and end of the
-// wait).
-func OnWait(onStart, onFinish OnWaitFunc) Option {
+// OnWaitStart creates an Option to configure a callback which is called when a
+// request blocks and has to wait for quota.
+func OnWaitStart(onStart OnWaitStartFunc) Option {
 	return optionFunc(func(cfg *config) {
 		cfg.onWaitStart = onStart
+	})
+}
+
+// OnWaitFinish creates an Option to configure a callback which is called when a
+// previously blocked request acquires resources.
+func OnWaitFinish(onFinish AcquisitionFunc) Option {
+	return optionFunc(func(cfg *config) {
 		cfg.onWaitFinish = onFinish
 	})
 }
@@ -66,10 +72,10 @@ func OnSlowAcquisition(threshold time.Duration, f SlowAcquisitionFunc) Option {
 // LogSlowAcquisition is a SlowAcquisitionFunc.
 func LogSlowAcquisition(ctx context.Context, poolName string, r Request, start time.Time) func() {
 	log.Warningf(ctx, "have been waiting %s attempting to acquire %s quota",
-		timeutil.Since(start), poolName)
+		timeutil.Since(start), log.Safe(poolName))
 	return func() {
 		log.Infof(ctx, "acquired %s quota after %s",
-			poolName, timeutil.Since(start))
+			log.Safe(poolName), timeutil.Since(start))
 	}
 }
 
@@ -112,13 +118,14 @@ func WithMinimumWait(duration time.Duration) Option {
 }
 
 type config struct {
-	onAcquisition             AcquisitionFunc
-	onSlowAcquisition         SlowAcquisitionFunc
-	onWaitStart, onWaitFinish OnWaitFunc
-	slowAcquisitionThreshold  time.Duration
-	timeSource                timeutil.TimeSource
-	closer                    <-chan struct{}
-	minimumWait               time.Duration
+	onAcquisition            AcquisitionFunc
+	onSlowAcquisition        SlowAcquisitionFunc
+	onWaitStart              OnWaitStartFunc
+	onWaitFinish             AcquisitionFunc
+	slowAcquisitionThreshold time.Duration
+	timeSource               timeutil.TimeSource
+	closer                   <-chan struct{}
+	minimumWait              time.Duration
 }
 
 var defaultConfig = config{

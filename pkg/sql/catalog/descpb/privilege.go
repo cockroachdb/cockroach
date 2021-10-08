@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
 )
@@ -33,11 +34,12 @@ const (
 	// OwnerVersion corresponds to descriptors created 20.2 and onward.
 	// These descriptors should always have owner set.
 	OwnerVersion
-)
 
-func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
-	return bits&priv.Mask() != 0
-}
+	// Version21_2 corresponds to descriptors created in 21.2 and onwards.
+	// These descriptors should have all the correct privileges and the owner field
+	// explicitly set. These descriptors should be strictly validated.
+	Version21_2
+)
 
 // Owner accesses the owner field.
 func (p PrivilegeDescriptor) Owner() security.SQLUsername {
@@ -61,9 +63,9 @@ func (p PrivilegeDescriptor) findUserIndex(user security.SQLUsername) int {
 	return -1
 }
 
-// findUser looks for a specific user in the list.
+// FindUser looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
-func (p PrivilegeDescriptor) findUser(user security.SQLUsername) (*UserPrivileges, bool) {
+func (p PrivilegeDescriptor) FindUser(user security.SQLUsername) (*UserPrivileges, bool) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		return nil, false
@@ -71,8 +73,8 @@ func (p PrivilegeDescriptor) findUser(user security.SQLUsername) (*UserPrivilege
 	return &p.Users[idx], true
 }
 
-// findOrCreateUser looks for a specific user in the list, creating it if needed.
-func (p *PrivilegeDescriptor) findOrCreateUser(user security.SQLUsername) *UserPrivileges {
+// FindOrCreateUser looks for a specific user in the list, creating it if needed.
+func (p *PrivilegeDescriptor) FindOrCreateUser(user security.SQLUsername) *UserPrivileges {
 	idx := sort.Search(len(p.Users), func(i int) bool {
 		return !p.Users[i].User().LessThan(user)
 	})
@@ -90,8 +92,8 @@ func (p *PrivilegeDescriptor) findOrCreateUser(user security.SQLUsername) *UserP
 	return &p.Users[idx]
 }
 
-// removeUser looks for a given user in the list and removes it if present.
-func (p *PrivilegeDescriptor) removeUser(user security.SQLUsername) {
+// RemoveUser looks for a given user in the list and removes it if present.
+func (p *PrivilegeDescriptor) RemoveUser(user security.SQLUsername) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		// Not found.
@@ -117,8 +119,17 @@ func NewCustomSuperuserPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: OwnerVersion,
+		Version: Version21_2,
 	}
+}
+
+// NewPublicSelectPrivilegeDescriptor is used to construct a privilege descriptor
+// owned by the node user which has SELECT privilege for the public role. It is
+// used for virtual tables.
+func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(
+		security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
+	)
 }
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
@@ -134,7 +145,7 @@ func NewPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: OwnerVersion,
+		Version: Version21_2,
 	}
 }
 
@@ -149,17 +160,15 @@ func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescrip
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
-// TODO(marc): if all privileges other than ALL are set, should we collapse
-// them into ALL?
 func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privilege.List) {
-	userPriv := p.findOrCreateUser(user)
-	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
+	userPriv := p.FindOrCreateUser(user)
+	if privilege.ALL.IsSetIn(userPriv.Privileges) {
 		// User already has 'ALL' privilege: no-op.
 		return
 	}
 
 	bits := privList.ToBitField()
-	if isPrivilegeSet(bits, privilege.ALL) {
+	if privilege.ALL.IsSetIn(bits) {
 		// Granting 'ALL' privilege: overwrite.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
@@ -173,22 +182,22 @@ func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privileg
 func (p *PrivilegeDescriptor) Revoke(
 	user security.SQLUsername, privList privilege.List, objectType privilege.ObjectType,
 ) {
-	userPriv, ok := p.findUser(user)
+	userPriv, ok := p.FindUser(user)
 	if !ok || userPriv.Privileges == 0 {
 		// Removing privileges from a user without privileges is a no-op.
 		return
 	}
 
 	bits := privList.ToBitField()
-	if isPrivilegeSet(bits, privilege.ALL) {
+	if privilege.ALL.IsSetIn(bits) {
 		// Revoking 'ALL' privilege: remove user.
 		// TODO(marc): the grammar does not allow it, but we should
 		// check if other privileges are being specified and error out.
-		p.removeUser(user)
+		p.RemoveUser(user)
 		return
 	}
 
-	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
+	if privilege.ALL.IsSetIn(userPriv.Privileges) {
 		// User has 'ALL' privilege. Remove it and set
 		// all other privileges one.
 		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
@@ -204,106 +213,108 @@ func (p *PrivilegeDescriptor) Revoke(
 	userPriv.Privileges &^= bits
 
 	if userPriv.Privileges == 0 {
-		p.removeUser(user)
+		p.RemoveUser(user)
 	}
 }
 
-// MaybeFixPrivileges fixes the privilege descriptor if needed, including:
-// * adding default privileges for the "admin" role
-// * fixing default privileges for the "root" user
-// * fixing maximum privileges for users.
-// Returns true if the privilege descriptor was modified.
-//
-// TODO(ajwerner): Figure out whether this is still needed. It seems like
-// perhaps it was intended only for the 2.0 release but then somehow we got
-// bad descriptors with bad initial permissions into later versions or we didn't
-// properly bake this migration in.
-func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
-	if *ptr == nil {
-		*ptr = &PrivilegeDescriptor{}
-	}
-	p := *ptr
-	allowedPrivilegesBits := privilege.ALL.Mask()
-	if IsReservedID(id) {
-		// System databases and tables have custom maximum allowed privileges.
-		allowedPrivilegesBits = SystemAllowedPrivileges[id].ToBitField()
-	}
-
-	var modified bool
-
-	fixSuperUser := func(user security.SQLUsername) {
-		privs := p.findOrCreateUser(user)
-		if privs.Privileges != allowedPrivilegesBits {
-			privs.Privileges = allowedPrivilegesBits
-			modified = true
-		}
-	}
-
-	// Check "root" user and "admin" role.
-	fixSuperUser(security.RootUserName())
-	fixSuperUser(security.AdminRoleName())
-
-	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
-		// ALL privileges allowed, we can skip regular users.
-		return modified
-	}
-
-	for i := range p.Users {
-		// Users is a slice of values, we need pointers to make them mutable.
-		u := &p.Users[i]
-		if u.User().IsRootUser() || u.User().IsAdminRole() {
-			// we've already checked super users.
-			continue
-		}
-
-		if (u.Privileges &^ allowedPrivilegesBits) != 0 {
-			// User has disallowed privileges: bitwise AND with allowed privileges.
-			u.Privileges &= allowedPrivilegesBits
-			modified = true
-		}
-	}
-
-	return modified
-}
-
-// Validate returns an error if the privilege descriptor is invalid.
+// ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
+// allowed privilege set for the object.
 // It requires the ID of the descriptor it is applied on to determine whether
 // it is is a system descriptor, because superusers do not always have full
 // privileges for those.
 // It requires the objectType to determine the superset of privileges allowed
 // for regular users.
-func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
-	allowedSuperuserPrivileges := DefaultSuperuserPrivileges
-	maybeSystem := ""
-
-	if IsReservedID(id) {
-		var ok bool
-		maybeSystem = "system "
-		allowedSuperuserPrivileges, ok = SystemAllowedPrivileges[id]
+func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
+	parentID ID,
+	objectType privilege.ObjectType,
+	objectName string,
+	allowedSuperuserPrivileges privilege.List,
+) error {
+	for _, user := range []security.SQLUsername{
+		// Check "root" user.
+		security.RootUserName(),
+		// We expect an "admin" role. Check that it has desired superuser permissions.
+		security.AdminRoleName(),
+	} {
+		superPriv, ok := p.FindUser(user)
 		if !ok {
-			return fmt.Errorf("no allowed privileges defined for %s%s with ID=%d",
-				maybeSystem, objectType, id)
+			return fmt.Errorf(
+				"user %s does not have privileges over %s",
+				user,
+				privilegeObject(parentID, objectType, objectName),
+			)
+		}
+
+		// The super users must match the allowed privilege set exactly.
+		if superPriv.Privileges != allowedSuperuserPrivileges.ToBitField() {
+			return fmt.Errorf(
+				"user %s must have exactly %s privileges on %s",
+				user,
+				allowedSuperuserPrivileges,
+				privilegeObject(parentID, objectType, objectName),
+			)
 		}
 	}
+	return nil
+}
 
-	// Check "root" user.
-	if err := p.validateRequiredSuperuser(id, allowedSuperuserPrivileges, security.RootUserName(), objectType); err != nil {
-		return err
-	}
-
-	// We expect an "admin" role. Check that it has desired superuser permissions.
-	if err := p.validateRequiredSuperuser(id, allowedSuperuserPrivileges, security.AdminRoleName(), objectType); err != nil {
-		return err
+// Validate returns an assertion error if the privilege descriptor is invalid.
+func (p PrivilegeDescriptor) Validate(
+	parentID ID,
+	objectType privilege.ObjectType,
+	objectName string,
+	allowedSuperuserPrivileges privilege.List,
+) error {
+	if err := p.ValidateSuperuserPrivileges(parentID, objectType, objectName, allowedSuperuserPrivileges); err != nil {
+		return errors.HandleAsAssertionFailure(err)
 	}
 
 	if p.Version >= OwnerVersion {
 		if p.Owner().Undefined() {
-			return errors.AssertionFailedf("found no owner for %s%s with ID=%d",
-				maybeSystem, objectType, id)
+			return errors.AssertionFailedf("found no owner for %s", privilegeObject(parentID, objectType, objectName))
 		}
 	}
 
+	valid, u, remaining := p.IsValidPrivilegesForObjectType(objectType)
+	if !valid {
+		return errors.AssertionFailedf(
+			"user %s must not have %s privileges on %s",
+			u.User(),
+			privilege.ListFromBitField(remaining, privilege.Any),
+			privilegeObject(parentID, objectType, objectName),
+		)
+	}
+
+	return nil
+}
+
+// IsValidPrivilegesForObjectType checks if the privileges on the descriptor
+// is valid for the given object type.
+// If the privileges are invalid, it returns false along with the first user
+// found to have invalid privileges and the bits representing the invalid
+// privileges.
+func (p PrivilegeDescriptor) IsValidPrivilegesForObjectType(
+	objectType privilege.ObjectType,
+) (bool, UserPrivileges, uint32) {
 	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
+
+	// Validate can be called during the fix_privileges_migration introduced in
+	// 21.2. It is possible for have invalid privileges prior to 21.2 in certain
+	// cases due to bugs. We can strictly check privileges in 21.2 and onwards.
+	if p.Version < Version21_2 {
+		if objectType == privilege.Schema {
+			// Prior to 21_2, it was possible for a schema to have some database
+			// privileges on it. This was temporarily fixed by an upgrade on read
+			// but in 21.2 onwards, it should be permanently fixed with a migration.
+			allowedPrivilegesBits |= privilege.GetValidPrivilegesForObject(privilege.Database).ToBitField()
+		}
+		if objectType == privilege.Table || objectType == privilege.Database {
+			// Prior to 21_2, it was possible for a table or database to have USAGE
+			// privilege on it due to a bug when upgrading from 20.1 to 20.2.
+			// In 21.2 onwards, it should be permanently fixed with a migration.
+			allowedPrivilegesBits |= privilege.USAGE.Mask()
+		}
+	}
 
 	// For all non-super users, privileges must not exceed the allowed privileges.
 	// Also the privileges must be valid on the object type.
@@ -314,44 +325,11 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
-			return fmt.Errorf("user %s must not have %s privileges on %s%s with ID=%d",
-				u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
-		}
-		// Get all the privilege bits set on the descriptor even if they're not valid.
-		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
-		if err := privilege.ValidatePrivileges(
-			privs, objectType,
-		); err != nil {
-			return err
+			return false, u, remaining
 		}
 	}
 
-	return nil
-}
-
-func (p PrivilegeDescriptor) validateRequiredSuperuser(
-	id ID,
-	allowedPrivileges privilege.List,
-	user security.SQLUsername,
-	objectType privilege.ObjectType,
-) error {
-	maybeSystem := ""
-	if IsReservedID(id) {
-		maybeSystem = "system "
-	}
-	superPriv, ok := p.findUser(user)
-	if !ok {
-		return fmt.Errorf("user %s does not have privileges over %s%s with ID=%d",
-			user, maybeSystem, objectType, id)
-	}
-
-	// The super users must match the allowed privilege set exactly.
-	if superPriv.Privileges != allowedPrivileges.ToBitField() {
-		return fmt.Errorf("user %s must have exactly %s privileges on %s%s with ID=%d",
-			user, allowedPrivileges, maybeSystem, objectType, id)
-	}
-
-	return nil
+	return true, UserPrivileges{}, 0
 }
 
 // UserPrivilegeString is a pair of strings describing the
@@ -381,16 +359,16 @@ func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivile
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
 func (p PrivilegeDescriptor) CheckPrivilege(user security.SQLUsername, priv privilege.Kind) bool {
-	userPriv, ok := p.findUser(user)
+	userPriv, ok := p.FindUser(user)
 	if !ok {
 		// User "node" has all privileges.
 		return user.IsNodeUser()
 	}
 
-	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
+	if privilege.ALL.IsSetIn(userPriv.Privileges) {
 		return true
 	}
-	return isPrivilegeSet(userPriv.Privileges, priv)
+	return priv.IsSetIn(userPriv.Privileges)
 }
 
 // AnyPrivilege returns true if 'user' has any privilege on this descriptor.
@@ -398,60 +376,50 @@ func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
 	if p.Owner() == user {
 		return true
 	}
-	userPriv, ok := p.findUser(user)
+	userPriv, ok := p.FindUser(user)
 	if !ok {
 		return false
 	}
 	return userPriv.Privileges != 0
 }
 
-// SystemAllowedPrivileges describes the allowable privilege list for each
-// system object. Super users (root and admin) must have exactly the specified privileges,
-// other users must not exceed the specified privileges.
-var SystemAllowedPrivileges = map[ID]privilege.List{
-	keys.SystemDatabaseID:           privilege.ReadData,
-	keys.NamespaceTableID:           privilege.ReadData,
-	keys.DeprecatedNamespaceTableID: privilege.ReadData,
-	keys.DescriptorTableID:          privilege.ReadData,
-	keys.UsersTableID:               privilege.ReadWriteData,
-	keys.RoleOptionsTableID:         privilege.ReadWriteData,
-	keys.ZonesTableID:               privilege.ReadWriteData,
-	// We eventually want to migrate the table to appear read-only to force the
-	// the use of a validating, logging accessor, so we'll go ahead and tolerate
-	// read-only privs to make that migration possible later.
-	keys.SettingsTableID:   privilege.ReadWriteData,
-	keys.DescIDSequenceID:  privilege.ReadData,
-	keys.TenantsTableID:    privilege.ReadData,
-	keys.LeaseTableID:      privilege.ReadWriteData,
-	keys.EventLogTableID:   privilege.ReadWriteData,
-	keys.RangeEventTableID: privilege.ReadWriteData,
-	keys.UITableID:         privilege.ReadWriteData,
-	// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
-	// users will be able to modify system tables' schemas at will. CREATE and
-	// DROP privileges are allowed on the above system tables for backwards
-	// compatibility reasons only!
-	keys.JobsTableID:                          privilege.ReadWriteData,
-	keys.WebSessionsTableID:                   privilege.ReadWriteData,
-	keys.TableStatisticsTableID:               privilege.ReadWriteData,
-	keys.LocationsTableID:                     privilege.ReadWriteData,
-	keys.RoleMembersTableID:                   privilege.ReadWriteData,
-	keys.CommentsTableID:                      privilege.ReadWriteData,
-	keys.ReplicationConstraintStatsTableID:    privilege.ReadWriteData,
-	keys.ReplicationCriticalLocalitiesTableID: privilege.ReadWriteData,
-	keys.ReplicationStatsTableID:              privilege.ReadWriteData,
-	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
-	keys.ProtectedTimestampsMetaTableID:       privilege.ReadData,
-	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadData,
-	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
-	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
-	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
-	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
-	keys.SqllivenessID:                        privilege.ReadWriteData,
-	keys.MigrationsID:                         privilege.ReadWriteData,
-	keys.JoinTokensTableID:                    privilege.ReadWriteData,
+// HasAllPrivileges returns whether the user has ALL privileges either through
+// ALL or having every privilege possible on the object.
+func (p PrivilegeDescriptor) HasAllPrivileges(
+	user security.SQLUsername, objectType privilege.ObjectType,
+) bool {
+	if p.CheckPrivilege(user, privilege.ALL) {
+		return true
+	}
+	// If ALL is not set, check if all other privileges would add up to all.
+	validPrivileges := privilege.GetValidPrivilegesForObject(objectType)
+	for _, priv := range validPrivileges {
+		if priv == privilege.ALL {
+			continue
+		}
+		if !p.CheckPrivilege(user, priv) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.
 func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
 	p.OwnerProto = owner.EncodeProto()
+}
+
+// SetVersion sets the version of the privilege descriptor.
+func (p *PrivilegeDescriptor) SetVersion(version PrivilegeDescVersion) {
+	p.Version = version
+}
+
+// privilegeObject is a helper function for privilege errors.
+func privilegeObject(parentID ID, objectType privilege.ObjectType, objectName string) string {
+	if parentID == keys.SystemDatabaseID ||
+		(parentID == InvalidID && objectName == catconstants.SystemDatabaseName) {
+		return fmt.Sprintf("system %s %q", objectType, objectName)
+	}
+	return fmt.Sprintf("%s %q", objectType, objectName)
 }

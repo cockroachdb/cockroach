@@ -51,6 +51,8 @@ type insertFastPathNode struct {
 	run insertFastPathRun
 }
 
+var _ mutationPlanNode = &insertFastPathNode{}
+
 type insertFastPathRun struct {
 	insertRun
 
@@ -109,10 +111,10 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	}
 	for i, ord := range c.InsertCols {
 		var colID descpb.ColumnID
-		if i < c.idx.NumColumns() {
-			colID = c.idx.GetColumnID(i)
+		if i < c.idx.NumKeyColumns() {
+			colID = c.idx.GetKeyColumnID(i)
 		} else {
-			colID = c.idx.GetExtraColumnID(i - c.idx.NumColumns())
+			colID = c.idx.GetKeySuffixColumnID(i - c.idx.NumKeyColumns())
 		}
 
 		c.colMap.Set(colID, int(ord))
@@ -162,8 +164,8 @@ func (r *insertFastPathRun) addFKChecks(
 				return c.errorForRow(inputRow)
 			}
 			// We have a row with only NULLS, or a row with some NULLs and match
-			// method PARTIAL. We can ignore this row.
-			return nil
+			// method PARTIAL. We can skip this FK check for this row.
+			continue
 		}
 
 		span, err := c.generateSpan(inputRow)
@@ -247,7 +249,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		}
 	}
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -302,6 +304,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		return false, err
 	}
 
+	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err
 	}
@@ -309,7 +312,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.GetID(), len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc, len(n.input))
 
 	return true, nil
 }
@@ -324,6 +327,10 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
+}
+
+func (n *insertFastPathNode) rowsWritten() int64 {
+	return n.run.ti.rowsWritten
 }
 
 // See planner.autoCommit.

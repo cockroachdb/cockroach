@@ -9,12 +9,15 @@
 package multiregionccl_test
 
 import (
+	"context"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -117,7 +120,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() error {
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
 						mu.Lock()
 						if firstOp {
 							firstOp = false
@@ -183,21 +186,9 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 				dbRegions = append(dbRegions, region)
 			}
 
-			if len(dbRegions) != len(tc.expectedRegions) {
-				t.Fatalf("unexpected number of regions, expected: %v found %v",
-					tc.expectedRegions,
-					dbRegions,
-				)
-			}
-
-			for i, expectedRegion := range tc.expectedRegions {
-				if expectedRegion != dbRegions[i] {
-					t.Fatalf("unexpected regions, expected: %v found %v",
-						tc.expectedRegions,
-						dbRegions,
-					)
-				}
-			}
+			sort.Strings(tc.expectedRegions)
+			sort.Strings(dbRegions)
+			require.Equal(t, tc.expectedRegions, dbRegions)
 		})
 	}
 }
@@ -216,9 +207,6 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "times out under race")
-
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	regionAlterCmds := []struct {
 		name          string
@@ -271,19 +259,21 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 
 				knobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							close(typeChangeStarted)
 							<-rbrOpFinished
 							if !regionAlterCmd.shouldSucceed {
 								// Trigger a roll-back.
-								return errors.New("boom")
+								return jobs.MarkAsPermanentJobError(errors.New("boom"))
 							}
 							// Trod on.
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				}
 
 				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -332,6 +322,119 @@ CREATE TABLE db.rbr(k INT PRIMARY KEY, v INT NOT NULL) LOCALITY REGIONAL BY ROW;
 	}
 }
 
+// TestSettingPlacementAmidstAddDrop starts a region add/drop and alters the
+// database to PLACEMENT RESTRICTED before enum promotion in the add/drop. This
+// is required to ensure that global tables are refreshed as a result of the
+// add/drop.
+// This test is built to protect against cases where PLACEMENT RESTRICTED is
+// applied but the database finalizer doesn't realize, meaning that global
+// tables don't have their constraints refreshed. This is only a problem in the
+// DEFAULT -> RESTRICTED path as in the RESTRICTED -> DEFAULT path, global
+// tables will always be refreshed, either by virtue of inheriting the database
+// zone config or being explicitly refreshed under RESTRICTED.
+func TestSettingPlacementAmidstAddDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name         string
+		placementOp  string
+		regionOp     string
+		expectedZcfg string
+	}{
+		{
+			name:        "add then set restricted",
+			placementOp: "ALTER DATABASE db PLACEMENT RESTRICTED",
+			regionOp:    `ALTER DATABASE db ADD REGION "us-east3"`,
+			expectedZcfg: `
+ALTER TABLE db.public.global CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	global_reads = true,
+	num_replicas = 5,
+	num_voters = 3,
+	constraints = '{+region=us-east1: 1, +region=us-east2: 1, +region=us-east3: 1}',
+	voter_constraints = '[+region=us-east1]',
+	lease_preferences = '[[+region=us-east1]]'`,
+		},
+		{
+			name:        "drop then set restricted",
+			placementOp: "ALTER DATABASE db PLACEMENT RESTRICTED",
+			regionOp:    `ALTER DATABASE db DROP REGION "us-east2"`,
+			expectedZcfg: `
+ALTER TABLE db.public.global CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	global_reads = true,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=us-east1: 1}',
+	voter_constraints = '[+region=us-east1]',
+	lease_preferences = '[[+region=us-east1]]'`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			regionOpStarted := make(chan struct{})
+			regionOpFinished := make(chan struct{})
+			placementOpFinished := make(chan struct{})
+
+			knobs := base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					RunBeforeEnumMemberPromotion: func(context.Context) error {
+						close(regionOpStarted)
+						<-placementOpFinished
+						return nil
+					},
+				},
+				// Decrease the adopt loop interval so that retries happen quickly.
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			}
+
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 3 /* numServers */, knobs,
+			)
+			defer cleanup()
+
+			_, err := sqlDB.Exec(`
+CREATE DATABASE db PRIMARY REGION "us-east1" REGIONS "us-east2";
+CREATE TABLE db.global () LOCALITY GLOBAL;
+SET CLUSTER SETTING sql.defaults.multiregion_placement_policy.enabled = true;`)
+			require.NoError(t, err)
+
+			go func() {
+				defer func() {
+					close(regionOpFinished)
+				}()
+
+				_, err := sqlDB.Exec(tc.regionOp)
+				require.NoError(t, err)
+			}()
+
+			<-regionOpStarted
+			_, err = sqlDB.Exec(tc.placementOp)
+			require.NoError(t, err)
+			close(placementOpFinished)
+
+			<-regionOpFinished
+			var actualZoneConfig string
+			res := sqlDB.QueryRow(
+				`SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE db.global]`,
+			)
+			err = res.Scan(&actualZoneConfig)
+			require.NoError(t, err)
+
+			expectedZcfg := strings.TrimSpace(tc.expectedZcfg)
+			if expectedZcfg != actualZoneConfig {
+				t.Fatalf("expected zone config %q but got %q", expectedZcfg, actualZoneConfig)
+			}
+		})
+	}
+}
+
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -342,7 +445,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	dropRegionFinished := make(chan struct{})
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-			RunBeforeEnumMemberPromotion: func() error {
+			RunBeforeEnumMemberPromotion: func(context.Context) error {
 				mu.Lock()
 				defer mu.Unlock()
 				if dropRegionStarted != nil {
@@ -432,9 +535,6 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	// Protects expectedCleanupRuns
 	var mu syncutil.Mutex
 	// We need to cleanup 2 times, once for the multi-region type descriptor and
@@ -444,7 +544,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeExec: func() error {
-				return errors.New("yikes")
+				return jobs.MarkAsPermanentJobError(errors.New("yikes"))
 			},
 			RunAfterOnFailOrCancel: func() error {
 				mu.Lock()
@@ -456,6 +556,8 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 				return nil
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -504,15 +606,14 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 
 	skip.UnderRace(t, "times out under race")
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
-				return errors.New("boom")
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
 	// Setup.
@@ -577,6 +678,101 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 	}
 }
 
+// TestRollbackDuringAddDropRegionPlacementRestricted ensures that rollback when
+// an ADD REGION/DROP REGION fails asynchronously is handled appropriately when
+// the database has been configured with PLACEMENT RESTRICTED.
+// This also ensures that zone configuration changes on the database are
+// transactional.
+func TestRollbackDuringAddDropRegionPlacementRestricted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeMultiRegionUpdates: func() error {
+				return jobs.MarkAsPermanentJobError(errors.New("boom"))
+			},
+		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	// Setup.
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, knobs,
+	)
+	defer cleanup()
+	_, err := sqlDB.Exec(
+		`SET enable_multiregion_placement_policy = true;
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2" PLACEMENT RESTRICTED;`,
+	)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`CREATE TABLE db.test_global () LOCALITY GLOBAL`)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			"add-region",
+			`ALTER DATABASE db ADD REGION "us-east3"`,
+		},
+		{
+			"drop-region",
+			`ALTER DATABASE db DROP REGION "us-east2"`,
+		},
+		{
+			"add-drop-region-in-txn",
+			`BEGIN;
+	ALTER DATABASE db DROP REGION "us-east2";
+	ALTER DATABASE db ADD REGION "us-east3";
+	COMMIT`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var originalZoneConfig string
+			res := sqlDB.QueryRow(
+				`SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE db.test_global]`,
+			)
+			err = res.Scan(&originalZoneConfig)
+			require.NoError(t, err)
+
+			_, err = sqlDB.Exec(tc.query)
+			testutils.IsError(err, "boom")
+
+			var jobStatus string
+			var jobErr string
+			row := sqlDB.QueryRow(
+				"SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'TYPEDESC SCHEMA CHANGE'",
+			)
+			require.NoError(t, row.Scan(&jobStatus, &jobErr))
+			require.Contains(t, "boom", jobErr)
+			require.Contains(t, "failed", jobStatus)
+
+			// Ensure the zone configuration didn't change.
+			var newZoneConfig string
+			res = sqlDB.QueryRow(
+				`SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE db.test_global]`,
+			)
+			err = res.Scan(&newZoneConfig)
+			require.NoError(t, err)
+
+			if newZoneConfig != originalZoneConfig {
+				t.Fatalf("expected zone config to not have changed, expected %q found %q",
+					originalZoneConfig,
+					newZoneConfig,
+				)
+			}
+		})
+	}
+}
+
 // TestRegionAddDropEnclosingBackupOps tests adding/dropping regions
 // (which may or may not succeed) with a concurrent backup operation
 // The sketch of the test is as follows:
@@ -590,12 +786,10 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 // - Validate that the database and its tables look as expected.
 func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 68341, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "times out under race")
-
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	regionAlterCmds := []struct {
 		name               string
@@ -652,7 +846,7 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 
 				backupKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if waitInTypeSchemaChangerDuringBackup {
@@ -665,6 +859,8 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				}
 
 				tempExternalIODir, tempDirCleanup := testutils.TempDir(t)
@@ -707,7 +903,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 
 				restoreKnobs := base.TestingKnobs{
 					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-						RunBeforeEnumMemberPromotion: func() error {
+						RunBeforeEnumMemberPromotion: func(context.Context) error {
 							mu.Lock()
 							defer mu.Unlock()
 							if !regionAlterCmd.shouldSucceed {
@@ -718,6 +914,8 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				}
 
 				// Start a new cluster (with new testing knobs) for restore.

@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -77,6 +77,11 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// ServerTyped is like Server, but returns the right type.
+func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
+	return tc.Servers[idx]
+}
+
 // ServerConn is part of TestClusterInterface.
 func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
@@ -116,12 +121,12 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		tc.stopServerLocked(i)
 	}
 
-	// TODO(irfansharif): Instead of checking for empty tracing registries after
-	// shutting down each node, we're doing it after shutting down all nodes.
-	// This is because TestCluster share the same Tracer object. Perhaps a saner
-	// thing to do is to separate out individual TestServers entirely. The
-	// component sharing within TestCluster has bitten in the past as well, and
-	// it's not clear why it has to be this way.
+	// TODO(andrei): Instead of checking for empty tracing registries after
+	// shutting down each node, we're doing it after shutting down all nodes. This
+	// is because all the nodes might share the same cluster (in case the Tracer
+	// was passed in at cluster creation time). We should not allow the Tracer to
+	// be passed in like this, and we should then also added this registry
+	// draining check to individual TestServers.
 	for i := 0; i < tc.NumServers(); i++ {
 		// Wait until a server's span registry is emptied out. This helps us check
 		// to see that there are no un-Finish()ed spans. We need to wrap this in a
@@ -131,7 +136,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// example of this.
 		//
 		// [1]: cleanupSessionTempObjects
-		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		tracer := tc.Servers[i].Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
 			var sps []*tracing.Span
 			_ = tracer.VisitSpans(func(span *tracing.Span) error {
@@ -221,6 +226,17 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 			serverArgs = perNodeServerArgs
 		} else {
 			serverArgs = tc.clusterArgs.ServerArgs
+		}
+
+		if len(serverArgs.StoreSpecs) == 0 {
+			serverArgs.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+		}
+		if knobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs); ok && knobs.StickyEngineRegistry != nil {
+			for j := range serverArgs.StoreSpecs {
+				if serverArgs.StoreSpecs[j].StickyInMemoryEngineID == "" {
+					serverArgs.StoreSpecs[j].StickyInMemoryEngineID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
+				}
+			}
 		}
 
 		// If no localities are specified in the args, we'll generate some
@@ -592,18 +608,41 @@ func (tc *TestCluster) Targets(serverIdxs ...int) []roachpb.ReplicationTarget {
 func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
+	tc.t.Helper()
 	ctx := context.TODO()
-	var beforeDesc roachpb.RangeDescriptor
-	if err := tc.Servers[0].DB().GetProto(
-		ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
-	); err != nil {
-		return roachpb.RangeDescriptor{}, errors.Wrap(err, "range descriptor lookup error")
+
+	var returnErr error
+	var desc *roachpb.RangeDescriptor
+	if err := testutils.SucceedsSoonError(func() error {
+		tc.t.Helper()
+		var beforeDesc roachpb.RangeDescriptor
+		if err := tc.Servers[0].DB().GetProto(
+			ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
+		); err != nil {
+			return errors.Wrap(err, "range descriptor lookup error")
+		}
+		var err error
+		desc, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
+		)
+		if kvserver.IsRetriableReplicationChangeError(err) {
+			tc.t.Logf("encountered retriable replication change error: %v", err)
+			return err
+		}
+		// Don't return blindly - if this isn't an error we think is related to a
+		// replication error that we can retry, save the error to the outer scope
+		// and return nil.
+		returnErr = err
+		return nil
+	}); err != nil {
+		returnErr = err
 	}
-	desc, err := tc.Servers[0].DB().AdminChangeReplicas(
-		ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
-	)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")
+
+	if returnErr != nil {
+		// We mark the error as Handled so that tests that wanted the error in the
+		// first attempt but spent a while spinning in the retry loop above will
+		// fail. These should invoke ChangeReplicas directly.
+		return roachpb.RangeDescriptor{}, errors.Handled(errors.Wrap(returnErr, "AdminChangeReplicas error"))
 	}
 	return *desc, nil
 }
@@ -871,23 +910,26 @@ func (tc *TestCluster) RemoveLeaseHolderOrFatal(
 
 // MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
 func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
-	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget, manual *hlc.HybridManualClock,
-) error {
+	ctx context.Context,
+	rangeDesc roachpb.RangeDescriptor,
+	dest roachpb.ReplicationTarget,
+	manual *hlc.HybridManualClock,
+) (*roachpb.Lease, error) {
 	knobs := tc.clusterArgs.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs)
 	if !knobs.AllowLeaseRequestProposalsWhenNotLeader {
 		// Without this knob, we'd have to architect a Raft leadership change
 		// too in order to let the replica get the lease. It's easier to just
 		// require that callers set it.
-		return errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
+		return nil, errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
 	}
 
 	destServer, err := tc.FindMemberServer(dest.StoreID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	destStore, err := destServer.Stores().GetStore(dest.StoreID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// We are going to advance the manual clock so that the current lease
@@ -896,13 +938,15 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	// when it's up for grabs. To handle that case, we wrap the entire operation
 	// in an outer retry loop.
 	const retryDur = testutils.DefaultSucceedsSoonDuration
-	return retry.ForDuration(retryDur, func() error {
+	var newLease *roachpb.Lease
+	err = retry.ForDuration(retryDur, func() error {
 		// Find the current lease.
 		prevLease, _, err := tc.FindRangeLease(rangeDesc, nil /* hint */)
 		if err != nil {
 			return err
 		}
 		if prevLease.Replica.StoreID == dest.StoreID {
+			newLease = &prevLease
 			return nil
 		}
 
@@ -911,6 +955,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		if err != nil {
 			return err
 		}
+		log.Infof(ctx, "test: advancing clock to lease expiration")
 		manual.Increment(lhStore.GetStoreConfig().LeaseExpiration())
 
 		// Heartbeat the destination server's liveness record so that if we are
@@ -922,24 +967,20 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 
 		// Issue a request to the target replica, which should notice that the
 		// old lease has expired and that it can acquire the lease.
-		var newLease *roachpb.Lease
-		ctx := context.Background()
-		req := &roachpb.LeaseInfoRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: rangeDesc.StartKey.AsRawKey(),
-			},
+		r, err := destStore.GetReplica(rangeDesc.RangeID)
+		if err != nil {
+			return err
 		}
-		h := roachpb.Header{RangeID: rangeDesc.RangeID}
-		reply, pErr := kv.SendWrappedWith(ctx, destStore, h, req)
-		if pErr != nil {
-			log.Infof(ctx, "LeaseInfoRequest failed: %v", pErr)
-			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok && lErr.Lease != nil {
+		ls, err := r.TestingAcquireLease(ctx)
+		if err != nil {
+			log.Infof(ctx, "TestingAcquireLease failed: %s", err)
+			if lErr := (*roachpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) && lErr.Lease != nil {
 				newLease = lErr.Lease
 			} else {
-				return pErr.GoError()
+				return err
 			}
 		} else {
-			newLease = &reply.(*roachpb.LeaseInfoResponse).Lease
+			newLease = &ls.Lease
 		}
 
 		// Is the lease in the right place?
@@ -949,6 +990,8 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		}
 		return nil
 	})
+	log.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
+	return newLease, err
 }
 
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
@@ -1345,7 +1388,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.StickyInMemoryEngineID == "" {
+		if specs.InMemory && specs.StickyInMemoryEngineID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
 		}
 	}
@@ -1405,7 +1448,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 						}
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
-							if _, err := s.NodeDialer().Dial(ctx, srv.NodeID(), class); err != nil {
+							if _, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, srv.NodeID(), class); err != nil {
 								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", s.NodeID(), srv.NodeID(), class)
 							}
 						}

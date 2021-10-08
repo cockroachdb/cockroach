@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
 )
 
 /*
@@ -54,16 +55,23 @@ new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 
  Creates a TxnMeta.
 
-new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+...
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [max-lock-wait-queue-length=<int>]
 ----
 
  Creates a Request.
 
 scan r=<name>
 ----
-<error string>|start-waiting: <bool>
+start-waiting: <bool>
 
  Calls lockTable.ScanAndEnqueue. If the request has an existing guard, uses it.
+ If a guard is returned, stores it for later use.
+
+scan-opt r=<name>
+----
+start-waiting: <bool>
+
+ Calls lockTable.ScanOptimistic. The request must not have an existing guard.
  If a guard is returned, stores it for later use.
 
 acquire r=<name> k=<key> durability=r|u
@@ -94,6 +102,12 @@ add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-finalized-
 <error string>
 
  Adds a discovered lock that is discovered by the named request.
+
+check-opt-no-conflicts r=<name> spans=r|w@<start>[,<end>]+...
+----
+no-conflicts: <bool>
+
+ Checks whether the request, which previously called ScanOptimistic, has no lock conflicts.
 
 dequeue r=<name>
 ----
@@ -133,6 +147,10 @@ clear [disable]
 print
 ----
 <state of lock table>
+
+metrics
+----
+<metrics for lock table>
 
  Calls lockTable.String.
 */
@@ -232,11 +250,16 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
+				var maxLockWaitQueueLength int
+				if d.HasArg("max-lock-wait-queue-length") {
+					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
+				}
 				spans := scanSpans(t, d, ts)
 				req := Request{
-					Timestamp:  ts,
-					LatchSpans: spans,
-					LockSpans:  spans,
+					Timestamp:              ts,
+					MaxLockWaitQueueLength: maxLockWaitQueueLength,
+					LatchSpans:             spans,
+					LockSpans:              spans,
 				}
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
@@ -262,6 +285,21 @@ func TestLockTableBasic(t *testing.T) {
 				guardsByReqName[reqName] = g
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
+			case "scan-opt":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				_, ok = guardsByReqName[reqName]
+				if ok {
+					d.Fatalf(t, "request has an existing guard: %s", reqName)
+				}
+				g := lt.ScanOptimistic(req)
+				guardsByReqName[reqName] = g
+				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
+
 			case "acquire":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
@@ -283,7 +321,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "release":
 				var txnName string
@@ -300,7 +338,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "update":
 				var txnName string
@@ -351,7 +389,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "add-discovered":
 				var reqName string
@@ -382,7 +420,21 @@ func TestLockTableBasic(t *testing.T) {
 					&intent, leaseSeq, consultFinalizedTxnCache, g); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
+
+			case "check-opt-no-conflicts":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				spans := scanSpans(t, d, req.Timestamp)
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(spans))
 
 			case "dequeue":
 				var reqName string
@@ -394,7 +446,7 @@ func TestLockTableBasic(t *testing.T) {
 				lt.Dequeue(g)
 				delete(guardsByReqName, reqName)
 				delete(requestsByName, reqName)
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "should-wait":
 				var reqName string
@@ -432,12 +484,16 @@ func TestLockTableBasic(t *testing.T) {
 					typeStr = "waitElsewhere"
 				case waitSelf:
 					return str + "state=waitSelf"
+				case waitQueueMaxLengthExceeded:
+					typeStr = "waitQueueMaxLengthExceeded"
 				case doneWaiting:
 					var toResolveStr string
 					if stateTransition {
 						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
 					}
 					return str + "state=doneWaiting" + toResolveStr
+				default:
+					d.Fatalf(t, "unexpected state: %v", state.kind)
 				}
 				id := state.txn.ID
 				var txnS string
@@ -472,10 +528,18 @@ func TestLockTableBasic(t *testing.T) {
 
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "print":
-				return lt.(*lockTableImpl).String()
+				return lt.String()
+
+			case "metrics":
+				metrics := lt.Metrics()
+				b, err := yaml.Marshal(&metrics)
+				if err != nil {
+					d.Fatalf(t, "marshaling metrics: %v", err)
+				}
+				return string(b)
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -1509,6 +1573,32 @@ func BenchmarkLockTable(b *testing.B) {
 					})
 			}
 		}
+	}
+}
+
+// BenchmarkLockTableMetrics populates variable sized lock-tables and ensures
+// that grabbing metrics from them is reasonably fast.
+func BenchmarkLockTableMetrics(b *testing.B) {
+	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
+		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
+			const maxLocks = 100000
+			lt := newLockTable(maxLocks)
+			lt.enabled = true
+
+			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}
+			for i := 0; i < locks; i++ {
+				k := roachpb.Key(fmt.Sprintf("%03d", i))
+				err := lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = lt.Metrics()
+			}
+		})
 	}
 }
 

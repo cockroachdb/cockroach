@@ -1,0 +1,84 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index'
+
+.Legend
+  display flex
+  max-width 713px
+  background-color $colors--white
+  border-radius 3px
+  box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  padding 20px 24px 12px
+  &--container
+    &:first-child
+      flex .72
+    &:last-child
+      flex .28
+    &__head
+      margin 0 0 16px
+      display flex
+      align-items center
+      &--title
+        text-transform uppercase
+        font-family SourceSansPro-SemiBold
+        font-size 12px
+        color $colors--neutral-6
+        line-height 1.17
+        letter-spacing 1.5px
+        margin 0
+        border-bottom 1px dashed $colors--neutral-5;
+      .info-icon
+        color $colors--neutral-5
+        font-size 16px
+        margin-left 7px
+    &__body
+      display flex
+      &--element
+        display flex
+        flex-direction column
+        align-items center
+        margin-right 6px
+      &--label
+        display flex
+        flex-direction row
+        margin-top $spacing-xx-small
+        margin-bottom 1em
+      &--label-suffix
+        color $colors--neutral-5
+
+.underline
+  border-bottom 1px dashed $colors--neutral-5;
+
+.noConnections__table
+  width 100%
+  td, th
+    padding 11px 20px
+    font-family $font-family--bold
+    font-size 12px
+    line-height 2
+    letter-spacing 0.1px
+    color $colors--neutral-6
+    &:nth-child(3)
+      border-left 1px solid $colors--neutral-2
+  &--item
+    td
+      padding 16px 20px
+      line-height 1.57
+      font-size 14px
+      width 30%
+      &:nth-child(2n)
+        width 20%
+    &__bold
+      font-family SourceSansPro-SemiBold
+    &__normal
+      font-family SourceSansPro-Regular
+  &--item:nth-child(2n)
+    background $colors--background

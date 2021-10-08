@@ -32,9 +32,9 @@ func TestMatch(t *testing.T) {
 **/c/ @cockroachdb/team-c
 `
 	teams := map[team.Alias]team.Team{
-		"cockroachdb/team-a": {Aliases: []team.Alias{"cockroachdb/team-a"}},
-		"cockroachdb/team-b": {Aliases: []team.Alias{"cockroachdb/team-c"}},
-		"cockroachdb/team-c": {Aliases: []team.Alias{"cockroachdb/team-c"}},
+		"cockroachdb/team-a": {},
+		"cockroachdb/team-b": {},
+		"cockroachdb/team-c": {},
 	}
 
 	codeOwners, err := LoadCodeOwners(strings.NewReader(owners), teams)

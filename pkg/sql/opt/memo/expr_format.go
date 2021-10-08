@@ -57,6 +57,11 @@ const (
 	// ExprFmtHideStats does not show statistics in the output.
 	ExprFmtHideStats
 
+	// ExprFmtHideHistograms does not show statistics histograms in the output.
+	// Note that if ExprFmtHideStats is set, histograms are never included
+	// in the output.
+	ExprFmtHideHistograms
+
 	// ExprFmtHideCost does not show expression cost in the output.
 	ExprFmtHideCost
 
@@ -303,6 +308,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("error: \"%s\"", private.ErrorOnDup)
 		}
 
+	case *TopKExpr:
+		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", t.Ordering)
+		}
+		tp.Childf("k: %d", t.K)
+
 	case *LimitExpr:
 		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
@@ -322,10 +333,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	// input columns that correspond to the output columns.
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
 		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
+		private := e.Private().(*SetPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) {
-			private := e.Private().(*SetPrivate)
 			f.formatColList(e, tp, "left columns:", private.LeftCols)
 			f.formatColList(e, tp, "right columns:", private.RightCols)
+		}
+		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
 
 	case *ScanExpr, *PlaceholderScanExpr:
@@ -353,7 +367,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
-			partialIndexPredicates := tab.PartialIndexPredicatesForFormattingOnly()
+			partialIndexPredicates := tab.PartialIndexPredicatesUnsafe()
 			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
 				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))
@@ -394,9 +408,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("limit: %s", private.HardLimit)
 		}
 		if !private.Flags.Empty() {
+			var b strings.Builder
+			b.WriteString("flags:")
 			if private.Flags.NoIndexJoin {
-				tp.Childf("flags: no-index-join")
-			} else if private.Flags.ForceIndex {
+				b.WriteString(" no-index-join")
+			}
+			if private.Flags.ForceIndex {
 				idx := md.Table(private.Table).Index(private.Flags.Index)
 				dir := ""
 				switch private.Flags.Direction {
@@ -406,8 +423,29 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				case tree.Descending:
 					dir = ",rev"
 				}
-				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
+				b.WriteString(fmt.Sprintf(" force-index=%s%s", idx.Name(), dir))
 			}
+			if private.Flags.NoZigzagJoin {
+				b.WriteString(" no-zigzag-join")
+			}
+			if private.Flags.ForceZigzag {
+				if private.Flags.ZigzagIndexes.Empty() {
+					b.WriteString(" force-zigzag")
+				} else {
+					b.WriteString(" force-zigzag=")
+					s := private.Flags.ZigzagIndexes
+					needComma := false
+					for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+						idx := md.Table(private.Table).Index(i)
+						if needComma {
+							b.WriteByte(',')
+						}
+						b.WriteString(string(idx.Name()))
+						needComma = true
+					}
+				}
+			}
+			tp.Child(b.String())
 		}
 		if private.Locking != nil {
 			strength := ""
@@ -464,6 +502,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(t.LookupExpr) > 0 {
 				n := tp.Childf("lookup expression")
 				f.formatExpr(&t.LookupExpr, n)
+			}
+			if len(t.RemoteLookupExpr) > 0 {
+				n := tp.Childf("remote lookup expression")
+				f.formatExpr(&t.RemoteLookupExpr, n)
 			}
 		}
 		if t.LookupColsAreTableKey {
@@ -712,7 +754,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(ExprFmtHideStats) {
-		tp.Childf("stats: %s", &relational.Stats)
+		if f.HasFlags(ExprFmtHideHistograms) {
+			tp.Childf("stats: %s", relational.Stats.StringWithoutHistograms())
+		} else {
+			tp.Childf("stats: %s", &relational.Stats)
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideCost) {
@@ -1008,9 +1054,12 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	var private interface{}
 	switch t := scalar.(type) {
-	case *NullExpr, *TupleExpr, *CollateExpr:
+	case *NullExpr, *TupleExpr:
 		// Private is redundant with logical type property.
 		private = nil
+
+	case *CollateExpr:
+		fmt.Fprintf(f.Buffer, " locale='%s'", t.Locale)
 
 	case *AnyExpr:
 		// We don't want to show the OriginalExpr; just show Cmp.
@@ -1380,6 +1429,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, ",ordering=%s", t.Ordering)
 		}
 
+	case *SetPrivate:
+		if !t.Ordering.Any() {
+			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
+		}
+
 	case *IndexJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name())
@@ -1453,7 +1507,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *SetPrivate, *types.T, *ExportPrivate:
+	case *ExplainPrivate, *opt.ColSet, *types.T, *ExportPrivate:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

@@ -23,7 +23,9 @@ import (
 // tenantAuthorizer authorizes RPCs sent by tenants to a node's tenant RPC
 // server, that is, it ensures that the request only accesses resources
 // available to the tenant.
-type tenantAuthorizer struct{}
+type tenantAuthorizer struct {
+	tenantID roachpb.TenantID
+}
 
 func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
@@ -36,6 +38,8 @@ func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
 	return roachpb.MakeTenantID(tenID), nil
 }
 
+// authorize enforces a security boundary around endpoints that tenants
+// request from the host KV node or other tenant SQL pod.
 func (a tenantAuthorizer) authorize(
 	tenID roachpb.TenantID, fullMethod string, req interface{},
 ) error {
@@ -52,8 +56,44 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
+	case "/cockroach.roachpb.Internal/TokenBucket":
+		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
+
 	case "/cockroach.rpc.Heartbeat/Ping":
-		return nil // no authorization
+		return nil // no restriction to usage of this endpoint by tenants
+
+	case "/cockroach.server.serverpb.Status/Regions":
+		return nil // no restriction to usage of this endpoint by tenants
+
+	case "/cockroach.server.serverpb.Status/Statements":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/CombinedStatementStats":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/ResetSQLStats":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/ListContentionEvents":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/ListLocalContentionEvents":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/ListSessions":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/ListLocalSessions":
+		return a.authTenant(tenID)
+
+	case "/cockroach.server.serverpb.Status/IndexUsageStatistics":
+		return a.authTenant(tenID)
+
+	case "/cockroach.roachpb.Internal/GetSpanConfigs":
+		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
+
+	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
+		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -157,6 +197,16 @@ func (a tenantAuthorizer) authGossipSubscription(
 	return nil
 }
 
+// authTenant checks if the given tenantID matches the one the
+// authorizer was initialized with. This authorizer is used for
+// endpoints that should remain within a single tenant's pods.
+func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
+	if a.tenantID != id {
+		return authErrorf("request from tenant %s not permitted on tenant %s", id, a.tenantID)
+	}
+	return nil
+}
+
 // gossipSubscriptionPatternAllowlist contains keys outside of a tenant's
 // keyspace that GossipSubscription RPC invocations are allowed to touch.
 // WIP: can't import gossip directly.
@@ -164,6 +214,69 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"system-db",
+}
+
+// authTokenBucket authorizes the provided tenant to invoke the
+// TokenBucket RPC with the provided args.
+func (a tenantAuthorizer) authTokenBucket(
+	tenID roachpb.TenantID, args *roachpb.TokenBucketRequest,
+) error {
+	if args.TenantID == 0 {
+		return authErrorf("token bucket request with unspecified tenant not permitted")
+	}
+	if argTenant := roachpb.MakeTenantID(args.TenantID); argTenant != tenID {
+		return authErrorf("token bucket request for tenant %s not permitted", argTenant)
+	}
+	return nil
+}
+
+// authGetSpanConfigs authorizes the provided tenant to invoke the
+// GetSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authGetSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.GetSpanConfigsRequest,
+) error {
+	tenSpan := tenantPrefix(tenID)
+	for _, sp := range args.Spans {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+		}
+	}
+	return nil
+}
+
+// authUpdateSpanConfigs authorizes the provided tenant to invoke the
+// UpdateSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authUpdateSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.UpdateSpanConfigsRequest,
+) error {
+	tenSpan := tenantPrefix(tenID)
+	validate := func(sp roachpb.Span) error {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+		}
+		return nil
+	}
+
+	for _, entry := range args.ToUpsert {
+		if err := validate(entry.Span); err != nil {
+			return err
+		}
+	}
+	for _, span := range args.ToDelete {
+		if err := validate(span); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

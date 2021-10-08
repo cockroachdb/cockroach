@@ -25,7 +25,7 @@ go_proto_library(
         "//pkg/base",  # keep
         "//pkg/build",
         "//pkg/config/zonepb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],

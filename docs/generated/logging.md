@@ -73,8 +73,7 @@ layer events (RocksDB/Pebble).
 
 The `SESSIONS` channel is used to report client network activity when enabled via
 the `server.auth_log.sql_connections.enabled` and/or
-`server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
-[cluster settings](cluster-settings.html):
+`server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
 
 - Connections opened/closed
 - Authentication events: logins, failed attempts
@@ -163,4 +162,10 @@ The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 helping developers of CockroachDB itself. It exists as a separate
 channel so as to not pollute the `SQL_PERF` logging output with
 internal troubleshooting details.
+
+### `TELEMETRY`
+
+The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+feature usage within CockroachDB and anonymizes any application-
+specific data.
 

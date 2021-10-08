@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,12 +46,17 @@ func init() {
 }
 
 // Connector mediates the communication of cluster-wide state to sandboxed
-// SQL-only tenant processes through a restricted interface. A Connector is
-// seeded with a set of one or more network addresses that reference existing KV
-// nodes in the cluster (or a load-balancer which fans out to some/all KV
-// nodes). On startup, it establishes contact with one of these nodes to learn
-// about the topology of the cluster and bootstrap the rest of SQL <-> KV
-// network communication.
+// SQL-only tenant processes through a restricted interface.
+//
+// A Connector is instantiated inside a tenant's SQL process and is seeded with
+// a set of one or more network addresses that reference existing KV nodes in
+// the host cluster (or a load-balancer which fans out to some/all KV nodes). On
+// startup, it establishes contact with one of these nodes to learn about the
+// topology of the cluster and bootstrap the rest of SQL <-> KV network
+// communication.
+//
+// The Connector communicates with the host cluster through the roachpb.Internal
+// API.
 //
 // See below for the Connector's roles.
 type Connector struct {
@@ -64,11 +72,17 @@ type Connector struct {
 
 	mu struct {
 		syncutil.RWMutex
-		client               roachpb.InternalClient
+		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
 		systemConfig         *config.SystemConfig
 		systemConfigChannels []chan<- struct{}
 	}
+}
+
+// client represents an RPC client that proxies to a KV instance.
+type client struct {
+	roachpb.InternalClient
+	serverpb.StatusClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -89,6 +103,14 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // the need for SQL-only tenant processes to join the cluster-wide gossip
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
+
+// Connector is capable of find the region of every node in the cluster.
+// This is necessary for region validation for zone configurations and
+// multi-region primitives.
+var _ serverpb.RegionsServer = (*Connector)(nil)
+
+// Connector is capable of accessing span configurations for secondary tenants.
+var _ spanconfig.KVAccessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -346,16 +368,112 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
+// Regions implements the serverpb.RegionsServer interface.
+func (c *Connector) Regions(
+	ctx context.Context, req *serverpb.RegionsRequest,
+) (resp *serverpb.RegionsResponse, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.Regions(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
+}
+
+// TokenBucket implements the kvtenant.TokenBucketProvider interface.
+func (c *Connector) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	// Proxy token bucket requests through the Internal service.
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		resp, err := client.TokenBucket(ctx, in)
+		if err != nil {
+			log.Warningf(ctx, "error issuing TokenBucket RPC: %v", err)
+			if grpcutil.IsAuthError(err) {
+				// Authentication or authorization error. Propagate.
+				return nil, err
+			}
+			// Soft RPC error. Drop client and retry.
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+		if resp.Error != (errorspb.EncodedError{}) {
+			// Hard logical error. Propagate.
+			return nil, errors.DecodeError(ctx, resp.Error)
+		}
+		return resp, nil
+	}
+	return nil, ctx.Err()
+}
+
+// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSpanConfigEntriesFor(
+	ctx context.Context, spans []roachpb.Span,
+) (entries []roachpb.SpanConfigEntry, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
+			Spans: spans,
+		})
+		if err != nil {
+			return err
+		}
+
+		entries = resp.SpanConfigEntries
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
+// interface.
+func (c *Connector) UpdateSpanConfigEntries(
+	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+) error {
+	return c.withClient(ctx, func(ctx context.Context, c *client) error {
+		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+			ToDelete: toDelete,
+			ToUpsert: toUpsert,
+		})
+		return err
+	})
+}
+
+// withClient is a convenience wrapper that executes the given closure while
+// papering over InternalClient retrieval errors.
+func (c *Connector) withClient(
+	ctx context.Context, f func(ctx context.Context, c *client) error,
+) error {
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		c, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		return f(ctx, c)
+	}
+	return ctx.Err()
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If
 // not, the method attempts to dial one of the configured addresses. The method
 // blocks until either a connection is successfully established or the provided
 // context is canceled.
-func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, error) {
+func (c *Connector) getClient(ctx context.Context) (*client, error) {
 	c.mu.RLock()
 	if client := c.mu.client; client != nil {
 		c.mu.RUnlock()
@@ -365,7 +483,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 		dialCtx := c.AnnotateCtx(context.Background())
 		dialCtx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
 		defer cancel()
-		var client roachpb.InternalClient
+		var client *client
 		err := c.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Connector: dial",
 			func(ctx context.Context) error {
 				var err error
@@ -387,7 +505,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 		if res.Err != nil {
 			return nil, res.Err
 		}
-		return res.Val.(roachpb.InternalClient), nil
+		return res.Val.(*client), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -395,7 +513,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 
 // dialAddrs attempts to dial each of the configured addresses in a retry loop.
 // The method will only return a non-nil error on context cancellation.
-func (c *Connector) dialAddrs(ctx context.Context) (roachpb.InternalClient, error) {
+func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 	for r := retry.StartWithCtx(ctx, c.rpcRetryOptions); r.Next(); {
 		// Try each address on each retry iteration.
 		randStart := rand.Intn(len(c.addrs))
@@ -406,7 +524,10 @@ func (c *Connector) dialAddrs(ctx context.Context) (roachpb.InternalClient, erro
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 				continue
 			}
-			return roachpb.NewInternalClient(conn), nil
+			return &client{
+				InternalClient: roachpb.NewInternalClient(conn),
+				StatusClient:   serverpb.NewStatusClient(conn),
+			}, nil
 		}
 	}
 	return nil, ctx.Err()

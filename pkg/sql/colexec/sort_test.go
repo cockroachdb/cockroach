@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -144,7 +146,7 @@ func TestSort(t *testing.T) {
 	for _, tc := range sortAllTestCases {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit)
 			})
 	}
 }
@@ -155,7 +157,7 @@ func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
-	// TODO(yuzefovich): randomize types as well.
+	// TODO(yuzefovich/mgartner): randomize types as well.
 	typs := make([]*types.T, maxCols)
 	for i := range typs {
 		typs[i] = types.Int
@@ -164,17 +166,21 @@ func TestSortRandomized(t *testing.T) {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 			for _, k := range []int{0, rng.Intn(nTups) + 1} {
 				topK := k != 0
-				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
+				matchLen := 0
+				if topK {
+					matchLen = rng.Intn(nOrderingCols)
+				}
+				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/topK=%t", nCols, nOrderingCols, matchLen, topK)
 				log.Infof(context.Background(), "%s", name)
-				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, matchLen)
 				if topK {
 					expected = expected[:k]
 				}
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k)), nil
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit)
 					}
-					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
 				})
 			}
 		}
@@ -187,9 +193,10 @@ func TestSortRandomized(t *testing.T) {
 // - expected - the same data but already sorted
 // - ordCols - ordering columns used in the sort operation.
 func generateRandomDataForTestSort(
-	rng *rand.Rand, nTups, nCols, nOrderingCols int,
+	rng *rand.Rand, nTups, nCols, nOrderingCols, matchLen int,
 ) (tups, expected colexectestutils.Tuples, ordCols []execinfrapb.Ordering_Column) {
 	ordCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+	partialOrdCols := ordCols[:matchLen]
 	tups = make(colexectestutils.Tuples, nTups)
 	for i := range tups {
 		tups[i] = make(colexectestutils.Tuple, nCols)
@@ -206,6 +213,7 @@ func generateRandomDataForTestSort(
 		tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
 	}
 
+	sort.Slice(tups, less(tups, partialOrdCols))
 	expected = make(colexectestutils.Tuples, nTups)
 	copy(expected, tups)
 	sort.Slice(expected, less(expected, ordCols))
@@ -313,14 +321,82 @@ func BenchmarkSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
+						var err error
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
+							sorter, err = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
 						} else {
-							var err error
-							sorter, err = NewSorter(testAllocator, source, typs, ordCols)
+							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
+						}
+						if err != nil {
+							b.Fatal(err)
+						}
+						sorter.Init(ctx)
+						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func BenchmarkSortUUID(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+
+	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
+		for _, nCols := range []int{1, 2} {
+			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
+				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
+				b.Run(name, func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// batch) * nCols (number of columns / row).
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					typs := make([]*types.T, nCols)
+					for i := range typs {
+						typs[i] = types.Bytes
+					}
+					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
+					batch.SetLength(coldata.BatchSize())
+					ordCols := make([]execinfrapb.Ordering_Column, nCols)
+					for i := range ordCols {
+						ordCols[i].ColIdx = uint32(i)
+						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
+
+						col := batch.ColVec(i).Bytes()
+
+						// Make a constant prefix used for constAbbrPct% of
+						// UUIDs. This helps measure the overhead of abbreviated
+						// comparisons with varying cardinality. For example, if
+						// all abbreviated values are the same, then comparing
+						// them is unnecessary work because we must always fall
+						// back to full comparisons.
+						id, err := uuid.NewV4()
+						if err != nil {
+							b.Fatalf("unexpected error: %s", err)
+						}
+						constPrefix := id[:8]
+
+						for j := 0; j < coldata.BatchSize(); j++ {
+							id, err := uuid.NewV4()
 							if err != nil {
-								b.Fatal(err)
+								b.Fatalf("unexpected error: %s", err)
 							}
+							idBytes := id[:16]
+							// Make the abbreviated bytes constant constAbbrPct% of
+							// the time.
+							if rng.Float32() < float32(constAbbrPct)/100 {
+								copy(idBytes, constPrefix)
+							}
+							col.Set(j, idBytes)
+						}
+					}
+					b.ResetTimer()
+					for n := 0; n < b.N; n++ {
+						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
+						sorter, err := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
+						if err != nil {
+							b.Fatal(err)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {

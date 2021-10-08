@@ -7,9 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvbase",
-        "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/closedts/ctpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
@@ -28,7 +26,7 @@ go_test(
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/testutils",
@@ -42,6 +40,7 @@ go_test(
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )

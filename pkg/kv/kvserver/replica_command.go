@@ -16,11 +16,9 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -563,13 +561,6 @@ func (r *Replica) AdminMerge(
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
-		// If we aren't certain that all possible nodes in the cluster support a
-		// range merge transaction refreshing its reads while the RHS range is
-		// subsumed, observe the commit timestamp to force a client-side retry.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries) {
-			_ = txn.CommitTimestamp()
-		}
-
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
 		// transaction to deadlock. Just turn pipelining off; the structure of the
@@ -784,6 +775,7 @@ func (r *Replica) AdminMerge(
 		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
+			log.VEventf(ctx, 2, "merge txn failed: %s", err)
 			txn.CleanupOnError(ctx, err)
 		}
 		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
@@ -2035,12 +2027,18 @@ type changeReplicasTxnArgs struct {
 	db *kv.DB
 
 	// liveAndDeadReplicas divides the provided repls slice into two slices: the
-	// first for live replicas, and the second for dead replicas. Replicas for
-	// which liveness or deadness cannot be ascertained are excluded from the
-	// returned slices. Replicas on decommissioning node/store are considered
-	// live.
+	// first for live replicas, and the second for dead replicas.
+	//
+	// - Replicas for  which liveness or deadness cannot be ascertained are
+	// excluded from the returned slices.
+	//
+	// - Replicas on decommissioning node/store are considered live.
+	//
+	// - If `includeSuspectAndDrainingStores` is true, stores that are marked suspect (i.e.
+	// stores that have failed a liveness heartbeat in the recent past) are
+	// considered live. Otherwise, they are excluded from the returned slices.
 	liveAndDeadReplicas func(
-		repls []roachpb.ReplicaDescriptor,
+		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
@@ -2127,7 +2125,15 @@ func execChangeReplicasTxn(
 			// See:
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors())
+			// We consider stores marked as "suspect" to be alive for the purposes of
+			// determining whether the range can achieve quorum since these stores are
+			// known to be currently live but have failed a liveness heartbeat in the
+			// recent past.
+			//
+			// Note that the allocator will avoid rebalancing to stores that are
+			// currently marked suspect. See uses of StorePool.getStoreList() in
+			// allocator.go.
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectAndDrainingStores */)
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -2719,19 +2725,6 @@ func (s *Store) relocateReplicas(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
-	canRetry := func(err error) bool {
-		allowlist := []string{
-			snapshotApplySemBusyMsg,
-			IntersectingSnapshotMsg,
-		}
-		errStr := err.Error()
-		for _, substr := range allowlist {
-			if strings.Contains(errStr, substr) {
-				return true
-			}
-		}
-		return false
-	}
 	transferLease := func(target roachpb.ReplicationTarget) error {
 		// TODO(tbg): we ignore errors here, but it seems that in practice these
 		// transfers "always work". Some of them are essential (we can't remove
@@ -2772,9 +2765,6 @@ func (s *Store) relocateReplicas(
 				// Done.
 				return rangeDesc, ctx.Err()
 			}
-			if fn := s.cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
-				fn(ops, leaseTarget, err)
-			}
 
 			opss := [][]roachpb.ReplicationChange{ops}
 			success := true
@@ -2782,7 +2772,7 @@ func (s *Store) relocateReplicas(
 				newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
 				if err != nil {
 					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
-					if !canRetry(err) {
+					if !isSnapshotError(err) {
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
@@ -2794,6 +2784,10 @@ func (s *Store) relocateReplicas(
 				rangeDesc = *newDesc
 			}
 			if success {
+				if fn := s.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
+					fn(ops, leaseTarget)
+				}
+
 				break
 			}
 		}
@@ -2852,11 +2846,11 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "can't relocate range")
 	}
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2893,8 +2887,10 @@ func (s *Store) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
-					candidate.StoreID)
+				return nil, nil, fmt.Errorf(
+					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
+						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
+				)
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
@@ -2903,10 +2899,14 @@ func (s *Store) relocateOne(
 		targetStore, _ := s.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
-			zone,
+			conf,
 			existingVoters,
 			existingNonVoters,
 			s.allocator.scorerOptions(),
+			// NB: Allow the allocator to return target stores that might be on the
+			// same node as an existing replica. This is to ensure that relocations
+			// that require "lateral" movement of replicas within a node can succeed.
+			true, /* allowMultipleReplsPerNode */
 			args.targetType,
 		)
 		if targetStore == nil {
@@ -2970,8 +2970,13 @@ func (s *Store) relocateOne(
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
 		targetStore, _, err := s.allocator.removeTarget(
-			ctx, zone, args.targetsToRemove(), existingVoters,
-			existingNonVoters, args.targetType,
+			ctx,
+			conf,
+			args.targetsToRemove(),
+			existingVoters,
+			existingNonVoters,
+			args.targetType,
+			s.allocator.scorerOptions(),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -3239,10 +3244,11 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 	// construct a more informative error to show to the user.
 	if doesNotApplyReason != "" {
 		if !resp.Verified {
+			desc := r.Desc()
 			failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
-				RangeID:  int64(r.Desc().GetRangeID()),
-				StartKey: r.Desc().GetStartKey(),
-				EndKey:   r.Desc().EndKey,
+				RangeID:  int64(desc.GetRangeID()),
+				StartKey: desc.GetStartKey(),
+				EndKey:   desc.EndKey,
 				Reason:   doesNotApplyReason,
 			}
 			resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)

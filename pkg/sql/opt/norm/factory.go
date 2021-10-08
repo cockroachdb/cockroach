@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -86,7 +87,22 @@ type Factory struct {
 
 	// See FoldingControl.
 	foldingControl FoldingControl
+
+	// constructorStackDepth tracks the call stack depth of factory constructor
+	// methods. It is incremented when a constructor function is called, and
+	// decremented when a constructor function returns.
+	constructorStackDepth int
 }
+
+// maxConstructorStackDepth is the maximum allowed depth of a constructor call
+// stack. Optgen generates factory code that refers to this constant.
+//
+// If constructorStackDepth exceeds this limit, a rule cycle likely exists that
+// will cause a stack overflow. To avoid a stack overflow, no further
+// normalization rules are applied when this limit is reached, and the
+// onMaxConstructorStackDepthExceeded method is called. This can result in an
+// expression that is not fully optimized.
+const maxConstructorStackDepth = 10000
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
@@ -175,6 +191,11 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
+// EvalContext returns the *tree.EvalContext of the factory.
+func (f *Factory) EvalContext() *tree.EvalContext {
+	return f.evalCtx
+}
+
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
 // that is part of another memo. That memo's metadata is copied to this
 // factory's memo so that tables and columns referenced by the copied memo can
@@ -215,14 +236,27 @@ func (f *Factory) CopyAndReplace(
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy all metadata to the target memo so that referenced tables and columns
-	// can keep the same ids they had in the "from" memo.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata())
+	// Copy the next scalar rank to the target memo so that new scalar
+	// expressions built with the new memo will not share scalar ranks with
+	// existing expressions.
+	f.mem.CopyNextRankFrom(from.Memo())
+
+	// Copy all metadata to the target memo so that referenced tables and
+	// columns can keep the same ids they had in the "from" memo. Scalar
+	// expressions in the metadata cannot have placeholders, so we simply copy
+	// the expressions without replacement.
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
 	to := f.invokeReplace(from, replace).(memo.RelExpr)
 	f.Memo().SetRoot(to, fromProps)
+}
+
+// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// It does not attempt to replace placeholders with values.
+func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
@@ -261,6 +295,33 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
+}
+
+// CheckConstructorStackDepth panics in test builds if the constructor stack
+// depth is not zero. The stack depth should be 0 after a top-level constructor
+// function returns. It is used to verify that the stack depth is correctly
+// decremented for each constructor function.
+func (f *Factory) CheckConstructorStackDepth() {
+	if util.CrdbTestBuild && f.constructorStackDepth != 0 {
+		panic(errors.AssertionFailedf(
+			"expected constructor stack depth %v to be 0",
+			f.constructorStackDepth,
+		))
+	}
+}
+
+// onMaxConstructorStackDepthExceeded is called when constructorStackDepth
+// exceeds maxConstructorStackDepth. In test builds it panics. In release builds
+// it reports an error to Sentry to alert of a likely normalization rule cycle.
+func (f *Factory) onMaxConstructorStackDepthExceeded() {
+	err := errors.AssertionFailedf(
+		"optimizer factory constructor call stack exceeded max depth of %v",
+		maxConstructorStackDepth,
+	)
+	if util.CrdbTestBuild {
+		panic(err)
+	}
+	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that

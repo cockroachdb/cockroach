@@ -103,7 +103,7 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, err
 	}
 
 	bld := execbuilder.New(
-		nil /* factory */, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
 		evalCtx, false, /* allowAutoCommit */
 	)
 	expr, err := bld.BuildScalar()
@@ -291,7 +291,7 @@ func TestEvalError(t *testing.T) {
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`unimplemented: timestamp abbreviations not supported`},
 		{`'abcd'::interval`,
-			`could not parse "abcd" as type interval: interval: missing unit`},
+			`could not parse "abcd" as type interval: interval: missing number at position 0: "abcd"`},
 		{`'1- 2:3:4 9'::interval`,
 			`could not parse "1- 2:3:4 9" as type interval: invalid input syntax for type interval 1- 2:3:4 9`},
 		{`e'\\xdedf0d36174'::BYTES`, `could not parse "\\xdedf0d36174" as type bytes: encoding/hex: odd length hex string`},

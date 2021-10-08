@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -1383,8 +1384,7 @@ func (t *T) Name() string {
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
 	case TupleFamily:
-		// Tuple types are currently anonymous, with no name.
-		return ""
+		return t.SQLStandardName()
 
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
@@ -1552,6 +1552,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "regproc"
 		case oid.T_regprocedure:
 			return "regprocedure"
+		case oid.T_regrole:
+			return "regrole"
 		case oid.T_regtype:
 			return "regtype"
 		default:
@@ -1636,6 +1638,10 @@ func (t *T) InformationSchemaName() string {
 	// This is the same as SQLStandardName, except for the case of arrays.
 	if t.Family() == ArrayFamily {
 		return "ARRAY"
+	}
+	// TypeMeta attributes are populated only when it is user defined type.
+	if t.TypeMeta.Name != nil {
+		return "USER-DEFINED"
 	}
 	return t.SQLStandardName()
 }
@@ -1807,9 +1813,9 @@ func (t *T) Equivalent(other *T) bool {
 }
 
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
-// * `t` is Unknown (i.e., NULL) and `other` is not a tuple,
+// * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
-func (t *T) EquivalentOrNull(other *T) bool {
+func (t *T) EquivalentOrNull(other *T, allowNullTupleEquivalence bool) bool {
 	// Check normal equivalency first, then check for Null
 	normalEquivalency := t.Equivalent(other)
 	if normalEquivalency {
@@ -1818,7 +1824,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 
 	switch t.Family() {
 	case UnknownFamily:
-		return other.Family() != TupleFamily
+		return allowNullTupleEquivalence || other.Family() != TupleFamily
 
 	case TupleFamily:
 		if other.Family() != TupleFamily {
@@ -1834,7 +1840,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 			return false
 		}
 		for i := range t.TupleContents() {
-			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i], allowNullTupleEquivalence) {
 				return false
 			}
 		}
@@ -2401,10 +2407,11 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		}
 	}
 	err := errors.Newf(
-		"could not find %v in enum %q representation %s",
+		"could not find %v in enum %q representation %s %s",
 		phys,
 		t.TypeMeta.Name.FQName(),
 		t.TypeMeta.EnumData.debugString(),
+		debug.Stack(),
 	)
 	return 0, err
 }
@@ -2445,8 +2452,6 @@ func IsStringType(t *T) bool {
 // the issue number should be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	switch t.Family() {
-	case JsonFamily:
-		return false, 23468
 	default:
 		return true, 0
 	}
@@ -2635,9 +2640,10 @@ var unreservedTypeTokens = map[string]*T{
 	"oidvector":  OidVector,
 	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 	"regclass":     RegClass,
+	"regnamespace": RegNamespace,
 	"regproc":      RegProc,
 	"regprocedure": RegProcedure,
-	"regnamespace": RegNamespace,
+	"regrole":      RegRole,
 	"regtype":      RegType,
 
 	"serial2":     &Serial2Type,

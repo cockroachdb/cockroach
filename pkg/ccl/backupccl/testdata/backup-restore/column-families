@@ -1,0 +1,30 @@
+new-server name=s1 localities=us-east-1,us-west-1,us-west-2,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE cfs (a INT PRIMARY KEY, b STRING, c STRING, d STRING, FAMILY (b), FAMILY (c));
+INSERT INTO cfs SELECT x, repeat('abc', 100), repeat('abc', 100) FROM generate_series(0, 3) AS x;
+ALTER TABLE cfs SPLIT AT SELECT a FROM cfs;
+-- Split the output files very small to catch output SSTs mid-row.
+SET CLUSTER SETTING bulkio.backup.file_size = '1';
+SET CLUSTER SETTING kv.bulk_sst.target_size = '1';
+BACKUP cfs TO 'nodelocal://1/foo';
+CREATE DATABASE r1;
+RESTORE cfs FROM 'nodelocal://1/foo' WITH into_db='r1';
+----
+
+query-sql
+SELECT max(length(start_key)) FROM [SHOW RANGES FROM TABLE orig.cfs];
+----
+2
+
+# Regression test for #67488.
+# This can return up to 6 if RESTORE improperly splits the ranges in the middle
+# of a SQL row since column family keys are longer. E.g. Keys are expected to be
+# of the form '/1' (row with PK 1), and not '/3/1/1' (row with PK 3, and CF 1).
+query-sql
+SELECT max(length(start_key)) FROM [SHOW RANGES FROM TABLE r1.cfs];
+----
+2

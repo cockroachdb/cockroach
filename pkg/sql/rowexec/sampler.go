@@ -20,10 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -146,7 +145,7 @@ func newSamplerProcessor(
 		// sent as single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		sketchSpec := spec.InvertedSketches[i]
@@ -160,7 +159,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
+	s.sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), inTypes, &s.memAcc, sampleCols)
 
 	outTypes := make([]*types.T, 0, len(inTypes)+7)
 
@@ -213,7 +212,7 @@ func newSamplerProcessor(
 }
 
 func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
-	execinfra.SendTraceData(ctx, s.Out.Output())
+	execinfra.SendTraceData(ctx, s.Output)
 }
 
 // Run is part of the Processor interface.
@@ -223,19 +222,14 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 
 	earlyExit, err := s.mainLoop(ctx)
 	if err != nil {
-		execinfra.DrainAndClose(ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(ctx, s.Output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
 		s.pushTrailingMeta(ctx)
 		s.input.ConsumerClosed()
-		s.Out.Close()
+		s.Output.ProducerDone()
 	}
 	s.MoveToDraining(nil /* err */)
 }
-
-// TestingSamplerSleep introduces a sleep inside the sampler, every
-// <samplerProgressInterval>. Used to simulate a heavily throttled
-// run for testing.
-var TestingSamplerSleep time.Duration
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
 	rng, _ := randutil.NewPseudoRand()
@@ -252,7 +246,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
@@ -269,7 +263,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 				RowsProcessed: uint64(SamplerProgressInterval),
 			}}
-			if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				return true, nil
 			}
 
@@ -313,10 +307,6 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					}
 				}
 				lastWakeupTime = timeutil.Now()
-			}
-
-			if TestingSamplerSleep != 0 {
-				time.Sleep(TestingSamplerSleep)
 			}
 		}
 
@@ -366,10 +356,12 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for i := range outRow {
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
+	// Reuse the numRows column for the capacity of the sample reservoir.
+	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(s.sr.Cap()))}
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+		if !emitHelper(ctx, s.Output, &s.OutputHelper, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -378,12 +370,14 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 	for col, invSr := range s.invSr {
+		// Reuse the numRows column for the capacity of the sample reservoir.
+		outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(invSr.Cap()))}
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
 		for _, sample := range invSr.Get() {
 			// Reuse the rank column for inverted index keys.
 			outRow[s.rankCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
 			outRow[s.invIdxKeyCol] = sample.Row[0]
-			if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+			if !emitHelper(ctx, s.Output, &s.OutputHelper, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 				return true, nil
 			}
 		}
@@ -418,7 +412,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 		RowsProcessed: uint64(rowCount % SamplerProgressInterval),
 	}}
-	if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+	if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}
 
@@ -435,7 +429,7 @@ func (s *samplerProcessor) emitSketchRow(
 		return false, err
 	}
 	outRow[s.sketchCol] = rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-	if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+	if !emitHelper(ctx, s.Output, &s.OutputHelper, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}
 	return false, nil
@@ -447,8 +441,9 @@ func (s *samplerProcessor) sampleRow(
 ) (earlyExit bool, err error) {
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
+	prevCapacity := sr.Cap()
 	if err := sr.SampleRow(ctx, s.EvalCtx, row, rank); err != nil {
-		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
 		}
 		// We hit an out of memory error. Clear the sample reservoir and
@@ -462,9 +457,14 @@ func (s *samplerProcessor) sampleRow(
 		meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 			HistogramDisabled: true,
 		}}
-		if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+		if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
+	} else if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return false, nil
 }

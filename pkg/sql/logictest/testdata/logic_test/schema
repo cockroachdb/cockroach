@@ -868,3 +868,35 @@ SHOW TABLES
 
 statement ok
 DROP DATABASE samename CASCADE;
+
+# Verify schema comments
+subtest schema_comments
+
+user root
+
+statement ok
+CREATE DATABASE comment_db
+
+statement ok
+USE comment_db
+
+statement ok
+CREATE SCHEMA foo
+
+statement ok
+COMMENT ON SCHEMA foo IS 'bar'
+
+query T
+SELECT comment FROM system.comments LIMIT 1
+----
+bar
+
+statement ok
+DROP SCHEMA foo
+
+query T
+SELECT comment FROM system.comments LIMIT 1
+----
+
+statement ok
+DROP DATABASE comment_db

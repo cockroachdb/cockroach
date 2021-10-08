@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,8 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -99,26 +103,18 @@ func findTransitioningMembers(desc *typedesc.Mutable) ([][]byte, bool) {
 func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
-	// Check if there is an active job for this type, otherwise create one.
-	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID]
+	// Check if there is a cached specification for this type, otherwise create one.
+	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
-	if jobExists {
+	if recordExists {
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
 			TypeID:               typeDesc.ID,
 			TransitioningMembers: transitioningMembers,
 		}
-		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
-			return err
-		}
-		if err := job.SetDescription(ctx, p.txn,
-			func(ctx context.Context, description string) (string, error) {
-				return description + "; " + jobDesc, nil
-			},
-		); err != nil {
-			return err
-		}
-		if err := job.SetNonCancelable(ctx, p.txn,
+		record.Details = newDetails
+		record.AppendDescription(jobDesc)
+		record.SetNonCancelable(ctx,
 			func(ctx context.Context, nonCancelable bool) bool {
 				// If the job is already cancelable, then it should stay as such
 				// regardless of if a member is being dropped or not in the current
@@ -129,13 +125,12 @@ func (p *planner) writeTypeSchemaChange(
 				// Type change jobs are non-cancelable unless an enum member is being
 				// dropped.
 				return !beingDropped
-			}); err != nil {
-			return err
-		}
-		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
+			})
+		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
 	} else {
 		// Or, create a new job.
-		jobRecord := jobs.Record{
+		newRecord := jobs.Record{
+			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
 			Description:   jobDesc,
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{typeDesc.ID},
@@ -148,12 +143,8 @@ func (p *planner) writeTypeSchemaChange(
 			// a transition that drops an enum member.
 			NonCancelable: !beingDropped,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID] = newJob
-		log.Infof(ctx, "queued new type change job %d for type %d", newJob.ID(), typeDesc.ID)
+		p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID] = &newRecord
+		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
@@ -189,7 +180,7 @@ type TypeSchemaChangerTestingKnobs struct {
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
-	RunBeforeEnumMemberPromotion func() error
+	RunBeforeEnumMemberPromotion func(ctx context.Context) error
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
@@ -227,7 +218,7 @@ func refreshTypeDescriptorLeases(
 		ids = append(ids, typeDesc.GetArrayTypeID())
 	}
 	for _, id := range ids {
-		if updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
+		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
 				log.Infof(ctx,
@@ -262,8 +253,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	// If there are any names to drain, then do so.
 	if len(typeDesc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
-			ctx, t.execCfg.Settings, typeDesc.GetID(), t.execCfg.DB, t.execCfg.InternalExecutor,
-			leaseMgr, codec, nil,
+			ctx, typeDesc.GetID(), t.execCfg.CollectionFactory, t.execCfg.DB,
+			t.execCfg.InternalExecutor, codec, nil,
 		); err != nil {
 			return err
 		}
@@ -281,41 +272,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
-			if err := fn(); err != nil {
+			if err := fn(ctx); err != nil {
 				return err
 			}
 		}
-
-		multiRegionPreDropIsNecessary := false
-
-		// First, we check if any of the enum values that are being removed are in
-		// use and fail. This is done in a separate txn to the one that mutates the
-		// descriptor, as this validation can take arbitrarily long.
-		validateDrops := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
-			if err != nil {
-				return err
-			}
-			for _, member := range typeDesc.EnumMembers {
-				if t.isTransitioningInCurrentJob(&member) && enumMemberIsRemoving(&member) {
-					if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, descsCol); err != nil {
-						return err
-					}
-					if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-						multiRegionPreDropIsNecessary = true
-					}
-				}
-			}
-			return nil
-		}
-		if err := descs.Txn(
-			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-			t.execCfg.InternalExecutor, t.execCfg.DB, validateDrops,
-		); err != nil {
-			return err
-		}
-
-		var regionChangeFinalizer *databaseRegionChangeFinalizer
 
 		// In the case where we're dropping elements from a multi-region enum,
 		// we first re-partition all REGIONAL BY ROW tables. This is to handle
@@ -342,41 +302,103 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// exposing things in the right order in OnFailOrCancel. This is because
 		// OnFailOrCancel doesn't expose any new state in the type descriptor
 		// (it just cleans up non-public states).
-		if multiRegionPreDropIsNecessary {
-			preDrop := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
-				if err != nil {
-					return err
-				}
-
-				regionChangeFinalizer, err = newDatabaseRegionChangeFinalizer(
-					ctx,
-					txn,
-					t.execCfg,
-					descsCol,
-					typeDesc.GetParentID(),
-					typeDesc.GetID(),
-				)
-				if err != nil {
-					return err
-				}
-				defer regionChangeFinalizer.cleanup()
-
-				if err := regionChangeFinalizer.preDrop(ctx, txn); err != nil {
-					return err
-				}
-				return nil
-			}
-			if err := descs.Txn(
-				ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-				t.execCfg.InternalExecutor, t.execCfg.DB, preDrop,
-			); err != nil {
+		var multiRegionPreDropIsNecessary bool
+		withDatabaseRegionChangeFinalizer := func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			f func(finalizer *databaseRegionChangeFinalizer) error,
+		) error {
+			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			if err != nil {
 				return err
 			}
+			regionChangeFinalizer, err := newDatabaseRegionChangeFinalizer(
+				ctx,
+				txn,
+				t.execCfg,
+				descsCol,
+				typeDesc.GetParentID(),
+				typeDesc.GetID(),
+			)
+			if err != nil {
+				return err
+			}
+			defer regionChangeFinalizer.cleanup()
+			return f(regionChangeFinalizer)
+		}
+		prepareRepartitionedRegionalByRowTables := func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) (repartitioned []*tabledesc.Mutable, err error) {
+			err = withDatabaseRegionChangeFinalizer(ctx, txn, descsCol, func(
+				finalizer *databaseRegionChangeFinalizer,
+			) (err error) {
+				repartitioned, _, err = finalizer.repartitionRegionalByRowTables(ctx, txn)
+				return err
+			})
+			return repartitioned, err
+		}
+		repartitionRegionalByRowTables := func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			return withDatabaseRegionChangeFinalizer(ctx, txn, descsCol, func(
+				finalizer *databaseRegionChangeFinalizer,
+			) error {
+				return finalizer.preDrop(ctx, txn)
+			})
+		}
 
-			// Now update the leases to ensure the that new table descriptor is
-			// visible to all nodes.
-			if err := regionChangeFinalizer.waitToUpdateLeases(ctx, leaseMgr); err != nil {
+		// First, we check if any of the enum values that are being removed are in
+		// use and fail. This is done in a separate txn to the one that mutates the
+		// descriptor, as this validation can take arbitrarily long.
+		validateDrops := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			if err != nil {
+				return err
+			}
+			var toDrop []descpb.TypeDescriptor_EnumMember
+			for _, member := range typeDesc.EnumMembers {
+				if t.isTransitioningInCurrentJob(&member) && enumMemberIsRemoving(&member) {
+					if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+						multiRegionPreDropIsNecessary = true
+					}
+					toDrop = append(toDrop, member)
+				}
+			}
+
+			// If we're dropping a multi-region enum value, we are also going to
+			// repartition all of the regional by row tables during this job. We
+			// don't want to disallow this operation and return an error because
+			// those tables are indeed partitioned by this value. To deal with this
+			// fact, we ask the databaseRegionChangeFinalizer to plan out what
+			// repartitioning it is going to do and inject those synthesized
+			// descriptors into out collection for the purpose of checking whether
+			// it is safe to remove this enum value. We'll not actually write the
+			// changes in this transaction because we don't want this long-running
+			// transaction to be a writing transaction; it would have a heck of
+			// a lot of data to refresh. We instead defer the repartitioning until
+			// after this checking confirms the safety of the change.
+			if multiRegionPreDropIsNecessary {
+				repartitioned, err := prepareRepartitionedRegionalByRowTables(ctx, txn, descsCol)
+				if err != nil {
+					return err
+				}
+				synthetic := make([]catalog.Descriptor, len(repartitioned))
+				for i, d := range repartitioned {
+					synthetic[i] = d
+				}
+				descsCol.SetSyntheticDescriptors(synthetic)
+			}
+			for _, member := range toDrop {
+				if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, descsCol); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := DescsTxn(ctx, t.execCfg, validateDrops); err != nil {
+			return err
+		}
+		if multiRegionPreDropIsNecessary {
+			if err := DescsTxn(ctx, t.execCfg, repartitionRegionalByRowTables); err != nil {
 				return err
 			}
 		}
@@ -408,7 +430,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			//   regions in the type enum to be a partition on the table descriptor,
 			//   failing validation.
 			// * We cannot write the partitions first as the members are not yet public.
-			regionChangeFinalizer, err = newDatabaseRegionChangeFinalizer(
+			regionChangeFinalizer, err := newDatabaseRegionChangeFinalizer(
 				ctx,
 				txn,
 				t.execCfg,
@@ -462,19 +484,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 			return nil
 		}
-		if err := descs.Txn(
-			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-			t.execCfg.InternalExecutor, t.execCfg.DB, run,
-		); err != nil {
+		if err := DescsTxn(ctx, t.execCfg, run); err != nil {
 			return err
-		}
-
-		// If any tables were repartitioned, make sure their leases are updated as
-		// well.
-		if regionChangeFinalizer != nil {
-			if err := regionChangeFinalizer.waitToUpdateLeases(ctx, leaseMgr); err != nil {
-				return err
-			}
 		}
 
 		// Finally, make sure all of the type descriptor leases are updated.
@@ -588,26 +599,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 
 		return nil
 	}
-	if err := descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
-		t.execCfg.DB, cleanup); err != nil {
-		return err
-	}
-
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, t.execCfg.LeaseManager, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
-		return err
-	}
-
-	if regionChangeFinalizer != nil {
-		if err := regionChangeFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return DescsTxn(ctx, t.execCfg, cleanup)
 }
 
 // convertToSQLStringRepresentation takes an array of bytes (the physical
@@ -658,7 +650,10 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			if err != nil {
+				return false, expr, err
+			}
 			if id != typeID {
 				return true, expr, nil
 			}
@@ -680,8 +675,12 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
+			id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			if err != nil {
+				return false, expr, err
+			}
 			// -1 since the type of this CastExpr is the array type.
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID) - 1
+			id = id - 1
 			if id != typeID {
 				return true, expr, nil
 			}
@@ -726,7 +725,10 @@ func findUsagesOfEnumValueInViewQuery(
 		if !ok {
 			return true, expr, nil
 		}
-		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		if err != nil {
+			return false, expr, err
+		}
 		if id != typeID {
 			return true, expr, nil
 		}
@@ -789,6 +791,63 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 		query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
 		firstClause := true
 		validationQueryConstructed := false
+
+		// Note that we examine all indexes as opposed to non-drop indexes so we
+		// do not remove a partitioning value which is in use on an index which
+		// is in the process of being dropped but gets re-added due to a failure
+		// in that schema change.
+		for _, idx := range desc.AllIndexes() {
+			if pred := idx.GetPredicate(); pred != "" {
+				foundUsage, err := findUsagesOfEnumValue(pred, member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a predicate of index %s",
+						member.LogicalRepresentation, &tree.TableIndexName{
+							Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+							Index: tree.UnrestrictedName(idx.GetName()),
+						})
+				}
+			}
+			keyColumns := make([]catalog.Column, 0, idx.NumKeyColumns())
+			for i := 0; i < idx.NumKeyColumns(); i++ {
+				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
+				if err != nil {
+					return errors.WithAssertionFailure(err)
+				}
+				keyColumns = append(keyColumns, col)
+			}
+			foundUsage, err := findUsagesOfEnumValueInPartitioning(
+				idx.GetPartitioning(), t.execCfg.Codec, keyColumns, desc, idx, member, nil, typeDesc,
+			)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in the partitioning of index %s",
+					member.LogicalRepresentation, &tree.TableIndexName{
+						Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+						Index: tree.UnrestrictedName(idx.GetName()),
+					})
+			}
+		}
+
+		// Examine all check constraints.
+		for _, chk := range desc.AllActiveAndInactiveChecks() {
+			foundUsage, err := findUsagesOfEnumValue(chk.Expr, member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a check constraint of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
 		for _, col := range desc.PublicColumns() {
 			// If this column has a default expression, check if it uses the enum member being dropped.
 			if col.HasDefault() {
@@ -816,22 +875,43 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				}
 			}
 
-			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
-				if !firstClause {
-					query.WriteString(" OR")
-				}
-				sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
+			// If this column has an ON UPDATE expression, check if it uses the enum
+			// member being dropped.
+			if col.HasOnUpdate() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetOnUpdateExpr(), member, typeDesc.ID)
 				if err != nil {
 					return err
 				}
-				colName := col.ColName()
-				query.WriteString(fmt.Sprintf(
-					" t.%s = %s",
-					colName.String(),
-					sqlPhysRep,
-				))
-				firstClause = false
-				validationQueryConstructed = true
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in an ON UPDATE expression"+
+							" of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
+			if col.GetType().UserDefined() {
+				tid, terr := typedesc.GetUserDefinedTypeDescID(col.GetType())
+				if terr != nil {
+					return terr
+				}
+				if typeDesc.ID == tid {
+					if !firstClause {
+						query.WriteString(" OR")
+					}
+					sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
+					if err != nil {
+						return err
+					}
+					colName := col.ColName()
+					query.WriteString(fmt.Sprintf(
+						" t.%s = %s",
+						colName.String(),
+						sqlPhysRep,
+					))
+					firstClause = false
+					validationQueryConstructed = true
+				}
 			}
 		}
 		query.WriteString(" LIMIT 1")
@@ -894,6 +974,122 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
 }
 
+// findUsagesOfEnumValueInPartitioning is a recursive function to explore all of
+// the values used in partitioning and its subpartitions. The fakePrefixDatums
+// should be nil when first calling this function. They are needed to support
+// calling rowenc.DecodePartitionTuple which needs them to synthesize an index
+// key that we don't actually need. As we traverse the subpartitions, it will
+// be populated with tree.DNull values for each column in the already explored
+// prefix.
+func findUsagesOfEnumValueInPartitioning(
+	partitioning catalog.Partitioning,
+	codec keys.SQLCodec,
+	columns []catalog.Column,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	member *descpb.TypeDescriptor_EnumMember,
+	fakePrefixDatums []tree.Datum,
+	typ *typedesc.Mutable,
+) (foundUsage bool, _ error) {
+	if partitioning == nil || partitioning.NumColumns() == 0 {
+		return false, nil
+	}
+
+	var colsToCheck util.FastIntSet
+	for i, c := range columns[:partitioning.NumColumns()] {
+		typT := c.GetType()
+		if !typT.UserDefined() {
+			continue
+		}
+		id, err := typedesc.UserDefinedTypeOIDToID(typT.Oid())
+		if err != nil {
+			return false, errors.WithAssertionFailure(err)
+		}
+		if id != typ.GetID() {
+			continue
+		}
+		colsToCheck.Add(i)
+	}
+	makeFakeDatums := func(n int) []tree.Datum {
+		ret := fakePrefixDatums
+		for i := 0; i < n; i++ {
+			ret = append(ret, tree.DNull)
+		}
+		return ret
+	}
+	// Note that we do not currently support indexing on array types so we don't
+	// need to check for arrays of the enums.
+	maybeFindUsageInValues := func(values [][]byte) (err error) {
+		if colsToCheck.Empty() {
+			return
+		}
+		for _, v := range values {
+			foundUsage, err = findUsageOfEnumValueInEncodedPartitioningValue(
+				codec, table, index, partitioning, v, fakePrefixDatums, colsToCheck, foundUsage, member,
+			)
+			if foundUsage {
+				err = iterutil.StopIteration()
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := partitioning.ForEachList(func(
+		name string, values [][]byte, subPartitioning catalog.Partitioning,
+	) (err error) {
+		if err = maybeFindUsageInValues(values); err != nil {
+			return err
+		}
+		foundUsage, err = findUsagesOfEnumValueInPartitioning(
+			subPartitioning, codec, columns[partitioning.NumColumns():],
+			table, index, member, makeFakeDatums(partitioning.NumColumns()), typ)
+		if err != nil && foundUsage {
+			err = iterutil.StopIteration()
+		}
+		return err
+	}); err != nil || foundUsage {
+		return foundUsage, err
+	}
+	if err := partitioning.ForEachRange(func(
+		name string, from, to []byte,
+	) error {
+		return maybeFindUsageInValues([][]byte{from, to})
+	}); err != nil || foundUsage {
+		return foundUsage, err
+	}
+	return false, nil
+}
+
+func findUsageOfEnumValueInEncodedPartitioningValue(
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	partitioning catalog.Partitioning,
+	v []byte,
+	fakePrefixDatums []tree.Datum,
+	colsToCheck util.FastIntSet,
+	foundUsage bool,
+	member *descpb.TypeDescriptor_EnumMember,
+) (bool, error) {
+	var d rowenc.DatumAlloc
+	tuple, _, err := rowenc.DecodePartitionTuple(
+		&d, codec, table, index, partitioning, v, fakePrefixDatums,
+	)
+	if err != nil {
+		return false, err
+	}
+	colsToCheck.ForEach(func(i int) {
+		foundUsage = foundUsage ||
+			bytes.Equal(
+				member.PhysicalRepresentation,
+				tuple.Datums[i].(*tree.DEnum).PhysicalRep,
+			)
+	})
+	return foundUsage, nil
+}
+
 // canRemoveEnumValueFromArrayUsages returns an error if the enum member is used
 // as a value by a table/view column which type resolves to a the given array
 // type.
@@ -923,7 +1119,14 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		//	) WHERE unnest = 'enum_value'
 		firstClause := true
 		for _, col := range desc.PublicColumns() {
-			if arrayTypeDesc.GetID() == typedesc.GetTypeDescID(col.GetType()) {
+			if !col.GetType().UserDefined() {
+				continue
+			}
+			tid, terr := typedesc.GetUserDefinedTypeDescID(col.GetType())
+			if terr != nil {
+				return terr
+			}
+			if arrayTypeDesc.GetID() == tid {
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
@@ -978,8 +1181,11 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			if err != nil {
 				return err
 			}
-			fqName := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(parentSchema.Name), tree.Name(desc.GetName()))
-
+			fqName := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(parentSchema.GetName()),
+				tree.Name(desc.GetName()),
+			)
 			return pgerror.Newf(pgcode.DependentObjectsStillExist, "could not remove enum value %q as it is being used by table %q",
 				member.LogicalRepresentation, fqName.FQString(),
 			)
@@ -1039,7 +1245,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 				t.typeID,
 			)
 			return nil
-		case !isPermanentSchemaChangeError(tcErr):
+		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
 			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
 		default:
@@ -1092,8 +1298,9 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 		}
 
 		if err := drainNamesForDescriptor(
-			ctx, tc.execCfg.Settings, tc.typeID, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.LeaseManager, tc.execCfg.Codec, nil,
+			ctx, tc.typeID, tc.execCfg.CollectionFactory, tc.execCfg.DB,
+			tc.execCfg.InternalExecutor, tc.execCfg.Codec,
+			nil, /* beforeDrainNames */
 		); err != nil {
 			return err
 		}
@@ -1113,8 +1320,8 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				tc.typeID,
 			)
-		case !isPermanentSchemaChangeError(rollbackErr):
-			return jobs.NewRetryJobError(rollbackErr.Error())
+		case !IsPermanentSchemaChangeError(rollbackErr):
+			return jobs.MarkAsRetryJobError(rollbackErr)
 		default:
 			return rollbackErr
 		}

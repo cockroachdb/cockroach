@@ -50,20 +50,20 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		switch {
 		case len(n.From) == 0:
 			return nil, errors.Errorf("no columns in SCATTER FROM expression")
-		case len(n.From) > index.NumColumns():
+		case len(n.From) > index.NumKeyColumns():
 			return nil, errors.Errorf("too many columns in SCATTER FROM expression")
 		case len(n.To) == 0:
 			return nil, errors.Errorf("no columns in SCATTER TO expression")
-		case len(n.To) > index.NumColumns():
+		case len(n.To) > index.NumKeyColumns():
 			return nil, errors.Errorf("too many columns in SCATTER TO expression")
 		}
 
 		// Calculate the desired types for the select statement:
 		//  - column values; it is OK if the select statement returns fewer columns
 		//  (the relevant prefix is used).
-		desiredTypes := make([]*types.T, index.NumColumns())
-		for i := 0; i < index.NumColumns(); i++ {
-			colID := index.GetColumnID(i)
+		desiredTypes := make([]*types.T, index.NumKeyColumns())
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colID := index.GetKeyColumnID(i)
 			c, err := tableDesc.FindColumnWithID(colID)
 			if err != nil {
 				return nil, err

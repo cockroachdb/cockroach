@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test
@@ -129,6 +130,14 @@ type TestServerArgs struct {
 
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
+
+	Tracer *tracing.Tracer
+	// If set, a TraceDir is initialized at the provided path.
+	TraceDir string
+
+	// If set, the span configs infrastructure will be enabled. This is
+	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+	EnableSpanConfigs bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -230,12 +239,10 @@ type TestTenantArgs struct {
 	// to be created by StartTenant.
 	Existing bool
 
-	// IdleExitAfter, if set will cause the tenant process to exit if idle.
-	IdleExitAfter time.Duration
-
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
+	Tracer   *tracing.Tracer
 
 	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
 	// cluster settings.
@@ -251,4 +258,32 @@ type TestTenantArgs struct {
 	// Test server starts with secure mode by default. When this is set to true
 	// it will switch to insecure
 	ForceInsecure bool
+
+	// MemoryPoolSize is the amount of memory in bytes that can be used by SQL
+	// clients to store row data in server RAM.
+	MemoryPoolSize int64
+
+	// TempStorageConfig is used to configure temp storage, which stores
+	// ephemeral data when processing large queries.
+	TempStorageConfig *TempStorageConfig
+
+	// ExternalIODirConfig is used to initialize the same-named
+	// field on the server.Config struct.
+	ExternalIODirConfig ExternalIODirConfig
+
+	// ExternalIODir is used to initialize the same-named field on
+	// the params.Settings struct.
+	ExternalIODir string
+
+	// If set, this will be appended to the Postgres URL by functions that
+	// automatically open a connection to the server. That's equivalent to running
+	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
+	UseDatabase string
+
+	// Skip check for tenant existence when running the test.
+	SkipTenantCheck bool
+
+	// Locality is used to initialize the same-named field on the server.Config
+	// struct.
+	Locality roachpb.Locality
 }

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +42,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-	tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
+	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -72,20 +71,6 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(columnName))
-}
-
-// IncrementSequence implements the tree.SequenceOperators interface.
-func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
-	if p.EvalContext().TxnReadOnly {
-		return 0, readOnlyError("nextval()")
-	}
-
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
-	if err != nil {
-		return 0, err
-	}
-	return incrementSequenceHelper(ctx, p, descriptor)
 }
 
 // IncrementSequenceByID implements the tree.SequenceOperators interface.
@@ -131,7 +116,11 @@ func incrementSequenceHelper(
 		return 0, err
 	}
 
-	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
+	p.ExtendedEvalContext().SessionMutatorIterator.applyForEachMutator(
+		func(m sessionDataMutator) {
+			m.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
+		},
+	)
 
 	return val, nil
 }
@@ -223,18 +212,6 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 		tree.ErrString((*tree.Name)(&name)), value)
 }
 
-// GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
-func (p *planner) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
-	if err != nil {
-		return 0, err
-	}
-	return getLatestValueInSessionForSequenceHelper(p, descriptor, seqName)
-}
-
 // GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
@@ -268,22 +245,6 @@ func getLatestValueInSessionForSequenceHelper(
 	}
 
 	return val, nil
-}
-
-// SetSequenceValue implements the tree.SequenceOperators interface.
-func (p *planner) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	if p.EvalContext().TxnReadOnly {
-		return readOnlyError("setval()")
-	}
-
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
-	if err != nil {
-		return err
-	}
-	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
 }
 
 // SetSequenceValueByID implements the tree.SequenceOperators interface.
@@ -591,7 +552,7 @@ func resolveColumnItemToDescriptors(
 		return nil, nil, errors.WithHint(err, "Specify OWNED BY table.column or OWNED BY NONE.")
 	}
 	tableName := columnItem.TableName.ToTableName()
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -638,13 +599,10 @@ func maybeAddSequenceDependencies(
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 ) ([]*tabledesc.Mutable, error) {
-	seqIdentifiers, err := sequence.GetUsedSequences(expr)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
 		return nil, err
 	}
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
 
 	var seqDescs []*tabledesc.Mutable
 	seqNameToID := make(map[string]int64)
@@ -652,6 +610,17 @@ func maybeAddSequenceDependencies(
 		seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 		if err != nil {
 			return nil, err
+		}
+		// Check if this reference is cross DB.
+		if seqDesc.GetParentID() != tableDesc.GetParentID() &&
+			!allowCrossDatabaseSeqReferences.Get(&st.SV) {
+			return nil, errors.WithHintf(
+				pgerror.Newf(pgcode.FeatureNotSupported,
+					"sequence references cannot come from other databases; (see the '%s' cluster setting)",
+					allowCrossDatabaseSeqReferencesSetting),
+				crossDBReferenceDeprecationHint(),
+			)
+
 		}
 		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 
@@ -673,7 +642,7 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      byID,
+				ByID:      true,
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
@@ -683,8 +652,8 @@ func maybeAddSequenceDependencies(
 
 	// If sequences are present in the expr (and the cluster is the right version),
 	// walk the expr tree and replace any sequences names with their IDs.
-	if len(seqIdentifiers) > 0 && byID {
-		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+	if len(seqIdentifiers) > 0 {
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return nil, err
 		}
@@ -698,7 +667,7 @@ func maybeAddSequenceDependencies(
 // GetSequenceDescFromIdentifier resolves the sequence descriptor for the given
 // sequence identifier.
 func GetSequenceDescFromIdentifier(
-	ctx context.Context, sc resolver.SchemaResolver, seqIdentifier sequence.SeqIdentifier,
+	ctx context.Context, sc resolver.SchemaResolver, seqIdentifier seqexpr.SeqIdentifier,
 ) (*tabledesc.Mutable, error) {
 	var tn tree.TableName
 	if seqIdentifier.IsByID() {
@@ -719,13 +688,13 @@ func GetSequenceDescFromIdentifier(
 	var err error
 	p, ok := sc.(*planner)
 	if ok {
-		seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		_, seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// This is only executed via IMPORT which uses its own resolver.
-		seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		_, seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}

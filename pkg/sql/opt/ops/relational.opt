@@ -364,6 +364,22 @@ define LookupJoinPrivate {
     # to a contiguous prefix of the index columns.
     LookupExpr FiltersExpr
 
+    # If RemoteLookupExpr is set, this is a locality optimized semi, inner, or
+    # left lookup join. In this case, LookupExpr contains the lookup join
+    # conditions targeting ranges located on local nodes (relative to the
+    # gateway region), and RemoteLookupExpr contains the lookup join conditions
+    # targeting remote nodes. The optimizer will only plan a locality optimized
+    # lookup join if it is known that each lookup returns at most one row. This
+    # fact allows the execution engine to use the local conditions in LookupExpr
+    # first, and if a match is found locally for each input row, there is no
+    # need to search remote nodes. If a local match is not found for all input
+    # rows, the execution engine uses RemoteLookupExpr to search remote nodes.
+    #
+    # The same restrictions on supported expressions that apply to LookupExpr
+    # also apply to RemoteLookupExpr. See the comment above LookupExpr for more
+    # details.
+    RemoteLookupExpr FiltersExpr
+
     # Cols is the union between the set of input columns that are returned by
     # the lookup join and the set of lookup columns retrieved through lookup.
     #
@@ -391,9 +407,9 @@ define LookupJoinPrivate {
     IsSecondJoinInPairedJoiner bool
 
     # LocalityOptimized is true if this lookup join is part of a locality
-    # optimized search strategy, indicating that it either requires all local
-    # (relative to the gateway region) or all remote lookups. Currently, only
-    # anti joins can be locality optimized, and they are implemented with two
+    # optimized search strategy. For semi, inner, and left joins, this means
+    # that RemoteLookupExpr will be non-nil. See comments above that field for
+    # details. Locality optimized anti joins, however, are implemented with two
     # nested anti lookup joins in which the first join targets local partitions
     # and the second join targets remote partitions. Therefore,
     # LocalityOptimized is used as a hint to the coster to reduce the cost of
@@ -815,11 +831,30 @@ define Union {
 #
 # To make normalization rules and execution simpler, both inputs to the set op
 # must have matching types.
+#
+# SetPrivate can also contain an optional ordering, allowing for more efficient
+# streaming execution.
 [Private]
 define SetPrivate {
     LeftCols ColList
     RightCols ColList
     OutCols ColList
+
+    # Ordering specifies the order required of the input, allowing for more
+    # efficient streaming execution.
+    #
+    # The canonical operation always contains an empty ordering. Exploration
+    # rules can create versions of the operator with orderings on the OutCols.
+    # The ordering can be mapped to the input columns using the LeftCols and
+    # RightCols ColLists.
+    #
+    # Note that for all operations except UnionAll, this ordering must include
+    # all output columns, and therefore it may not be simplified according to
+    # the FDs. All columns are needed to ensure correct execution of the
+    # streaming set operation.
+    #
+    # This field cannot be set for LocalityOptimizedSearch.
+    Ordering OrderingChoice
 }
 
 # Intersect is an operator used to perform an intersection between the Left
@@ -829,6 +864,9 @@ define SetPrivate {
 # The SetPrivate field matches columns from the Left and Right inputs of the
 # Intersect with the output columns. See the comment above SetPrivate for more
 # details.
+# Note that Intersect is symmetric in most cases, but there are exceptions:
+# some types allow values that are equal but not identical (e.g. collated
+# strings) in which case it could be visible which side a row is coming from.
 [Relational, Set]
 define Intersect {
     Left RelExpr
@@ -891,6 +929,9 @@ define UnionAll {
 # The SetPrivate field matches columns from the Left and Right inputs of the
 # IntersectAll with the output columns. See the comment above SetPrivate for more
 # details.
+# Note that IntersectAll is symmetric in most cases, but there are exceptions:
+# some types allow values that are equal but not identical (e.g. collated
+# strings) in which case it could be visible which side a row is coming from.
 [Relational, Set]
 define IntersectAll {
     Left RelExpr
@@ -982,7 +1023,7 @@ define LocalityOptimizedSearch {
 
 # Limit returns a limited subset of the results in the input relation. The limit
 # expression is a scalar value; the operator returns at most this many rows. The
-# Orering field is a physical.OrderingChoice which indicates the row ordering
+# Ordering field is a physical.OrderingChoice which indicates the row ordering
 # required from the input (the first rows with respect to this ordering are
 # returned).
 [Relational]
@@ -998,6 +1039,29 @@ define Limit {
 define Offset {
     Input RelExpr
     Offset ScalarExpr
+    Ordering OrderingChoice
+}
+
+# TopK returns the top K, where K is a constant, rows from the input set according to its
+# sort ordering, discarding the remaining rows. The Limit is a constant
+# positive integer; the operator returns at most Limit rows. Rows can be sorted by one
+# or more of the input columns, each of which can be sorted in either ascending
+# or descending order. See the Ordering field in the PhysicalProps struct.
+#
+# Unlike the Limit relational operator, TopK does not require its input to be
+# ordered. TopK can be used to substitute a Limit that requires its input to be
+# ordered and performs best when the input is not already ordered. TopK scans the
+# input, storing the K rows that best meet the ordering requirement in a max
+# heap, then sorts the K rows.
+[Relational]
+define TopK {
+    Input RelExpr
+    _ TopKPrivate
+}
+
+[Private]
+define TopKPrivate {
+    K int64
     Ordering OrderingChoice
 }
 
@@ -1206,4 +1270,14 @@ define FakeRel {
 [Private]
 define FakeRelPrivate {
     Props RelPropsPtr
+}
+
+# NormCycleTestRel is a relational operator for testing that normalization rule
+# cycles are detected by the Factory and a stack overflow is prevented. Two
+# rules for this expression, NormCycleTestRelTrueToFalse and
+# NormCycleTestRelFalseToTrue, create a normalization rule cycle. See the cycle
+# test file for tests that use this expression.
+[Relational]
+define NormCycleTestRel {
+    Scalar ScalarExpr
 }

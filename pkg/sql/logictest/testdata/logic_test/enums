@@ -754,28 +754,6 @@ txn
 statement ok
 ROLLBACK
 
-# Ensure that index drops that can't use range deletions succeed.
-statement ok
-CREATE TABLE enum_parent (x greeting PRIMARY KEY);
-CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
-INSERT INTO enum_parent VALUES ('hello');
-INSERT INTO enum_child VALUES ('hello', 'hello');
-CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
-DROP INDEX enum_child@i
-
-# Test the above case, but in a transaction.
-statement ok
-DROP TABLE enum_child;
-DROP TABLE enum_parent;
-BEGIN;
-CREATE TABLE enum_parent (x greeting PRIMARY KEY);
-CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
-INSERT INTO enum_parent VALUES ('hello');
-INSERT INTO enum_child VALUES ('hello', 'hello');
-CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
-DROP INDEX enum_child@i;
-ROLLBACK
-
 # Test primary key change to an ENUM column.
 statement ok
 CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
@@ -1392,9 +1370,6 @@ SELECT * from arr_t5
 subtest drop_used_enum_values
 
 statement ok
-SET enable_drop_enum_value = true
-
-statement ok
 CREATE TYPE default_abc AS ENUM ('a', 'b', 'c')
 
 statement ok
@@ -1520,3 +1495,23 @@ CREATE TABLE tab (k typ2 PRIMARY KEY)
 
 statement ok
 CREATE INDEX foo ON tab(k) WHERE k = ANY (ARRAY['a', 'a']:::typ2[])
+
+subtest regression_66576
+
+let $oid
+SELECT oid FROM pg_type WHERE typname = 'typ2'
+
+query T
+SELECT typname FROM pg_type WHERE oid = $oid
+----
+typ2
+
+subtest drop_enum_value_index_predicate
+
+statement ok
+DROP TYPE IF EXISTS enum_for_predicate;
+CREATE TYPE enum_for_predicate AS ENUM ('a', 'b');
+CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, INDEX (t) WHERE (t = 'a'))
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
+ALTER TYPE enum_for_predicate DROP VALUE 'a'

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -103,15 +104,28 @@ type IndexOpts struct {
 	AddMutations bool
 }
 
-// Descriptor is an interface to be shared by individual descriptor
-// types.
-type Descriptor interface {
-	tree.NameResolutionResult
-
-	GetID() descpb.ID
+// NameKey is an interface for objects which have all the components
+// of their corresponding namespace table entry.
+// Typically these objects are either Descriptor implementations or
+// descpb.NameInfo structs.
+type NameKey interface {
 	GetName() string
 	GetParentID() descpb.ID
 	GetParentSchemaID() descpb.ID
+}
+
+// NameEntry corresponds to an entry in the namespace table.
+type NameEntry interface {
+	NameKey
+	GetID() descpb.ID
+}
+
+var _ NameKey = descpb.NameInfo{}
+
+// Descriptor is an interface to be shared by individual descriptor
+// types.
+type Descriptor interface {
+	NameEntry
 
 	// IsUncommittedVersion returns true if this descriptor represent a version
 	// which is not the currently committed version. Implementations may return
@@ -140,7 +154,7 @@ type Descriptor interface {
 
 	// GetReferencedDescIDs returns the IDs of all descriptors directly referenced
 	// by this descriptor, including itself.
-	GetReferencedDescIDs() DescriptorIDSet
+	GetReferencedDescIDs() (DescriptorIDSet, error)
 
 	// ValidateSelf checks the internal consistency of the descriptor.
 	ValidateSelf(vea ValidationErrorAccumulator)
@@ -152,17 +166,10 @@ type Descriptor interface {
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 }
 
-// DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by Immutable.
+// DatabaseDescriptor encapsulates the concept of a database.
 type DatabaseDescriptor interface {
 	Descriptor
 
-	// Note: Prior to user-defined schemas, databases were the schema meta for
-	// objects.
-	//
-	// TODO(ajwerner): Remove this in the 20.2 cycle as part of user-defined
-	// schemas.
-	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
 	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig
@@ -172,13 +179,7 @@ type DatabaseDescriptor interface {
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
-}
-
-// SchemaDescriptor will eventually be called schemadesc.Descriptor.
-// It is implemented by Immutable.
-type SchemaDescriptor interface {
-	Descriptor
-	SchemaDesc() *descpb.SchemaDescriptor
+	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
 }
 
 // TableDescriptor is an interface around the table descriptor types.
@@ -234,7 +235,7 @@ type TableDescriptor interface {
 	// See also Index.Ordinal().
 	NonDropIndexes() []Index
 
-	// NonDropIndexes returns a slice of all partial indexes in the underlying
+	// PartialIndexes returns a slice of all partial indexes in the underlying
 	// proto, in their canonical order. This is equivalent to taking the slice
 	// produced by AllIndexes and removing indexes with empty expressions.
 	PartialIndexes() []Index
@@ -286,6 +287,7 @@ type TableDescriptor interface {
 	DeletableColumns() []Column
 	NonDropColumns() []Column
 	VisibleColumns() []Column
+	AccessibleColumns() []Column
 	ReadableColumns() []Column
 	UserDefinedTypeColumns() []Column
 	SystemColumns() []Column
@@ -324,9 +326,10 @@ type TableDescriptor interface {
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 	GetAllReferencedTypeIDs(
 		databaseDesc DatabaseDescriptor, getType func(descpb.ID) (TypeDescriptor, error),
-	) (descpb.IDs, error)
+	) (referencedAnywhere, referencedInColumns descpb.IDs, _ error)
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
+	GetDependedOnBy() []descpb.TableDescriptor_Reference
 	GetDependsOn() []descpb.ID
 	GetDependsOnTypes() []descpb.ID
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
@@ -339,8 +342,6 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
 	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
-	GetInboundFKs() []descpb.ForeignKeyConstraint
-	GetOutboundFKs() []descpb.ForeignKeyConstraint
 
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
 	IsLocalityRegionalByRow() bool
@@ -358,7 +359,7 @@ type TypeDescriptor interface {
 	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
-	GetIDClosure() map[descpb.ID]struct{}
+	GetIDClosure() (map[descpb.ID]struct{}, error)
 	IsCompatibleWith(other TypeDescriptor) error
 
 	PrimaryRegionName() (descpb.RegionName, error)
@@ -387,6 +388,20 @@ type TypeDescriptor interface {
 type TypeDescriptorResolver interface {
 	// GetTypeDescriptor returns the type descriptor for the input ID.
 	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
+}
+
+// DefaultPrivilegeDescriptor is an interface for default privileges to ensure
+// DefaultPrivilegeDescriptor protos are not accessed and interacted
+// with directly.
+type DefaultPrivilegeDescriptor interface {
+	CreatePrivilegesFromDefaultPrivileges(
+		dbID descpb.ID,
+		user security.SQLUsername,
+		targetObject tree.AlterDefaultPrivilegesTargetObject,
+		databasePrivileges *descpb.PrivilegeDescriptor,
+	) *descpb.PrivilegeDescriptor
+	GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole) (*descpb.DefaultPrivilegesForRole, bool)
+	ForEachDefaultPrivilegeForRole(func(descpb.DefaultPrivilegesForRole) error) error
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an
@@ -459,4 +474,13 @@ func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
 	if drainingNames := desc.GetDrainingNames(); len(drainingNames) > 0 {
 		w.Printf(", NumDrainingNames: %d", len(drainingNames))
 	}
+}
+
+// IsSystemDescriptor returns true iff the descriptor is a system or a reserved
+// descriptor.
+func IsSystemDescriptor(desc Descriptor) bool {
+	if desc.GetID() <= keys.MaxReservedDescID {
+		return true
+	}
+	return desc.GetParentID() == keys.SystemDatabaseID
 }

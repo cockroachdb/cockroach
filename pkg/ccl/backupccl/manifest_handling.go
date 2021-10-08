@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -32,8 +33,7 @@ import (
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -392,7 +392,7 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
 		return err
 	}
 
@@ -401,7 +401,7 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := exportStore.WriteFile(ctx, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 		return errors.Wrap(err, "writing manifest checksum")
 	}
 
@@ -488,7 +488,7 @@ func writeBackupPartitionDescriptor(
 		}
 	}
 
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
 }
 
 // writeTableStatistics writes a StatsTable object to a file of the filename
@@ -516,7 +516,7 @@ func writeTableStatistics(
 			return err
 		}
 	}
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(statsBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(statsBuf))
 }
 
 func loadBackupManifests(
@@ -592,47 +592,67 @@ func getLocalityInfo(
 	return info, nil
 }
 
-const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
+const incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
 
-// findPriorBackupNames finds "appended" incremental backups, as done by
-// findPriorBackupLocations and appends the backup manifest file name to
-// the URI.
-func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName)
-	if err != nil {
+// listingDelimDataSlash is used when listing to find backups and groups all the
+// data sst files in each backup, which start with "data/", into a single result
+// that can be skipped over quickly.
+const listingDelimDataSlash = "data/"
+
+const (
+	// IncludeManifest is a named const that can be passed to FindPriorBackups.
+	IncludeManifest = true
+	// OmitManifest is a named const that can be passed to FindPriorBackups.
+	OmitManifest = false
+)
+
+// FindPriorBackups finds "appended" incremental backups by searching
+// for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
+// If includeManifest is true the returned paths are to the manifests for the
+// prior backup, otherwise it is just to the backup path.
+func FindPriorBackups(
+	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
+) ([]string, error) {
+	var prev []string
+	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
+		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupManifestName)
+			}
+			prev = append(prev, p)
+			return nil
+		}
+		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
+			}
+			prev = append(prev, p)
+		}
+		return nil
+	}); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
 	sort.Strings(prev)
 	return prev, nil
 }
 
-// FindPriorBackupLocations finds "appended" incremental backups by searching
-// for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
-// Using file-system searching rather than keeping an explicit list allows
-// layers to be manually moved/removed/etc without needing to update/maintain
-// said list.
-func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	backupManifestSuffix := backupManifestName
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
+// checkForLatestFileInCollection checks whether the directory pointed by store contains the
+// latestFileName pointer directory.
+func checkForLatestFileInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) (bool, error) {
+	_, err := store.ReadFile(ctx, latestFileName)
 	if err != nil {
-		return nil, errors.Wrap(err, "reading previous backup layers")
-	}
-
-	if len(prev) == 0 {
-		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
-		// that too.
-		backupManifestSuffix = backupOldManifestName
-		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading previous backup layers")
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
 		}
+		return false, pgerror.WithCandidateCode(err, pgcode.Io)
 	}
-
-	for i := range prev {
-		prev[i] = strings.TrimSuffix(prev[i], "/"+backupManifestSuffix)
-	}
-	sort.Strings(prev)
-	return prev, nil
+	return true, nil
 }
 
 // resolveBackupManifests resolves a list of list of URIs that point to the
@@ -696,7 +716,7 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-		prev, err := findPriorBackupNames(ctx, baseStores[0])
+		prev, err := FindPriorBackups(ctx, baseStores[0], IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
@@ -854,7 +874,15 @@ func loadSQLDescsFromBackupsAtTime(
 		return ret
 	}
 	if asOf.IsEmpty() {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous
+		// database versions of database descriptors in
+		// lastBackupManifest.Descriptors. Find the correct set of descriptors by
+		// going through their revisions. See #68541.
+		asOf = lastBackupManifest.EndTime
 	}
 
 	for _, b := range backupManifests {
@@ -885,8 +913,14 @@ func loadSQLDescsFromBackupsAtTime(
 		// backed up -- if the DB is missing, filter the object.
 		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
-		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {
@@ -952,7 +986,7 @@ func writeEncryptionInfoIfNotExists(
 	if err != nil {
 		return err
 	}
-	if err := dest.WriteFile(ctx, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
+	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil
@@ -961,7 +995,7 @@ func writeEncryptionInfoIfNotExists(
 // RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
 // return to the client in an error message.
 func RedactURIForErrorMessage(uri string) string {
-	redactedURI, err := cloudimpl.SanitizeExternalStorageURI(uri, []string{})
+	redactedURI, err := cloud.SanitizeExternalStorageURI(uri, []string{})
 	if err != nil {
 		return "<uri_failed_to_redact>"
 	}
@@ -1017,8 +1051,15 @@ func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
-	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
-	if err != nil {
+	var backupPaths []string
+	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
+		if ok, err := path.Match("/*/*/*/"+backupManifestName, f); err != nil {
+			return err
+		} else if ok {
+			backupPaths = append(backupPaths, f)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {

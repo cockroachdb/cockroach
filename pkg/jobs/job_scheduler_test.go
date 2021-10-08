@@ -202,30 +202,31 @@ func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
 
 func getScopedSettings() (*settings.Values, func()) {
 	sv := &settings.Values{}
-	sv.Init(nil)
+	sv.Init(context.Background(), nil)
 	return sv, settings.TestingSaveRegistry()
 }
 
 func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	sv, cleanup := getScopedSettings()
 	defer cleanup()
 
-	schedulerEnabledSetting.Override(sv, false)
+	schedulerEnabledSetting.Override(ctx, sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
 	require.EqualValues(t, 5*time.Minute, getWaitPeriod(sv, nil))
-	schedulerEnabledSetting.Override(sv, true)
+	schedulerEnabledSetting.Override(ctx, sv, true)
 
 	// When pace is too low, we use something more reasonable.
-	schedulerPaceSetting.Override(sv, time.Nanosecond)
+	schedulerPaceSetting.Override(ctx, sv, time.Nanosecond)
 	require.EqualValues(t, minPacePeriod, getWaitPeriod(sv, nil))
 
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
-	schedulerPaceSetting.Override(sv, pace)
+	schedulerPaceSetting.Override(ctx, sv, pace)
 	require.EqualValues(t, pace, getWaitPeriod(sv, nil))
 }
 
@@ -261,6 +262,16 @@ func (n *recordScheduleExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (n *recordScheduleExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
 
 func fastDaemonKnobs(scanDelay func() time.Duration) *TestingKnobs {
@@ -288,7 +299,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 
 	knobs := fastDaemonKnobs(func() time.Duration {
 		// Disable daemon
-		schedulerEnabledSetting.Override(&h.cfg.Settings.SV, false)
+		schedulerEnabledSetting.Override(ctx, &h.cfg.Settings.SV, false)
 
 		// Before we return, create a job which should not be executed
 		// (since the daemon is disabled).  We use our special executor
@@ -422,7 +433,7 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	// Advance our fake time 1 hour forward (plus a bit) so that the daemon finds matching jobs.
 	h.env.AdvanceTime(time.Hour + time.Second)
 	const jobsPerIteration = 2
-	schedulerMaxJobsPerIterationSetting.Override(&h.cfg.Settings.SV, jobsPerIteration)
+	schedulerMaxJobsPerIterationSetting.Override(ctx, &h.cfg.Settings.SV, jobsPerIteration)
 
 	// Make daemon execute initial scan immediately, but block subsequent scans.
 	h.cfg.TestingKnobs = fastDaemonKnobs(overridePaceSetting(time.Hour))
@@ -473,6 +484,16 @@ func (e *returnErrorExecutor) NotifyJobTermination(
 
 func (e *returnErrorExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (e *returnErrorExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 var _ ScheduledJobExecutor = &returnErrorExecutor{}
@@ -646,6 +667,16 @@ func (e *txnConflictExecutor) NotifyJobTermination(
 
 func (e *txnConflictExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (e *txnConflictExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 var _ ScheduledJobExecutor = (*txnConflictExecutor)(nil)

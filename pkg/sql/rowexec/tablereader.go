@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -34,9 +35,10 @@ import (
 type tableReader struct {
 	execinfra.ProcessorBase
 
-	spans       roachpb.Spans
-	limitHint   int64
-	parallelize bool
+	spans           roachpb.Spans
+	limitHint       rowinfra.RowLimit
+	parallelize     bool
+	batchBytesLimit rowinfra.BytesLimit
 
 	scanStarted bool
 
@@ -49,6 +51,8 @@ type tableReader struct {
 	// collection layer.
 	fetcher rowFetcher
 	alloc   rowenc.DatumAlloc
+
+	scanStats execinfra.ScanStats
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
@@ -80,22 +84,34 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
+	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
+		// Parallelize shouldn't be set when there's a limit hint, but double-check
+		// just in case.
+		spec.Parallelize = false
+	}
+	var batchBytesLimit rowinfra.BytesLimit
+	if !spec.Parallelize {
+		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
+		if batchBytesLimit == 0 {
+			batchBytesLimit = rowinfra.DefaultBatchBytesLimit
+		}
+	}
+
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
-	// Parallelize shouldn't be set when there's a limit hint, but double-check
-	// just in case.
-	tr.parallelize = spec.Parallelize && tr.limitHint == 0
+	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tr.parallelize = spec.Parallelize
+	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := spec.BuildTableDescriptor()
-	virtualColumn := tabledesc.FindVirtualColumn(tableDesc, spec.VirtualColumn)
+	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = tableDesc.DeletableColumns()
 	}
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	resultTypes := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
+	resultTypes := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 
 	// Add all requested system columns to the output.
 	if spec.HasSystemColumns {
@@ -126,7 +142,7 @@ func newTableReader(
 		return nil, err
 	}
 
-	neededColumns := tr.Out.NeededColumns()
+	neededColumns := tr.OutputHelper.NeededColumns()
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
@@ -144,7 +160,7 @@ func newTableReader(
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.HasSystemColumns,
-		virtualColumn,
+		invertedColumn,
 	); err != nil {
 		return nil, err
 	}
@@ -191,11 +207,17 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
+	var bytesLimit rowinfra.BytesLimit
+	if !limitBatches {
+		bytesLimit = rowinfra.NoBytesLimit
+	} else {
+		bytesLimit = tr.batchBytesLimit
+	}
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans, limitBatches, tr.limitHint,
+			ctx, tr.FlowCtx.Txn, tr.spans, bytesLimit, tr.limitHint,
 			tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
@@ -203,7 +225,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.spans,
-			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
@@ -294,15 +316,18 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	tr.scanStats = execinfra.GetScanStats(tr.Ctx)
+	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
 		},
-		Output: tr.Out.Stats(),
+		Output: tr.OutputHelper.Stats(),
 	}
+	execinfra.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
+	return ret
 }
 
 func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {

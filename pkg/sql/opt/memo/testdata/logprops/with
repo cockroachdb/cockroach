@@ -6,10 +6,10 @@ build
 WITH foo AS (SELECT * FROM xy) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: x:4(int!null) y:5(int)
- ├── key: (4)
- ├── fd: (4)-->(5)
- ├── prune: (4,5)
+ ├── columns: x:5(int!null) y:6(int)
+ ├── key: (5)
+ ├── fd: (5)-->(6)
+ ├── prune: (5,6)
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
@@ -17,19 +17,19 @@ with &1 (foo)
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: xy.x:1(int!null) xy.y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── prune: (1-3)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
  │         └── interesting orderings: (+1)
  └── with-scan &1 (foo)
-      ├── columns: x:4(int!null) y:5(int)
+      ├── columns: x:5(int!null) y:6(int)
       ├── mapping:
-      │    ├──  xy.x:1(int) => x:4(int)
-      │    └──  xy.y:2(int) => y:5(int)
-      ├── key: (4)
-      ├── fd: (4)-->(5)
-      ├── prune: (4,5)
+      │    ├──  xy.x:1(int) => x:5(int)
+      │    └──  xy.y:2(int) => y:6(int)
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── prune: (5,6)
       └── cte-uses
            └── &1: count=1 used-columns=(1,2)
 
@@ -186,17 +186,17 @@ FROM
     t40930, with_4189
 ----
 project
- ├── columns: "?column?":9(unknown)
- ├── fd: ()-->(9)
- ├── prune: (9)
+ ├── columns: "?column?":11(unknown)
+ ├── fd: ()-->(11)
+ ├── prune: (11)
  ├── inner-join (cross)
  │    ├── scan t40930
- │    │    └── unfiltered-cols: (5-7)
+ │    │    └── unfiltered-cols: (6-9)
  │    ├── scan t40930 [as=tab_10102]
- │    │    └── unfiltered-cols: (1-3)
+ │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
  └── projections
-      └── null [as="?column?":9, type=unknown]
+      └── null [as="?column?":11, type=unknown]
 
 build
 SELECT
@@ -262,9 +262,9 @@ WITH vals AS (VALUES (1), (2)),
 SELECT * FROM cte
 ----
 with &2 (cte)
- ├── columns: key:9(bytes) pretty:10(string) split_enforced_until:11(timestamp)
+ ├── columns: key:10(bytes) pretty:11(string) split_enforced_until:12(timestamp)
  ├── volatile, mutations
- ├── prune: (9-11)
+ ├── prune: (10-12)
  ├── alter-table-split xy
  │    ├── columns: key:3(bytes) pretty:4(string) split_enforced_until:5(timestamp)
  │    ├── volatile, mutations
@@ -278,11 +278,11 @@ with &2 (cte)
  │    │         └── const: 2 [type=int]
  │    └── null [type=string]
  └── with-scan &2 (cte)
-      ├── columns: key:9(bytes) pretty:10(string) split_enforced_until:11(timestamp)
+      ├── columns: key:10(bytes) pretty:11(string) split_enforced_until:12(timestamp)
       ├── mapping:
-      │    ├──  key:3(bytes) => key:9(bytes)
-      │    ├──  pretty:4(string) => pretty:10(string)
-      │    └──  split_enforced_until:5(timestamp) => split_enforced_until:11(timestamp)
-      ├── prune: (9-11)
+      │    ├──  key:3(bytes) => key:10(bytes)
+      │    ├──  pretty:4(string) => pretty:11(string)
+      │    └──  split_enforced_until:5(timestamp) => split_enforced_until:12(timestamp)
+      ├── prune: (10-12)
       └── cte-uses
            └── &2: count=1 used-columns=(3-5)

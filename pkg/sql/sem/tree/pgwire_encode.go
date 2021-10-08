@@ -22,9 +22,9 @@ import (
 // ResolveBlankPaddedChar pads the given string with spaces if blank padding is
 // required or returns the string unmodified otherwise.
 func ResolveBlankPaddedChar(s string, t *types.T) string {
-	if t.Oid() == oid.T_bpchar {
-		// Pad spaces on the right of the string to make it of length specified in
-		// the type t.
+	if t.Oid() == oid.T_bpchar && len(s) < int(t.Width()) {
+		// Pad spaces on the right of the string to make it of length specified
+		// in the type t.
 		return fmt.Sprintf("%-*v", t.Width(), s)
 	}
 	return s
@@ -64,7 +64,7 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 			dv.JSON.Format(&buf)
 			pgwireFormatStringInTuple(&ctx.Buffer, buf.String())
 		default:
-			s := AsStringWithFlags(v, ctx.flags)
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		}
 		comma = ","
@@ -137,7 +137,7 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		case *DBytes:
 			ctx.FormatNode(dv)
 		default:
-			s := AsStringWithFlags(v, ctx.flags)
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInArray(ctx, s)
 		}
 		comma = ","

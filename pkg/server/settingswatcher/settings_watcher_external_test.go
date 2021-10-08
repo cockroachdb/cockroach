@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -51,7 +50,7 @@ func TestSettingWatcher(t *testing.T) {
 	toSet := map[string][]interface{}{
 		"sql.defaults.experimental_hash_sharded_indexes.enabled": {true, false},
 		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
-		"kv.closed_timestamp.close_fraction":                     {.23, .55},
+		"sql.txn_stats.sample_rate":                              {.23, .55},
 		"cluster.organization":                                   {"foobar", "bazbax"},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)
@@ -93,10 +92,6 @@ func TestSettingWatcher(t *testing.T) {
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
 		tc.Stopper())
 	require.NoError(t, sw.Start(ctx))
-	// TestCluster randomizes the value of SeparatedIntentsEnabled, so set it to
-	// the same as in fakeSettings for the subsequent equality check.
-	storage.SeparatedIntentsEnabled.Override(
-		&s0.ClusterSettings().SV, storage.SeparatedIntentsEnabled.Get(&fakeSettings.SV))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), fakeSettings))
 	for k, v := range toSet {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[1])

@@ -48,9 +48,10 @@ import (
 )
 
 var (
-	flagRSGTime        = flag.Duration("rsg", 0, "random syntax generator test duration")
-	flagRSGGoRoutines  = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
+	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 2*time.Minute, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -120,10 +121,27 @@ type nonCrasher struct {
 func (c *nonCrasher) Error() string {
 	return c.err.Error()
 }
-
 func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) error {
-	if err := verifyFormat(sql); err != nil {
-		db.verifyFormatErr = err
+	return db.execWithTimeout(t, ctx, sql, *flagRSGExecTimeout)
+}
+func (db *verifyFormatDB) execWithTimeout(
+	t *testing.T, ctx context.Context, sql string, duration time.Duration,
+) error {
+	if err := func() (retErr error) {
+		defer func() {
+			if err := recover(); err != nil {
+				retErr = errors.CombineErrors(
+					errors.AssertionFailedf("panic executing %s: err %v", sql, err),
+					retErr,
+				)
+			}
+		}()
+		if err := verifyFormat(sql); err != nil {
+			db.verifyFormatErr = err
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
 
@@ -158,7 +176,7 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 			return &nonCrasher{sql: sql, err: err}
 		}
 		return nil
-	case <-time.After(*flagRSGExecTimeout):
+	case <-time.After(duration):
 		db.mu.Lock()
 		defer db.mu.Unlock()
 		b := make([]byte, 1024*1024)
@@ -280,6 +298,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Calculating the Frechet distance is slow and testing it here
 					// is not worth it.
 					continue
+				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
+					// Skipped due to long execution time.
+					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
 				for _, builtin := range variations {
@@ -396,7 +417,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
-		return db.exec(t, ctx, s)
+		return db.execWithTimeout(t, ctx, s, *flagRSGExecColumnChangeTimeout)
 	})
 }
 

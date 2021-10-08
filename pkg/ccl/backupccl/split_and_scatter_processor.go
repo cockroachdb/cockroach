@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,12 +59,12 @@ func (n noopSplitAndScatterer) scatter(
 // layer.
 type dbSplitAndScatterer struct {
 	db *kv.DB
-	kr *storageccl.KeyRewriter
+	kr *KeyRewriter
 }
 
 var _ splitAndScatterer = dbSplitAndScatterer{}
 
-func makeSplitAndScatterer(db *kv.DB, kr *storageccl.KeyRewriter) splitAndScatterer {
+func makeSplitAndScatterer(db *kv.DB, kr *KeyRewriter) splitAndScatterer {
 	return dbSplitAndScatterer{db: db, kr: kr}
 }
 
@@ -84,6 +83,11 @@ func (s dbSplitAndScatterer) split(
 	newSplitKey, err := rewriteBackupSpanKey(codec, s.kr, splitKey)
 	if err != nil {
 		return err
+	}
+	if splitAt, err := keys.EnsureSafeSplitKey(newSplitKey); err != nil {
+		// Ignore the error, not all keys are table keys.
+	} else if len(splitAt) != 0 {
+		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
 	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
@@ -107,6 +111,11 @@ func (s dbSplitAndScatterer) scatter(
 	newScatterKey, err := rewriteBackupSpanKey(codec, s.kr, scatterKey)
 	if err != nil {
 		return 0, err
+	}
+	if scatterAt, err := keys.EnsureSafeSplitKey(newScatterKey); err != nil {
+		// Ignore the error, not all keys are table keys.
+	} else if len(scatterAt) != 0 {
+		newScatterKey = scatterAt
 	}
 
 	log.VEventf(ctx, 1, "scattering new key %+v", newScatterKey)
@@ -201,7 +210,7 @@ func newSplitAndScatterProcessor(
 	}
 
 	db := flowCtx.Cfg.DB
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
+	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -148,7 +147,11 @@ var generators = map[string]builtinDefinition{
 			tree.ArgTypes{{"name", types.String}},
 			types.Int,
 			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
-				name := string(*args[0].(*tree.DString))
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				name := string(s)
 				gen, ok := ctx.TestingKnobs.CallbackGenerators[name]
 				if !ok {
 					return nil, errors.Errorf("callback %q not registered", name)
@@ -300,6 +303,16 @@ var generators = map[string]builtinDefinition{
 	"jsonb_each":                makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
 	"json_each_text":            makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
 	"jsonb_each_text":           makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"json_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+		"Expands the object in from_json to a row whose columns match the record type defined by base.",
+	)),
+	"jsonb_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+		"Expands the object in from_json to a row whose columns match the record type defined by base.",
+	)),
+	"json_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
+	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
@@ -401,8 +414,8 @@ func makeGeneratorOverload(
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info, volatility)
 }
 
-func newUnsuitableUseOfGeneratorError() error {
-	return errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
+var unsuitableUseOfGeneratorFn = func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
 }
 
 func makeGeneratorOverloadWithReturnType(
@@ -416,9 +429,6 @@ func makeGeneratorOverloadWithReturnType(
 		Types:      in,
 		ReturnType: retType,
 		Generator:  g,
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return nil, newUnsuitableUseOfGeneratorError()
-		},
 		Info:       info,
 		Volatility: volatility,
 	}
@@ -497,13 +507,13 @@ func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 // Next implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Next(_ context.Context) (bool, error) {
 	k.curKeyword++
-	return k.curKeyword < len(lex.KeywordNames), nil
+	return k.curKeyword < len(lexbase.KeywordNames), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Values() (tree.Datums, error) {
-	kw := lex.KeywordNames[k.curKeyword]
-	cat := lex.KeywordsCategories[kw]
+	kw := lexbase.KeywordNames[k.curKeyword]
+	cat := lexbase.KeywordsCategories[kw]
 	desc := keywordCategoryDescriptions[cat]
 	return tree.Datums{tree.NewDString(kw), tree.NewDString(cat), tree.NewDString(desc)}, nil
 }
@@ -1228,6 +1238,199 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{g.key, g.value}, nil
 }
 
+var jsonPopulateProps = tree.FunctionProperties{
+	Class:    tree.GeneratorClass,
+	Category: categoryGenerator,
+	// The typical way to call json_populate_record is to send NULL::atype as the
+	// first argument, so we have to accept nullable args.
+	NullableArgs: true,
+}
+
+func makeJSONPopulateImpl(gen tree.GeneratorWithExprsFactory, info string) tree.Overload {
+	return tree.Overload{
+		// The json{,b}_populate_record{,set} builtins all have a 2 argument
+		// structure. The first argument is an arbitrary tuple type, which is used
+		// to set the columns of the output when the builtin is used as a FROM
+		// source, or used as-is when it's used as an ordinary projection. To match
+		// PostgreSQL, the argument actually is types.Any, and its tuple-ness is
+		// checked at execution time.
+		// The second argument is a JSON object or array of objects. The builtin
+		// transforms the JSON in the second argument into the tuple in the first
+		// argument, field by field, casting fields in key "k" to the type in the
+		// tuple slot "k". Any tuple fields that were missing in the JSON will be
+		// left as they are in the input argument.
+		// The first argument can be of the form NULL::<tupletype>, in which case
+		// the default values of each field will be NULL.
+		// The second argument can also be null, in which case the first argument
+		// is returned as-is.
+		Types:              tree.ArgTypes{{"base", types.Any}, {"from_json", types.Jsonb}},
+		ReturnType:         tree.IdentityReturnType(0),
+		GeneratorWithExprs: gen,
+		Info:               info,
+		Volatility:         tree.VolatilityStable,
+	}
+}
+
+func makeJSONPopulateRecordGenerator(
+	evalCtx *tree.EvalContext, args tree.Exprs,
+) (tree.ValueGenerator, error) {
+	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	if j != nil {
+		if j.Type() != json.ObjectJSONType {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_record must be an object")
+		}
+	} else {
+		j = json.NewObjectBuilder(0).Build()
+	}
+	return &jsonPopulateRecordGenerator{
+		evalCtx: evalCtx,
+		input:   tuple,
+		target:  j,
+	}, nil
+}
+
+// jsonPopulateRecordEvalArgs evaluates the first 2 expression arguments to
+// one of the jsonPopulateRecord variants, and returns the correctly-typed
+// tuple of default values, and the JSON input or nil if it was SQL NULL.
+func jsonPopulateRecordEvalArgs(
+	evalCtx *tree.EvalContext, args tree.Exprs,
+) (tuple *tree.DTuple, jsonInputOrNil json.JSON, err error) {
+	evalled := make(tree.Datums, len(args))
+	for i := range args {
+		var err error
+		evalled[i], err = args[i].(tree.TypedExpr).Eval(evalCtx)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	tupleType := args[0].(tree.TypedExpr).ResolvedType()
+	if tupleType.Family() != types.TupleFamily && tupleType.Family() != types.UnknownFamily {
+		return nil, nil, pgerror.New(
+			pgcode.DatatypeMismatch,
+			"first argument of json{b}_populate_record{set} must be a record type",
+		)
+	}
+	var defaultElems tree.Datums
+	if evalled[0] == tree.DNull {
+		defaultElems = make(tree.Datums, len(tupleType.TupleLabels()))
+		for i := range defaultElems {
+			defaultElems[i] = tree.DNull
+		}
+	} else {
+		defaultElems = tree.MustBeDTuple(evalled[0]).D
+	}
+	var j json.JSON
+	if evalled[1] != tree.DNull {
+		j = tree.MustBeDJSON(evalled[1]).JSON
+	}
+	return tree.NewDTuple(tupleType, defaultElems...), j, nil
+}
+
+type jsonPopulateRecordGenerator struct {
+	input  *tree.DTuple
+	target json.JSON
+
+	wasCalled bool
+	evalCtx   *tree.EvalContext
+}
+
+// ResolvedType is part of the tree.ValueGenerator interface.
+func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
+	return j.input.ResolvedType()
+}
+
+// Start is part of the tree.ValueGenerator interface.
+func (j *jsonPopulateRecordGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+
+// Close is part of the tree.ValueGenerator interface.
+func (j *jsonPopulateRecordGenerator) Close(_ context.Context) {}
+
+// Next is part of the tree.ValueGenerator interface.
+func (j *jsonPopulateRecordGenerator) Next(_ context.Context) (bool, error) {
+	if !j.wasCalled {
+		j.wasCalled = true
+		return true, nil
+	}
+	return false, nil
+}
+
+// Values is part of the tree.ValueGenerator interface.
+func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
+	if err := tree.PopulateRecordWithJSON(j.evalCtx, j.target, j.input.ResolvedType(), j.input); err != nil {
+		return nil, err
+	}
+	return j.input.D, nil
+}
+
+func makeJSONPopulateRecordSetGenerator(
+	evalCtx *tree.EvalContext, args tree.Exprs,
+) (tree.ValueGenerator, error) {
+	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	if j != nil {
+		if j.Type() != json.ArrayJSONType {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_recordset must be an array")
+		}
+	} else {
+		j = json.NewArrayBuilder(0).Build()
+	}
+
+	return &jsonPopulateRecordSetGenerator{
+		jsonPopulateRecordGenerator: jsonPopulateRecordGenerator{
+			evalCtx: evalCtx,
+			input:   tuple,
+			target:  j,
+		},
+	}, nil
+}
+
+type jsonPopulateRecordSetGenerator struct {
+	jsonPopulateRecordGenerator
+
+	nextIdx int
+}
+
+// ResolvedType is part of the tree.ValueGenerator interface.
+func (j jsonPopulateRecordSetGenerator) ResolvedType() *types.T { return j.input.ResolvedType() }
+
+// Start is part of the tree.ValueGenerator interface.
+func (j jsonPopulateRecordSetGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+
+// Close is part of the tree.ValueGenerator interface.
+func (j jsonPopulateRecordSetGenerator) Close(_ context.Context) {}
+
+// Next is part of the tree.ValueGenerator interface.
+func (j *jsonPopulateRecordSetGenerator) Next(_ context.Context) (bool, error) {
+	if j.nextIdx >= j.target.Len() {
+		return false, nil
+	}
+	j.nextIdx++
+	return true, nil
+}
+
+// Values is part of the tree.ValueGenerator interface.
+func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
+	obj, err := j.target.FetchValIdx(j.nextIdx - 1)
+	if err != nil {
+		return nil, err
+	}
+	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
+	for i := range j.input.D {
+		output.D[i] = j.input.D[i]
+	}
+	if err := tree.PopulateRecordWithJSON(j.evalCtx, obj, j.input.ResolvedType(), output); err != nil {
+		return nil, err
+	}
+	return output.D, nil
+}
+
 type checkConsistencyGenerator struct {
 	db       *kv.DB
 	from, to roachpb.Key
@@ -1502,7 +1705,7 @@ func makePayloadsForSpanGenerator(
 		)
 	}
 	spanID := uint64(*(args[0].(*tree.DInt)))
-	span, found := ctx.Settings.Tracer.GetActiveSpanFromID(spanID)
+	span, found := ctx.Tracer.GetActiveSpanFromID(spanID)
 	if !found {
 		return nil, nil
 	}
@@ -1548,7 +1751,7 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 			return false, nil
 		}
 		currRecording := p.span.GetRecording()[p.recordingIndex]
-		currRecording.Structured(func(item *pbtypes.Any) {
+		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
 			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
 			if err != nil {
 				return
@@ -1575,9 +1778,11 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	// leftover from JSON value conversion.
 	payloadTypeAsString := strings.TrimSuffix(
 		strings.TrimPrefix(
-			payloadTypeAsJSON.String(),
-			"\"type.googleapis.com/cockroach.",
-		),
+			strings.TrimPrefix(
+				payloadTypeAsJSON.String(),
+				"\"type.googleapis.com/",
+			),
+			"cockroach."),
 		"\"",
 	)
 
@@ -1688,12 +1893,11 @@ const (
 // showCreateAllTablesGenerator supports the execution of
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
-	ie        sqlutil.InternalExecutor
-	txn       *kv.Txn
-	timestamp string
-	ids       []int64
-	dbName    string
-	acc       mon.BoundAccount
+	ie     sqlutil.InternalExecutor
+	txn    *kv.Txn
+	ids    []int64
+	dbName string
+	acc    mon.BoundAccount
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -1725,7 +1929,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.ie, txn, s.dbName, s.timestamp, &s.acc,
+		ctx, s.ie, txn, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -1751,7 +1955,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName,
+			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -1797,7 +2001,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementReturnType,
+			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -1834,15 +2038,9 @@ func makeShowCreateAllTablesGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
-	tsI, err := tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
-	if err != nil {
-		return nil, err
-	}
-	ts := tsI.String()
 	return &showCreateAllTablesGenerator{
-		timestamp: ts,
-		dbName:    dbName,
-		ie:        ctx.InternalExecutor.(sqlutil.InternalExecutor),
-		acc:       ctx.Mon.MakeBoundAccount(),
+		dbName: dbName,
+		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
+		acc:    ctx.Mon.MakeBoundAccount(),
 	}, nil
 }

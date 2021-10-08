@@ -42,7 +42,7 @@ go_test(
     ],
     embed = [":pgerror"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",

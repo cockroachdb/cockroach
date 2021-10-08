@@ -175,7 +175,7 @@ func (*dropTableNode) Close(context.Context)        {}
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType tree.RequiredTableKind,
 ) (*tabledesc.Mutable, error) {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +395,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
+		ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
 		if err != nil {
 			return err
 		}
@@ -501,11 +501,26 @@ func (p *planner) initiateDropTable(
 // schema change jobs that couldn't be successfully reverted and ended up in
 // a failed state. Such jobs could have already been GCed from the jobs
 // table by the time this code runs.
+//
+// This function is called while dropping a table or truncate. Therefore, we
+// have to stop the ongoing mutation jobs on the table. If the job is in the
+// cache that was created during this transaction, we can simply remove the
+// job from the cache because the job is not started yet. If the mutation job
+// was started in another transaction, we mark the job as succeeded or failed
+// to stop the job.
 func (p *planner) markTableMutationJobsSuccessful(
 	ctx context.Context, tableDesc *tabledesc.Mutable,
 ) error {
 	for _, mj := range tableDesc.MutationJobs {
 		jobID := jobspb.JobID(mj.JobID)
+		// Jobs are only added in the cache during the transaction and are created
+		// in a batch only when the transaction commits. So, if a job's record exists
+		// in the cache, we can simply delete that record from cache because the
+		// job is not created yet.
+		if record, exists := p.ExtendedEvalContext().SchemaChangeJobRecords[tableDesc.ID]; exists && record.JobID == jobID {
+			delete(p.ExtendedEvalContext().SchemaChangeJobRecords, tableDesc.ID)
+			continue
+		}
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
@@ -518,7 +533,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 			ctx, p.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				status := md.Status
 				switch status {
-				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed:
+				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
 					log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 					return nil
 				case jobs.StatusRunning, jobs.StatusPending:
@@ -534,7 +549,6 @@ func (p *planner) markTableMutationJobsSuccessful(
 			}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
 		}
-		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
 	return nil
 }
@@ -549,7 +563,7 @@ func (p *planner) removeFKForBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving origin table ID %d: %v", ref.OriginTableID, err)
+			return errors.Wrapf(err, "error resolving origin table ID %d", ref.OriginTableID)
 		}
 		originTableDesc = lookup
 	}
@@ -607,7 +621,7 @@ func (p *planner) removeFKBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}
 		referencedTableDesc = lookup
 	}
@@ -663,7 +677,7 @@ func (p *planner) removeInterleaveBackReference(
 	} else {
 		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+			return errors.Wrapf(err, "error resolving referenced table ID %d", ancestor.TableID)
 		}
 		t = lookup
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -41,7 +42,12 @@ type Deleter struct {
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []catalog.Column,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	requestedCols []catalog.Column,
+	sv *settings.Values,
+	internal bool,
+	metrics *Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 
@@ -62,22 +68,22 @@ func MakeDeleter(
 			}
 			return nil
 		}
-		for j := 0; j < tableDesc.GetPrimaryIndex().NumColumns(); j++ {
-			colID := tableDesc.GetPrimaryIndex().GetColumnID(j)
+		for j := 0; j < tableDesc.GetPrimaryIndex().NumKeyColumns(); j++ {
+			colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(j)
 			if err := maybeAddCol(colID); err != nil {
 				return Deleter{}
 			}
 		}
 		for _, index := range indexes {
-			for j := 0; j < index.NumColumns(); j++ {
-				colID := index.GetColumnID(j)
+			for j := 0; j < index.NumKeyColumns(); j++ {
+				colID := index.GetKeyColumnID(j)
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}
 			}
 			// The extra columns are needed to fix #14601.
-			for j := 0; j < index.NumExtraColumns(); j++ {
-				colID := index.GetExtraColumnID(j)
+			for j := 0; j < index.NumKeySuffixColumns(); j++ {
+				colID := index.GetKeySuffixColumnID(j)
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}
@@ -86,7 +92,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexes),
+		Helper:               newRowHelper(codec, tableDesc, indexes, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}

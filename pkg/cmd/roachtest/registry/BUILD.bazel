@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "registry",
+    srcs = [
+        "filter.go",
+        "owners.go",
+        "registry_interface.go",
+        "tag.go",
+        "test_spec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/test",
+    ],
+)

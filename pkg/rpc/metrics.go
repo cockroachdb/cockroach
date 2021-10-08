@@ -101,7 +101,7 @@ type Metrics struct {
 	// succeeded on their previous attempt.
 	HeartbeatsNominal *metric.Gauge
 	// HeartbeatsNominal tracks the current number of heartbeat loops which
-	// succeeded on their previous attempt.
+	// failed on their previous attempt.
 	HeartbeatsFailed *metric.Gauge
 }
 

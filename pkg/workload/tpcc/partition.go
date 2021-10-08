@@ -116,6 +116,47 @@ type zoneConfig struct {
 	strategy partitionStrategy
 }
 
+type survivalGoal int
+
+const (
+	survivalGoalZone survivalGoal = iota
+	survivalGoalRegion
+)
+
+// Part of pflag's Value interface.
+func (s survivalGoal) String() string {
+	switch s {
+	case survivalGoalZone:
+		return "zone"
+	case survivalGoalRegion:
+		return "region"
+	}
+	panic("unexpected")
+}
+
+// Part of pflag's Value interface.
+func (s *survivalGoal) Set(value string) error {
+	switch value {
+	case "zone":
+		*s = survivalGoalZone
+	case "region":
+		*s = survivalGoalRegion
+	default:
+		return errors.Errorf("unknown survival goal %q", value)
+	}
+	return nil
+}
+
+// Part of pflag's Value interface.
+func (s survivalGoal) Type() string {
+	return "survival_goal"
+}
+
+type multiRegionConfig struct {
+	regions      []string
+	survivalGoal survivalGoal
+}
+
 // partitioner encapsulates all logic related to partitioning discrete numbers
 // of warehouses into disjoint sets of roughly equal sizes. Partitions are then
 // evenly assigned "active" warehouses, which allows for an even split of live
@@ -130,6 +171,109 @@ type partitioner struct {
 	partElems    [][]int     // the elements active in each partition
 	partElemsMap map[int]int // mapping from element to partition index
 	totalElems   []int       // all active elements
+}
+
+// makeMRPartitioner makes a multi-region partitioner. This is different from
+// the base partitioner in that it handles multi-region setups which, instead of
+// partitioning in consecutive blocks, distributes the warehouses in a
+// round-robin fashion across all regions.
+func makeMRPartitioner(total, active, parts int) (*partitioner, error) {
+	if total <= 0 {
+		return nil, errors.Errorf("total must be positive; %d", total)
+	}
+	if active <= 0 {
+		return nil, errors.Errorf("active must be positive; %d", active)
+	}
+	if parts <= 0 {
+		return nil, errors.Errorf("parts must be positive; %d", parts)
+	}
+	if active > total {
+		return nil, errors.Errorf("active > total; %d > %d", active, total)
+	}
+	if parts > total {
+		return nil, errors.Errorf("parts > total; %d > %d", parts, total)
+	}
+
+	// Partition sizes.
+	//
+	// Contains the number of elements that are active in each partition.
+	// Since we're distributing warehouses in a round-robin fashion, if there
+	// is an uneven number of partitions, some partitions at the beginning will
+	// have one more warehouse assigned to then than partitions towards the end.
+	//
+	//  active = 10
+	//  parts  = 3
+	//  sizes  = [4, 3, 3]
+	//
+	sizes := make([]int, parts)
+	adjustment := active % parts
+	for i := range sizes {
+		// active / parts + distribution of mod
+		base := active / parts
+		if adjustment > 0 {
+			base++
+			adjustment--
+		}
+		sizes[i] = base
+	}
+
+	// Partitions.
+	//
+	// partElems enumerates the active elements in each partition.
+	//
+	//  total     = 20
+	//  active    = 10
+	//  parts     = 3
+	//  partElems = [[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]]
+	//
+	partElems := make([][]int, parts)
+	for i := 0; i < active; i++ {
+		if i < parts {
+			partAct := make([]int, sizes[i])
+			partElems[i] = partAct
+		}
+		partElems[i%parts][i/parts] = i
+	}
+
+	// Partition reverse mapping.
+	//
+	// partElemsMap maps each active element to its partition index.
+	//
+	//  total        = 20
+	//  active       = 10
+	//  parts        = 3
+	//  partElemsMap = {0:0, 3:0, 6:0, 9:0, 1:1, 4:1, 7:1, 2:2, 5:2, 8:2}
+	//
+	partElemsMap := make(map[int]int)
+	for p, elems := range partElems {
+		for _, elem := range elems {
+			partElemsMap[elem] = p
+		}
+	}
+
+	// Total elements.
+	//
+	// totalElems aggregates all active elements into a single slice.
+	//
+	//  total      = 20
+	//  active     = 10
+	//  parts      = 3
+	//  totalElems = [0, 3, 6, 9, 1, 4, 7, 2, 5, 8]
+	//
+	var totalElems []int
+	for _, elems := range partElems {
+		totalElems = append(totalElems, elems...)
+	}
+
+	return &partitioner{
+		total:  total,
+		active: active,
+		parts:  parts,
+
+		partElems:    partElems,
+		partElemsMap: partElemsMap,
+		totalElems:   totalElems,
+	}, nil
 }
 
 func makePartitioner(total, active, parts int) (*partitioner, error) {

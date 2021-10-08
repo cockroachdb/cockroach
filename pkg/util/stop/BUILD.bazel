@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/stop",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -27,12 +27,13 @@ go_test(
     ],
     deps = [
         ":stop",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],

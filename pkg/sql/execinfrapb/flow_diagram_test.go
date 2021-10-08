@@ -231,7 +231,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Input: []InputSyncSpec{
 					{
-						Type: InputSyncSpec_UNORDERED,
+						Type: InputSyncSpec_PARALLEL_UNORDERED,
 						Streams: []StreamEndpointSpec{
 							{StreamID: 11},
 							{StreamID: 21},
@@ -239,7 +239,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						},
 					},
 					{
-						Type: InputSyncSpec_UNORDERED,
+						Type: InputSyncSpec_PARALLEL_UNORDERED,
 						Streams: []StreamEndpointSpec{
 							{StreamID: 41},
 							{StreamID: 51},
@@ -261,7 +261,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			},
 			{
 				Input: []InputSyncSpec{{
-					Type: InputSyncSpec_UNORDERED,
+					Type: InputSyncSpec_PARALLEL_UNORDERED,
 					Streams: []StreamEndpointSpec{
 						{StreamID: 101},
 						{StreamID: 102},
@@ -314,7 +314,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Input: []InputSyncSpec{
 					{
-						Type: InputSyncSpec_UNORDERED,
+						Type: InputSyncSpec_PARALLEL_UNORDERED,
 						Streams: []StreamEndpointSpec{
 							{StreamID: 12},
 							{StreamID: 22},
@@ -322,7 +322,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 						},
 					},
 					{
-						Type: InputSyncSpec_UNORDERED,
+						Type: InputSyncSpec_PARALLEL_UNORDERED,
 						Streams: []StreamEndpointSpec{
 							{StreamID: 42},
 							{StreamID: 52},

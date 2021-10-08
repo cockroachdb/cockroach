@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
@@ -29,11 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 // setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
@@ -88,52 +85,10 @@ func setExplainBundleResult(
 	return nil
 }
 
-// traceToJSON converts a trace to a JSON datum suitable for the
-// system.statement_diagnostics.trace column. In case of error, the returned
-// datum is DNull. Also returns the string representation of the trace.
-//
-// traceToJSON assumes that the first span in the recording contains all the
-// other spans.
-func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
-	root := normalizeSpan(trace[0], trace)
-	marshaller := jsonpb.Marshaler{
-		Indent: "\t",
-	}
-	str, err := marshaller.MarshalToString(&root)
-	if err != nil {
-		return tree.DNull, "", err
-	}
-	d, err := tree.ParseDJSON(str)
-	if err != nil {
-		return tree.DNull, "", err
-	}
-	return d, str, nil
-}
-
-func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
-	var n tracingpb.NormalizedSpan
-	n.Operation = s.Operation
-	n.StartTime = s.StartTime
-	n.Duration = s.Duration
-	n.Tags = s.Tags
-	n.Logs = s.Logs
-
-	for _, ss := range trace {
-		if ss.ParentSpanID != s.SpanID {
-			continue
-		}
-		n.Children = append(n.Children, normalizeSpan(ss, trace))
-	}
-	return n
-}
-
 // diagnosticsBundle contains diagnostics information collected for a statement.
 type diagnosticsBundle struct {
 	// Zip file binary data.
 	zip []byte
-
-	// Tracing data, as DJson (or DNull if it is not available).
-	traceJSON tree.Datum
 
 	// Stores any error in the collection, building, or insertion of the bundle.
 	collectionErr error
@@ -164,14 +119,14 @@ func buildStatementBundle(
 	b.addExecPlan(planString)
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
-	traceJSON := b.addTrace()
+	b.addTrace()
 	b.addEnv(ctx)
 
 	buf, err := b.finalize()
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
-	return diagnosticsBundle{traceJSON: traceJSON, zip: buf.Bytes()}
+	return diagnosticsBundle{zip: buf.Bytes()}
 }
 
 // insert the bundle in statement diagnostics. Sets bundle.diagID and (in error
@@ -192,7 +147,6 @@ func (bundle *diagnosticsBundle) insert(
 		diagRequestID,
 		fingerprint,
 		tree.AsString(ast),
-		bundle.traceJSON,
 		bundle.zip,
 		bundle.collectionErr,
 	)
@@ -213,7 +167,7 @@ type stmtBundleBuilder struct {
 	trace        tracing.Recording
 	placeholders *tree.PlaceholderInfo
 
-	z memZipper
+	z memzipper.Zipper
 }
 
 func makeStmtBundleBuilder(
@@ -328,10 +282,11 @@ func (b *stmtBundleBuilder) addExplainVec() {
 	}
 }
 
-// addTrace adds two files to the bundle: one is a json representation of the
-// trace, the other one is a human-readable representation.
-func (b *stmtBundleBuilder) addTrace() tree.Datum {
-	traceJSON, traceJSONStr, err := traceToJSON(b.trace)
+// addTrace adds three files to the bundle: two are a json representation of the
+// trace (the default and the jaeger formats), the third one is a human-readable
+// representation.
+func (b *stmtBundleBuilder) addTrace() {
+	traceJSONStr, err := tracing.TraceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
 	} else {
@@ -352,14 +307,16 @@ func (b *stmtBundleBuilder) addTrace() tree.Datum {
 
 	// Note that we're going to include the non-anonymized statement in the trace.
 	// But then again, nothing in the trace is anonymized.
-	jaegerJSON, err := b.trace.ToJaegerJSON(stmt)
+	comment := fmt.Sprintf(`This is a trace for SQL statement: %s
+This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select the JSON File.
+Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
+The UI can then be accessed at http://localhost:16686/search`, stmt)
+	jaegerJSON, err := b.trace.ToJaegerJSON(stmt, comment, "")
 	if err != nil {
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
 	}
-
-	return traceJSON
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
@@ -448,46 +405,6 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 // finalize generates the zipped bundle and returns it as a buffer.
 func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 	return b.z.Finalize()
-}
-
-// memZipper builds a zip file into an in-memory buffer.
-type memZipper struct {
-	buf *bytes.Buffer
-	z   *zip.Writer
-	err error
-}
-
-func (z *memZipper) Init() {
-	z.buf = &bytes.Buffer{}
-	z.z = zip.NewWriter(z.buf)
-}
-
-func (z *memZipper) AddFile(name string, contents string) {
-	if z.err != nil {
-		return
-	}
-	w, err := z.z.CreateHeader(&zip.FileHeader{
-		Name:     name,
-		Method:   zip.Deflate,
-		Modified: timeutil.Now(),
-	})
-	if err != nil {
-		z.err = err
-		return
-	}
-	_, z.err = w.Write([]byte(contents))
-}
-
-func (z *memZipper) Finalize() (*bytes.Buffer, error) {
-	if z.err != nil {
-		return nil, z.err
-	}
-	if err := z.z.Close(); err != nil {
-		return nil, err
-	}
-	buf := z.buf
-	*z = memZipper{}
-	return buf, nil
 }
 
 // stmtEnvCollector helps with gathering information about the "environment" in
@@ -579,7 +496,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		if err != nil {
 			return enumVal
 		}
-		return sessiondata.DistSQLExecMode(n).String()
+		return sessiondatapb.DistSQLExecMode(n).String()
 	}
 
 	vectorizeConv := func(enumVal string) string {
@@ -704,6 +621,11 @@ func (c *stmtEnvCollector) PrintTableStats(
 	}
 
 	stats = strings.Replace(stats, "'", "''", -1)
+	// Don't display the catalog during the `ALTER TABLE` since the schema file
+	// doesn't specify the catalog for its create table statements.
+	explicitCatalog := tn.ExplicitCatalog
+	tn.ExplicitCatalog = false
 	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
+	tn.ExplicitCatalog = explicitCatalog
 	return nil
 }

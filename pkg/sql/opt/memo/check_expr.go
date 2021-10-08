@@ -137,6 +137,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			))
 		}
 
+		switch t.Op() {
+		case opt.LocalityOptimizedSearchOp:
+			if !setPrivate.Ordering.Any() {
+				panic(errors.AssertionFailedf("locality optimized search op has a non-empty ordering"))
+			}
+		}
+
 	case *AggregationsExpr:
 		var checkAggs func(scalar opt.ScalarExpr)
 		checkAggs = func(scalar opt.ScalarExpr) {
@@ -169,6 +176,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *DistinctOnExpr, *EnsureDistinctOnExpr, *UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates can be only FirstAgg or ConstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -182,6 +190,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *GroupByExpr, *ScalarGroupByExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates cannot be FirstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -251,8 +260,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 				switch kind {
 				case cat.System:
 					panic(errors.AssertionFailedf("system column found in insertion columns"))
-				case cat.VirtualInverted:
-					panic(errors.AssertionFailedf("virtual inverted column found in insertion columns"))
+				case cat.Inverted:
+					panic(errors.AssertionFailedf("inverted column found in insertion columns"))
 				}
 			}
 		}
@@ -291,6 +300,12 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	case *ConstExpr:
 		if t.Value == tree.DNull {
 			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
+		}
+		if t.Value == tree.DBoolTrue {
+			panic(errors.AssertionFailedf("true values should always use TrueSingleton, not ConstExpr"))
+		}
+		if t.Value == tree.DBoolFalse {
+			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
 		}
 
 	default:
@@ -346,8 +361,7 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 
 // checkExprOrdering runs checks on orderings stored inside operators.
 func checkExprOrdering(e opt.Expr) {
-	// Verify that orderings stored in operators only refer to columns produced by
-	// their input.
+	// Verify that orderings stored in operators only refer to output columns.
 	var ordering props.OrderingChoice
 	switch t := e.Private().(type) {
 	case *props.OrderingChoice:
@@ -356,6 +370,20 @@ func checkExprOrdering(e opt.Expr) {
 		ordering = t.Ordering
 	case GroupingPrivate:
 		ordering = t.Ordering
+	case *SetPrivate:
+		ordering = t.Ordering
+		switch e.Op() {
+		case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp, opt.UnionOp:
+			// For these operators, the ordering must include all output columns.
+			if !ordering.Any() {
+				if outCols := e.(RelExpr).Relational().OutputCols; !outCols.SubsetOf(ordering.ColSet()) {
+					panic(errors.AssertionFailedf(
+						"ordering for streaming set ops must include all output columns %v (op: %s, outcols: %v)",
+						log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+					))
+				}
+			}
+		}
 	default:
 		return
 	}
@@ -394,6 +422,23 @@ func checkErrorOnDup(e RelExpr) {
 		e.Private().(*GroupingPrivate).ErrorOnDup == "" {
 		panic(errors.AssertionFailedf(
 			"%s should never leave ErrorOnDup as an empty string", log.Safe(e.Op())))
+	}
+}
+
+func checkNullsAreDistinct(e RelExpr) {
+	// Only UpsertDistinctOn and EnsureUpsertDistinctOn should set the
+	// NullsAreDistinct field to true.
+	if e.Op() != opt.UpsertDistinctOnOp &&
+		e.Op() != opt.EnsureUpsertDistinctOnOp &&
+		e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to true", log.Safe(e.Op())))
+	}
+	if (e.Op() == opt.UpsertDistinctOnOp ||
+		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
+		!e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to false", log.Safe(e.Op())))
 	}
 }
 

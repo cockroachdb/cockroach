@@ -78,3 +78,10 @@ query T
 SELECT r.rolname FROM pg_database d JOIN pg_roles r ON d.datdba = r.oid WHERE d.datname = 'd';
 ----
 b
+
+user root
+
+# Regression test for #62012
+statement ok
+CREATE DATABASE "order";
+ALTER DATABASE "order" OWNER TO testuser

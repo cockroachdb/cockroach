@@ -34,13 +34,13 @@ func TestTranslate(t *testing.T) {
 			expected: geom.NewPointFlat(geom.XY, []float64{15, 5}),
 		},
 		{
-			desc:     "translate a line string",
+			desc:     "translate a 2D line string",
 			input:    geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 30}),
 			deltas:   []float64{1, 5},
 			expected: geom.NewLineStringFlat(geom.XY, []float64{11, 20, 21, 35}),
 		},
 		{
-			desc:     "translate a polygon",
+			desc:     "translate a 2D polygon",
 			input:    geom.NewPolygonFlat(geom.XY, []float64{0, 0, 5, 5, 0, 10, 0, 0}, []int{8}),
 			deltas:   []float64{1, 1},
 			expected: geom.NewPolygonFlat(geom.XY, []float64{1, 1, 6, 6, 1, 11, 1, 1}, []int{8}),
@@ -52,25 +52,25 @@ func TestTranslate(t *testing.T) {
 			expected: geom.NewMultiPointFlat(geom.XY, []float64{6, 10.5, -29, 40.5}),
 		},
 		{
-			desc:     "translate multiple line strings",
+			desc:     "translate multiple 2D line strings",
 			input:    geom.NewMultiLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 4, 4}, []int{4, 8}),
 			deltas:   []float64{.1, .1},
 			expected: geom.NewMultiLineStringFlat(geom.XY, []float64{1.1, 1.1, 2.1, 2.1, 3.1, 3.1, 4.1, 4.1}, []int{4, 8}),
 		},
 		{
-			desc:     "translate empty line string",
+			desc:     "translate empty 2D line string",
 			input:    geom.NewLineString(geom.XY),
 			deltas:   []float64{1, 1},
 			expected: geom.NewLineString(geom.XY),
 		},
 		{
-			desc:     "translate empty polygon",
+			desc:     "translate empty 2D polygon",
 			input:    geom.NewPolygon(geom.XY),
 			deltas:   []float64{1, 1},
 			expected: geom.NewPolygon(geom.XY),
 		},
 		{
-			desc: "translate non-empty collection",
+			desc: "translate non-empty 2D collection",
 			input: geom.NewGeometryCollection().MustPush(
 				geom.NewPointFlat(geom.XY, []float64{10, 10}),
 				geom.NewLineStringFlat(geom.XY, []float64{0, 0, 5, 5}),
@@ -84,9 +84,71 @@ func TestTranslate(t *testing.T) {
 			),
 		},
 		{
-			desc:     "translate empty collection",
+			desc:     "translate empty 2D collection",
 			input:    geom.NewGeometryCollection(),
 			deltas:   []float64{1, 1},
+			expected: geom.NewGeometryCollection(),
+		},
+		{
+			desc:     "translate a 3D point",
+			input:    geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			deltas:   []float64{5, -5, -15},
+			expected: geom.NewPointFlat(geom.XYZ, []float64{15, 5, -5}),
+		},
+		{
+			desc:     "translate a 3D line string",
+			input:    geom.NewLineStringFlat(geom.XYZ, []float64{10, 15, 20, 30, 25, 35}),
+			deltas:   []float64{1, 5, -10},
+			expected: geom.NewLineStringFlat(geom.XYZ, []float64{11, 20, 10, 31, 30, 25}),
+		},
+		{
+			desc:     "translate a 3D polygon",
+			input:    geom.NewPolygonFlat(geom.XYZ, []float64{0, 0, 7, 1, -1, -50, 2, 0, 0, 0, 0, 7}, []int{12}),
+			deltas:   []float64{1, 1, 10},
+			expected: geom.NewPolygonFlat(geom.XYZ, []float64{1, 1, 17, 2, 0, -40, 3, 1, 10, 1, 1, 17}, []int{12}),
+		},
+		{
+			desc:     "translate multiple 3D points",
+			input:    geom.NewMultiPointFlat(geom.XYZ, []float64{5, 10, 0, -30, 40, 20}),
+			deltas:   []float64{1, 0.5, 10},
+			expected: geom.NewMultiPointFlat(geom.XYZ, []float64{6, 10.5, 10, -29, 40.5, 30}),
+		},
+		{
+			desc:     "translate multiple 3D line strings",
+			input:    geom.NewMultiLineStringFlat(geom.XYZ, []float64{1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4}, []int{6, 12}),
+			deltas:   []float64{.1, .1, .2},
+			expected: geom.NewMultiLineStringFlat(geom.XYZ, []float64{1.1, 1.1, 1.2, 2.1, 2.1, 2.2, 3.1, 3.1, 3.2, 4.1, 4.1, 4.2}, []int{6, 12}),
+		},
+		{
+			desc:     "translate empty 3D line string",
+			input:    geom.NewLineString(geom.XYZ),
+			deltas:   []float64{1, 1, 1},
+			expected: geom.NewLineString(geom.XYZ),
+		},
+		{
+			desc:     "translate empty 3D polygon",
+			input:    geom.NewPolygon(geom.XYZ),
+			deltas:   []float64{1, 1, 1},
+			expected: geom.NewPolygon(geom.XYZ),
+		},
+		{
+			desc: "translate non-empty 3D collection",
+			input: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XYZ, []float64{10, 10, 0}),
+				geom.NewLineStringFlat(geom.XYZ, []float64{0, 0, 0, 5, 5, 5}),
+				geom.NewMultiPointFlat(geom.XYZ, []float64{0, 0, 0, -5, -5, -5, -10, -10, -10}),
+			),
+			deltas: []float64{1, -1, 5},
+			expected: geom.NewGeometryCollection().MustPush(
+				geom.NewPointFlat(geom.XYZ, []float64{11, 9, 5}),
+				geom.NewLineStringFlat(geom.XYZ, []float64{1, -1, 5, 6, 4, 10}),
+				geom.NewMultiPointFlat(geom.XYZ, []float64{1, -1, 5, -4, -6, 0, -9, -11, -5}),
+			),
+		},
+		{
+			desc:     "translate empty 3D collection",
+			input:    geom.NewGeometryCollection(),
+			deltas:   []float64{1, 1, 1},
 			expected: geom.NewGeometryCollection(),
 		},
 	}
@@ -116,6 +178,18 @@ func TestTranslate(t *testing.T) {
 		isErr := errors.Is(err, geom.ErrStrideMismatch{
 			Got:  3,
 			Want: 2,
+		})
+		require.True(t, isErr)
+	})
+	t.Run("error if mismatching deltas", func(t *testing.T) {
+		deltas := []float64{1, 1}
+		geometry, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XYZ, []float64{0, 0, 0})
+		require.NoError(t, err)
+
+		_, err = Translate(geometry, deltas)
+		isErr := errors.Is(err, geom.ErrStrideMismatch{
+			Got:  2,
+			Want: 3,
 		})
 		require.True(t, isErr)
 	})

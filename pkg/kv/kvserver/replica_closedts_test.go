@@ -12,25 +12,30 @@ package kvserver_test
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestBumpSideTransportClosed tests the various states that a replica can find
@@ -304,7 +309,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 		},
 		{
 			// We can't close all the way up to the lease expiration. See
-			// propBuf.assignClosedTimestampToProposalLocked.
+			// propBuf.assignClosedTimestampAndLAIToProposalLocked.
 			name: "close lease expiration",
 			computeTarget: func(r *kvserver.Replica) (target hlc.Timestamp, exp bool) {
 				ls := r.LeaseStatusAt(context.Background(), r.Clock().NowAsClockTimestamp())
@@ -416,7 +421,13 @@ func TestBumpSideTransportClosed(t *testing.T) {
 
 // Test that a lease proposal that gets rejected doesn't erroneously dictate the
 // closed timestamp of further requests. If it would, then writes could violate
-// that closed timestamp. The tricky scenario tested is the following:
+// that closed timestamp.
+//
+// NOTE: This test was written back when lease requests were closing the lease
+// start time. This is no longer true; currently lease requests don't carry a
+// closed timestamp. Still, we leave the test as a regression test.
+//
+// The tricky scenario tested is the following:
 //
 // 1. A lease held by rep1 is getting close to its expiration.
 // 2. Rep1 begins the process of transferring its lease to rep2 with a start
@@ -515,6 +526,16 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				// Disable preemptive lease extensions because, if the server startup
+				// takes too long before we pause the clock, such an extension can
+				// happen on the range of interest, and messes up the test that expects
+				// the lease to expire.
+				RangeLeaseRenewalFraction: -1,
+				// Also make expiration-based leases last for a long time, as the test
+				// wants a valid lease after cluster start.
+				RaftElectionTimeoutTicks: 1000,
+			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					ClockSource: manual.UnixNano,
@@ -585,13 +606,14 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			leaseAcqErrCh <- err
 			return
 		}
-		_, err = r.AcquireLease(ctx)
+		_, err = r.TestingAcquireLease(ctx)
 		leaseAcqErrCh <- err
 	}()
 	// Wait for the lease acquisition to be blocked.
 	select {
 	case <-leaseAcqCh:
 	case err := <-leaseAcqErrCh:
+		close(leaseTransferCh)
 		t.Fatalf("lease request unexpectedly finished. err: %v", err)
 	}
 	// Let the previously blocked transfer succeed. n2's lease acquisition remains
@@ -704,4 +726,209 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 			b.Fatal("BumpSideTransportClosed unexpectedly failed")
 		}
 	}
+}
+
+// TestNonBlockingReadsAtResolvedTimestamp tests that reads served at or below a
+// key span's resolved timestamp never block or redirect to the leaseholder. The
+// test also verifies that the resolved timestamp on each replica increases
+// monotonically.
+func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testNonBlockingReadsWithReaderFn(t, func(
+		store *kvserver.Store, rangeID roachpb.RangeID, keySpan roachpb.Span,
+	) func(context.Context) error {
+		// The reader queries the resolved timestamp and then reads at that time.
+		var lastResTS hlc.Timestamp
+		return func(ctx context.Context) error {
+			// Query the key span's resolved timestamp.
+			queryResTS := roachpb.QueryResolvedTimestampRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			}
+			queryResTSHeader := roachpb.Header{
+				RangeID:         rangeID,
+				ReadConsistency: roachpb.INCONSISTENT,
+			}
+			resp, pErr := kv.SendWrappedWith(ctx, store, queryResTSHeader, &queryResTS)
+			if pErr != nil {
+				return pErr.GoError()
+			}
+
+			// Validate that the resolved timestamp increases monotonically.
+			resTS := resp.(*roachpb.QueryResolvedTimestampResponse).ResolvedTS
+			if resTS.IsEmpty() {
+				return errors.Errorf("empty resolved timestamp")
+			}
+			if resTS.Less(lastResTS) {
+				return errors.Errorf("resolved timestamp regression: %s -> %s", lastResTS, resTS)
+			}
+			lastResTS = resTS
+
+			// Issue a transactional scan over the keys at the resolved timestamp on
+			// the same store. Use an error wait policy so that we'll hear an error
+			// (WriteIntentError) under conditions that would otherwise cause us to
+			// block on an intent. Send to a specific store instead of through a
+			// DistSender so that we'll hear an error (NotLeaseholderError) if the
+			// request would otherwise be redirected to the leaseholder.
+			scan := roachpb.ScanRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			}
+			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0)
+			scanHeader := roachpb.Header{
+				RangeID:         rangeID,
+				ReadConsistency: roachpb.CONSISTENT,
+				Txn:             &txn,
+				WaitPolicy:      lock.WaitPolicy_Error,
+			}
+			_, pErr = kv.SendWrappedWith(ctx, store, scanHeader, &scan)
+			return pErr.GoError()
+		}
+	})
+}
+
+// TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation tests that
+// bounded staleness reads that hit the server-side negotiation fast-path (i.e.
+// those that negotiate and execute in a single RPC) never block on conflicting
+// intents or redirect to the leaseholder if run on follower replicas. For
+// details, see (*Store).executeServerSideBoundedStalenessNegotiation.
+//
+// The test is a higher-level version of TestNonBlockingReadsAtResolvedTimestamp
+// that exercises the server-side negotiation fast-path.
+func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testNonBlockingReadsWithReaderFn(t, func(
+		store *kvserver.Store, rangeID roachpb.RangeID, keySpan roachpb.Span,
+	) func(context.Context) error {
+		// The reader performs bounded-staleness reads that hit the server-side
+		// negotiation fast-path.
+		minTSBound := hlc.MinTimestamp
+		var lastTS hlc.Timestamp
+		return func(ctx context.Context) error {
+			// Issue a bounded-staleness read (a read with a MinTimestampBound)
+			// over the keys. Use an error wait policy so that we'll hear an error
+			// (WriteIntentError) under conditions that would otherwise cause us
+			// to block on an intent. Send to a specific store instead of through
+			// a DistSender so that we'll hear an error (NotLeaseholderError) if
+			// the request would otherwise be redirected to the leaseholder.
+			var ba roachpb.BatchRequest
+			ba.RangeID = rangeID
+			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+				MinTimestampBound:       minTSBound,
+				MinTimestampBoundStrict: true,
+			}
+			ba.WaitPolicy = lock.WaitPolicy_Error
+			ba.Add(&roachpb.ScanRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			})
+			br, pErr := store.Send(ctx, ba)
+			if pErr != nil {
+				return pErr.GoError()
+			}
+
+			// Validate that the bounded staleness timestamp increases monotonically
+			// across attempts, since we're issuing bounded staleness reads to the
+			// same replica.
+			reqTS := br.Timestamp
+			if reqTS.IsEmpty() {
+				return errors.Errorf("empty bounded staleness timestamp")
+			}
+			if reqTS.Less(lastTS) {
+				return errors.Errorf("bounded staleness timestamp regression: %s -> %s", lastTS, reqTS)
+			}
+			lastTS = reqTS
+
+			// Forward the minimum timestamp bound for the next request. Once a
+			// bounded staleness read has been served at a timestamp, future reads
+			// should be able to be served at the same timestamp (or later) as long
+			// as they are routed to the same replica.
+			minTSBound = lastTS
+			return nil
+		}
+	})
+}
+
+// testNonBlockingReadsWithReaderFn is shared between the preceding two tests.
+// It sets up a three node cluster, launches a collection of writers writing to
+// a set of keys, and uses the provided readerFnFactory to create a reader per
+// node. The reader is invoked repeatedly.
+func testNonBlockingReadsWithReaderFn(
+	t *testing.T,
+	readerFnFactory func(*kvserver.Store, roachpb.RangeID, roachpb.Span) func(context.Context) error,
+) {
+	const testTime = 1 * time.Second
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range. Then add one voting follower and one non-voting
+	// follower to the range.
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	tc.AddNonVotersOrFatal(t, scratchKey, tc.Target(2))
+
+	// Drop the closed timestamp interval far enough so that we can create
+	// situations where an active intent is at a lower timestamp than the
+	// range's closed timestamp - thereby being the limiting factor for the
+	// range's resolved timestamp.
+	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
+
+	keySet := make([]roachpb.Key, 5)
+	for i := range keySet {
+		n := len(scratchKey)
+		keySet[i] = append(scratchKey[:n:n], byte(i))
+	}
+	keySpan := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
+
+	var g errgroup.Group
+	var done int32
+	sleep := func() {
+		time.Sleep(time.Duration(rand.Intn(2000)) * time.Microsecond)
+	}
+
+	// Writer goroutines: write intents and commit them.
+	for _, key := range keySet {
+		key := key // copy for goroutine
+		g.Go(func() error {
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				if err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					if _, err := txn.Inc(ctx, key, 1); err != nil {
+						return err
+					}
+					// Let the intent stick around for a bit.
+					sleep()
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	// Reader goroutines: run one reader per store.
+	for _, s := range tc.Servers {
+		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		g.Go(func() error {
+			readerFn := readerFnFactory(store, scratchRange.RangeID, keySpan)
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				if err := readerFn(ctx); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(testTime)
+	atomic.StoreInt32(&done, 1)
+	require.NoError(t, g.Wait())
 }

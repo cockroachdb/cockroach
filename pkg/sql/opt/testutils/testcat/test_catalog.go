@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -44,9 +45,9 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	tree.TypeReferenceResolver
 	testSchema Schema
 	counter    int
+	enumTypes  map[string]*types.T
 }
 
 type dataSource interface {
@@ -174,11 +175,6 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
-// ResolveTypeByOID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
-	return nil, errors.Newf("test catalog cannot handle user defined types")
-}
-
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	return tc.CheckAnyPrivilege(ctx, o)
@@ -229,6 +225,11 @@ func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
 	return ds.(dataSource).fqName(), nil
+}
+
+// RoleExists is part of the cat.Catalog interface.
+func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+	return true, nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -349,7 +350,7 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
-	return tc.ExecuteDDLWithIndexVersion(sql, descpb.EmptyArraysInInvertedIndexesVersion)
+	return tc.ExecuteDDLWithIndexVersion(sql, descpb.StrictIndexColumnIDGuaranteesVersion)
 }
 
 // ExecuteDDLWithIndexVersion parses the given DDL SQL statement and creates
@@ -394,6 +395,10 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 
 	case *tree.CreateSequence:
 		tc.CreateSequence(stmt)
+		return "", nil
+
+	case *tree.CreateType:
+		tc.CreateType(stmt)
 		return "", nil
 
 	case *tree.SetZoneConfig:
@@ -589,7 +594,7 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	Families   []*Family
 	IsVirtual  bool
-	Catalog    cat.Catalog
+	Catalog    *Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -776,10 +781,16 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 		return nil
 	}
 
-	// Collect UDTs in default expression, computed column and the column type itself.
+	// Collect UDTs in default expression, ON UPDATE expression, computed column
+	// and the column type itself.
 	col := tt.Columns[ord]
 	if col.HasDefault() {
 		if err := addOIDsInExpr(col.DefaultExprStr()); err != nil {
+			return nil, err
+		}
+	}
+	if col.HasOnUpdate() {
+		if err := addOIDsInExpr(col.OnUpdateExprStr()); err != nil {
 			return nil, err
 		}
 	}
@@ -794,7 +805,11 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 
 	ids := make(descpb.IDs, 0, len(visitor.OIDs))
 	for collectedOid := range visitor.OIDs {
-		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
+		id, err := typedesc.UserDefinedTypeOIDToID(collectedOid)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
 	}
 	return ids, nil
 }
@@ -837,7 +852,7 @@ type Index struct {
 	// predicate is the partial index predicate expression, if it exists.
 	predicate string
 
-	// invertedOrd is the ordinal of the VirtualInverted column, if the index is
+	// invertedOrd is the ordinal of the Inverted column, if the index is
 	// an inverted index.
 	invertedOrd int
 
@@ -907,10 +922,10 @@ func (ti *Index) Column(i int) cat.IndexColumn {
 	return ti.Columns[i]
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (ti *Index) VirtualInvertedColumn() cat.IndexColumn {
+// InvertedColumn is part of the cat.Index interface.
+func (ti *Index) InvertedColumn() cat.IndexColumn {
 	if !ti.IsInverted() {
-		panic("non-inverted indexes do not have inverted virtual columns")
+		panic("non-inverted indexes do not have inverted columns")
 	}
 	return ti.Column(ti.invertedOrd)
 }
@@ -1054,9 +1069,29 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 		panic(err)
 	}
 	colType := tree.MustBeStaticallyKnownType(colTypeRef)
-	histogram := make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
-	for i := range histogram {
-		bucket := &ts.js.HistogramBuckets[i]
+
+	var histogram []cat.HistogramBucket
+	var offset int
+	if ts.js.NullCount > 0 {
+		// A bucket for NULL is not persisted, but we create a fake one to
+		// make histograms easier to work with. The length of histogram
+		// is therefore 1 greater than the length of ts.js.HistogramBuckets.
+		// NOTE: This matches the logic in the TableStatisticsCache.
+		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets)+1)
+		histogram[0] = cat.HistogramBucket{
+			NumEq:         float64(ts.js.NullCount),
+			NumRange:      0,
+			DistinctRange: 0,
+			UpperBound:    tree.DNull,
+		}
+		offset = 1
+	} else {
+		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
+		offset = 0
+	}
+
+	for i := offset; i < len(histogram); i++ {
+		bucket := &ts.js.HistogramBuckets[i-offset]
 		datum, err := rowenc.ParseDatumStringAs(colType, bucket.UpperBound, &evalCtx)
 		if err != nil {
 			panic(err)

@@ -26,7 +26,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -517,7 +517,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 				{
 					var cmpResult int
 
-					cmpResult = prevVal.(*coldataext.Datum).CompareDatum(bufferedCol, curVal)
+					cmpResult = coldataext.CompareDatum(prevVal, bufferedCol, curVal)
 
 					match = cmpResult == 0
 				}

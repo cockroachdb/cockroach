@@ -104,7 +104,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	binOp := tree.Mult
+	binOp := tree.MakeBinaryOperator(tree.Mult)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -136,7 +136,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cmpOp := tree.GE
+	cmpOp := tree.MakeComparisonOperator(tree.GE)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -215,15 +215,15 @@ func TestRandomComparisons(t *testing.T) {
 		}
 		colconv.ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
 		colconv.ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
-		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+		supportedCmpOps := []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 		if typ.Family() == types.JsonFamily {
-			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}
+			supportedCmpOps = []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE}
 		}
-		for _, cmpOp := range supportedCmpOps {
+		for _, cmpOpSymbol := range supportedCmpOps {
 			for i := range lDatums {
 				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
-				switch cmpOp {
+				switch cmpOpSymbol {
 				case tree.EQ:
 					b = cmp == 0
 				case tree.NE:
@@ -239,6 +239,7 @@ func TestRandomComparisons(t *testing.T) {
 				}
 				expected[i] = b
 			}
+			cmpOp := tree.MakeComparisonOperator(cmpOpSymbol)
 			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
@@ -264,7 +265,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
-	binOp := tree.Mult
+	binOp := tree.MakeBinaryOperator(tree.Mult)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -360,11 +361,11 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames []string
 		opInfix []string
 	)
-	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
 		opNames = append(opNames, execgen.BinaryOpName[binOp])
 		opInfix = append(opInfix, binOp.String())
 	}
-	for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+	for _, cmpOp := range []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 		opNames = append(opNames, execgen.ComparisonOpName[cmpOp])
 		opInfix = append(opInfix, cmpOp.String())
 	}

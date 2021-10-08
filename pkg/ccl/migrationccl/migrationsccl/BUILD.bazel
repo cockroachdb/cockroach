@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "migrationsccl_test",
+    srcs = [
+        "main_test.go",
+        "records_based_registry_external_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/baseccl",
+        "//pkg/clusterversion",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

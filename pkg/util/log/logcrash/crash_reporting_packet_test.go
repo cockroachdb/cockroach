@@ -62,7 +62,7 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
-	logcrash.DiagnosticsReportingEnabled.Override(&st.SV, true)
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &st.SV, true)
 
 	defer logcrash.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
 
@@ -210,7 +210,7 @@ func TestInternalErrorReporting(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
-	logcrash.DiagnosticsReportingEnabled.Override(&st.SV, true)
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &st.SV, true)
 
 	defer logcrash.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
 

@@ -210,6 +210,7 @@ var (
 	CollationMismatch                  = MakeCode("42P21")
 	IndeterminateCollation             = MakeCode("42P22")
 	WrongObjectType                    = MakeCode("42809")
+	GeneratedAlways                    = MakeCode("428C9")
 	UndefinedColumn                    = MakeCode("42703")
 	UndefinedCursor                    = MakeCode("34000")
 	UndefinedDatabase                  = MakeCode("3D000")
@@ -378,4 +379,11 @@ var (
 	// InternalConnectionFailure refers to a networking error encountered
 	// internally on a connection between different Cockroach nodes.
 	InternalConnectionFailure = MakeCode("58C01")
+
+	// Class XC - cockroach extension.
+	// CockroachDB distributed system related errors.
+
+	// UnsatisfiableBoundedStaleness signals that the bounded staleness query
+	// cannot be satisfied.
+	UnsatisfiableBoundedStaleness = MakeCode("XCUBS")
 )

@@ -93,8 +93,8 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// Tracer returns a *tracing.Tracer as an interface{}.
-	Tracer() interface{}
+	// TracerI returns a *tracing.Tracer as an interface{}.
+	TracerI() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
@@ -114,6 +114,10 @@ type TestServerInterface interface {
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
 
+	// SpanConfigAccessor returns the underlying spanconfig.KVAccessor as an
+	// interface{}.
+	SpanConfigAccessor() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
@@ -126,8 +130,8 @@ type TestServerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
-	// SQLMigrationsManager returns the *sqlmigrations.Manager as an interface{}.
-	SQLMigrationsManager() interface{}
+	// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
+	StartupMigrationsManager() interface{}
 
 	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
 	// interface{}.
@@ -135,6 +139,10 @@ type TestServerInterface interface {
 
 	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
 	HeartbeatNodeLiveness() error
+
+	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
+	// interface{}.
+	NodeDialer() interface{}
 
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
 	// server's executor. The argument must be a physicalplan.SpanResolver
@@ -232,6 +240,13 @@ type TestServerInterface interface {
 
 	// MetricsRecorder periodically records node-level and store-level metrics.
 	MetricsRecorder() *status.MetricsRecorder
+
+	// CollectionFactory returns a *descs.CollectionFactory.
+	CollectionFactory() interface{}
+
+	// TestingKnobs returns the TestingKnobs in use by the test
+	// server.
+	TestingKnobs() *base.TestingKnobs
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -337,12 +352,16 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // StartTenant starts a tenant SQL server connecting to the supplied test
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
+//
+// Note: log.Scope() should always be used in tests that start a tenant
+// (otherwise, having more than one test in a package which uses StartTenant
+// without log.Scope() will cause a a "clusterID already set" panic).
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	stopper := params.Stopper
@@ -351,8 +370,15 @@ func StartTenant(
 	}
 
 	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), "", false /* insecure */, stopper)
+		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
 	return tenant, goDB
+}
+
+// TestTenantID returns a roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID() roachpb.TenantID {
+	return roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

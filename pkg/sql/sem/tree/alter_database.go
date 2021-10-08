@@ -30,8 +30,9 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 
 // AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION statement.
 type AlterDatabaseAddRegion struct {
-	Name   Name
-	Region Name
+	Name        Name
+	Region      Name
+	IfNotExists bool
 }
 
 var _ Statement = &AlterDatabaseAddRegion{}
@@ -41,13 +42,17 @@ func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ADD REGION ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	ctx.FormatNode(&node.Region)
 }
 
 // AlterDatabaseDropRegion represents a ALTER DATABASE DROP REGION statement.
 type AlterDatabaseDropRegion struct {
-	Name   Name
-	Region Name
+	Name     Name
+	Region   Name
+	IfExists bool
 }
 
 var _ Statement = &AlterDatabaseDropRegion{}
@@ -57,6 +62,9 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" DROP REGION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
 	ctx.FormatNode(&node.Region)
 }
 
@@ -90,4 +98,20 @@ func (node *AlterDatabaseSurvivalGoal) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ")
 	node.SurvivalGoal.Format(ctx)
+}
+
+// AlterDatabasePlacement represents a ALTER DATABASE PLACEMENT statement.
+type AlterDatabasePlacement struct {
+	Name      Name
+	Placement DataPlacement
+}
+
+var _ Statement = &AlterDatabasePlacement{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" ")
+	node.Placement.Format(ctx)
 }

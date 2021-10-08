@@ -22,9 +22,9 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -45,6 +45,12 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+const (
+	localPrefixByte = '\x01'
+	// LocalMaxByte is the end of the local key range.
+	LocalMaxByte = '\x02'
+)
+
 var (
 	// RKeyMin is a minimum key value which sorts before all other keys.
 	RKeyMin = RKey("")
@@ -54,6 +60,11 @@ var (
 	RKeyMax = RKey{0xff, 0xff}
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
+
+	// LocalPrefix is the prefix for all local keys.
+	LocalPrefix = Key{localPrefixByte}
+	// LocalMax is the end of the local key range. It is itself a global key.
+	LocalMax = Key{LocalMaxByte}
 
 	// PrettyPrintKey prints a key in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
@@ -861,7 +872,7 @@ func (v Value) PrettyPrint() string {
 }
 
 // Kind returns the kind of commit trigger as a string.
-func (ct InternalCommitTrigger) Kind() string {
+func (ct InternalCommitTrigger) Kind() redact.SafeString {
 	switch {
 	case ct.SplitTrigger != nil:
 		return "split"
@@ -892,7 +903,8 @@ func (ts TransactionStatus) IsFinalized() bool {
 	return ts == COMMITTED || ts == ABORTED
 }
 
-var _ errors.SafeMessager = Transaction{}
+// SafeValue implements the redact.SafeValue interface.
+func (TransactionStatus) SafeValue() {}
 
 // MakeTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
@@ -1255,48 +1267,26 @@ func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
 }
 
 // String formats transaction into human readable string.
-//
-// NOTE: When updating String(), you probably want to also update SafeMessage().
 func (t Transaction) String() string {
-	var buf strings.Builder
-	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
-	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
-	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
-	}
-	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
-	}
-	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
-	}
-	return buf.String()
+	return redact.StringWithoutMarkers(t)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept largely synchronized with String(), except that it
-// can't include sensitive info (e.g. the transaction key).
-func (t Transaction) SafeMessage() string {
-	var buf strings.Builder
+// SafeFormat implements the redact.SafeFormatter interface.
+func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
+		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
+		w.Printf(" int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
+		w.Printf(" ifw=%d", nw)
 	}
 	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
+		w.Printf(" isn=%d", ni)
 	}
-	return buf.String()
 }
 
 // ResetObservedTimestamps clears out all timestamps recorded from individual
@@ -2149,6 +2139,37 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Intersect returns the intersection of the key space covered by the two spans.
+// If there is no intersection between the two spans, an invalid span (see Valid)
+// is returned.
+func (s Span) Intersect(o Span) Span {
+	// If two spans do not overlap, there is no intersection between them.
+	if !s.Overlaps(o) {
+		return Span{}
+	}
+
+	// An empty end key means this span contains a single key. Overlaps already
+	// has special code for the single-key cases, so here we return whichever key
+	// is the single key, if any. If they are both a single key, we know they are
+	// equal anyway so the order doesn't matter.
+	if len(s.EndKey) == 0 {
+		return s
+	}
+	if len(o.EndKey) == 0 {
+		return o
+	}
+
+	key := s.Key
+	if key.Compare(o.Key) < 0 {
+		key = o.Key
+	}
+	endKey := s.EndKey
+	if endKey.Compare(o.EndKey) > 0 {
+		endKey = o.EndKey
+	}
+	return Span{key, endKey}
+}
+
 // Combine creates a new span containing the full union of the key
 // space covered by the two spans. This includes any key space not
 // covered by either span, but between them if the spans are disjoint.
@@ -2200,6 +2221,18 @@ func (s Span) Contains(o Span) bool {
 // ContainsKey returns whether the span contains the given key.
 func (s Span) ContainsKey(key Key) bool {
 	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
+}
+
+// CompareKey returns -1 if the key precedes the span start, 0 if its contained
+// by the span and 1 if its after the end of the span.
+func (s Span) CompareKey(key Key) int {
+	if bytes.Compare(key, s.Key) >= 0 {
+		if bytes.Compare(key, s.EndKey) < 0 {
+			return 0
+		}
+		return 1
+	}
+	return -1
 }
 
 // ProperlyContainsKey returns whether the span properly contains the given key.
@@ -2261,6 +2294,15 @@ func (s Span) Valid() bool {
 	return true
 }
 
+// SpanOverhead is the overhead of Span in bytes.
+const SpanOverhead = int64(unsafe.Sizeof(Span{}))
+
+// MemUsage returns the size of the Span in bytes for memory accounting
+// purposes.
+func (s Span) MemUsage() int64 {
+	return SpanOverhead + int64(cap(s.Key)) + int64(cap(s.EndKey))
+}
+
 // Spans is a slice of spans.
 type Spans []Span
 
@@ -2279,6 +2321,22 @@ func (a Spans) ContainsKey(key Key) bool {
 	}
 
 	return false
+}
+
+// SpansOverhead is the overhead of Spans in bytes.
+const SpansOverhead = int64(unsafe.Sizeof(Spans{}))
+
+// MemUsage returns the size of the Spans in bytes for memory accounting
+// purposes.
+func (a Spans) MemUsage() int64 {
+	// Slice the full capacity of a so we can account for the memory
+	// used by spans past the length of a.
+	aCap := a[:cap(a)]
+	size := SpansOverhead
+	for i := range aCap {
+		size += aCap[i].MemUsage()
+	}
+	return size
 }
 
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.

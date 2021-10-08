@@ -44,9 +44,11 @@ func Scan(
 		Txn:                   h.Txn,
 		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
 		MaxKeys:               h.MaxSpanRequestKeys,
+		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:           h.TargetBytes,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		Reverse:               false,
+		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 	}
 
 	switch args.ScanFormat {
@@ -73,7 +75,7 @@ func Scan(
 
 	if scanRes.ResumeSpan != nil {
 		reply.ResumeSpan = scanRes.ResumeSpan
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		reply.ResumeReason = scanRes.ResumeReason
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {

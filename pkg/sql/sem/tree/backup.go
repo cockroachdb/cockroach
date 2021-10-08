@@ -116,6 +116,8 @@ type RestoreOptions struct {
 	SkipMissingViews          bool
 	Detached                  bool
 	SkipLocalitiesCheck       bool
+	DebugPauseOn              Expr
+	NewDBName                 Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -176,7 +178,11 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&n.Key)
+		// KVOption Key values never contain PII and should be distinguished
+		// for feature tracking purposes.
+		ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+			ctx.FormatNode(&n.Key)
+		})
 		if n.Value != nil {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)
@@ -316,6 +322,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.IntoDB)
 	}
 
+	if o.DebugPauseOn != nil {
+		maybeAddSep()
+		ctx.WriteString("debug_pause_on = ")
+		ctx.FormatNode(o.DebugPauseOn)
+	}
+
 	if o.SkipMissingFKs {
 		maybeAddSep()
 		ctx.WriteString("skip_missing_foreign_keys")
@@ -344,6 +356,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.SkipLocalitiesCheck {
 		maybeAddSep()
 		ctx.WriteString("skip_localities_check")
+	}
+
+	if o.NewDBName != nil {
+		maybeAddSep()
+		ctx.WriteString("new_db_name = ")
+		ctx.FormatNode(o.NewDBName)
 	}
 }
 
@@ -416,6 +434,18 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
 	}
 
+	if o.DebugPauseOn == nil {
+		o.DebugPauseOn = other.DebugPauseOn
+	} else if other.DebugPauseOn != nil {
+		return errors.New("debug_pause_on specified multiple times")
+	}
+
+	if o.NewDBName == nil {
+		o.NewDBName = other.NewDBName
+	} else if other.NewDBName != nil {
+		return errors.New("new_db_name specified multiple times")
+	}
+
 	return nil
 }
 
@@ -430,5 +460,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
 		o.Detached == options.Detached &&
-		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
+		o.DebugPauseOn == options.DebugPauseOn &&
+		o.NewDBName == options.NewDBName
 }

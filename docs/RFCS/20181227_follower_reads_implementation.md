@@ -1,5 +1,5 @@
 - Feature Name: Follower Reads Adoption
-- Implementation Status: draft
+- Implementation Status: completed
 - Start Date: 2018-12-27
 - Authors: Andrew Werner
 - RFC PR: #33474

@@ -11,11 +11,14 @@
 package scbuild_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	gojson "encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -51,43 +55,54 @@ func TestBuilderAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-table":
+			case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
-				create, ok := stmts[0].AST.(*tree.CreateTable)
-				if !ok {
-					t.Fatal("not a CREATE TABLE statement")
+				tableName := ""
+				switch node := stmts[0].AST.(type) {
+				case *tree.CreateTable:
+					tableName = node.Table.String()
+				case *tree.CreateSequence:
+					tableName = node.Name.String()
+				case *tree.CreateView:
+					tableName = node.Name.String()
+				case *tree.CreateType:
+					tableName = ""
+				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateDatabase:
+					tableName = ""
+				default:
+					t.Fatal("not a supported CREATE statement")
 				}
-
 				tdb.Exec(t, d.Input)
 
-				tableName := create.Table.String()
-				var tableID descpb.ID
-				tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
-				if tableID == 0 {
-					t.Fatalf("failed to read ID of new table %s", tableName)
+				if len(tableName) > 0 {
+					var tableID descpb.ID
+					tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
+					if tableID == 0 {
+						t.Fatalf("failed to read ID of new table %s", tableName)
+					}
+					t.Logf("created relation with id %d", tableID)
 				}
-				t.Logf("created table with id %d", tableID)
 
 				return ""
 			case "build":
-				b, cleanup := newTestingBuilder(s)
+				deps, cleanup := newTestingBuilderDeps(s)
 				defer cleanup()
 
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
-
-				var ts []*scpb.Node
+				var outputNodes scpb.State
 				for i := range stmts {
-					next, err := b.Build(ctx, ts, stmts[i].AST)
+					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
 					require.NoError(t, err)
-					ts = next
 				}
 
-				return marshalNodes(t, ts)
+				return marshalNodes(t, outputNodes)
 			case "unimplemented":
-				b, cleanup := newTestingBuilder(s)
+				deps, cleanup := newTestingBuilderDeps(s)
 				defer cleanup()
 
 				stmts, err := parser.Parse(d.Input)
@@ -97,7 +112,7 @@ func TestBuilderAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = b.AlterTable(ctx, nil, alter)
+				_, err = scbuild.Build(ctx, *deps, nil, alter)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
@@ -109,32 +124,51 @@ func TestBuilderAlterTable(t *testing.T) {
 	})
 }
 
-// marshalNodes marshals a []*scpb.Node to YAML.
-func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
-	type mapNode struct {
-		Target map[string]interface{}
-		State  string
+// indentText indents text for formatting out marshaled data.
+func indentText(input string, tab string) string {
+	result := strings.Builder{}
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
+		result.WriteString(tab)
+		result.WriteString(line)
+		result.WriteString("\n")
 	}
-	mapNodes := make([]mapNode, 0, len(nodes))
-	for _, node := range nodes {
-		var buf bytes.Buffer
-		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target))
-
-		target := make(map[string]interface{})
-		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
-
-		mapNodes = append(mapNodes, mapNode{
-			Target: target,
-			State:  node.State.String(),
-		})
-	}
-
-	out, err := yaml.Marshal(mapNodes)
-	require.NoError(t, err)
-	return string(out)
+	return result.String()
 }
 
-func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, func()) {
+// marshalNodes marshals a scpb.State to YAML.
+func marshalNodes(t *testing.T, nodes scpb.State) string {
+	var sortedEntries []string
+	for _, node := range nodes {
+		var buf bytes.Buffer
+		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
+		target := make(map[string]interface{})
+		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
+		entry := strings.Builder{}
+		entry.WriteString("- ")
+		entry.WriteString(node.Target.Direction.String())
+		entry.WriteString(" ")
+		scpb.FormatAttributes(node.Element(), &entry)
+		entry.WriteString("\n")
+		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
+		entry.WriteString(indentText("details:\n", "  "))
+		out, err := yaml.Marshal(target)
+		require.NoError(t, err)
+		entry.WriteString(indentText(string(out), "    "))
+		sortedEntries = append(sortedEntries, entry.String())
+	}
+	// Sort the output buffer of nodes for determinism.
+	result := strings.Builder{}
+	sort.Strings(sortedEntries)
+	for _, entry := range sortedEntries {
+		result.WriteString(entry)
+	}
+	return result.String()
+}
+
+func newTestingBuilderDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
@@ -150,6 +184,15 @@ func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, fun
 		resolver.SchemaResolver
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
+		scbuild.AuthorizationAccessor
+		Descriptors() *descs.Collection
 	})
-	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext()), cleanup
+	buildDeps := scbuild.Dependencies{
+		Res:          planner,
+		SemaCtx:      planner.SemaCtx(),
+		EvalCtx:      planner.EvalContext(),
+		Descs:        planner.Descriptors(),
+		AuthAccessor: planner,
+	}
+	return &buildDeps, cleanup
 }

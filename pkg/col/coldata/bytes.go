@@ -11,11 +11,13 @@
 package coldata
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -30,10 +32,11 @@ type Bytes struct {
 	// access of this Bytes we will try to maintain this assumption.
 	offsets []int32
 
-	// maxSetIndex specifies the last index set by the user of this struct. This
-	// enables us to disallow unordered sets (which would require data movement).
-	// Also, this helps us maintain the assumption of non-decreasing offsets.
-	maxSetIndex int
+	// maxSetLength specifies the number of elements set by the user of this
+	// struct. This enables us to disallow unordered sets (which would require
+	// data movement). Also, this helps us maintain the assumption of
+	// non-decreasing offsets.
+	maxSetLength int
 
 	// isWindow indicates whether this Bytes is a "window" into another Bytes.
 	// If it is, no modifications are allowed (all of them will panic).
@@ -84,34 +87,30 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
 // called by the colexecop.Operator that is modifying this Bytes before
 // returning it as an output. A convenient place for this is Batch.SetLength()
 // method - we assume that *always*, before returning a batch, the length is
-// set on it.
+// set on it. UpdateOffsetsToBeNonDecreasing assumes that all offsets up to
+// b.maxSetLength are non-decreasing. Note that this method is a noop when
+// n <= b.maxSetLength.
 func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n int) {
 	// Note that we're not checking whether this Bytes is a window because
 	// although this function might modify the "window" Bytes, it maintains the
 	// invariant that we need to have.
-	prev := b.offsets[0]
-	for j := 1; j <= n; j++ {
-		if b.offsets[j] > prev {
-			prev = b.offsets[j]
-		} else {
-			b.offsets[j] = prev
-		}
-	}
-}
-
-// maybeBackfillOffsets is an optimized version of
-// UpdateOffsetsToBeNonDecreasing that assumes that all offsets up to
-// b.maxSetIndex+1 are non-decreasing. Note that this method is a noop when
-// i <= b.maxSetIndex+1.
-func (b *Bytes) maybeBackfillOffsets(i int) {
-	// Note that we're not checking whether this Bytes is a window because
-	// although this function might modify the "window" Bytes, it maintains the
-	// invariant that we need to have.
-	for j := b.maxSetIndex + 2; j <= i; j++ {
-		b.offsets[j] = b.offsets[b.maxSetIndex+1]
-	}
-	if i > b.maxSetIndex {
-		b.maxSetIndex = i - 1
+	//
+	// Note that the offsets slice always has one more value than there are
+	// elements stored in data, because the index of the start of the first
+	// element must be stored (usually zero). The following is an example of what
+	// the offsets might look like for different values of maxSetLength (and a
+	// maximum length of 2 elements):
+	//   maxSetLength | offsets
+	//    0           | [0, 0, 0] // No elements.
+	//    1           | [0, 4, 0] // Set a 4-byte element at index 0 (1 element).
+	//    2           | [0, 4, 8] // Set a 4-byte element at index 1 (2 elements).
+	//
+	// This means that maxSetLength is also the index into offsets at which the
+	// end index for the max set element is stored. Therefore, the value at
+	// offsets[maxSetLength] should be used to back-fill offsets.
+	prev := b.offsets[b.maxSetLength]
+	for i := b.maxSetLength + 1; i <= n; i++ {
+		b.offsets[i] = prev
 	}
 }
 
@@ -130,11 +129,11 @@ func (b *Bytes) getAppendTo(i int) []byte {
 	if b.isWindow {
 		panic("getAppendTo is called on a window into Bytes")
 	}
-	if i < b.maxSetIndex {
+	if i < b.maxSetLength-1 {
 		panic(
 			fmt.Sprintf(
-				"cannot overwrite value on flat Bytes: maxSetIndex=%d, setIndex=%d, consider using Reset",
-				b.maxSetIndex,
+				"cannot overwrite value on flat Bytes: maxSetLength=%d, setIndex=%d, consider using Reset",
+				b.maxSetLength,
 				i,
 			),
 		)
@@ -143,7 +142,7 @@ func (b *Bytes) getAppendTo(i int) []byte {
 	// element (i.e. there might be gaps in b.offsets). This is probably due to
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
-	b.maybeBackfillOffsets(i)
+	b.UpdateOffsetsToBeNonDecreasing(i)
 	return b.data[:b.offsets[i]]
 }
 
@@ -155,7 +154,7 @@ func (b *Bytes) Set(i int, v []byte) {
 	appendTo := b.getAppendTo(i)
 	b.data = append(appendTo, v...)
 	b.offsets[i+1] = int32(len(b.data))
-	b.maxSetIndex = i
+	b.maxSetLength = i + 1
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -171,7 +170,7 @@ func (b *Bytes) Window(start, end int) *Bytes {
 			),
 		)
 	}
-	b.maybeBackfillOffsets(end)
+	b.UpdateOffsetsToBeNonDecreasing(end)
 	data := b.data[:b.offsets[end]]
 	if end == 0 {
 		data = b.data[:0]
@@ -181,9 +180,9 @@ func (b *Bytes) Window(start, end int) *Bytes {
 		// We use 'end+1' because of the extra offset to know the length of the
 		// last element of the newly created window.
 		offsets: b.offsets[start : end+1],
-		// maxSetIndex is set only for pretty printing the Bytes.
-		maxSetIndex: (end - start) - 1,
-		isWindow:    true,
+		// maxSetLength is set only for pretty printing the Bytes.
+		maxSetLength: end - start,
+		isWindow:     true,
 	}
 }
 
@@ -222,7 +221,7 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if toCopy == 0 || b.Len() == 0 || destIdx == b.Len() {
 		return
 	}
-	b.maybeBackfillOffsets(destIdx)
+	b.UpdateOffsetsToBeNonDecreasing(destIdx)
 
 	if destIdx+toCopy > b.Len() {
 		// Reduce the number of elements to copy to what can fit into the
@@ -235,11 +234,11 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// source are actually NULL values in which case the corresponding offsets
 	// might remain zeroes. We want to be on the safe side, so we backfill the
 	// source offsets as well.
-	src.maybeBackfillOffsets(srcEndIdx)
+	src.UpdateOffsetsToBeNonDecreasing(srcEndIdx)
 	srcDataToCopy := src.data[src.offsets[srcStartIdx]:src.offsets[srcEndIdx]]
 
 	var leftoverDestBytes []byte
-	if destIdx+toCopy <= b.maxSetIndex {
+	if destIdx+toCopy < b.maxSetLength {
 		// There will still be elements left over after the last element to copy. We
 		// copy those elements into leftoverDestBytes to append after all elements
 		// have been copied.
@@ -248,9 +247,9 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 		copy(leftoverDestBytes, leftoverDestBytesToCopy)
 	}
 
-	newMaxIdx := destIdx + (toCopy - 1)
-	if newMaxIdx > b.maxSetIndex {
-		b.maxSetIndex = newMaxIdx
+	newLength := destIdx + toCopy
+	if newLength > b.maxSetLength {
+		b.maxSetLength = newLength
 	}
 
 	destDataIdx := int32(0)
@@ -317,18 +316,14 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 			),
 		)
 	}
-	// NOTE: it is important that we do not update b.maxSetIndex before we do the
-	// backfill. Also, since it is possible to have a self referencing source, we
-	// can update b.maxSetIndex only after backfilling the source below.
-	b.maybeBackfillOffsets(destIdx)
+	// NOTE: it is important that we do not update b.maxSetLength before we update
+	// the tail offsets. Also, since it is possible to have a self referencing
+	// source, we can update b.maxSetLength only after updating the offsets for
+	// the source below.
+	b.UpdateOffsetsToBeNonDecreasing(destIdx)
 	toAppend := srcEndIdx - srcStartIdx
 	if toAppend == 0 {
-		// Note that in b.maybeBackfillOffsets if "old" b.maxSetIndex value was
-		// smaller than destIdx-1, b.maxSetIndex has been updated, so we will
-		// not get into a situation in which we advance this value more than
-		// the index of the actual last element, so it is safe to update it
-		// unconditionally.
-		b.maxSetIndex = destIdx - 1
+		b.maxSetLength = destIdx
 		// We're simply slicing up to destIdx (exclusive).
 		if destIdx == b.Len() {
 			return
@@ -342,10 +337,10 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// source are actually NULL values in which case the corresponding offsets
 	// might remain zeroes. We want to be on the safe side, so we backfill the
 	// source offsets as well.
-	src.maybeBackfillOffsets(srcEndIdx)
+	src.UpdateOffsetsToBeNonDecreasing(srcEndIdx)
 	srcDataToAppend := src.data[src.offsets[srcStartIdx]:src.offsets[srcEndIdx]]
 	destDataIdx := b.offsets[destIdx]
-	b.maxSetIndex = destIdx + (toAppend - 1)
+	b.maxSetLength = destIdx + toAppend
 
 	// Calculate the amount to translate offsets by before modifying any
 	// destination offsets since we might be appending from the same Bytes (and
@@ -372,61 +367,142 @@ func (b *Bytes) AppendVal(v []byte) {
 	if b.isWindow {
 		panic("AppendVal is called on a window into Bytes")
 	}
-	b.maybeBackfillOffsets(b.Len())
+	b.UpdateOffsetsToBeNonDecreasing(b.Len())
 	b.data = append(b.data[:b.offsets[b.Len()]], v...)
-	b.maxSetIndex = b.Len()
 	b.offsets = append(b.offsets, int32(len(b.data)))
+	b.maxSetLength = b.Len()
 }
 
 // Len returns how many []byte values the receiver contains.
+//gcassert:inline
 func (b *Bytes) Len() int {
 	return len(b.offsets) - 1
 }
 
 // FlatBytesOverhead is the overhead of Bytes in bytes.
-const FlatBytesOverhead = unsafe.Sizeof(Bytes{})
-const sizeOfInt32 = unsafe.Sizeof(int32(0))
+const FlatBytesOverhead = int64(unsafe.Sizeof(Bytes{}))
 
 // Size returns the total size of the receiver in bytes.
-func (b *Bytes) Size() uintptr {
+func (b *Bytes) Size() int64 {
+	if b == nil {
+		return 0
+	}
 	return FlatBytesOverhead +
-		uintptr(cap(b.data)) +
-		uintptr(cap(b.offsets))*sizeOfInt32
+		int64(cap(b.data)) +
+		int64(cap(b.offsets))*memsize.Int32
 }
 
 // ProportionalSize returns the size of the receiver in bytes that is
 // attributed to only first n out of Len() elements.
-func (b *Bytes) ProportionalSize(n int64) uintptr {
+func (b *Bytes) ProportionalSize(n int64) int64 {
 	if n == 0 {
 		return 0
 	}
 	// It is possible that we have a "window" into the vector that doesn't start
 	// from the offset of 0, so we have to look at the first actual offset.
-	return FlatBytesOverhead + uintptr(len(b.data[b.offsets[0]:b.offsets[n]])) + uintptr(n)*sizeOfInt32
+	return FlatBytesOverhead + int64(len(b.data[b.offsets[0]:b.offsets[n]])) + n*memsize.Int32
 }
 
-var zeroInt32Slice = make([]int32, BytesInitialAllocationFactor*BatchSize())
+// ElemSize returns the size in bytes of the []byte elem at the given index.
+// Panics if passed an invalid element.
+func (b *Bytes) ElemSize(idx int) int64 {
+	if idx < 0 || idx >= b.Len() {
+		colexecerror.InternalError(
+			errors.AssertionFailedf("called ElemSize with invalid index: %d", idx))
+	}
+	return int64(b.offsets[idx+1] - b.offsets[idx])
+}
 
-// Reset resets the underlying Bytes for reuse. Note that this zeroes out the
-// underlying bytes but doesn't change the length (see #42054 for the
-// discussion on why simply truncating b.data and setting b.maxSetIndex to 0 is
-// not sufficient).
+// Abbreviated returns a uint64 slice where each uint64 represents the first
+// eight bytes of each []byte. It is used for byte comparison fast paths.
+//
+// Given Bytes b, and abbr = b.Abbreviated():
+//
+//   - abbr[i] > abbr[j] iff b.Get(i) > b.Get(j)
+//   - abbr[i] < abbr[j] iff b.Get(i) < b.Get(j)
+//   - If abbr[i] == abbr[j], it is unknown if b.Get(i) is greater than, less
+//     than, or equal to b.Get(j). A full comparison of all bytes in each is
+//     required.
+//
+func (b *Bytes) Abbreviated() []uint64 {
+	r := make([]uint64, b.Len())
+	for i := range r {
+		bs := b.Get(i)
+		r[i] = abbreviate(bs)
+	}
+	return r
+}
+
+// abbreviate interprets up to the first 8 bytes of the slice as a big-endian
+// uint64. If the slice has less than 8 bytes, the value returned is the same as
+// if the slice was filled to 8 bytes with zero value bytes. For example:
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//     => 1
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
+//     => 256
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//     => 256
+//
+func abbreviate(bs []byte) uint64 {
+	if len(bs) >= 8 {
+		return binary.BigEndian.Uint64(bs)
+	}
+	var v uint64
+	for _, b := range bs {
+		v <<= 8
+		v |= uint64(b)
+	}
+	return v << uint(8*(8-len(bs)))
+}
+
+// Reset resets the underlying Bytes for reuse.
 // TODO(asubiotto): Move towards removing Set in favor of AppendVal. At that
-// point we can reset the length to 0.
+// point we can truncate the offsets slice.
 func (b *Bytes) Reset() {
 	if b.isWindow {
 		panic("Reset is called on a window into Bytes")
 	}
 	b.data = b.data[:0]
-	for n := 0; n < len(b.offsets); n += copy(b.offsets[n:], zeroInt32Slice) {
+	b.maxSetLength = 0
+}
+
+// ResetForAppend is similar to Reset, but it also resets the offsets slice so
+// that future calls to AppendSlice or AppendVal will append starting from index
+// zero. TODO(drewk): once Set is removed, this can just be Reset.
+func (b *Bytes) ResetForAppend() {
+	b.Reset()
+	// The first offset indicates where the first element will start.
+	b.offsets = b.offsets[:1]
+}
+
+// Truncate truncates the underlying bytes to the given length. This allows Set
+// to be called at or beyond the given length. If the length of the bytes is
+// already less than or equal to the given length, Truncate is a no-op.
+func (b *Bytes) Truncate(length int) {
+	if b.isWindow {
+		panic("Truncate is called on a window into Bytes")
 	}
-	b.maxSetIndex = 0
+	if length < 0 {
+		panic(fmt.Sprintf("length out of range: %d", length))
+	}
+	if length > b.Len() {
+		// This is a no-op.
+		return
+	}
+	// Ensure that calling Truncate with a length greater than maxSetLength does
+	// not invalidate the non-decreasing invariant.
+	b.UpdateOffsetsToBeNonDecreasing(length)
+	b.data = b.data[:b.offsets[length]]
+	b.maxSetLength = length
 }
 
 // String is used for debugging purposes.
 func (b *Bytes) String() string {
 	var builder strings.Builder
-	for i := range b.offsets[:b.maxSetIndex+1] {
+	for i := range b.offsets[:b.maxSetLength] {
 		builder.WriteString(
 			fmt.Sprintf("%d: %v\n", i, b.data[b.offsets[i]:b.offsets[i+1]]),
 		)
@@ -439,7 +515,7 @@ func (b *Bytes) String() string {
 func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
 	b.data = data
 	b.offsets = offsets
-	b.maxSetIndex = len(offsets) - 2
+	b.maxSetLength = len(offsets) - 1
 }
 
 // ToArrowSerializationFormat returns a bytes slice and offsets that are
@@ -448,9 +524,20 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	if n == 0 {
 		return []byte{}, []int32{0}
 	}
+	serializeStart := b.offsets[0]
 	serializeLength := b.offsets[n]
-	data := b.data[:serializeLength]
+	data := b.data[serializeStart:serializeLength]
 	offsets := b.offsets[:n+1]
+	if serializeStart > 0 {
+		// This can happen when the receiver is a window. We will have to ensure
+		// that offsets starts at index zero into the truncated version of b.data.
+		offsets = make([]int32, len(offsets))
+		for i := range offsets {
+			// This works because of the non-decreasing invariant imposed on the
+			// offsets.
+			offsets[i] = b.offsets[i] - serializeStart
+		}
+	}
 	return data, offsets
 }
 
@@ -484,7 +571,7 @@ func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
 
 // ProportionalSize calls the method of the same name on bytes-like
 // vectors, panicking if not bytes-like.
-func ProportionalSize(v Vec, length int64) uintptr {
+func ProportionalSize(v Vec, length int64) int64 {
 	family := v.CanonicalTypeFamily()
 	switch family {
 	case types.BytesFamily:

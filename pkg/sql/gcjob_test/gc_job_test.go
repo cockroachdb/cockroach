@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,7 +49,6 @@ import (
 func TestSchemaChangeGCJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 60664, "flaky test")
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	type DropItem int
 	const (
@@ -63,8 +66,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	for _, dropItem := range []DropItem{INDEX, TABLE, DATABASE} {
 		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
-			params := base.TestServerArgs{}
 			blockGC := make(chan struct{}, 1)
+			params := base.TestServerArgs{}
+			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 				RunBeforePerformGC: func(_ jobspb.JobID) error {
 					<-blockGC
@@ -261,11 +265,11 @@ func TestSchemaChangeGCJob(t *testing.T) {
 func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 
 	// We're going to drop a table then manually delete it, then update the
 	// database zone config and ensure the job finishes successfully.
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, args)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -299,7 +303,7 @@ SELECT job_id, status, running_status
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		nameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec, dbID, keys.PublicSchemaID, "foo")
+		nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, dbID, "foo")
 		if err := txn.Del(ctx, nameKey); err != nil {
 			return err
 		}
@@ -327,13 +331,13 @@ SELECT job_id, status, running_status
 // logic for GC-ing tenant.
 func TestGCResumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 	gcjob.SetSmallMaxGCIntervalForTest()
 
 	ctx := context.Background()
-	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
 	defer srv.Stopper().Stop(ctx)
@@ -414,4 +418,47 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, err)
 		require.Error(t, sj.AwaitCompletion(ctx))
 	})
+}
+
+func TestGCJobRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	var failed atomic.Value
+	failed.Store(false)
+	params := base.TestServerArgs{}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			_, ok := request.GetArg(roachpb.ClearRange)
+			if !ok {
+				return nil
+			}
+			if failed.Load().(bool) {
+				return nil
+			}
+			failed.Store(true)
+			return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+				Timestamp: hlc.Timestamp{},
+				Threshold: hlc.Timestamp{},
+			})
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+	tdb.Exec(t, "DROP TABLE foo CASCADE;")
+	var jobID int64
+	tdb.QueryRow(t, `
+SELECT job_id
+  FROM [SHOW JOBS]
+ WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
+	).Scan(&jobID)
+	var status jobs.Status
+	tdb.QueryRow(t,
+		"SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID,
+	).Scan(&status)
+	require.Equal(t, jobs.StatusSucceeded, status)
 }

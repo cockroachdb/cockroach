@@ -1,0 +1,8 @@
+row_source_extension_stmt ::=
+	delete_stmt
+	| explain_stmt
+	| insert_stmt
+	| select_stmt
+	| show_stmt
+	| update_stmt
+	| upsert_stmt

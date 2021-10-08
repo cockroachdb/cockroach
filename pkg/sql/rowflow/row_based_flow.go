@@ -274,8 +274,9 @@ func (f *rowBasedFlow) setupInputSyncs(
 				return nil, errors.Errorf("input sync with no streams")
 			}
 			var sync execinfra.RowSource
-			if is.Type != execinfrapb.InputSyncSpec_UNORDERED &&
-				is.Type != execinfrapb.InputSyncSpec_ORDERED {
+			if is.Type != execinfrapb.InputSyncSpec_PARALLEL_UNORDERED &&
+				is.Type != execinfrapb.InputSyncSpec_ORDERED &&
+				is.Type != execinfrapb.InputSyncSpec_SERIAL_UNORDERED {
 				return nil, errors.Errorf("unsupported input sync type %s", is.Type)
 			}
 
@@ -289,10 +290,10 @@ func (f *rowBasedFlow) setupInputSyncs(
 				return nil, err
 			}
 
-			if is.Type == execinfrapb.InputSyncSpec_UNORDERED {
+			if is.Type == execinfrapb.InputSyncSpec_PARALLEL_UNORDERED {
 				if opt == flowinfra.FuseNormally || len(is.Streams) == 1 {
-					// Unordered synchronizer: create a RowChannel for each input.
-
+					// Parallel unordered synchronizer: create a RowChannel for
+					// each input.
 					mrc := &execinfra.RowChannel{}
 					mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 					for _, s := range is.Streams {
@@ -304,11 +305,13 @@ func (f *rowBasedFlow) setupInputSyncs(
 				}
 			}
 			if sync == nil {
-				// We have an ordered synchronizer or an unordered one that we really
-				// want to fuse because of the FuseAggressively option. We'll create a
-				// RowChannel for each input for now, but the inputs might be fused with
-				// the synchronizer later (in which case the RowChannels will be
-				// dropped).
+				// We have a serial synchronizer (either ordered or unordered)
+				// or a parallel unordered sync that we really want to fuse
+				// because of the FuseAggressively option.
+				//
+				// We'll create a RowChannel for each input for now, but the
+				// inputs might be fused with the synchronizer later (in which
+				// case the RowChannels will be dropped).
 				streams := make([]execinfra.RowSource, len(is.Streams))
 				for i, s := range is.Streams {
 					rowChan := &execinfra.RowChannel{}
@@ -381,7 +384,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 	sid := spec.StreamID
 	switch spec.Type {
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-		return f.GetSyncFlowConsumer(), nil
+		return f.GetRowSyncFlowConsumer(), nil
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		atomic.AddInt32(&f.numOutboxes, 1)

@@ -89,7 +89,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 				et.LockSpans[len(origET.LockSpans)+i] = roachpb.Span{Key: w.Key}
 			}
 			// See below for why we set Header.DistinctSpans here.
-			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
+			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(&et.LockSpans)
 			return ba, nil
 		}
 	}
@@ -161,7 +161,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		// batch overlap with each other. This will have (rare) false negatives
 		// when the in-flight writes overlap with existing lock spans, but never
 		// false positives.
-		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
+		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(&et.LockSpans)
 	}
 	return ba, nil
 }

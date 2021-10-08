@@ -11,19 +11,24 @@
 package slstorage_test
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,6 +42,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestStorage(t *testing.T) {
@@ -46,7 +52,6 @@ func TestStorage(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -59,6 +64,7 @@ func TestStorage(t *testing.T) {
 			`CREATE TABLE system.sqlliveness`,
 			`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
 		tDB.Exec(t, schema)
+		tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 		timeSource := timeutil.NewManualTime(t0)
 		clock := hlc.NewClock(func() int64 {
@@ -66,8 +72,8 @@ func TestStorage(t *testing.T) {
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper()
-		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
-			dbName, timeSource.NewTimer)
+		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+			tableID, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -102,7 +108,7 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-update", func(t *testing.T) {
 		clock, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
-		slstorage.GCJitter.Override(&settings.SV, 0)
+		slstorage.GCJitter.Override(ctx, &settings.SV, 0)
 		storage.Start(ctx)
 		metrics := storage.Metrics()
 
@@ -235,6 +241,7 @@ func TestStorage(t *testing.T) {
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(0), metrics.SessionsDeleted.Count())
 		}
 		// Advance to the point where the session is expired.
 		timeSource.Advance(time.Second + time.Nanosecond)
@@ -245,6 +252,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure that the fact that it is no longer alive is cached.
 		{
@@ -253,6 +261,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(1), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure it cannot be updated.
 		{
@@ -303,7 +312,6 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	dbName := t.Name()
@@ -312,6 +320,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		`CREATE TABLE system.sqlliveness`,
 		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
 	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(func() int64 {
@@ -320,9 +329,9 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	slstorage.CacheSize.Override(&settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
-		dbName, timeSource.NewTimer)
+	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
+	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	const (
@@ -438,4 +447,307 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		step(t)
 	}
 	wg.Wait()
+}
+
+// TestConcurrentAccessSynchronization tests that various interactions between
+// synchronous and asynchronous readers in the face of context cancellation work
+// as expected.
+func TestConcurrentAccessSynchronization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type filterFunc = func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error
+	var requestFilter atomic.Value
+	requestFilter.Store(filterFunc(nil))
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(
+					ctx context.Context, request roachpb.BatchRequest,
+				) *roachpb.Error {
+					if f := requestFilter.Load().(filterFunc); f != nil {
+						return f(ctx, request)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	dbName := t.Name()
+	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SqllivenessTableSchema,
+		`CREATE TABLE system.sqlliveness`,
+		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
+	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sqlliveness")
+
+	timeSource := timeutil.NewManualTime(t0)
+	clock := hlc.NewClock(func() int64 {
+		return timeSource.Now().UnixNano()
+	}, base.DefaultMaxClockOffset)
+	settings := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
+	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		tableID, timeSource.NewTimer)
+	storage.Start(ctx)
+
+	// Synchronize reading from the store with the blocked channel by detecting
+	// a Get to the table.
+	prefix := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+	var blockChannel atomic.Value
+	var blocked int64
+	resetBlockedChannel := func() { blockChannel.Store(make(chan struct{})) }
+	waitForBlocked := func(t *testing.T) {
+		testutils.SucceedsSoon(t, func() error {
+			if atomic.LoadInt64(&blocked) == 0 {
+				return errors.New("not blocked")
+			}
+			return nil
+		})
+	}
+	unblock := func() { close(blockChannel.Load().(chan struct{})) }
+	requestFilter.Store(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+		getRequest, ok := request.GetArg(roachpb.Get)
+		if !ok {
+			return nil
+		}
+		get := getRequest.(*roachpb.GetRequest)
+		if !bytes.HasPrefix(get.Key, prefix) {
+			return nil
+		}
+		atomic.AddInt64(&blocked, 1)
+		defer atomic.AddInt64(&blocked, -1)
+		<-blockChannel.Load().(chan struct{})
+		return roachpb.NewError(ctx.Err())
+	})
+
+	t.Run("CachedReader does not block", func(t *testing.T) {
+		resetBlockedChannel()
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(ctx, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		waitForBlocked(t)
+		// Make sure that the cached read did not block.
+		require.NoError(t, g.Wait())
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+		// Unblock the reader and make sure it eventually populates the cache.
+		unblock()
+		testutils.SucceedsSoon(t, func() error {
+			alive, err := cached.IsAlive(ctx, sid)
+			require.NoError(t, err)
+			if alive {
+				return errors.New("expected not alive")
+			}
+			return nil
+		})
+	})
+	t.Run("canceled context does not interrupt read", func(t *testing.T) {
+		resetBlockedChannel()
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		toCancel, cancel := context.WithCancel(ctx)
+
+		before := storage.Metrics().IsAliveCacheMisses.Count()
+
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(toCancel, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		waitForBlocked(t)
+		require.NoError(t, g.Wait()) // make sure that the cached read did not block
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+		cur := storage.Metrics().IsAliveCacheMisses.Count()
+		require.Equal(t, int64(1), cur-before)
+		// Now launch another, synchronous reader, which will join
+		// the single-flight.
+		g.Go(func() (err error) {
+			alive, err = storage.IsAlive(ctx, sid)
+			return err
+		})
+		// Sleep some tiny amount of time to hopefully allow the other
+		// goroutine to make it to the group.
+		testutils.SucceedsSoon(t, func() error {
+			if storage.Metrics().IsAliveCacheMisses.Count()-before != 2 {
+				return errors.New("not seen cache miss yet")
+			}
+			return nil
+		})
+		// Cancel the context of the original, async call.
+		cancel()
+		// Unblock the reader.
+		unblock()
+		// Ensure that no error makes it to the synchronous call.
+		require.NoError(t, g.Wait())
+		// Ensure that the synchronous reader sees the session as not alive.
+		require.False(t, alive)
+	})
+	// Test that canceling the context of a synchronous reader
+	// results in the call returning promptly.
+	t.Run("context cancellation returns", func(t *testing.T) {
+		resetBlockedChannel()
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(ctx, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		waitForBlocked(t)
+		require.NoError(t, g.Wait()) // make sure that the cached read did not block
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+
+		toCancel, cancel := context.WithCancel(ctx)
+		// Now launch another, synchronous reader, which will join
+		// the single-flight.
+		g.Go(func() (err error) {
+			alive, err = storage.IsAlive(toCancel, sid)
+			return err
+		})
+
+		// Cancel the context and ensure that the reader
+		// returns early.
+		cancel()
+		require.Regexp(t, "context canceled", g.Wait())
+		unblock()
+
+		// Ensure that the cache still gets populated.
+		testutils.SucceedsSoon(t, func() error {
+			alive, err := cached.IsAlive(ctx, sid)
+			require.NoError(t, err)
+			if alive {
+				return errors.New("expected not alive")
+			}
+			return nil
+		})
+	})
+}
+
+// TestDeleteMidUpdateFails ensures that a session removed while it attempts to
+// update itself fails.
+func TestDeleteMidUpdateFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type filterFunc = func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+	var respFilter atomic.Value
+	respFilter.Store(filterFunc(nil))
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(
+					ctx context.Context, request roachpb.BatchRequest, resp *roachpb.BatchResponse,
+				) *roachpb.Error {
+					if f := respFilter.Load().(filterFunc); f != nil {
+						return f(ctx, request, resp)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Set up a fake storage implementation using a separate table.
+	dbName := t.Name()
+	tdb.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SqllivenessTableSchema,
+		`CREATE TABLE system.sqlliveness`,
+		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
+	tdb.Exec(t, schema)
+	tableID := getTableID(t, tdb, dbName, "sqlliveness")
+
+	storage := slstorage.NewTestingStorage(
+		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
+		tableID, timeutil.DefaultTimeSource{}.NewTimer,
+	)
+
+	// Insert a session.
+	ID := sqlliveness.SessionID("foo")
+	require.NoError(t, storage.Insert(ctx, ID, s.Clock().Now()))
+
+	// Install a filter which will send on this channel when we attempt
+	// to perform an update after the get has evaluated.
+	getChan := make(chan chan struct{})
+	respFilter.Store(func(
+		ctx context.Context, request roachpb.BatchRequest, _ *roachpb.BatchResponse,
+	) *roachpb.Error {
+		if get, ok := request.GetArg(roachpb.Get); !ok || !bytes.HasPrefix(
+			get.(*roachpb.GetRequest).Key,
+			keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+		) {
+			return nil
+		}
+		respFilter.Store(filterFunc(nil))
+		unblock := make(chan struct{})
+		getChan <- unblock
+		<-unblock
+		return nil
+	})
+
+	// Launch the update.
+	type result struct {
+		exists bool
+		err    error
+	}
+	resCh := make(chan result)
+	go func() {
+		var res result
+		res.exists, res.err = storage.Update(ctx, ID, s.Clock().Now())
+		resCh <- res
+	}()
+
+	// Wait for the update to block.
+	unblock := <-getChan
+
+	// Delete the session being updated.
+	tdb.Exec(t, `DELETE FROM "`+dbName+`".sqlliveness WHERE true`)
+
+	// Unblock the update and ensure that it saw that its session was deleted.
+	close(unblock)
+	res := <-resCh
+	require.False(t, res.exists)
+	require.NoError(t, res.err)
+}
+
+func getTableID(
+	t *testing.T, db *sqlutils.SQLRunner, dbName, tableName string,
+) (tableID descpb.ID) {
+	t.Helper()
+	db.QueryRow(t, `
+select u.id 
+  from system.namespace t
+  join system.namespace u 
+    on t.id = u."parentID" 
+ where t.name = $1 and u.name = $2`,
+		dbName, tableName).Scan(&tableID)
+	return tableID
 }

@@ -145,7 +145,7 @@ func TestCastsFromUnknown(t *testing.T) {
 			// These type families are exceptions.
 
 		default:
-			cast := lookupCast(types.UnknownFamily, fam)
+			cast := lookupCast(types.UnknownFamily, fam, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
 			if cast == nil {
 				t.Errorf("cast from Unknown to %s does not exist", fam)
 			}
@@ -198,7 +198,7 @@ func TestTupleCastVolatility(t *testing.T) {
 		from.InternalType.TupleContents = tc.from
 		to := *types.EmptyTuple
 		to.InternalType.TupleContents = tc.to
-		v, ok := LookupCastVolatility(&from, &to)
+		v, ok := LookupCastVolatility(&from, &to, nil /* sessionData */)
 		res := "error"
 		if ok {
 			res = v.String()

@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "column.go",
         "constraint.go",
+        "default_privilege.go",
         "descriptor.go",
         "index.go",
         "join_type.go",
@@ -26,9 +27,12 @@ go_library(
         "//pkg/security",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
@@ -40,7 +44,10 @@ go_library(
 go_test(
     name = "descpb_test",
     size = "small",
-    srcs = ["privilege_test.go"],
+    srcs = [
+        "privilege_test.go",
+        "structured_test.go",
+    ],
     embed = [":descpb"],
     deps = [
         "//pkg/keys",
@@ -65,6 +72,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/types:types_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -79,7 +87,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
-        "//pkg/roachpb",  # keep
+        "//pkg/roachpb:with-mocks",  # keep
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",

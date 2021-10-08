@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -36,6 +35,8 @@ type explainVecNode struct {
 		lines []string
 		// The current row returned by the node.
 		values tree.Datums
+		// cleanup will be called after closing the input tree.
+		cleanup func()
 	}
 }
 
@@ -44,9 +45,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
+		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main,
 	)
-	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
 	defer func() {
@@ -61,9 +61,9 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, physPlan)
+	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
-	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p, &distSQLPlanner.rpcCtx.ClusterID)
+	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -71,11 +71,12 @@ func (n *explainVecNode) startExec(params runParams) error {
 	// With all other options, we don't change the setting to the
 	// most-inclusive option as we used to because the plan can be different
 	// based on 'vectorize' setting.
-	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeOff {
+	if flowCtx.EvalCtx.SessionData().VectorizeMode == sessiondatapb.VectorizeOff {
 		return errors.New("vectorize is set to 'off'")
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	n.run.lines, err = colflow.ExplainVec(
+	willDistribute := physPlan.Distribution.WillDistribute()
+	n.run.lines, n.run.cleanup, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
 		distSQLPlanner.gatewayNodeID, verbose, willDistribute,
 	)
@@ -85,16 +86,15 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func newFlowCtxForExplainPurposes(
-	planCtx *PlanningCtx, p *planner, clusterID *base.ClusterIDContainer,
-) *execinfra.FlowCtx {
+func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.FlowCtx {
 	return &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
 			Settings:       p.execCfg.Settings,
-			ClusterID:      clusterID,
+			ClusterID:      &p.DistSQLPlanner().rpcCtx.ClusterID,
 			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
+			NodeDialer:     p.DistSQLPlanner().nodeDialer,
 		},
 		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
 			Descriptors: p.Descriptors(),
@@ -133,4 +133,7 @@ func (n *explainVecNode) Next(runParams) (bool, error) {
 func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
+	if n.run.cleanup != nil {
+		n.run.cleanup()
+	}
 }

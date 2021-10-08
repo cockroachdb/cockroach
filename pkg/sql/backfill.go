@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -78,6 +80,14 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 	"the number of rows for which we construct index entries in a single batch",
 	50000,
 	settings.NonNegativeInt, /* validateFn */
+)
+
+// indexBackfillCheckpointInterval is the duration between backfill detail updates.
+var indexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+	"bulkio.index_backfill.checkpoint_interval",
+	"the amount of time between index backfill checkpoint updates",
+	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // columnBackfillBatchSize is the maximum number of rows we update at once when
@@ -177,7 +187,9 @@ func (sc *SchemaChanger) fixedTimestampTxn(
 	retryable func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		txn.SetFixedTimestamp(ctx, readAsOf)
+		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
+			return err
+		}
 		return retryable(ctx, txn, descriptors)
 	})
 }
@@ -476,15 +488,6 @@ func (sc *SchemaChanger) dropConstraints(
 		return nil, err
 	}
 
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return nil, err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return nil, err
-		}
-	}
-
 	log.Info(ctx, "finished dropping constraints")
 	tableDescs := make(map[descpb.ID]catalog.TableDescriptor, len(fksByBackrefTable)+1)
 	if err := sc.txn(ctx, func(
@@ -638,15 +641,6 @@ func (sc *SchemaChanger) addConstraints(
 	}); err != nil {
 		return err
 	}
-
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return err
-		}
-	}
 	log.Info(ctx, "finished adding constraints")
 	return nil
 }
@@ -755,15 +749,6 @@ func (sc *SchemaChanger) validateConstraints(
 	return nil
 }
 
-func (sc *SchemaChanger) newCollection() *descs.Collection {
-	return descs.NewCollection(
-		sc.settings,
-		sc.leaseMgr,
-		nil, // leaseManager
-		nil, // virtualSchemas
-	)
-}
-
 // getTableVersion retrieves the descriptor for the table being
 // targeted by the schema changer using the provided txn, and asserts
 // that the retrieved descriptor is at the given version. An error is
@@ -815,9 +800,12 @@ func TruncateInterleavedIndexes(
 			resumeAt := resume
 			// Make a new txn just to drop this chunk.
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				rd := row.MakeDeleter(codec, table, nil /* requestedCols */)
+				rd := row.MakeDeleter(
+					codec, table, nil /* requestedCols */, &execCfg.Settings.SV, true, /* internal */
+					execCfg.GetRowMetrics(true /* internal */),
+				)
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &execCfg.Settings.SV); err != nil {
 					return err
 				}
 				resume, err := td.deleteIndex(
@@ -877,7 +865,9 @@ func (sc *SchemaChanger) truncateIndexes(
 			}
 
 			// Make a new txn just to drop this chunk.
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := sc.txn(ctx, func(
+				ctx context.Context, txn *kv.Txn, tc *descs.Collection,
+			) error {
 				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
 					if err := fn(resume); err != nil {
 						return err
@@ -888,15 +878,16 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := sc.newCollection()
-				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err
 				}
-				rd := row.MakeDeleter(sc.execCfg.Codec, tableDesc, nil /* requestedCols */)
+				rd := row.MakeDeleter(
+					sc.execCfg.Codec, tableDesc, nil /* requestedCols */, &sc.settings.SV,
+					true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
+				)
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
 					return err
 				}
 				if !canClearRangeForDrop(idx) {
@@ -933,14 +924,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	return nil
 }
 
-type backfillType int
-
-const (
-	_ backfillType = iota
-	columnBackfill
-	indexBackfill
-)
-
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
 // TODO (lucy): This is not a good way to look up all schema change jobs
@@ -959,14 +942,15 @@ func getJobIDForMutationWithDescriptor(
 		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 
-// nRanges returns the number of ranges that cover a set of spans.
+// numRangesInSpans returns the number of ranges that cover a set of spans.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func (sc *SchemaChanger) nRanges(
-	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+func numRangesInSpans(
+	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
-	spanResolver := sc.distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	txn := db.NewTxn(ctx, "num-ranges-in-spans")
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
 	rangeIds := make(map[int64]struct{})
 	for _, span := range spans {
 		// For each span, iterate the spanResolver until it's exhausted, storing
@@ -1159,6 +1143,17 @@ func (sc *SchemaChanger) distIndexBackfill(
 	)
 	defer recv.Release()
 
+	getTodoSpansForUpdate := func() []roachpb.Span {
+		mu.Lock()
+		defer mu.Unlock()
+		if mu.updatedTodoSpans == nil {
+			return nil
+		}
+		return append(
+			make([]roachpb.Span, 0, len(mu.updatedTodoSpans)),
+			mu.updatedTodoSpans...,
+		)
+	}
 	updateJobProgress = func() error {
 		// Report schema change progress. We define progress at this point as the
 		// the fraction of fully-backfilled ranges of the primary index of the
@@ -1167,22 +1162,19 @@ func (sc *SchemaChanger) distIndexBackfill(
 		// change state machine or from a previous backfill attempt, we scale that
 		// fraction of ranges completed by the remaining fraction of the job's
 		// progress bar.
-		err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			mu.Lock()
+		updatedTodoSpans := getTodoSpansForUpdate()
+		if updatedTodoSpans == nil {
+			return nil
+		}
+		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
+		if err != nil {
+			return err
+		}
+		if origNRanges == -1 {
+			origNRanges = nRanges
+		}
+		return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// No processor has returned completed spans yet.
-			if mu.updatedTodoSpans == nil {
-				mu.Unlock()
-				return nil
-			}
-			nRanges, err := sc.nRanges(ctx, txn, mu.updatedTodoSpans)
-			mu.Unlock()
-			if err != nil {
-				return err
-			}
-			if origNRanges == -1 {
-				origNRanges = nRanges
-			}
-
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
@@ -1193,21 +1185,18 @@ func (sc *SchemaChanger) distIndexBackfill(
 			}
 			return nil
 		})
-		return err
 	}
 
 	updateJobDetails = func() error {
-		err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			mu.Lock()
-			defer mu.Unlock()
+		updatedTodoSpans := getTodoSpansForUpdate()
+		return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// No processor has returned completed spans yet.
-			if mu.updatedTodoSpans == nil {
+			if updatedTodoSpans == nil {
 				return nil
 			}
-			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", mu.updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, mu.updatedTodoSpans, mutationIdx, txn, sc.job)
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
+			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
 		})
-		return err
 	}
 
 	// Setup periodic progress update.
@@ -1234,7 +1223,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	// Setup periodic job details update.
 	stopJobDetailsUpdate := make(chan struct{})
-	detailsDuration := 10 * time.Second
+	detailsDuration := indexBackfillCheckpointInterval.Get(&sc.settings.SV)
 	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(detailsDuration)
 		defer tick.Stop()
@@ -1283,19 +1272,17 @@ func (sc *SchemaChanger) distIndexBackfill(
 	return nil
 }
 
-// distBackfill runs (or continues) a backfill for the first mutation
+// distColumnBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
 // MutationFilter.
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
-func (sc *SchemaChanger) distBackfill(
+func (sc *SchemaChanger) distColumnBackfill(
 	ctx context.Context,
 	version descpb.DescriptorVersion,
-	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
-	targetSpans []roachpb.Span,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -1336,7 +1323,7 @@ func (sc *SchemaChanger) distBackfill(
 			// schema change state machine or from a previous backfill attempt,
 			// we scale that fraction of ranges completed by the remaining fraction
 			// of the job's progress bar.
-			nRanges, err := sc.nRanges(ctx, txn, todoSpans)
+			nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
 			if err != nil {
 				return err
 			}
@@ -1626,20 +1613,40 @@ func ValidateInvertedIndexes(
 			defer close(countReady[i])
 
 			start := timeutil.Now()
-			col := idx.InvertedColumnName()
+
+			colID := idx.InvertedColumnID()
+			col, err := tableDesc.FindColumnWithID(colID)
+			if err != nil {
+				return err
+			}
+
+			// colNameOrExpr is the column or expression indexed by the inverted
+			// index. It is used in the query below that verifies that the
+			// number of entries in the inverted index is correct. If the index
+			// is an expression index, the column name cannot be used because it
+			// is inaccessible; the query would result in a "column does not
+			// exist" error.
+			var colNameOrExpr string
+			if col.IsExpressionIndexColumn() {
+				colNameOrExpr = col.GetComputeExpr()
+			} else {
+				// Wrap the column name in double-quotes because it might
+				// contain special characters, like "-".
+				colNameOrExpr = fmt.Sprintf("%q", col.ColName())
+			}
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 				var stmt string
 				geoConfig := idx.GetGeoConfig()
 				if geoindex.IsEmptyConfig(&geoConfig) {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
-						col, idx.GetVersion(), tableDesc.GetID(),
+						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
+						colNameOrExpr, idx.GetVersion(), tableDesc.GetID(),
 					)
 				} else {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
-						tableDesc.GetID(), idx.GetID(), col, tableDesc.GetID(),
+						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %s)), 0) FROM [%d AS t]`,
+						tableDesc.GetID(), idx.GetID(), colNameOrExpr, tableDesc.GetID(),
 					)
 				}
 				// If the index is a partial index the predicate must be added
@@ -1661,8 +1668,8 @@ func ValidateInvertedIndexes(
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "column %s/%s expected inverted index count = %d, took %s",
-				tableDesc.GetName(), col, expectedCount[i], timeutil.Since(start))
+			log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
+				tableDesc.GetName(), colNameOrExpr, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
 	}
@@ -1781,12 +1788,12 @@ func ValidateForwardIndexes(
 
 					// For implicitly partitioned unique indexes, we need to independently
 					// validate that the non-implicitly partitioned columns are unique.
-					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns > 0 && !skipUniquenessChecks {
+					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 && !skipUniquenessChecks {
 						if err := validateUniqueConstraint(
 							ctx,
 							tableDesc,
 							idx.GetName(),
-							idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns:],
+							idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 							idx.GetPredicate(),
 							ie,
 							txn,
@@ -1961,9 +1968,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 ) error {
 	log.Infof(ctx, "clearing and backfilling columns")
 
-	if err := sc.distBackfill(
-		ctx, version, columnBackfill, columnBackfillBatchSize.Get(&sc.settings.SV),
-		backfill.ColumnMutationFilter, nil); err != nil {
+	if err := sc.distColumnBackfill(
+		ctx, version, columnBackfillBatchSize.Get(&sc.settings.SV),
+		backfill.ColumnMutationFilter); err != nil {
 		return err
 	}
 	log.Info(ctx, "finished clearing and backfilling columns")
@@ -1985,9 +1992,8 @@ func runSchemaChangesInTxn(
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
 		for _, drain := range tableDesc.DrainingNames {
-			err := catalogkv.RemoveObjectNamespaceEntry(ctx, planner.Txn(), planner.ExecCfg().Codec,
-				drain.ParentID, drain.ParentSchemaID, drain.Name, false /* KVTrace */)
-			if err != nil {
+			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
+			if err := planner.Txn().Del(ctx, key); err != nil {
 				return err
 			}
 		}
@@ -2039,7 +2045,10 @@ func runSchemaChangesInTxn(
 				return AlterColTypeInTxnNotSupportedErr
 			} else if col := m.AsColumn(); col != nil {
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
-					if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
+					if err := columnBackfillInTxn(
+						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
+						immutDesc, traceKV,
+					); err != nil {
 						return err
 					}
 					doneColumnBackfill = true
@@ -2060,7 +2069,8 @@ func runSchemaChangesInTxn(
 			if col := m.AsColumn(); col != nil {
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
-						ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
+						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
+						immutDesc, traceKV,
 					); err != nil {
 						return err
 					}
@@ -2188,7 +2198,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.Descriptors().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, planner.LeaseMgr(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2240,7 +2250,7 @@ func runSchemaChangesInTxn(
 			} else {
 				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
 				if err != nil {
-					return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
+					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.ReferencedTableID)
 				}
 				referencedTableDesc = lookup
 			}
@@ -2394,6 +2404,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
+	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
@@ -2409,8 +2420,11 @@ func columnBackfillInTxn(
 		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon")
 	}
 
+	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon); err != nil {
+	if err := backfiller.InitForLocalUse(
+		ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics,
+	); err != nil {
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -2418,7 +2432,7 @@ func columnBackfillInTxn(
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, sp, columnBackfillBatchSize.Get(&evalCtx.Settings.SV),
+			txn, tableDesc, sp, rowinfra.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV)),
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err
@@ -2448,7 +2462,9 @@ func indexBackfillInTxn(
 	}
 
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon); err != nil {
+	if err := backfiller.InitForLocalUse(
+		ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon,
+	); err != nil {
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -2480,9 +2496,13 @@ func indexTruncateInTxn(
 	alloc := &rowenc.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil /* requestedCols */)
+		internal := evalCtx.SessionData().Internal
+		rd := row.MakeDeleter(
+			execCfg.Codec, tableDesc, nil /* requestedCols */, &execCfg.Settings.SV, internal,
+			execCfg.GetRowMetrics(internal),
+		)
 		td := tableDeleter{rd: rd, alloc: alloc}
-		if err := td.init(ctx, txn, evalCtx); err != nil {
+		if err := td.init(ctx, txn, evalCtx, &evalCtx.Settings.SV); err != nil {
 			return err
 		}
 		var err error

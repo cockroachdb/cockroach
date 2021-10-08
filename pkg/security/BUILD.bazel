@@ -12,6 +12,7 @@ go_library(
         "ocsp.go",
         "password.go",
         "pem.go",
+        "permission_check.go",
         "tls.go",
         "tls_settings.go",
         "username.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
+        "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -43,7 +45,6 @@ go_library(
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
         "@org_golang_x_sync//errgroup",
-        "@org_golang_x_term//:term",
     ],
 )
 
@@ -60,6 +61,7 @@ go_test(
         "certs_test.go",
         "join_token_test.go",
         "main_test.go",
+        "permission_check_test.go",
         "tls_test.go",
         "username_test.go",
         "x509_test.go",
@@ -67,7 +69,7 @@ go_test(
     embed = [":security"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/security/securitytest",
         "//pkg/server",

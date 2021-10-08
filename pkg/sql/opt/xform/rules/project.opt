@@ -3,7 +3,7 @@
 # =============================================================================
 
 # EliminateIndexJoinInsideProject discards an IndexJoin operator inside a
-# Project operator when the input of the IndexJoin produces all the rows
+# Project operator when the input of the IndexJoin produces all the columns
 # required by the Project.
 #
 # This rule is useful when using partial indexes. When generating partial index
@@ -14,7 +14,7 @@
 #
 # Consider the example:
 #
-#   CREATE TABLE t (i INT, s STRING, INDEX (a) WHERE s = 'foo')
+#   CREATE TABLE t (i INT, s STRING, INDEX (i) WHERE s = 'foo')
 #
 #   SELECT i FROM t WHERE s = 'foo'
 #

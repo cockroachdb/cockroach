@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "memsize",
+    srcs = ["constants.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/memsize",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/util/duration",
+        "@com_github_cockroachdb_apd_v2//:apd",
+    ],
+)

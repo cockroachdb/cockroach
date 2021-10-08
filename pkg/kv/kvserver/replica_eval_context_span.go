@@ -13,11 +13,10 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -25,10 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -72,11 +70,6 @@ func (rec *SpanSetReplicaEvalContext) Clock() *hlc.Clock {
 	return rec.i.Clock()
 }
 
-// DB returns the Replica's client DB.
-func (rec *SpanSetReplicaEvalContext) DB() *kv.DB {
-	return rec.i.DB()
-}
-
 // GetConcurrencyManager returns the concurrency.Manager.
 func (rec *SpanSetReplicaEvalContext) GetConcurrencyManager() concurrency.Manager {
 	return rec.i.GetConcurrencyManager()
@@ -92,11 +85,6 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 	return rec.i.GetNodeLocality()
 }
 
-// Engine returns the engine.
-func (rec *SpanSetReplicaEvalContext) Engine() storage.Engine {
-	return rec.i.Engine()
-}
-
 // GetFirstIndex returns the first index.
 func (rec *SpanSetReplicaEvalContext) GetFirstIndex() (uint64, error) {
 	return rec.i.GetFirstIndex()
@@ -110,12 +98,6 @@ func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
 func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
 	return rec.i.GetLeaseAppliedIndex()
-}
-
-// GetTracker returns the min prop tracker that keeps tabs over ongoing command
-// evaluations for the closed timestamp subsystem.
-func (rec *SpanSetReplicaEvalContext) GetTracker() closedts.TrackerI {
-	return rec.i.GetTracker()
 }
 
 // IsFirstRange returns true iff the replica belongs to the first range.
@@ -165,12 +147,12 @@ func (rec SpanSetReplicaEvalContext) GetLastSplitQPS() float64 {
 // for the provided transaction information. See Replica.CanCreateTxnRecord
 // for details about its arguments, return values, and preconditions.
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
+	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
-	return rec.i.CanCreateTxnRecord(txnID, txnKey, txnMinTS)
+	return rec.i.CanCreateTxnRecord(ctx, txnID, txnKey, txnMinTS)
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
@@ -178,7 +160,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
+		roachpb.Span{Key: keys.RangeGCThresholdKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
 }
@@ -219,9 +201,7 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
-	ctx context.Context,
-) (rspb.ReadSummary, hlc.Timestamp) {
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
@@ -236,9 +216,9 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
 	return rec.i.GetCurrentReadSummary(ctx)
 }
 
-// GetLimiters returns the per-store limiters.
-func (rec *SpanSetReplicaEvalContext) GetLimiters() *batcheval.Limiters {
-	return rec.i.GetLimiters()
+// GetClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	return rec.i.GetClosedTimestamp(ctx)
 }
 
 // GetExternalStorage returns an ExternalStorage object, based on
@@ -265,4 +245,9 @@ func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roach
 // completes.
 func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 	return rec.i.WatchForMerge(ctx)
+}
+
+// GetResponseMemoryAccount implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccount {
+	return rec.i.GetResponseMemoryAccount()
 }

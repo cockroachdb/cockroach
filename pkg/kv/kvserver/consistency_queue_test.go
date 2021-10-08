@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -27,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,12 +70,12 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 		return testStart, nil
 	}
 
-	isNodeLive := func(nodeID roachpb.NodeID) (bool, error) {
-		return live, nil
+	isNodeAvailable := func(nodeID roachpb.NodeID) bool {
+		return live
 	}
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeAvailable,
 		false, interval); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
@@ -83,7 +83,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	live = false
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeAvailable,
 		false, interval); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
@@ -233,12 +233,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// good to make sure we're overly redacting said diff.
 	defer log.TestingSetRedactable(true)()
 
-	if testing.Short() {
-		// Takes 30s as of 2020/07. The test uses on-disk stores because nodes get
-		// killed, and for some reason using the on-disk stores seems to cause
-		// WaitForFullReplication() to take forever.
-		skip.UnderShort(t)
-	}
+	// Test uses sticky registry to have persistent pebble state that could
+	// be analyzed for existence of snapshots and to verify snapshot content
+	// after failures.
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
 	const numStores = 3
 	testKnobs := kvserver.StoreTestingKnobs{
@@ -311,19 +310,19 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		notifyFatal <- struct{}{}
 	}
 
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
 	serverArgsPerNode := make(map[int]base.TestServerArgs)
 	for i := 0; i < numStores; i++ {
 		testServerArgs := base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &testKnobs,
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEngineRegistry,
+				},
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					Path:     filepath.Join(dir, fmt.Sprintf("%d", i)),
-					InMemory: false,
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 		}
@@ -353,7 +352,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runCheck := func() *roachpb.CheckConsistencyResponse {
+	runConsistencyCheck := func() *roachpb.CheckConsistencyResponse {
 		checkArgs := roachpb.CheckConsistencyRequest{
 			RequestHeader: roachpb.RequestHeader{
 				// span of keys that include "a" & "c".
@@ -369,20 +368,28 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		return resp.(*roachpb.CheckConsistencyResponse)
 	}
 
-	checkpoints := func(nodeIdx int) []string {
+	onDiskCheckpointPaths := func(nodeIdx int) []string {
 		testServer := tc.Servers[nodeIdx]
+		fs, pErr := stickyEngineRegistry.GetUnderlyingFS(
+			base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(nodeIdx), 10)})
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 		testStore, pErr := testServer.Stores().GetStore(testServer.GetFirstStoreID())
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		pat := filepath.Join(testStore.Engine().GetAuxiliaryDir(), "checkpoints") + "/*"
-		m, err := filepath.Glob(pat)
-		assert.NoError(t, err)
-		return m
+		checkpointPath := filepath.Join(testStore.Engine().GetAuxiliaryDir(), "checkpoints")
+		checkpoints, _ := fs.List(checkpointPath)
+		var checkpointPaths []string
+		for _, cpDirName := range checkpoints {
+			checkpointPaths = append(checkpointPaths, filepath.Join(checkpointPath, cpDirName))
+		}
+		return checkpointPaths
 	}
 
 	// Run the check the first time, it shouldn't find anything.
-	respOK := runCheck()
+	respOK := runConsistencyCheck()
 	assert.Len(t, respOK.Result, 1)
 	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, respOK.Result[0].Status)
 	select {
@@ -395,7 +402,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// No checkpoints should have been created.
 	for i := 0; i < numStores; i++ {
-		assert.Empty(t, checkpoints(i))
+		assert.Empty(t, onDiskCheckpointPaths(i))
 	}
 
 	// Write some arbitrary data only to store 1. Inconsistent key "e"!
@@ -414,7 +421,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	// Run consistency check again, this time it should find something.
-	resp := runCheck()
+	resp := runConsistencyCheck()
 
 	select {
 	case <-notifyReportDiff:
@@ -429,15 +436,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Checkpoints should have been created on all stores and they're not empty.
 	for i := 0; i < numStores; i++ {
-		cps := checkpoints(i)
+		cps := onDiskCheckpointPaths(i)
 		assert.Len(t, cps, 1)
-		cpEng, err := storage.NewDefaultEngine(
-			1<<20,
-			base.StorageConfig{
-				Dir: cps[0],
-			},
-		)
+
+		// Create a new store on top of checkpoint location inside existing in mem
+		// VFS to verify its contents.
+		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		assert.NoError(t, err)
+		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
 		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
@@ -570,17 +576,10 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := pebble.NewCache(1 << 20)
-		defer cache.Unref()
-		opts := storage.DefaultPebbleOptions()
-		opts.Cache = cache
-		eng, err := storage.NewPebble(ctx, storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Dir:       path,
-				MustExist: true,
-			},
-			Opts: opts,
-		})
+		eng, err := storage.Open(ctx,
+			storage.Filesystem(path),
+			storage.CacheSize(1<<20 /* 1 MiB */),
+			storage.MustExist)
 		if err != nil {
 			t.Fatal(err)
 		}

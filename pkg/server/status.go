@@ -54,9 +54,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -87,6 +86,9 @@ const (
 
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
+
+	// loadStatusVars exposes prometheus metrics for instant monitoring of CPU load.
+	loadStatusVars = statusPrefix + "load"
 
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
@@ -128,12 +130,21 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 // baseStatusServer implements functionality shared by the tenantStatusServer
 // and the full statusServer.
 type baseStatusServer struct {
+	// Embedding the UnimplementedStatusServer lets us easily support
+	// treating the tenantStatusServer as implementing the StatusServer
+	// interface. We'd return an unimplemented error for the methods we
+	// didn't require anyway.
+	serverpb.UnimplementedStatusServer
+
 	log.AmbientContext
 	privilegeChecker   *adminPrivilegeChecker
 	sessionRegistry    *sql.SessionRegistry
 	contentionRegistry *contention.Registry
+	flowScheduler      *flowinfra.FlowScheduler
 	st                 *cluster.Settings
 	sqlServer          *SQLServer
+	rpcCtx             *rpc.Context
+	stopper            *stop.Stopper
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -290,10 +301,10 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	return nil
 }
 
-// hasContentionEventsPermissions checks whether the session user is allowed to
-// query contention events (which is the case when it is a superuser or has
-// VIEWACTIVITY permission) and returns an error if not.
-func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) error {
+// hasViewActivityPermissions checks whether the session user has permissions to
+// view the activity on the server (which is the case when it is a superuser or
+// has VIEWACTIVITY permission) and returns an error if not.
+func (b *baseStatusServer) hasViewActivityPermissions(ctx context.Context) error {
 	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
 		return err
@@ -304,26 +315,79 @@ func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) e
 	}
 	if !isAdmin && !hasViewActivity {
 		// Only superusers and users with VIEWACTIVITY permission are allowed
-		// to query contention information.
+		// to view the activity on the server.
 		return status.Errorf(
 			codes.PermissionDenied,
-			"client user %q does not have permission to view contention events",
+			"client user %q does not have permission to view the activity",
 			sessionUser)
 	}
 	return nil
 }
 
-func (b *baseStatusServer) getLocalContentionEvents(
+// ListLocalContentionEvents returns a list of contention events on this node.
+func (b *baseStatusServer) ListLocalContentionEvents(
 	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
-) (contentionpb.SerializedRegistry, error) {
+) (*serverpb.ListContentionEventsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	if err := b.hasContentionEventsPermissions(ctx); err != nil {
-		return contentionpb.SerializedRegistry{}, err
+	if err := b.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
 	}
 
-	return b.contentionRegistry.Serialize(), nil
+	return &serverpb.ListContentionEventsResponse{
+		Events: b.contentionRegistry.Serialize(),
+	}, nil
+}
+
+func (b *baseStatusServer) ListLocalDistSQLFlows(
+	ctx context.Context, _ *serverpb.ListDistSQLFlowsRequest,
+) (*serverpb.ListDistSQLFlowsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	if err := b.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	nodeIDOrZero, _ := b.sqlServer.sqlIDContainer.OptionalNodeID()
+
+	running, runningSince, queued, queuedSince := b.flowScheduler.Serialize()
+	if len(running) != len(runningSince) {
+		return nil, errors.Errorf("mismatched lengths of running and runningSince")
+	}
+	if len(queued) != len(queuedSince) {
+		return nil, errors.Errorf("mismatched lengths of queued and queuedSince")
+	}
+	response := &serverpb.ListDistSQLFlowsResponse{
+		Flows: make([]serverpb.DistSQLRemoteFlows, 0, len(running)+len(queued)),
+	}
+	for i, f := range running {
+		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
+			FlowID: f,
+			Infos: []serverpb.DistSQLRemoteFlows_Info{{
+				NodeID:    nodeIDOrZero,
+				Timestamp: runningSince[i],
+				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
+			}},
+		})
+	}
+	for i, f := range queued {
+		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
+			FlowID: f,
+			Infos: []serverpb.DistSQLRemoteFlows_Info{{
+				NodeID:    nodeIDOrZero,
+				Timestamp: queuedSince[i],
+				Status:    serverpb.DistSQLRemoteFlows_QUEUED,
+			}},
+		})
+	}
+	// Per the contract of serverpb.ListDistSQLFlowsResponse, sort the flows
+	// lexicographically by FlowID.
+	sort.Slice(response.Flows, func(i, j int) bool {
+		return bytes.Compare(response.Flows[i].FlowID.GetBytes(), response.Flows[j].FlowID.GetBytes()) < 0
+	})
+	return response, nil
 }
 
 // A statusServer provides a RESTful status API.
@@ -337,9 +401,7 @@ type statusServer struct {
 	metricSource             metricMarshaler
 	nodeLiveness             *liveness.NodeLiveness
 	storePool                *kvserver.StorePool
-	rpcCtx                   *rpc.Context
 	stores                   *kvserver.Stores
-	stopper                  *stop.Stopper
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
@@ -372,6 +434,7 @@ func newStatusServer(
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
+	flowScheduler *flowinfra.FlowScheduler,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
@@ -381,7 +444,10 @@ func newStatusServer(
 			privilegeChecker:   adminServer.adminPrivilegeChecker,
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
+			flowScheduler:      flowScheduler,
 			st:                 st,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -390,9 +456,7 @@ func newStatusServer(
 		metricSource:     metricSource,
 		nodeLiveness:     nodeLiveness,
 		storePool:        storePool,
-		rpcCtx:           rpcCtx,
 		stores:           stores,
-		stopper:          stopper,
 		internalExecutor: internalExecutor,
 	}
 
@@ -598,23 +662,11 @@ func (s *statusServer) Allocator(
 
 func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.TraceEvent {
 	var output []*serverpb.TraceEvent
-	var buf bytes.Buffer
 	for _, sp := range spans {
 		for _, entry := range sp.Logs {
 			event := &serverpb.TraceEvent{
-				Time: entry.Time,
-			}
-			if len(entry.Fields) == 1 {
-				event.Message = entry.Fields[0].Value
-			} else {
-				buf.Reset()
-				for i, f := range entry.Fields {
-					if i != 0 {
-						buf.WriteByte(' ')
-					}
-					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
-				}
-				event.Message = buf.String()
+				Time:    entry.Time,
+				Message: entry.Msg().StripMarkers(),
 			}
 			output = append(output, event)
 		}
@@ -942,6 +994,24 @@ func checkFilePattern(pattern string) error {
 }
 
 // LogFilesList returns a list of available log files.
+//
+// Note that even though the FileInfo struct does not store the path
+// to the log file(s), each file can be mapped back to its directory
+// reliably via LogFile(), thanks to the unique file group names in
+// the log configuration. For example, consider the following config:
+//
+// file-groups:
+//    groupA:
+//      dir: dir1
+//    groupB:
+//      dir: dir2
+//
+// The result of ListLogFiles on this config will return the list
+// {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without
+// directory information. This can be mapped back to dir1 and dir2 via the
+// configuration. We know that groupA files cannot be in dir2 because
+// the group names are unique under file-groups and so there cannot be
+// two different groups with the same name and different directories.
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
@@ -972,6 +1042,9 @@ func (s *statusServer) LogFilesList(
 }
 
 // LogFile returns a single log file.
+//
+// See the comment on LogfilesList() to understand why+how log file
+// names are mapped to their full path.
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
@@ -1001,14 +1074,17 @@ func (s *statusServer) LogFile(
 	log.Flush()
 
 	// Read the logs.
-	reader, err := log.GetLogReader(req.File, true /* restricted */)
-	if reader == nil || err != nil {
-		return nil, fmt.Errorf("log file %s could not be opened: %s", req.File, err)
+	reader, err := log.GetLogReader(req.File)
+	if err != nil {
+		return nil, errors.Wrapf(err, "log file %q could not be opened", req.File)
 	}
 	defer reader.Close()
 
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader, inputEditMode)
+	decoder, err := log.NewEntryDecoder(reader, inputEditMode)
+	if err != nil {
+		return nil, err
+	}
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
@@ -1165,8 +1241,6 @@ func (s *statusServer) Stacks(
 			}
 			return &serverpb.JSONResponse{Data: buf[:length]}, nil
 		}
-	case serverpb.StacksType_THREAD_STACKS:
-		return &serverpb.JSONResponse{Data: []byte(storage.ThreadStacks())}, nil
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
@@ -1175,7 +1249,8 @@ func (s *statusServer) Stacks(
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
 // this one allows querying by NodeID.
 //
-// Profile returns a heap profile.
+// Profile returns a heap profile. This endpoint is used by the
+// `pprofui` package to satisfy local and remote pprof requests.
 func (s *statusServer) Profile(
 	ctx context.Context, req *serverpb.ProfileRequest,
 ) (*serverpb.JSONResponse, error) {
@@ -1199,20 +1274,20 @@ func (s *statusServer) Profile(
 		return status.Profile(ctx, req)
 	}
 
+	return profileLocal(ctx, req, s.st)
+}
+
+func profileLocal(
+	ctx context.Context, req *serverpb.ProfileRequest, st *cluster.Settings,
+) (*serverpb.JSONResponse, error) {
 	switch req.Type {
-	case serverpb.ProfileRequest_HEAP:
-		p := pprof.Lookup("heap")
-		if p == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: heap")
-		}
-		var buf bytes.Buffer
-		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	case serverpb.ProfileRequest_CPU:
 		var buf bytes.Buffer
-		if err := debug.CPUProfileDo(s.st, cluster.CPUProfileWithLabels, func() error {
+		profileType := cluster.CPUProfileDefault
+		if req.Labels {
+			profileType = cluster.CPUProfileWithLabels
+		}
+		if err := debug.CPUProfileDo(st, profileType, func() error {
 			duration := 30 * time.Second
 			if req.Seconds != 0 {
 				duration = time.Duration(req.Seconds) * time.Second
@@ -1232,11 +1307,78 @@ func (s *statusServer) Profile(
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+		name, ok := serverpb.ProfileRequest_Type_name[int32(req.Type)]
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %d", req.Type)
+		}
+		name = strings.ToLower(name)
+		p := pprof.Lookup(name)
+		if p == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
+		}
+		var buf bytes.Buffer
+		if err := p.WriteTo(&buf, 0); err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
 }
 
+// Regions implements the serverpb.Status interface.
+func (s *statusServer) Regions(
+	ctx context.Context, req *serverpb.RegionsRequest,
+) (*serverpb.RegionsResponse, error) {
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	if err != nil {
+		return nil, err
+	}
+	return regionsResponseFromNodesResponse(resp), nil
+}
+
+func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.RegionsResponse {
+	regionsToZones := make(map[string]map[string]struct{})
+	for _, node := range nr.Nodes {
+		var region string
+		var zone string
+		for _, tier := range node.Desc.Locality.Tiers {
+			switch tier.Key {
+			case "region":
+				region = tier.Value
+			case "zone", "availability-zone", "az":
+				zone = tier.Value
+			}
+		}
+		if region == "" {
+			continue
+		}
+		if _, ok := regionsToZones[region]; !ok {
+			regionsToZones[region] = make(map[string]struct{})
+		}
+		if zone != "" {
+			regionsToZones[region][zone] = struct{}{}
+		}
+	}
+	ret := &serverpb.RegionsResponse{
+		Regions: make(map[string]*serverpb.RegionsResponse_Region, len(regionsToZones)),
+	}
+	for region, zones := range regionsToZones {
+		zonesArr := make([]string, 0, len(zones))
+		for z := range zones {
+			zonesArr = append(zonesArr, z)
+		}
+		sort.Strings(zonesArr)
+		ret.Regions[region] = &serverpb.RegionsResponse_Region{
+			Zones: zonesArr,
+		}
+	}
+	return ret
+}
+
 // Nodes returns all node statuses.
+//
+// Do not use this method inside the server code! Use
+// ListNodesInternal() instead.
+// This method here is the one exposed to network clients over HTTP.
 //
 // The LivenessByNodeID in the response returns the known liveness
 // information according to gossip. Nodes for which there is no gossip
@@ -1246,7 +1388,22 @@ func (s *statusServer) Profile(
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	return resp, err
+}
+
+// ListNodesInternal is a helper function for the benefit of SQL exclusively.
+// It skips the privilege check, assuming that SQL is doing privilege checking already.
+func (s *statusServer) ListNodesInternal(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
 	return resp, err
 }
 
@@ -1255,6 +1412,7 @@ func (s *statusServer) nodesHelper(
 ) (*serverpb.NodesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -1293,7 +1451,7 @@ func (s *statusServer) nodesHelper(
 func (s *statusServer) nodesStatusWithLiveness(
 	ctx context.Context,
 ) (map[roachpb.NodeID]nodeStatusWithLiveness, error) {
-	nodes, err := s.Nodes(ctx, nil)
+	nodes, err := s.ListNodesInternal(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1327,6 +1485,13 @@ func (s *statusServer) Node(
 ) (*statuspb.NodeStatus, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1381,7 +1546,7 @@ func (s *statusServer) RaftDebug(
 		return nil, err
 	}
 
-	nodes, err := s.Nodes(ctx, nil)
+	nodes, err := s.ListNodesInternal(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1591,6 +1756,20 @@ func (s *statusServer) rangesHelper(
 		span.StartKey = desc.StartKey.String()
 		span.EndKey = desc.EndKey.String()
 		state := rep.State(ctx)
+		var topKLocksByWaiters []serverpb.RangeInfo_LockInfo
+		for _, lm := range metrics.LockTableMetrics.TopKLocksByWaiters {
+			if lm.Key == nil {
+				break
+			}
+			topKLocksByWaiters = append(topKLocksByWaiters, serverpb.RangeInfo_LockInfo{
+				PrettyKey:      lm.Key.String(),
+				Key:            lm.Key,
+				Held:           lm.Held,
+				Waiters:        lm.Waiters,
+				WaitingReaders: lm.WaitingReaders,
+				WaitingWriters: lm.WaitingWriters,
+			})
+		}
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1612,11 +1791,15 @@ func (s *statusServer) rangesHelper(
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 			},
-			LatchesLocal:  metrics.LatchInfoLocal,
-			LatchesGlobal: metrics.LatchInfoGlobal,
-			LeaseStatus:   metrics.LeaseStatus,
-			Quiescent:     metrics.Quiescent,
-			Ticking:       metrics.Ticking,
+			LeaseStatus:                 metrics.LeaseStatus,
+			Quiescent:                   metrics.Quiescent,
+			Ticking:                     metrics.Ticking,
+			ReadLatches:                 metrics.LatchMetrics.ReadCount,
+			WriteLatches:                metrics.LatchMetrics.WriteCount,
+			Locks:                       metrics.LockTableMetrics.Locks,
+			LocksWithWaitQueues:         metrics.LockTableMetrics.LocksWithWaitQueues,
+			LockWaitQueueWaiters:        metrics.LockTableMetrics.Waiters,
+			TopKLocksByWaitQueueWaiters: topKLocksByWaiters,
 		}
 	}
 
@@ -1845,17 +2028,6 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
-// ListLocalContentionEvents returns a list of contention events on this node.
-func (s *statusServer) ListLocalContentionEvents(
-	ctx context.Context, req *serverpb.ListContentionEventsRequest,
-) (*serverpb.ListContentionEventsResponse, error) {
-	events, err := s.getLocalContentionEvents(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return &serverpb.ListContentionEventsResponse{Events: events}, nil
-}
-
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
@@ -1910,9 +2082,13 @@ func (s *statusServer) iterateNodes(
 	defer cancel()
 	for nodeID := range nodeStatuses {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
-		if err := s.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
-			sem, true, /* wait */
+		if err := s.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+				Sem:        sem,
+				WaitForSem: true,
+			},
 			func(ctx context.Context) { nodeQuery(ctx, nodeID) },
 		); err != nil {
 			return err
@@ -2001,9 +2177,13 @@ func (s *statusServer) paginatedIterateNodes(
 	for idx, nodeID := range nodeIDs {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
 		idx := idx
-		if err := s.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
-			sem, true, /* wait */
+		if err := s.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+				Sem:        sem,
+				WaitForSem: true,
+			},
 			func(ctx context.Context) { paginator.queryNode(ctx, nodeID, idx) },
 		); err != nil {
 			return pagState, err
@@ -2152,7 +2332,7 @@ func (s *statusServer) ListContentionEvents(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Check permissions early to avoid fan-out to all nodes.
-	if err := s.hasContentionEventsPermissions(ctx); err != nil {
+	if err := s.hasViewActivityPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2180,7 +2360,7 @@ func (s *statusServer) ListContentionEvents(
 		response.Events = contention.MergeSerializedRegistries(response.Events, events)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		errResponse := serverpb.ListContentionEventsError{NodeID: nodeID, Message: err.Error()}
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
 		response.Errors = append(response.Errors, errResponse)
 	}
 
@@ -2188,6 +2368,96 @@ func (s *statusServer) ListContentionEvents(
 		return nil, err
 	}
 	return &response, nil
+}
+
+func (s *statusServer) ListDistSQLFlows(
+	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
+) (*serverpb.ListDistSQLFlowsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
+	}
+
+	var response serverpb.ListDistSQLFlowsResponse
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalDistSQLFlows(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Errors) > 0 {
+			return nil, errors.Errorf("%s", resp.Errors[0].Message)
+		}
+		return resp, nil
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		flows := nodeResp.(*serverpb.ListDistSQLFlowsResponse).Flows
+		response.Flows = mergeDistSQLRemoteFlows(response.Flows, flows)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := s.iterateNodes(ctx, "distsql flows list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+// mergeDistSQLRemoteFlows takes in two slices of DistSQL remote flows (that
+// satisfy the contract of serverpb.ListDistSQLFlowsResponse) and merges them
+// together while adhering to the same contract.
+//
+// It is assumed that if serverpb.DistSQLRemoteFlows for a particular FlowID
+// appear in both arguments - let's call them flowsA and flowsB for a and b,
+// respectively - then there are no duplicate NodeIDs among flowsA and flowsB.
+func mergeDistSQLRemoteFlows(a, b []serverpb.DistSQLRemoteFlows) []serverpb.DistSQLRemoteFlows {
+	maxLength := len(a)
+	if len(b) > len(a) {
+		maxLength = len(b)
+	}
+	result := make([]serverpb.DistSQLRemoteFlows, 0, maxLength)
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		cmp := bytes.Compare(a[aIter].FlowID.GetBytes(), b[bIter].FlowID.GetBytes())
+		if cmp < 0 {
+			result = append(result, a[aIter])
+			aIter++
+		} else if cmp > 0 {
+			result = append(result, b[bIter])
+			bIter++
+		} else {
+			r := a[aIter]
+			// No need to perform any kind of de-duplication because a
+			// particular flow will be reported at most once by each node in the
+			// cluster.
+			r.Infos = append(r.Infos, b[bIter].Infos...)
+			sort.Slice(r.Infos, func(i, j int) bool {
+				return r.Infos[i].NodeID < r.Infos[j].NodeID
+			})
+			result = append(result, r)
+			aIter++
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		result = append(result, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		result = append(result, b[bIter:]...)
+	}
+	return result
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

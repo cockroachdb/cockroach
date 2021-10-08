@@ -45,7 +45,7 @@ func NewWindowSortingPartitioner(
 	}
 
 	var distinctCol []bool
-	input, distinctCol, err = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
+	input, distinctCol, err = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps, false /* nullsAreDistinct */)
 	if err != nil {
 		return nil, err
 	}

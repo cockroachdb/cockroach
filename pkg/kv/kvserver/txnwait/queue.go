@@ -609,7 +609,10 @@ func (q *Queue) MaybeWaitForPush(
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
 				log.VEventf(ctx, 1, "pusher committed: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionCommittedStatusError(), updatedPusher)
+				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
+					roachpb.TransactionStatusError_REASON_TXN_COMMITTED,
+					"already committed"),
+					updatedPusher)
 			case roachpb.ABORTED:
 				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
 				return nil, roachpb.NewErrorWithTxn(

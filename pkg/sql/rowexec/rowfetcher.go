@@ -22,18 +22,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
-// rowFetcher is an interface used to abstract a row fetcher so that a stat
+// rowFetcher is an interface used to abstract a row.Fetcher so that a stat
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, limitBatches bool,
-		limitHint int64, traceKV bool, forceProductionKVBatchSize bool,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
 	StartInconsistentScan(
 		_ context.Context,
@@ -41,8 +42,8 @@ type rowFetcher interface {
 		initialTimestamp hlc.Timestamp,
 		maxTimestampAge time.Duration,
 		spans roachpb.Spans,
-		limitBatches bool,
-		limitHint int64,
+		batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
 	) error
@@ -98,6 +99,7 @@ func initRowFetcher(
 		reverseScan,
 		lockStrength,
 		lockWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
 		isCheck,
 		alloc,
 		mon,

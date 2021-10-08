@@ -361,7 +361,7 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	case types.GeographyFamily:
 		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
 	default:
-		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.StrictIndexColumnIDGuaranteesVersion)
 	}
 
 	if err != nil {
@@ -625,9 +625,6 @@ func postgresMutator(rng *rand.Rand, q string) string {
 		":::":     "::",
 		"STRING":  "TEXT",
 		"BYTES":   "BYTEA",
-		"FLOAT4":  "FLOAT8",
-		"INT2":    "INT8",
-		"INT4":    "INT8",
 		"STORING": "INCLUDE",
 		" AS (":   " GENERATED ALWAYS AS (",
 		",)":      ")",
@@ -816,7 +813,8 @@ func postgresCreateTableMutator(
 								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
 									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
 									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
-										referencedType.Family() == types.OidFamily
+										referencedType.Family() == types.OidFamily ||
+										referencedType.Family() == types.DateFamily
 									if isContextDependentType &&
 										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
 										def.Computed.Expr = &tree.CaseExpr{

@@ -101,12 +101,15 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
-	conv, err := row.NewDatumRowConverter(ctx,
-		sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil /* seqChunkProvider */)
+	semaCtx := tree.MakeSemaContext()
+	conv, err := row.NewDatumRowConverter(
+		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
+		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(),
+	)
 	if err != nil {
 		return err
 	}
-	if conv.EvalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData() == nil {
 		panic("uninitialized session data")
 	}
 

@@ -39,8 +39,8 @@ type NodeIterator func(n *scpb.Node) error
 // ForEachNode iterates the nodes in the graph.
 func (g *Graph) ForEachNode(it NodeIterator) error {
 	for _, m := range g.targetNodes {
-		for i := 0; i < scpb.NumStates; i++ {
-			if ts, ok := m[scpb.State(i)]; ok {
+		for i := 0; i < scpb.NumStatus; i++ {
+			if ts, ok := m[scpb.Status(i)]; ok {
 				if err := it(ts); err != nil {
 					if iterutil.Done(err) {
 						err = nil

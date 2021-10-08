@@ -109,11 +109,11 @@ func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
 
 // CommitTimestampFixed is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestampFixed() bool {
-	panic("unimplemented")
+	return m.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
+func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) error {
 	m.txn.WriteTimestamp = ts
 	m.txn.ReadTimestamp = ts
 	m.txn.GlobalUncertaintyLimit = ts
@@ -122,6 +122,7 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
 	m.txn.MinTimestamp.Backward(ts)
+	return nil
 }
 
 // RequiredFrontier is part of the TxnSender interface.
@@ -158,6 +159,9 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
+
+// IsLocking is part of the TxnSender interface.
+func (m *MockTransactionalSender) IsLocking() bool { return false }
 
 // TestingCloneTxn is part of the TxnSender interface.
 func (m *MockTransactionalSender) TestingCloneTxn() *roachpb.Transaction {
@@ -217,6 +221,7 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error)
+	nonTxnSenderFunc Sender
 }
 
 var _ TxnSenderFactory = MockTxnSenderFactory{}
@@ -234,6 +239,21 @@ func MakeMockTxnSenderFactory(
 	}
 }
 
+// MakeMockTxnSenderFactoryWithNonTxnSender creates a MockTxnSenderFactory from
+// two sender functions: one for transactional and one for non-transactional
+// requests.
+func MakeMockTxnSenderFactoryWithNonTxnSender(
+	senderFunc func(
+		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error),
+	nonTxnSenderFunc SenderFunc,
+) MockTxnSenderFactory {
+	return MockTxnSenderFactory{
+		senderFunc:       senderFunc,
+		nonTxnSenderFunc: nonTxnSenderFunc,
+	}
+}
+
 // RootTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) RootTransactionalSender(
 	txn *roachpb.Transaction, _ roachpb.UserPriority,
@@ -248,5 +268,5 @@ func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputS
 
 // NonTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) NonTransactionalSender() Sender {
-	return nil
+	return f.nonTxnSenderFunc
 }

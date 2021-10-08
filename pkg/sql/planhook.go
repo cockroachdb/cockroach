@@ -16,15 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -86,18 +87,20 @@ type PlanHookState interface {
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
-	EvalAsOfTimestamp(ctx context.Context, asOf tree.AsOfClause) (hlc.Timestamp, error)
-	ResolveUncachedDatabaseByName(
-		ctx context.Context, dbName string, required bool) (catalog.DatabaseDescriptor, error)
-	ResolveMutableTableDescriptor(
-		ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
-	) (table *tabledesc.Mutable, err error)
+	EvalAsOfTimestamp(
+		ctx context.Context,
+		asOf tree.AsOfClause,
+		opts ...tree.EvalAsOfTimestampOption,
+	) (tree.AsOfSystemTime, error)
+	ResolveMutableTableDescriptor(ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
 	MigrationJobDeps() migration.JobDeps
+	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
+	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

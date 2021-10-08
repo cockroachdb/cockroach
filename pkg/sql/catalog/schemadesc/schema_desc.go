@@ -16,11 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -37,6 +38,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+}
+
+func (desc *immutable) SchemaKind() catalog.ResolvedSchemaKind {
+	return catalog.SchemaUserDefined
 }
 
 // SafeMessage makes immutable a SafeMessager.
@@ -69,6 +74,10 @@ type Mutable struct {
 	immutable
 
 	ClusterVersion *immutable
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 var _ redact.SafeMessager = (*immutable)(nil)
@@ -141,13 +150,13 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Schema))
+	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Schema))
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
-	return catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
+func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+	return catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID()), nil
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.
@@ -198,9 +207,6 @@ func (desc *immutable) ValidateTxnCommit(
 ) {
 	// No-op.
 }
-
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *immutable) NameResolutionResult() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
@@ -282,11 +288,17 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *Mutable) HasPostDeserializationChanges() bool {
+	return desc.changed
+}
+
 // IsSchemaNameValid returns whether the input name is valid for a user defined
 // schema.
 func IsSchemaNameValid(name string) error {
 	// Schemas starting with "pg_" are not allowed.
-	if strings.HasPrefix(name, sessiondata.PgSchemaPrefix) {
+	if strings.HasPrefix(name, catconstants.PgSchemaPrefix) {
 		err := pgerror.Newf(pgcode.ReservedName, "unacceptable schema name %q", name)
 		err = errors.WithDetail(err, `The prefix "pg_" is reserved for system schemas.`)
 		return err

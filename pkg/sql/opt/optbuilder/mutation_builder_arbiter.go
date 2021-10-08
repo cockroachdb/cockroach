@@ -208,7 +208,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
@@ -294,7 +294,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
@@ -502,7 +502,7 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
 				includeMutations:       false,
 				includeSystem:          false,
-				includeVirtualInverted: false,
+				includeInverted:        false,
 				includeVirtualComputed: true,
 			}),
 			nil, /* indexFlags */
@@ -544,7 +544,7 @@ func (h *arbiterPredicateHelper) partialUniqueConstraintPredicate(
 
 // arbiterFilters returns a scalar expression representing the arbiter
 // predicate. If the arbiter predicate contains non-immutable operators,
-// ok=true is returned.
+// ok=false is returned.
 func (h *arbiterPredicateHelper) arbiterFilters() (_ memo.FiltersExpr, ok bool) {
 	// The filters have been initialized if they are non-nil or
 	// invalidArbiterPredicate has been set to true.

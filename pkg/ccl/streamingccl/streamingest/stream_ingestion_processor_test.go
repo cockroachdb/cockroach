@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +72,6 @@ func (m *mockStreamClient) ConsumePartition(
 	}
 
 	eventCh := make(chan streamingccl.Event, len(events))
-
 	for _, event := range events {
 		eventCh <- event
 	}
@@ -170,6 +171,58 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		row, meta := out.Next()
 		require.Nil(t, row)
 		testutils.IsError(meta.Err, "this client always returns an error")
+	})
+
+	t.Run("stream ingestion processor shuts down gracefully on losing client connection", func(t *testing.T) {
+		events := []streamingccl.Event{streamingccl.MakeGenerationEvent()}
+		pa := streamingccl.PartitionAddress("partition")
+		mockClient := &mockStreamClient{
+			partitionEvents: map[streamingccl.PartitionAddress][]streamingccl.Event{pa: events},
+		}
+
+		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		partitionAddresses := []streamingccl.PartitionAddress{"partition"}
+
+		processEventCh := make(chan struct{})
+		defer close(processEventCh)
+		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) {
+			processEventCh <- struct{}{}
+		}}
+		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
+			partitionAddresses, startTime, nil /* interceptEvents */, mockClient, streamingTestingKnob)
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sip.Run(ctx)
+		}()
+
+		// The channel will block on read if the event has not been intercepted yet.
+		// Once it unblocks, we are guaranteed that the mockClient has sent the
+		// GenerationEvent and the processor has read it.
+		<-processEventCh
+
+		// The sip processor has received a GenerationEvent and is thus
+		// waiting for a cutover signal, so let's send one!
+		sip.cutoverCh <- struct{}{}
+
+		wg.Wait()
+		// Ensure that all the outputs are properly closed.
+		if !out.ProducerClosed() {
+			t.Fatalf("output RowReceiver not closed")
+		}
+
+		for {
+			// No metadata should have been produced since the processor
+			// should have been moved to draining state with a nil error.
+			row := out.NextNoMeta(t)
+			if row == nil {
+				break
+			}
+			t.Fatalf("more output rows than expected")
+		}
 	})
 }
 
@@ -379,6 +432,31 @@ func runStreamIngestionProcessor(
 	interceptEvents []streamclient.InterceptFn,
 	mockClient streamclient.Client,
 ) (*distsqlutils.RowBuffer, error) {
+	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr,
+		partitionAddresses, startTime, interceptEvents, mockClient, nil /* streamingTestingKnobs */)
+	require.NoError(t, err)
+
+	sip.Run(ctx)
+
+	// Ensure that all the outputs are properly closed.
+	if !out.ProducerClosed() {
+		t.Fatalf("output RowReceiver not closed")
+	}
+	return out, err
+}
+
+func getStreamIngestionProcessor(
+	ctx context.Context,
+	t *testing.T,
+	registry *jobs.Registry,
+	kvDB *kv.DB,
+	streamAddr string,
+	partitionAddresses []streamingccl.PartitionAddress,
+	startTime hlc.Timestamp,
+	interceptEvents []streamclient.InterceptFn,
+	mockClient streamclient.Client,
+	streamingTestingKnobs *sql.StreamingTestingKnobs,
+) (*streamIngestionProcessor, *distsqlutils.RowBuffer, error) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
@@ -387,9 +465,10 @@ func runStreamIngestionProcessor(
 
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DB:          kvDB,
-			JobRegistry: registry,
+			Settings:     st,
+			DB:           kvDB,
+			JobRegistry:  registry,
+			TestingKnobs: execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,
@@ -423,14 +502,7 @@ func runStreamIngestionProcessor(
 			interceptable.RegisterInterception(interceptor)
 		}
 	}
-
-	sip.Run(ctx)
-
-	// Ensure that all the outputs are properly closed.
-	if !out.ProducerClosed() {
-		t.Fatalf("output RowReceiver not closed")
-	}
-	return out, err
+	return sip, out, err
 }
 
 func registerValidatorWithClient(

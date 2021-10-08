@@ -81,6 +81,15 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// RowCountIfAvailable returns the RowCount if the stats were available and a
+// negative number otherwise.
+func (s *Statistics) RowCountIfAvailable() float64 {
+	if s.Available {
+		return s.RowCount
+	}
+	return -1
+}
+
 // CopyFrom copies a Statistics object which can then be modified independently.
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
@@ -99,12 +108,36 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 	s.Selectivity.Multiply(selectivity)
 }
 
-// UnapplySelectivity divides the statistics by the given selectivity.
+// ApplySelectivityRatio multiplies the statistics by the given numerator, and
+// divides by the denominator. RowCount and Selectivity are updated. Note that
+// DistinctCounts, NullCounts, and Histograms are not updated.
+func (s *Statistics) ApplySelectivityRatio(numerator, denominator Selectivity) {
+	ratio := numerator.AsFloat() / denominator.AsFloat()
+
+	// Make sure that we don't increase the row count to something larger than it
+	// was at the beginning. Selectivity will never exceed 1, so use that fact to
+	// update the RowCount.
+	if ratio > 1 {
+		oldSelectivity := s.Selectivity
+		// MakeSelectivity ensures that newSelectivity is <= 1.
+		newSelectivity := MakeSelectivity(oldSelectivity.AsFloat() * ratio)
+		s.RowCount *= newSelectivity.AsFloat() / oldSelectivity.AsFloat()
+		s.Selectivity = newSelectivity
+	} else {
+		s.RowCount *= ratio
+		s.Selectivity = MakeSelectivity(s.Selectivity.AsFloat() * ratio)
+	}
+}
+
+// LimitSelectivity limits the Selectivity to the given max selectivity.
 // RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
 // and Histograms are not updated.
-func (s *Statistics) UnapplySelectivity(selectivity Selectivity) {
-	s.RowCount /= selectivity.AsFloat()
-	s.Selectivity.Divide(selectivity)
+func (s *Statistics) LimitSelectivity(maxSelectivity Selectivity) {
+	if s.Selectivity.selectivity > maxSelectivity.selectivity {
+		adjustedSelectivity := maxSelectivity
+		adjustedSelectivity.Divide(s.Selectivity)
+		s.ApplySelectivity(adjustedSelectivity)
+	}
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It
@@ -117,7 +150,18 @@ func (s *Statistics) UnionWith(other *Statistics) {
 	s.Selectivity.Add(other.Selectivity)
 }
 
+// String returns a string representation of the statistics.
 func (s *Statistics) String() string {
+	return s.stringImpl(true)
+}
+
+// StringWithoutHistograms is like String, but all histograms are omitted from
+// the returned string.
+func (s *Statistics) StringWithoutHistograms() string {
+	return s.stringImpl(false)
+}
+
+func (s *Statistics) stringImpl(includeHistograms bool) string {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
@@ -131,17 +175,19 @@ func (s *Statistics) String() string {
 		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
-	for _, col := range colStats {
-		if col.Histogram != nil {
-			label := fmt.Sprintf("histogram%s=", col.Cols.String())
-			indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
-			fmt.Fprintf(&buf, "\n%s", label)
-			histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
-			for i, line := range histLines {
-				if i != 0 {
-					fmt.Fprintf(&buf, "\n%s", indent)
+	if includeHistograms {
+		for _, col := range colStats {
+			if col.Histogram != nil {
+				label := fmt.Sprintf("histogram%s=", col.Cols.String())
+				indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
+				fmt.Fprintf(&buf, "\n%s", label)
+				histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
+				for i, line := range histLines {
+					if i != 0 {
+						fmt.Fprintf(&buf, "\n%s", indent)
+					}
+					fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 				}
-				fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 			}
 		}
 	}
@@ -229,14 +275,14 @@ func (c ColumnStatistics) Less(i, j int) bool {
 
 	prev := opt.ColumnID(0)
 	for {
-		nextI, ok := c[i].Cols.Next(prev)
+		nextI, ok := c[i].Cols.Next(prev + 1)
 		if !ok {
 			return false
 		}
 
 		// No need to check if ok since both ColSets are the same length and
 		// so far have had the same elements.
-		nextJ, _ := c[j].Cols.Next(prev)
+		nextJ, _ := c[j].Cols.Next(prev + 1)
 
 		if nextI != nextJ {
 			return nextI < nextJ

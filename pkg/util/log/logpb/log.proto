@@ -96,8 +96,7 @@ enum Channel {
 
   // SESSIONS is used to report client network activity when enabled via
   // the `server.auth_log.sql_connections.enabled` and/or
-  // `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
-  // [cluster settings](cluster-settings.html):
+  // `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
   //
   // - Connections opened/closed
   // - Authentication events: logins, failed attempts
@@ -180,6 +179,15 @@ enum Channel {
   // channel so as to not pollute the `SQL_PERF` logging output with
   // internal troubleshooting details.
   SQL_INTERNAL_PERF = 11;
+
+  // TELEMETRY reports telemetry events. Telemetry events describe
+  // feature usage within CockroachDB and anonymizes any application-
+  // specific data.
+  TELEMETRY = 12;
+
+  // CHANNEL_MAX is the maximum allocated channel number so far.
+  // This should be increased every time a new channel is added.
+  CHANNEL_MAX = 13;
 }
 
 // Entry represents a cockroach log entry in the following two cases:
@@ -226,13 +234,54 @@ message Entry {
 
   // Channel is the channel on which the message was sent.
   Channel channel = 10;
+
+  // StructuredEnd, if non-zero, indicates that the entry
+  // is structured; it is also the index
+  // inside the Message field where the JSON payload ends (exclusive).
+  uint32 structured_end = 11;
+
+  // StructuredStart, when StructuredEnd is non-zero, is the index
+  // inside the Message field where the JSON payload starts (inclusive).
+  uint32 structured_start = 12;
+
+  // StackTraceStart is the index inside Message where a detailed
+  // stack trace starts. If zero, no stack trace is present. Stack
+  // traces are always separated from the message using a newline
+  // character. If a stack trace is included, StackTracePosition is
+  // the index of the character immediately after the newline
+  // character.
+  //
+  // We use an index-in-string field in the protobuf, instead of two
+  // separate string fields, because previous-version consumers of
+  // Entry are still expecting the message and the stack trace in the
+  // same field.
+  uint32 stack_trace_start = 13;
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of
 // a log file.
 message FileDetails {
+  // program contains the combination of program name and log file
+  // group name, separated by a hyphen. The program name part is
+  // guaranteed to not contain hyphens itself; if there had been any
+  // in the executable file name, they would be escaped to
+  // underscores. The first hyphen separates the program name from the
+  // file group name. The file group itself can contain hyphens.
+  //
+  // For example, if the field is set to "mybinary-my-log-group",
+  // the program name is "mybinary" and the file group is "my-log-group".
+  //
+  // The field is also guaranteed not to contain periods. If there had
+  // been periods in the executable file name, they would be replaced
+  // by underscores.
   string program = 1;
+  // host is the hostname part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the hostname, they would be replaced by underscores.
   string host = 2;
+  // user_name is the unix username part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the username, they would be replaced by underscores.
   string user_name = 3;
   reserved 4;
   int64 time = 5;
@@ -244,4 +293,5 @@ message FileInfo {
   int64 size_bytes = 2;
   int64 mod_time_nanos = 3;
   FileDetails details = 4 [(gogoproto.nullable) = false];
+  uint32 file_mode = 5;
 }

@@ -19,8 +19,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 func TestSpanSet(t *testing.T) {
@@ -671,6 +673,7 @@ func TestSpan_KeyCount(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	kcAscAsc := testKeyContext(1, 2)
 	kcDescDesc := testKeyContext(-1, -2)
+	enums := makeEnums(t)
 
 	testCases := []struct {
 		keyCtx   *KeyContext
@@ -707,62 +710,69 @@ func TestSpan_KeyCount(t *testing.T) {
 			expected: "2",
 		},
 		{ // 4
+			// Multiple key span with DBool datum type.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/false - /true]", types.BoolFamily),
+			expected: "2",
+		},
+		{ // 5
 			// Single-key span with multiple-column key.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
 			expected: "1",
 		},
-		{ // 5
+		{ // 6
 			// Fails because the span is multiple-key and the type is not enumerable.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
 			expected: "FAIL",
 		},
-		{ // 6
+		{ // 7
 			// Descending multiple-key span.
 			keyCtx:   kcDescDesc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/5 - /-5]"),
 			expected: "11",
 		},
-		{ // 7
+		{ // 8
 			// Descending multiple-key span with multiple-column keys.
 			keyCtx:   kcDescDesc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/5 - /US_WEST/-5]"),
 			expected: "11",
 		},
-		{ // 8
+		{ // 9
 			// Fails because the keys can only differ in the last column.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/US_WEST/1 - /US_EAST/1]"),
 			expected: "FAIL",
 		},
-		{ // 9
+		{ // 10
 			// Fails because both keys must be at least as long as the given length.
 			keyCtx:   kcAscAsc,
 			length:   2,
 			span:     ParseSpan(&evalCtx, "[/1/1 - /1]"),
 			expected: "FAIL",
 		},
-		{ // 10
+		{ // 11
 			// Fails because both keys must be at least as long as the given length.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1 - ]"),
 			expected: "FAIL",
 		},
-		{ // 11
+		{ // 12
 			// Fails because the given prefix length must be larger than zero.
 			keyCtx:   kcAscAsc,
 			length:   0,
 			span:     ParseSpan(&evalCtx, "[/1 - ]"),
 			expected: "FAIL",
 		},
-		{ // 12
+		{ // 13
 			// Case with postfix values beyond the given prefix length. Key count is
 			// calculated only between the prefixes; postfixes are ignored.
 			keyCtx:   kcAscAsc,
@@ -770,42 +780,88 @@ func TestSpan_KeyCount(t *testing.T) {
 			span:     ParseSpan(&evalCtx, "[/1/post - /5/fix]"),
 			expected: "5",
 		},
-		{ // 13
+		{ // 14
 			// Case with postfix for the start key, but not the end key.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1/post - /5]"),
 			expected: "5",
 		},
-		{ // 14
+		{ // 15
 			// Case with postfix for the end key, but not the start key.
 			keyCtx:   kcAscAsc,
 			length:   1,
 			span:     ParseSpan(&evalCtx, "[/1 - /5/fix]"),
 			expected: "5",
 		},
-		{ // 15
+		{ // 16
 			// Fails because of overflow.
 			keyCtx: kcAscAsc,
 			length: 1,
 			span: Span{
 				start:         MakeKey(tree.NewDInt(math.MinInt64)),
 				end:           MakeKey(tree.NewDInt(math.MaxInt64)),
-				startBoundary: false,
-				endBoundary:   false,
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
 			},
 			expected: "FAIL",
 		},
-		{ // 16
+		{ // 17
 			// Fails because of underflow.
 			keyCtx: kcDescDesc,
 			length: 1,
 			span: Span{
 				start:         MakeKey(tree.NewDInt(math.MaxInt64)),
 				end:           MakeKey(tree.NewDInt(math.MinInt64)),
-				startBoundary: false,
-				endBoundary:   false,
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
 			},
+			expected: "FAIL",
+		},
+		{ // 18
+			// Test enums.
+			keyCtx: kcAscAsc,
+			length: 1,
+			span: Span{
+				start:         MakeKey(enums[0]),
+				end:           MakeKey(enums[1]),
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
+			},
+			expected: "2",
+		},
+		{ // 19
+			// Test enums.
+			keyCtx: kcAscAsc,
+			length: 1,
+			span: Span{
+				start:         MakeKey(enums[0]),
+				end:           MakeKey(enums[2]),
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
+			},
+			expected: "3",
+		},
+		{ // 20
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST/post - /US_WEST]"),
+			expected: "1",
+		},
+		{ // 21
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/1 - /2/fix)"),
+			expected: "2",
+		},
+		{ // 22
+			// Fails since the key is the same length as the prefix and the boundary
+			// is exclusive.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST - /US_WEST/fix]"),
 			expected: "FAIL",
 		},
 	}
@@ -830,6 +886,7 @@ func TestSpan_SplitSpan(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	kcAscAsc := testKeyContext(1, 2)
 	kcDescDesc := testKeyContext(-1, -2)
+	enums := makeEnums(t)
 
 	testCases := []struct {
 		keyCtx   *KeyContext
@@ -938,6 +995,52 @@ func TestSpan_SplitSpan(t *testing.T) {
 			span:     ParseSpan(&evalCtx, "[/-1/1 - /5]"),
 			expected: "FAIL",
 		},
+		{ // 13
+			// Test enums.
+			keyCtx: kcAscAsc,
+			length: 1,
+			span: Span{
+				start:         MakeKey(enums[0]),
+				end:           MakeKey(enums[1]),
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
+			},
+			expected: "[/'hello' - /'hello'] [/'hey' - /'hey']",
+		},
+		{ // 14
+			// Test enums.
+			keyCtx: kcAscAsc,
+			length: 1,
+			span: Span{
+				start:         MakeKey(enums[0]),
+				end:           MakeKey(enums[2]),
+				startBoundary: IncludeBoundary,
+				endBoundary:   IncludeBoundary,
+			},
+			expected: "[/'hello' - /'hello'] [/'hey' - /'hey'] [/'hi' - /'hi']",
+		},
+		{ // 15
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/1/post - /2]"),
+			expected: "(/1/'post' - /1] [/2 - /2]",
+		},
+		{ // 16
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/1 - /2/fix)"),
+			expected: "[/1 - /1] [/2 - /2/'fix')",
+		},
+		{ // 17
+			// Fails since the key is the same length as the prefix and the boundary
+			// is exclusive.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST - /US_WEST/fix]"),
+			expected: "FAIL",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -954,4 +1057,38 @@ func TestSpan_SplitSpan(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeEnums(t *testing.T) tree.Datums {
+	t.Helper()
+	enumMembers := []string{"hello", "hey", "hi"}
+	enumType := types.MakeEnum(typedesc.TypeIDToOID(500), typedesc.TypeIDToOID(100500))
+	enumType.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Schema: "test",
+			Name:   "greeting",
+		},
+		EnumData: &types.EnumMetadata{
+			LogicalRepresentations: enumMembers,
+			PhysicalRepresentations: [][]byte{
+				encoding.EncodeUntaggedIntValue(nil, 0),
+				encoding.EncodeUntaggedIntValue(nil, 1),
+				encoding.EncodeUntaggedIntValue(nil, 2),
+			},
+			IsMemberReadOnly: make([]bool, len(enumMembers)),
+		},
+	}
+	enumHello, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	enumHey, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	enumHi, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tree.Datums{enumHello, enumHey, enumHi}
 }

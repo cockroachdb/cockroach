@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
@@ -397,8 +397,8 @@ func RunTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		closeIfCloser(ctx, t, originalOp)
-		closeIfCloser(ctx, t, opWithNulls)
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
 	}
 }
 
@@ -407,9 +407,9 @@ func RunTestsWithTyps(
 //
 // RunTests harness needs to do that once it is done with op. In non-test
 // setting, the closing happens at the end of the query execution.
-func closeIfCloser(ctx context.Context, t *testing.T, op colexecop.Operator) {
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
 	if c, ok := op.(colexecop.Closer); ok {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -443,6 +443,26 @@ func RunTestsWithoutAllNullsInjection(
 	verifier VerifierType,
 	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
+	RunTestsWithoutAllNullsInjectionWithErrorHandler(
+		t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) },
+	)
+}
+
+// RunTestsWithoutAllNullsInjectionWithErrorHandler is the same as
+// RunTestsWithoutAllNullsInjection but takes in an additional argument function
+// that handles any errors encountered during the test run (e.g. if the panic is
+// expected to occur during the execution, it will be caught, and the error
+// handler could verify that the expected error was, in fact, encountered).
+func RunTestsWithoutAllNullsInjectionWithErrorHandler(
+	t *testing.T,
+	allocator *colmem.Allocator,
+	tups []Tuples,
+	typs [][]*types.T,
+	expected Tuples,
+	verifier VerifierType,
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
+	errorHandler func(error),
+) {
 	ctx := context.Background()
 	verifyFn := (*OpTestOutput).VerifyAnyOrder
 	skipVerifySelAndNullsResets := true
@@ -460,16 +480,16 @@ func RunTestsWithoutAllNullsInjection(
 		}
 		out := NewOpTestOutput(op, expected)
 		if err := verifyFn(out); err != nil {
-			t.Fatal(err)
+			errorHandler(err)
 		}
 		if isOperatorChainResettable(op) {
 			log.Info(ctx, "reusing after reset")
 			out.Reset(ctx)
 			if err := verifyFn(out); err != nil {
-				t.Fatal(err)
+				errorHandler(err)
 			}
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -481,9 +501,6 @@ func RunTestsWithoutAllNullsInjection(
 		// output on its second Next call (we need the first call to Next to get a
 		// reference to a batch to modify), and a second time to modify the batch
 		// and verify that this does not change the operator output.
-		// NOTE: this test makes sense only if the operator returns two non-zero
-		// length batches (if not, we short-circuit the test since the operator
-		// doesn't have to restore anything on a zero-length batch).
 		var (
 			secondBatchHasSelection, secondBatchHasNulls bool
 			inputTypes                                   []*types.T
@@ -501,46 +518,59 @@ func RunTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 			// We might short-circuit, so defer the closing of the operator.
-			defer closeIfCloser(ctx, t, op)
+			defer closeIfCloser(t, op)
 			op.Init(ctx)
-			b := op.Next()
-			if b.Length() == 0 {
-				return
-			}
-			if round == 1 {
-				if secondBatchHasSelection {
-					b.SetSelection(false)
-				} else {
-					b.SetSelection(true)
+			// NOTE: this test makes sense only if the operator returns two
+			// non-zero length batches (if not, we short-circuit the test since
+			// the operator doesn't have to restore anything on a zero-length
+			// batch).
+			lessThanTwoBatches := true
+			if err = colexecerror.CatchVectorizedRuntimeError(func() {
+				b := op.Next()
+				if b.Length() == 0 {
+					return
 				}
-				if secondBatchHasNulls {
-					// ResetInternalBatch will throw away the null information.
-					b.ResetInternalBatch()
-				} else {
-					for i := 0; i < b.Width(); i++ {
-						b.ColVec(i).Nulls().SetNulls()
+				if round == 1 {
+					if secondBatchHasSelection {
+						b.SetSelection(false)
+					} else {
+						b.SetSelection(true)
+					}
+					if secondBatchHasNulls {
+						// ResetInternalBatch will throw away the null information.
+						b.ResetInternalBatch()
+					} else {
+						for i := 0; i < b.Width(); i++ {
+							b.ColVec(i).Nulls().SetNulls()
+						}
 					}
 				}
+				b = op.Next()
+				if b.Length() == 0 {
+					return
+				}
+				lessThanTwoBatches = false
+				if round == 0 {
+					secondBatchHasSelection = b.Selection() != nil
+					secondBatchHasNulls = maybeHasNulls(b)
+				}
+				if round == 1 {
+					if secondBatchHasSelection {
+						assert.NotNil(t, b.Selection())
+					} else {
+						assert.Nil(t, b.Selection())
+					}
+					if secondBatchHasNulls {
+						assert.True(t, maybeHasNulls(b))
+					} else {
+						assert.False(t, maybeHasNulls(b))
+					}
+				}
+			}); err != nil {
+				errorHandler(err)
 			}
-			b = op.Next()
-			if b.Length() == 0 {
+			if lessThanTwoBatches {
 				return
-			}
-			if round == 0 {
-				secondBatchHasSelection = b.Selection() != nil
-				secondBatchHasNulls = maybeHasNulls(b)
-			}
-			if round == 1 {
-				if secondBatchHasSelection {
-					assert.NotNil(t, b.Selection())
-				} else {
-					assert.Nil(t, b.Selection())
-				}
-				if secondBatchHasNulls {
-					assert.True(t, maybeHasNulls(b))
-				} else {
-					assert.False(t, maybeHasNulls(b))
-				}
 			}
 		}
 	}
@@ -563,10 +593,14 @@ func RunTestsWithoutAllNullsInjection(
 		if err != nil {
 			t.Fatal(err)
 		}
-		op.Init(ctx)
-		for b := op.Next(); b.Length() > 0; b = op.Next() {
+		if err = colexecerror.CatchVectorizedRuntimeError(func() {
+			op.Init(ctx)
+			for b := op.Next(); b.Length() > 0; b = op.Next() {
+			}
+		}); err != nil {
+			errorHandler(err)
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	}
 }
 
@@ -611,7 +645,7 @@ func RunTestsWithFn(
 					if typs != nil {
 						inputTypes = typs[i]
 					}
-					rng, _ := randutil.NewPseudoRand()
+					rng, _ := randutil.NewTestRandFromGlobalSeed()
 					inputSources[i] = newOpTestSelInput(allocator, rng, batchSize, tup, inputTypes)
 				}
 			} else {
@@ -713,8 +747,6 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 		vec.JSON().Set(idx, j)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v := val.(type) {
-		case *coldataext.Datum:
-			vec.Datum().Set(idx, v)
 		case tree.Datum:
 			vec.Datum().Set(idx, v)
 		case string:
@@ -897,7 +929,7 @@ func (s *opTestInput) Next() coldata.Batch {
 		}
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRandFromGlobalSeed()
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
@@ -938,6 +970,10 @@ func (s *opTestInput) Next() coldata.Batch {
 							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
 						}
 						setColVal(vec, outputIdx, j, s.evalCtx)
+					case types.TimestampTZFamily:
+						t := timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000))
+						t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
+						setColVal(vec, outputIdx, t, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
 						case types.CollatedStringFamily:
@@ -954,7 +990,10 @@ func (s *opTestInput) Next() coldata.Batch {
 						case types.TupleFamily:
 							setColVal(vec, outputIdx, stringToDatum("(NULL)", vec.Type(), s.evalCtx), s.evalCtx)
 						default:
-							colexecerror.InternalError(errors.AssertionFailedf("unexpected datum-backed type: %s", vec.Type()))
+							// For other datum-backed types we'll be lazy and
+							// won't set the garbage values. We should already
+							// have good coverage with other types.
+							continue
 						}
 					default:
 						if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
@@ -1159,7 +1198,7 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 				}
 				val = reflect.ValueOf(j)
 			} else if family == typeconv.DatumVecCanonicalTypeFamily {
-				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum)
+				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(tree.Datum))
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
 			}
@@ -1199,7 +1238,12 @@ func (r *OpTestOutput) Reset(ctx context.Context) {
 func (r *OpTestOutput) Verify() error {
 	var actual Tuples
 	for {
-		tup := r.next()
+		var tup Tuple
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			tup = r.next()
+		}); err != nil {
+			return err
+		}
 		if tup == nil {
 			break
 		}
@@ -1216,7 +1260,12 @@ func (r *OpTestOutput) Verify() error {
 func (r *OpTestOutput) VerifyAnyOrder() error {
 	var actual Tuples
 	for {
-		tup := r.next()
+		var tup Tuple
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			tup = r.next()
+		}); err != nil {
+			return err
+		}
 		if tup == nil {
 			break
 		}
@@ -1233,8 +1282,10 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 		return false
 	}
 	for i := 0; i < len(actual); i++ {
-		if expected[i] == nil || actual[i] == nil {
-			if expected[i] != nil || actual[i] != nil {
+		expectedIsNull := expected[i] == nil || expected[i] == tree.DNull
+		actualIsNull := actual[i] == nil || actual[i] == tree.DNull
+		if expectedIsNull || actualIsNull {
+			if !expectedIsNull || !actualIsNull {
 				return false
 			}
 		} else {
@@ -1284,13 +1335,8 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 			}
 			// Special case for datum-backed types.
 			if d1, ok := actual[i].(tree.Datum); ok {
-				if d, ok := d1.(*coldataext.Datum); ok {
-					d1 = d.Datum
-				}
 				var d2 tree.Datum
 				switch d := expected[i].(type) {
-				case *coldataext.Datum:
-					d2 = d.Datum
 				case tree.Datum:
 					d2 = d
 				case string:
@@ -1552,7 +1598,7 @@ const MinBatchSize = 3
 func GenerateBatchSize() int {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRandFromGlobalSeed()
 		// sizesToChooseFrom specifies some predetermined and one random sizes
 		// that we will choose from. Such distribution is chosen due to the
 		// fact that most of our unit tests don't have a lot of data, so in

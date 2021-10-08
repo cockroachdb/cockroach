@@ -17,10 +17,12 @@ import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
+import "roachpb/index_usage_stats.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
+import "sql/execinfrapb/api.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -129,6 +131,17 @@ message NodesResponse {
   ];
 }
 
+// RegionsRequest requests all available regions.
+message RegionsRequest {}
+
+// RegionsResponse describes the available regions.
+message RegionsResponse {
+  message Region {
+    repeated string zones = 1;
+  }
+  map<string, Region> regions = 1;
+}
+
 message NodeRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -215,11 +228,24 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
+  reserved 11, 12;
   kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
+  int64 read_latches = 16;
+  int64 write_latches = 17;
+  int64 locks = 18;
+  int64 locks_with_wait_queues = 19;
+  int64 lock_wait_queue_waiters = 20;
+  message LockInfo {
+    string pretty_key = 1;
+    bytes key = 2 [ (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key" ];
+    bool held = 3;
+    int64 waiters = 4;
+    int64 waiting_readers = 5;
+    int64 waiting_writers = 6;
+  }
+  repeated LockInfo top_k_locks_by_wait_queue_waiters = 21 [ (gogoproto.nullable) = false ];
 }
 
 message RangesRequest {
@@ -341,6 +367,10 @@ message LogFilesListRequest {
 }
 
 message LogFilesListResponse {
+  // files is the list of log files under this node's configured logging
+  // directories. Note that the response does not contain detail about
+  // which directory contains which file. The location of each file
+  // is known to the server based on its name and the logging configuration.
   repeated cockroach.util.log.FileInfo files = 1
       [ (gogoproto.nullable) = false ];
 }
@@ -349,6 +379,10 @@ message LogFileRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  // file is the name of the log file to retrieve. Note that it
+  // must not be prefixed by a directory name. The full path to
+  // the file is computed by the server based on the base name
+  // and the logging configuration.
   string file = 2;
   // redact, if true, requests redaction of sensitive data away
   // from the retrieved log entries.
@@ -359,7 +393,7 @@ message LogFileRequest {
 
 enum StacksType {
   GOROUTINE_STACKS = 0;
-  THREAD_STACKS = 1;
+  reserved 1;
 }
 
 message StacksRequest {
@@ -371,7 +405,7 @@ message StacksRequest {
 
 // Represents the type of file.
 // TODO(ridwanmsharif): Add support for log files. They're currently served
-// by an endpoint that parses the log messages, which is not what the 
+// by an endpoint that parses the log messages, which is not what the
 // debug zip client wants.
 enum FileType {
   HEAP = 0;
@@ -411,12 +445,18 @@ message ProfileRequest {
 
   enum Type {
       HEAP = 0;
-      CPU = 1; // with labels on
+      CPU = 1; // with labels on by default
+      GOROUTINE = 2;
+      THREADCREATE = 3;
+      ALLOCS = 4;
+      BLOCK = 5;
+      MUTEX = 6;
   }
   // The type of profile to retrieve.
   Type type = 5;
 
   int32 seconds = 6; // applies only to Type=CPU, defaults to 30
+  bool labels = 7; // applies only to Type=CPU, defaults to false
 }
 
 message MetricsRequest {
@@ -541,7 +581,7 @@ message ActiveQuery {
   float progress = 6;
 
   // The SQL statement fingerprint, compatible with StatementStatisticsKey.
-  string sql_anon = 8;
+  string sql_no_constants = 8;
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -586,7 +626,7 @@ message Session {
   TxnInfo active_txn = 12;
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
-  string last_active_query_anon = 13;
+  string last_active_query_no_constants = 13;
 }
 
 // An error wrapper object for ListSessionsResponse.
@@ -657,8 +697,11 @@ message CancelSessionResponse {
 // Request object for ListContentionEvents and ListLocalContentionEvents.
 message ListContentionEventsRequest {}
 
-// An error wrapper object for ListContentionEventsResponse.
-message ListContentionEventsError {
+// An error wrapper object for ListContentionEventsResponse and
+// ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
+// implemented on a tenant, the `node_id` field refers to the instanceIDs that
+// identify individual tenant pods.
+message ListActivityError {
   // ID of node that was being contacted when this error occurred.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
@@ -675,7 +718,58 @@ message ListContentionEventsResponse {
   cockroach.sql.contentionpb.SerializedRegistry events = 1 [ (gogoproto.nullable) = false ];
 
   // Any errors that occurred during fan-out calls to other nodes.
-  repeated ListContentionEventsError errors = 2 [ (gogoproto.nullable) = false ];
+  repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
+}
+
+// Request object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsRequest {}
+
+// DistSQLRemoteFlows describes all DistSQL remote flows that are part of the
+// same physical plan. The gateway node that initiated the execution of the plan
+// isn't included.
+message DistSQLRemoteFlows {
+  enum Status {
+    RUNNING = 0;
+    QUEUED = 1;
+  }
+
+  // Info contains an information about a single DistSQL remote flow.
+  message Info {
+    // NodeID is the node on which this remote flow is either running or queued.
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // Timestamp must be in the UTC timezone.
+    google.protobuf.Timestamp timestamp = 2 [
+      (gogoproto.nullable) = false, (gogoproto.stdtime) = true
+    ];
+
+    // Status is the current status of this remote flow.
+    Status status = 3;
+  }
+
+  // FlowID is the unique identifier of the physical plan shared by all remote
+  // flows.
+  bytes flow_id = 1 [(gogoproto.nullable) = false,
+                     (gogoproto.customname) = "FlowID",
+                     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb.FlowID"];
+
+  // Infos contains the information about all remote flows that are part of this
+  // DistSQL physical plan and that haven't finished yet.
+  //
+  // The slice doesn't contain duplicate NodeIDs and is sorted by NodeID in ASC
+  // order.
+  repeated Info infos = 2 [(gogoproto.nullable) = false];
+}
+
+// Response object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsResponse {
+  // Flows are ordered by FlowID lexicographically and do not contain
+  // duplicates.
+  repeated DistSQLRemoteFlows flows = 1 [ (gogoproto.nullable) = false ];
+
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
 message SpanStatsRequest {
@@ -919,21 +1013,33 @@ message StoresResponse {
   repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
 }
 
+// StatementsRequest is used by both tenant and node-level
+// implementations to serve fan-out requests across multiple nodes or
+// instances. When implemented on a node, the `node_id` field refers to
+// the cluster nodes by their nodeID. When implemented on a tenant, the
+// `node_id` field refers to the instanceIDs that identify individual
+// tenant pods.
 message StatementsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // If this field is set we will use the combined statements API instead.
+  bool combined = 2;
+  // These fields are used for the combined statements API.
+  int64 start = 3 [(gogoproto.nullable) = true];
+  int64 end = 4 [(gogoproto.nullable) = true];
 }
 
 message StatementsResponse {
   message ExtendedStatementStatisticsKey {
     cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    google.protobuf.Timestamp aggregated_ts = 3 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
   }
 
   message CollectedStatementStatistics {
     ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
     uint64 id = 3 [(gogoproto.customname) = "ID",
-                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 
@@ -953,6 +1059,12 @@ message StatementsResponse {
   // Transactions is transaction-level statistics for the collection of
   // statements in this response.
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
+}
+
+message CombinedStatementsStatsRequest {
+  // Unix time range for aggregated statements.
+  int64 start = 1 [(gogoproto.nullable) = true];
+  int64 end = 2 [(gogoproto.nullable) = true];
 }
 
 message StatementDiagnosticsReport {
@@ -1022,10 +1134,25 @@ message JobStatusResponse {
 // Request object for issuing a SQL stats reset request.
 message ResetSQLStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // reset_persisted_stats specifies if the persisted SQL Stats will be reset
+  // along with the in-memory SQL stats.
+  bool reset_persisted_stats = 2;
 }
 
 // Response object returned by ResetSQLStats.
 message ResetSQLStatsResponse {
+}
+
+// Request object for issuing IndexUsageStatistics request.
+message IndexUsageStatisticsRequest {
+  // node_id is the ID of the node where the stats data shall be retrieved from.
+  // If this is left empty, the cluster-wide aggregated result will be returned.
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// Response object returned by IndexUsageStatistics.
+message IndexUsageStatisticsResponse {
+  repeated cockroach.sql.CollectedIndexUsageStatistics statistics = 1 [(gogoproto.nullable) = false];
 }
 
 service Status {
@@ -1042,6 +1169,9 @@ service Status {
       get : "/_status/details/{node_id}"
     };
   }
+
+  // RegionsRequest retrieves all available regions.
+  rpc Regions(RegionsRequest) returns (RegionsResponse) {}
 
   // Nodes returns status info for all commissioned nodes. Decommissioned nodes
   // are not included, except in rare cases where the node doing the
@@ -1181,6 +1311,29 @@ service Status {
     };
   }
 
+  // ListDistSQLFlows retrieves all of the remote flows of the DistSQL execution
+  // that are currently running or queued on any node in the cluster. The local
+  // flows (those that are running on the same node as the query originated on)
+  // are not included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/distsql_flows"
+    };
+  }
+
+  // ListLocalDistSQLFlows retrieves all of the remote flows of the DistSQL
+  // execution that are currently running or queued on this node in the cluster.
+  // Queries that originated on this node are not be included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListLocalDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/local_distsql_flows"
+    };
+  }
+
   // CancelSessions forcefully terminates a SQL session given its ID.
   rpc CancelSession(CancelSessionRequest) returns (CancelSessionResponse) {
     option (google.api.http) = {
@@ -1287,6 +1440,13 @@ service Status {
       get: "/_status/statements"
     };
   }
+
+  // Retrieve the combined in-memory and persisted statement stats by date range.
+  rpc CombinedStatementStats(CombinedStatementsStatsRequest) returns (StatementsResponse) {
+    option (google.api.http) = {
+      get: "/_status/combinedstmts"
+    };
+  }
   rpc CreateStatementDiagnosticsReport(CreateStatementDiagnosticsReportRequest) returns (CreateStatementDiagnosticsReportResponse) {
     option (google.api.http) = {
       post: "/_status/stmtdiagreports"
@@ -1318,6 +1478,12 @@ service Status {
     option (google.api.http) = {
       post: "/_status/resetsqlstats"
       body: "*"
+    };
+  }
+
+  rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {
+    option (google.api.http) = {
+      get: "/_status/indexusagestatistics"
     };
   }
 }

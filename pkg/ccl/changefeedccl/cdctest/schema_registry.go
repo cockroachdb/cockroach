@@ -9,10 +9,12 @@
 package cdctest
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -32,12 +34,32 @@ type SchemaRegistry struct {
 	}
 }
 
-// MakeTestSchemaRegistry creates and starts schema registry for tests.
-func MakeTestSchemaRegistry() *SchemaRegistry {
+// StartTestSchemaRegistry creates and starts schema registry for
+// tests.
+func StartTestSchemaRegistry() *SchemaRegistry {
+	r := makeTestSchemaRegistry()
+	r.server.Start()
+	return r
+}
+
+// StartTestSchemaRegistryWithTLS creates and starts schema registry
+// for tests with TLS enabled.
+func StartTestSchemaRegistryWithTLS(certificate *tls.Certificate) (*SchemaRegistry, error) {
+	r := makeTestSchemaRegistry()
+	if certificate != nil {
+		r.server.TLS = &tls.Config{
+			Certificates: []tls.Certificate{*certificate},
+		}
+	}
+	r.server.StartTLS()
+	return r, nil
+}
+
+func makeTestSchemaRegistry() *SchemaRegistry {
 	r := &SchemaRegistry{}
 	r.mu.schemas = make(map[int32]string)
 	r.mu.subjects = make(map[string]int32)
-	r.server = httptest.NewServer(http.HandlerFunc(r.register))
+	r.server = httptest.NewUnstartedServer(http.HandlerFunc(r.requestHandler))
 	return r
 }
 
@@ -68,43 +90,79 @@ func (r *SchemaRegistry) SchemaForSubject(subject string) string {
 	return r.mu.schemas[r.mu.subjects[subject]]
 }
 
-// register is an http hander for the underlying server which registers schemas.
-func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) {
+func (r *SchemaRegistry) registerSchema(subject string, schema string) int32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	id := r.mu.idAlloc
+	r.mu.idAlloc++
+	r.mu.schemas[id] = schema
+	r.mu.subjects[subject] = id
+	return id
+}
+
+var (
+	// We are slightly stricter than confluent here as they allow
+	// a trailing slash.
+	subjectVersionsRegexp = regexp.MustCompile("^/subjects/[^/]+/versions$")
+)
+
+// requestHandler routes requests based on the Method and Path of the request.
+func (r *SchemaRegistry) requestHandler(hw http.ResponseWriter, hr *http.Request) {
+	path := hr.URL.Path
+	method := hr.Method
+
+	var err error
+	switch {
+	case method == http.MethodPost && subjectVersionsRegexp.MatchString(path):
+		err = r.register(hw, hr)
+	case method == http.MethodGet && path == "/mode":
+		err = r.mode(hw, hr)
+	default:
+		hw.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(hw, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// register is an http handler for the underlying server which registers schemas.
+func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) (err error) {
 	type confluentSchemaVersionRequest struct {
 		Schema string `json:"schema"`
 	}
 	type confluentSchemaVersionResponse struct {
 		ID int32 `json:"id"`
 	}
-	if err := func() (err error) {
-		defer func() {
-			err = hr.Body.Close()
-		}()
 
-		var req confluentSchemaVersionRequest
-		if err := json.NewDecoder(hr.Body).Decode(&req); err != nil {
-			return err
-		}
+	defer func() {
+		err = hr.Body.Close()
+	}()
 
-		r.mu.Lock()
-		subject := strings.Split(hr.URL.Path, "/")[2]
-		id := r.mu.idAlloc
-		r.mu.idAlloc++
-		r.mu.schemas[id] = req.Schema
-		r.mu.subjects[subject] = id
-		r.mu.Unlock()
-
-		res, err := json.Marshal(confluentSchemaVersionResponse{ID: id})
-		if err != nil {
-			return err
-		}
-
-		hw.Header().Set(`Content-type`, `application/json`)
-		_, _ = hw.Write(res)
-		return nil
-	}(); err != nil {
-		http.Error(hw, err.Error(), http.StatusInternalServerError)
+	var req confluentSchemaVersionRequest
+	if err := json.NewDecoder(hr.Body).Decode(&req); err != nil {
+		return err
 	}
+
+	subject := strings.Split(hr.URL.Path, "/")[2]
+	id := r.registerSchema(subject, req.Schema)
+	res, err := json.Marshal(confluentSchemaVersionResponse{ID: id})
+	if err != nil {
+		return err
+	}
+
+	hw.Header().Set(`Content-type`, `application/json`)
+	_, err = hw.Write(res)
+	return err
+}
+
+// mode is an http handler for the /mode endpoint. Our implementation
+// returns an empty response as we currently don't care about the
+// response.
+func (r *SchemaRegistry) mode(hw http.ResponseWriter, _ *http.Request) error {
+	_, err := hw.Write([]byte("{}"))
+	return err
 }
 
 // EncodedAvroToNative decodes bytes that were previously encoded by

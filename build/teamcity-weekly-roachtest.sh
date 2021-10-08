@@ -8,6 +8,7 @@ set -euo pipefail
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 source "$(dirname "${0}")/teamcity-support.sh"
 log_into_gcloud
+export ROACHPROD_USER=teamcity
 
 set -x
 
@@ -29,7 +30,7 @@ fi
 
 chmod +x cockroach.linux-2.6.32-gnu-amd64
 
-artifacts=$PWD/artifacts/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
+artifacts=$PWD/artifacts/$(date +"%Y%m%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 # See https://github.com/cockroachdb/cockroach/issues/54570#issuecomment-706324593
 chmod o+rwx "${artifacts}"
@@ -40,11 +41,11 @@ chmod o+rwx "${artifacts}"
 # kill with SIGINT which will allow roachtest to fail tests and
 # cleanup.
 #
-# NB(2): We specify --zones below so that nodes are created in us-central1-b 
+# NB(2): We specify --zones below so that nodes are created in us-central1-b
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
 exit_status=0
-if ! timeout -s INT $((7800*60)) bin/roachtest run \
+timeout -s INT $((7800*60)) bin/roachtest run \
   tag:weekly \
   --build-tag "${build_tag}" \
   --cluster-id "${TC_BUILD_ID}" \
@@ -55,9 +56,17 @@ if ! timeout -s INT $((7800*60)) bin/roachtest run \
   --artifacts "$artifacts" \
   --parallelism 5 \
   --encrypt=random \
-  --teamcity; then
-  exit_status=$?
+  --teamcity || exit_status=$?
+
+if [[ ${exit_status} -eq 10 ]]; then
+  # Exit code 10 indicates that some tests failed, but that roachtest
+  # as a whole passed. We want to exit zero in this case so that we
+  # can let TeamCity report failing tests without also failing the
+  # build. That way, build failures can be used to notify about serious
+  # problems that prevent tests from being invoked in the first place.
+  exit_status=0
 fi
+
 
 # Upload any stats.json files to the cockroach-nightly bucket.
 for file in $(find ${artifacts#${PWD}/} -name stats.json); do

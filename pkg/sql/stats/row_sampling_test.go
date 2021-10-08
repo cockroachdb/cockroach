@@ -13,6 +13,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"testing"
@@ -22,41 +23,67 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
-func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, ranks []int) {
+func runSampleTest(
+	t *testing.T,
+	evalCtx *tree.EvalContext,
+	numSamples, expectedNumSamples int,
+	ranks []int,
+	memAcc *mon.BoundAccount,
+) {
 	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, []*types.T{types.Int}, nil /* memAcc */, util.MakeFastIntSet(0))
+	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, util.MakeFastIntSet(0))
 	for _, r := range ranks {
 		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
+		prevCapacity := sr.Cap()
 		if err := sr.SampleRow(ctx, evalCtx, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
-			t.Errorf("%v", err)
+			t.Fatal(err)
+		} else if sr.Cap() != prevCapacity {
+			t.Logf(
+				"samples reduced from %d to %d during SampleRow",
+				prevCapacity, sr.Cap(),
+			)
 		}
 	}
-	samples := sr.Get()
-	sampledRanks := make([]int, len(samples))
 
 	// Verify that the row and the ranks weren't mishandled.
-	for i, s := range samples {
+	for _, s := range sr.Get() {
 		if *s.Row[0].Datum.(*tree.DInt) != tree.DInt(s.Rank) {
 			t.Fatalf(
 				"mismatch between row %s and rank %d",
 				s.Row.String([]*types.T{types.Int}), s.Rank,
 			)
 		}
-		sampledRanks[i] = int(s.Rank)
 	}
 
-	// Verify the top ranks made it.
+	prevCapacity := sr.Cap()
+	values, err := sr.GetNonNullDatums(ctx, memAcc, 0 /* colIdx */)
+	if err != nil {
+		t.Fatal(err)
+	} else if sr.Cap() != prevCapacity {
+		t.Logf(
+			"samples reduced from %d to %d during GetNonNullDatums",
+			prevCapacity, sr.Cap(),
+		)
+	}
+
+	sampledRanks := make([]int, len(values))
+	for i, v := range values {
+		sampledRanks[i] = int(*v.(*tree.DInt))
+	}
+
+	// Verify that the top (smallest) ranks made it.
 	sort.Ints(sampledRanks)
 	expected := append([]int(nil), ranks...)
 	sort.Ints(expected)
-	if len(expected) > numSamples {
-		expected = expected[:numSamples]
+	if len(expected) > expectedNumSamples {
+		expected = expected[:expectedNumSamples]
 	}
 	if !reflect.DeepEqual(expected, sampledRanks) {
 		t.Errorf("invalid ranks: %v vs %v", sampledRanks, expected)
@@ -64,7 +91,10 @@ func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, rank
 }
 
 func TestSampleReservoir(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
 	for _, n := range []int{10, 100, 1000, 10000} {
 		rng, _ := randutil.NewPseudoRand()
 		ranks := make([]int, n)
@@ -72,9 +102,34 @@ func TestSampleReservoir(t *testing.T) {
 			ranks[i] = rng.Int()
 		}
 		for _, k := range []int{1, 5, 10, 100} {
-			t.Run(fmt.Sprintf("%d/%d", n, k), func(t *testing.T) {
-				runSampleTest(t, &evalCtx, k, ranks)
+			t.Run(fmt.Sprintf("n=%d/k=%d/mem=nolimit", n, k), func(t *testing.T) {
+				runSampleTest(t, &evalCtx, k, k, ranks, nil)
 			})
+			for _, mem := range []int64{1 << 8, 1 << 10, 1 << 12} {
+				t.Run(fmt.Sprintf("n=%d/k=%d/mem=%d", n, k, mem), func(t *testing.T) {
+					monitor := mon.NewMonitorWithLimit(
+						"test-monitor",
+						mon.MemoryResource,
+						mem,
+						nil,
+						nil,
+						1,
+						math.MaxInt64,
+						st,
+					)
+					monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+					memAcc := monitor.MakeBoundAccount()
+					expectedK := k
+					if mem == 1<<8 && n > 1 && k > 1 {
+						expectedK = 1
+					} else if mem == 1<<10 && n > 10 && k > 10 {
+						expectedK = 6
+					} else if mem == 1<<12 && n > 10 && k > 10 {
+						expectedK = 25
+					}
+					runSampleTest(t, &evalCtx, k, expectedK, ranks, &memAcc)
+				})
+			}
 		}
 	}
 }

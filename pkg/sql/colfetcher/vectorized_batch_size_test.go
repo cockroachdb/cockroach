@@ -122,3 +122,47 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 		})
 	}
 }
+
+// TestCFetcherLimitsOutputBatch verifies that cFetcher limits its output batch
+// based on the memory footprint.
+func TestCFetcherLimitsOutputBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderMetamorphic(t, "This test doesn't work with metamorphic batch sizes.")
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	// We set up a table with 50 rows that take up 16KiB each and we lower the
+	// distsql_workmem session variable to 128KiB. We also collect the stats on
+	// the table so that we had an estimated row count of 50 for the scan. With
+	// such setup the cFetcher will allocate an output batch of capacity 50, yet
+	// after setting the 7th or so row the footprint of the batch will exceed
+	// the memory limit. As a result, we will get around 7 batches.
+	_, err := conn.ExecContext(ctx, `
+SET distsql_workmem='128KiB';
+CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, repeat('a', 16 * 1024) FROM generate_series(1, 50) AS g(i);
+ANALYZE t
+`)
+	assert.NoError(t, err)
+
+	batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+	rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) SELECT * FROM t`)
+	assert.NoError(t, err)
+	foundBatches := -1
+	for rows.Next() {
+		var res string
+		assert.NoError(t, rows.Scan(&res))
+		if matches := batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+			foundBatches, err = strconv.Atoi(matches[1])
+			assert.NoError(t, err)
+		}
+	}
+
+	// There is a bit of non-determinism (namely, in how data in coldata.Bytes
+	// is appended), so we require that we get at least 7 batches. If we get
+	// more, that's still ok since it means that the batches were even smaller.
+	assert.GreaterOrEqual(t, foundBatches, 7)
+}

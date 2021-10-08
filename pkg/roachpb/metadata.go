@@ -199,6 +199,26 @@ func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
 }
 
+// KeySpan returns the keys covered by this range. Local keys are not included.
+//
+// TODO(andrei): Consider if this logic should be lifted to
+// RangeDescriptor.RSpan(). Or better yet, see if we can changes things such
+// that the first range starts at LocalMax instead at starting at an empty key.
+func (r *RangeDescriptor) KeySpan() RSpan {
+	start := r.StartKey
+	if r.StartKey.Equal(RKeyMin) {
+		// The first range in the keyspace is declared to start at KeyMin (the
+		// lowest possible key). That is a lie, however, since the local key space
+		// ([LocalMin,LocalMax)) doesn't belong to this range; it doesn't belong to
+		// any range in particular.
+		start = RKey(LocalMax)
+	}
+	return RSpan{
+		Key:    start,
+		EndKey: r.EndKey,
+	}
+}
+
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
 func (r *RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
@@ -438,6 +458,32 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 
 // SafeValue implements the redact.SafeValue interface.
 func (r ReplicaType) SafeValue() {}
+
+// IsVoterOldConfig returns true if the replica is a voter in the outgoing
+// config (or, simply is a voter if the range is not in a joint-config state).
+// Can be used as a filter for
+// ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
+func (r ReplicaDescriptor) IsVoterOldConfig() bool {
+	switch r.GetType() {
+	case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsVoterNewConfig returns true if the replica is a voter in the incoming
+// config (or, simply is a voter if the range is not in a joint-config state).
+// Can be used as a filter for
+// ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
+func (r ReplicaDescriptor) IsVoterNewConfig() bool {
+	switch r.GetType() {
+	case VOTER_FULL, VOTER_INCOMING:
+		return true
+	default:
+		return false
+	}
+}
 
 // PercentilesFromData derives percentiles from a slice of data points.
 // Sorts the input data if it isn't already sorted.

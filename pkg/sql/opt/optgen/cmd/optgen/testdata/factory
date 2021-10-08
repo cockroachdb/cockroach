@@ -82,6 +82,14 @@ func (_f *Factory) ConstructSelect(
 	input memo.RelExpr,
 	filters memo.FiltersExpr,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
 	// [PushSelectIntoJoinLeft]
 	{
 		if input.Op() == opt.InnerJoinOp || input.Op() == opt.InnerJoinApplyOp {
@@ -109,6 +117,7 @@ func (_f *Factory) ConstructSelect(
 						if _f.appliedRule != nil {
 							_f.appliedRule(opt.PushSelectIntoJoinLeft, nil, _expr)
 						}
+						_f.constructorStackDepth--
 						return _expr
 					}
 				}
@@ -116,8 +125,11 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
+SKIP_RULES:
 	e := _f.mem.MemoizeSelect(input, filters)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructInnerJoin constructs an expression for the InnerJoin operator.
@@ -126,8 +138,19 @@ func (_f *Factory) ConstructInnerJoin(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeInnerJoin(left, right, on)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
@@ -136,8 +159,19 @@ func (_f *Factory) ConstructInnerJoinApply(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeInnerJoinApply(left, right, on)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructFiltersItem constructs an expression for the FiltersItem operator.
@@ -383,30 +417,71 @@ import (
 func (_f *Factory) ConstructVariable(
 	col opt.ColumnID,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeVariable(col)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructMin constructs an expression for the Min operator.
 func (_f *Factory) ConstructMin(
 	input *memo.VariableExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeMin(input)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructMax constructs an expression for the Max operator.
 func (_f *Factory) ConstructMax(
 	input *memo.VariableExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeMax(input)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructAggDistinct constructs an expression for the AggDistinct operator.
 func (_f *Factory) ConstructAggDistinct(
 	input opt.ScalarExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
 	// [EliminateAggDistinct1]
 	{
 		if input.Op() == opt.MinOp || input.Op() == opt.MaxOp {
@@ -415,6 +490,7 @@ func (_f *Factory) ConstructAggDistinct(
 				if _f.appliedRule != nil {
 					_f.appliedRule(opt.EliminateAggDistinct1, nil, _expr)
 				}
+				_f.constructorStackDepth--
 				return _expr
 			}
 		}
@@ -432,6 +508,7 @@ func (_f *Factory) ConstructAggDistinct(
 				if _f.appliedRule != nil {
 					_f.appliedRule(opt.EliminateAggDistinct2, nil, _expr)
 				}
+				_f.constructorStackDepth--
 				return _expr
 			}
 		}
@@ -449,13 +526,17 @@ func (_f *Factory) ConstructAggDistinct(
 				if _f.appliedRule != nil {
 					_f.appliedRule(opt.EliminateAggDistinct3, nil, _expr)
 				}
+				_f.constructorStackDepth--
 				return _expr
 			}
 		}
 	}
 
+SKIP_RULES:
 	e := _f.mem.MemoizeAggDistinct(input)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // Replace enables an expression subtree to be rewritten under the control of
@@ -600,8 +681,19 @@ func (_f *Factory) ConstructWith(
 	binding memo.RelExpr,
 	main memo.RelExpr,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeWith(binding, main)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // Replace enables an expression subtree to be rewritten under the control of
@@ -742,6 +834,14 @@ func (_f *Factory) ConstructProject(
 	projections memo.ProjectionsExpr,
 	passthrough opt.ColSet,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
 	// [PruneValuesCols]
 	{
 		_values, _ := input.(*memo.ValuesExpr)
@@ -757,22 +857,37 @@ func (_f *Factory) ConstructProject(
 					if _f.appliedRule != nil {
 						_f.appliedRule(opt.PruneValuesCols, nil, _expr)
 					}
+					_f.constructorStackDepth--
 					return _expr
 				}
 			}
 		}
 	}
 
+SKIP_RULES:
 	e := _f.mem.MemoizeProject(input, projections, passthrough)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructValues constructs an expression for the Values operator.
 func (_f *Factory) ConstructValues(
 	rows memo.ScalarListExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeValues(rows)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // Replace enables an expression subtree to be rewritten under the control of
@@ -985,14 +1100,33 @@ func (_f *Factory) ConstructAnd(
 	left opt.ScalarExpr,
 	right opt.ScalarExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
+SKIP_RULES:
 	e := _f.mem.MemoizeAnd(left, right)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // ConstructRange constructs an expression for the Range operator.
 func (_f *Factory) ConstructRange(
 	and opt.ScalarExpr,
 ) opt.ScalarExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
 	// [SimplifyRange]
 	{
 		input := and
@@ -1003,13 +1137,17 @@ func (_f *Factory) ConstructRange(
 				if _f.appliedRule != nil {
 					_f.appliedRule(opt.SimplifyRange, nil, _expr)
 				}
+				_f.constructorStackDepth--
 				return _expr
 			}
 		}
 	}
 
+SKIP_RULES:
 	e := _f.mem.MemoizeRange(and)
-	return _f.onConstructScalar(e)
+	expr := _f.onConstructScalar(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // Replace enables an expression subtree to be rewritten under the control of
@@ -1193,6 +1331,14 @@ func (_f *Factory) ConstructUnion(
 	left memo.RelExpr,
 	right memo.RelExpr,
 ) memo.RelExpr {
+	_f.constructorStackDepth++
+	if _f.constructorStackDepth > maxConstructorStackDepth {
+		// If the constructor call stack depth exceeds the limit, call
+		// onMaxConstructorStackDepthExceeded and skip all rules.
+		_f.onMaxConstructorStackDepthExceeded()
+		goto SKIP_RULES
+	}
+
 	// [Let]
 	{
 		a, b, ok := _f.funcs.Split(left, right)
@@ -1205,6 +1351,7 @@ func (_f *Factory) ConstructUnion(
 				if _f.appliedRule != nil {
 					_f.appliedRule(opt.Let, nil, _expr)
 				}
+				_f.constructorStackDepth--
 				return _expr
 			}
 		}
@@ -1223,6 +1370,7 @@ func (_f *Factory) ConstructUnion(
 					if _f.appliedRule != nil {
 						_f.appliedRule(opt.LetNestedInFunction, nil, _expr)
 					}
+					_f.constructorStackDepth--
 					return _expr
 				}
 			}
@@ -1243,6 +1391,7 @@ func (_f *Factory) ConstructUnion(
 					if _f.appliedRule != nil {
 						_f.appliedRule(opt.LetNestedInFunctionWithBinding, nil, _expr)
 					}
+					_f.constructorStackDepth--
 					return _expr
 				}
 			}
@@ -1269,6 +1418,7 @@ func (_f *Factory) ConstructUnion(
 						if _f.appliedRule != nil {
 							_f.appliedRule(opt.LetInNestedMatch, nil, _expr)
 						}
+						_f.constructorStackDepth--
 						return _expr
 					}
 				}
@@ -1290,6 +1440,7 @@ func (_f *Factory) ConstructUnion(
 					if _f.appliedRule != nil {
 						_f.appliedRule(opt.LetNestedInFunctionAndLet, nil, _expr)
 					}
+					_f.constructorStackDepth--
 					return _expr
 				}
 			}
@@ -1307,12 +1458,16 @@ func (_f *Factory) ConstructUnion(
 			if _f.appliedRule != nil {
 				_f.appliedRule(opt.LetInReplace, nil, _expr)
 			}
+			_f.constructorStackDepth--
 			return _expr
 		}
 	}
 
+SKIP_RULES:
 	e := _f.mem.MemoizeUnion(left, right)
-	return _f.onConstructRelational(e)
+	expr := _f.onConstructRelational(e)
+	_f.constructorStackDepth--
+	return expr
 }
 
 // Replace enables an expression subtree to be rewritten under the control of

@@ -14,10 +14,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
@@ -48,9 +48,9 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	}
 	var schemaClause string
 	if name.ExplicitSchema {
-		schema := lex.EscapeSQLString(name.Schema())
-		if name.Schema() == sessiondata.PgTempSchemaName {
-			schema = lex.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
+		schema := lexbase.EscapeSQLString(name.Schema())
+		if name.Schema() == catconstants.PgTempSchemaName {
+			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData().SearchPath.GetTemporarySchemaName())
 		}
 		schemaClause = fmt.Sprintf("AND ns.nspname = %s", schema)
 	} else {

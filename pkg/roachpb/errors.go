@@ -81,9 +81,10 @@ const (
 	// written. We allow the transaction to continue after such errors; we also
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
-	// after ConditionFailedErrors (uniqueness violations). With continuing after
-	// errors its important for the coordinator to track the timestamp at which
-	// intents might have been written.
+	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
+	// (lock not available errors). With continuing after errors its important for
+	// the coordinator to track the timestamp at which intents might have been
+	// written.
 	//
 	// Note that all the lower scores also are unambiguous in this sense, so this
 	// score can be seen as an upper-bound for unambiguous errors.
@@ -132,11 +133,12 @@ func ErrPriority(err error) ErrorPriority {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
-	case *ConditionFailedError:
+	case *ConditionFailedError, *WriteIntentError:
 		// We particularly care about returning the low ErrorScoreUnambiguousError
-		// because we don't want to transition a transaction that encounters
-		// ConditionFailedError to an error state. More specifically, we want to
-		// allow rollbacks to savepoint after a ConditionFailedError.
+		// because we don't want to transition a transaction that encounters a
+		// ConditionFailedError or a WriteIntentError to an error state. More
+		// specifically, we want to allow rollbacks to savepoint after one of these
+		// errors.
 		return ErrorScoreUnambiguousError
 	}
 	return ErrorScoreNonRetriable
@@ -318,6 +320,8 @@ const (
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
 	InvalidLeaseErrType                     ErrorDetailType = 40
+	OptimisticEvalConflictsErrType          ErrorDetailType = 41
+	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -327,7 +331,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 41
+	NumErrors int = 43
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -801,21 +805,14 @@ func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionRetryError{}
 var _ transactionRestartError = &TransactionRetryError{}
 
-// NewTransactionStatusError initializes a new TransactionStatusError from
-// the given message.
-func NewTransactionStatusError(msg string) *TransactionStatusError {
+// NewTransactionStatusError initializes a new TransactionStatusError with
+// the given message and reason.
+func NewTransactionStatusError(
+	reason TransactionStatusError_Reason, msg string,
+) *TransactionStatusError {
 	return &TransactionStatusError{
 		Msg:    msg,
-		Reason: TransactionStatusError_REASON_UNKNOWN,
-	}
-}
-
-// NewTransactionCommittedStatusError initializes a new TransactionStatusError
-// with a REASON_TXN_COMMITTED.
-func NewTransactionCommittedStatusError() *TransactionStatusError {
-	return &TransactionStatusError{
-		Msg:    "already committed",
-		Reason: TransactionStatusError_REASON_TXN_COMMITTED,
+		Reason: reason,
 	}
 }
 
@@ -867,6 +864,19 @@ func (e *WriteIntentError) message(_ *Error) string {
 			}
 			buf.WriteString(end[i].Key.String())
 		}
+	}
+
+	switch e.Reason {
+	case WriteIntentError_REASON_UNSPECIFIED:
+		// Nothing to say.
+	case WriteIntentError_REASON_WAIT_POLICY:
+		buf.WriteString(" [reason=wait_policy]")
+	case WriteIntentError_REASON_LOCK_TIMEOUT:
+		buf.WriteString(" [reason=lock_timeout]")
+	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
+		buf.WriteString(" [reason=lock_wait_queue_max_length_exceeded]")
+	default:
+		// Could panic, better to silently ignore in case new reasons are added.
 	}
 	return buf.String()
 }
@@ -1256,3 +1266,52 @@ func (e *InvalidLeaseError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &InvalidLeaseError{}
+
+// NewOptimisticEvalConflictsError initializes a new
+// OptimisticEvalConflictsError.
+func NewOptimisticEvalConflictsError() *OptimisticEvalConflictsError {
+	return &OptimisticEvalConflictsError{}
+}
+
+func (e *OptimisticEvalConflictsError) Error() string {
+	return e.message(nil)
+}
+
+func (e *OptimisticEvalConflictsError) message(pErr *Error) string {
+	return "optimistic eval encountered conflict"
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *OptimisticEvalConflictsError) Type() ErrorDetailType {
+	return OptimisticEvalConflictsErrType
+}
+
+var _ ErrorDetailInterface = &OptimisticEvalConflictsError{}
+
+// NewMinTimestampBoundUnsatisfiableError initializes a new
+// MinTimestampBoundUnsatisfiableError.
+func NewMinTimestampBoundUnsatisfiableError(
+	minTimestampBound, resolvedTimestamp hlc.Timestamp,
+) *MinTimestampBoundUnsatisfiableError {
+	return &MinTimestampBoundUnsatisfiableError{
+		MinTimestampBound: minTimestampBound,
+		ResolvedTimestamp: resolvedTimestamp,
+	}
+}
+
+func (e *MinTimestampBoundUnsatisfiableError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MinTimestampBoundUnsatisfiableError) message(pErr *Error) string {
+	return fmt.Sprintf("bounded staleness read with minimum timestamp "+
+		"bound of %s could not be satisfied by a local resolved timestamp of %s",
+		e.MinTimestampBound, e.ResolvedTimestamp)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
+	return MinTimestampBoundUnsatisfiableErrType
+}
+
+var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}

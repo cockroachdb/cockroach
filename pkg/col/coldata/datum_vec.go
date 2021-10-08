@@ -25,9 +25,9 @@ type DatumVec interface {
 	// Set sets the datum at index i in the vector. It must check whether the
 	// provided datum is compatible with the type that the DatumVec stores.
 	Set(i int, v Datum)
-	// Slice creates a "window" into the vector. It behaves similarly to
+	// Window creates a "window" into the vector. It behaves similarly to
 	// Golang's slice.
-	Slice(start, end int) DatumVec
+	Window(start, end int) DatumVec
 	// CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive
 	// tree.Datum values from src into the vector starting at destIdx.
 	CopySlice(src DatumVec, destIdx, srcStartIdx, srcEndIdx int)
@@ -48,6 +48,11 @@ type DatumVec interface {
 	// index i.
 	UnmarshalTo(i int, b []byte) error
 	// Size returns the total memory footprint of the vector (including the
-	// internal memory used by tree.Datums) in bytes.
-	Size() uintptr
+	// internal memory used by tree.Datums) in bytes. It only accounts for the
+	// size of the datum objects starting from the given index. So, Size is
+	// relatively cheap when startIdx >= length, and expensive when
+	// startIdx < length (with a maximum at zero). A nonzero startIdx should only
+	// be used when elements before startIdx are guaranteed not to have been
+	// modified.
+	Size(startIdx int) int64
 }

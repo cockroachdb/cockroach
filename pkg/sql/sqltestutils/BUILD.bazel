@@ -12,11 +12,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
-        "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server",
         "//pkg/server/diagnostics",
         "//pkg/sql",

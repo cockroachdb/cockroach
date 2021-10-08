@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -82,7 +84,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	for i := range n.Tables {
 		tn := &n.Tables[i]
-		tableDesc, err := p.ResolveMutableTableDescriptor(
+		_, tableDesc, err := p.ResolveMutableTableDescriptor(
 			ctx, tn, true /*required*/, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return err
@@ -212,6 +214,16 @@ func (p *planner) truncateTable(
 
 	if err := checkTableForDisallowedMutationsWithTruncate(tableDesc); err != nil {
 		return err
+	}
+
+	// Exit early with an error if the table is undergoing a new-style schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if tableDesc.NewSchemaChangeJobID != 0 {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			tableDesc.GetName(),
+		)
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -424,6 +436,7 @@ func ClearTableDataInChunks(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
+	sv *settings.Values,
 	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
@@ -436,9 +449,9 @@ func ClearTableDataInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.GetName(), rowIdx, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */)
+			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */, sv, true /* internal */, nil /* metrics */)
 			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+			if err := td.init(ctx, txn, nil /* *tree.EvalContext */, sv); err != nil {
 				return err
 			}
 			var err error
@@ -513,7 +526,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	tablePrefix := p.execCfg.Codec.TablePrefix(uint32(tableID))
 
 	// Fetch all of the range descriptors for this index.
-	ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
+	ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "truncate-copy-splits"), roachpb.Span{
 		Key:    tablePrefix,
 		EndKey: tablePrefix.PrefixEnd(),
 	})

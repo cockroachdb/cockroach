@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -107,20 +106,20 @@ func DecodePartitionTuple(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
-	partDesc *descpb.PartitioningDescriptor,
+	part catalog.Partitioning,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
 ) (*PartitionTuple, []byte, error) {
-	if len(prefixDatums)+int(partDesc.NumColumns) > index.NumColumns() {
+	if len(prefixDatums)+part.NumColumns() > index.NumKeyColumns() {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
 	t := &PartitionTuple{
-		Datums: make(tree.Datums, 0, int(partDesc.NumColumns)),
+		Datums: make(tree.Datums, 0, part.NumColumns()),
 	}
 
-	for i := len(prefixDatums); i < index.NumColumns() && i < len(prefixDatums)+int(partDesc.NumColumns); i++ {
-		colID := index.GetColumnID(i)
+	for i := len(prefixDatums); i < index.NumKeyColumns() && i < len(prefixDatums)+part.NumColumns(); i++ {
+		colID := index.GetKeyColumnID(i)
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, err
@@ -161,7 +160,7 @@ func DecodePartitionTuple(
 	allDatums := append(prefixDatums, t.Datums...)
 	var colMap catalog.TableColMap
 	for i := range allDatums {
-		colMap.Set(index.GetColumnID(i), i)
+		colMap.Set(index.GetKeyColumnID(i), i)
 	}
 
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())

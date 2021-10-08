@@ -12,27 +12,21 @@ package rangefeed_test
 
 import (
 	"context"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type mockClient struct {
@@ -335,50 +329,47 @@ func TestRangeFeedMock(t *testing.T) {
 	})
 }
 
-// TestBackoffOnRangefeedFailure ensures that the backoff occurs when a
-// rangefeed fails. It observes this indirectly by looking at logs.
+// TestBackoffOnRangefeedFailure ensures that the rangefeed is retried on
+// failures.
 func TestBackoffOnRangefeedFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var called int64
-	const timesToFail = 3
-	rpcKnobs := rpc.ContextTestingKnobs{
-		StreamClientInterceptor: func(
-			target string, class rpc.ConnectionClass,
-		) grpc.StreamClientInterceptor {
-			return func(
-				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
-				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
-			) (stream grpc.ClientStream, err error) {
-				if strings.Contains(method, "RangeFeed") &&
-					atomic.AddInt64(&called, 1) <= timesToFail {
-					return nil, errors.Errorf("boom")
-				}
-				return streamer(ctx, desc, cc, method, opts...)
-			}
-		},
+	ctx, cancel := context.WithCancel(context.Background())
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	ctrl := gomock.NewController(t)
+	db := rangefeed.NewMockkvDB(ctrl)
+
+	// Make sure scan failure gets retried.
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
+	// (which signals the rangefeed to shut down gracefully).
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(3).
+		Return(errors.New("rangefeed failed"))
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(context.Context, roachpb.Span, hlc.Timestamp, bool, chan<- *roachpb.RangeFeedEvent) {
+			cancel()
+		}).
+		Return(nil)
+
+	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
+	r, err := f.RangeFeed(ctx, "foo",
+		roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+		hlc.Timestamp{},
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
+		rangefeed.WithInitialScan(func(ctx context.Context) {}),
+		rangefeed.WithRetry(retry.Options{InitialBackoff: time.Millisecond}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "timed out waiting for retries")
 	}
-	ctx := context.Background()
-	var seen int64
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					ContextTestingKnobs: rpcKnobs,
-				},
-				RangeFeed: &rangefeed.TestingKnobs{
-					OnRangefeedRestart: func() {
-						atomic.AddInt64(&seen, 1)
-					},
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	testutils.SucceedsSoon(t, func() error {
-		if n := atomic.LoadInt64(&seen); n < timesToFail {
-			return errors.Errorf("seen %d, waiting for %d", n, timesToFail)
-		}
-		return nil
-	})
 }

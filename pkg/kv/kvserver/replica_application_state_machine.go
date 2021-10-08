@@ -73,7 +73,7 @@ type nonDeterministicFailure struct {
 
 // The provided format string should be safe for reporting.
 func makeNonDeterministicFailure(format string, args ...interface{}) error {
-	err := errors.Newf(format, args...)
+	err := errors.AssertionFailedWithDepthf(1, format, args...)
 	return &nonDeterministicFailure{
 		wrapped:  err,
 		safeExpl: err.Error(),
@@ -812,7 +812,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	// it will shut down with an error. If the WriteBatch is nil then we expect
 	// the logical operation log to also be nil. We don't want to trigger a
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
-	// the rangefed. If no rangefeed is running at all, this call will be a noop.
+	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
 	if ops := cmd.raftCmd.LogicalOpLog; cmd.raftCmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
@@ -918,7 +918,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// If the range is now less than its RangeMaxBytes, clear the history of its
 	// largest previous max bytes.
-	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < *r.mu.zone.RangeMaxBytes {
+	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < r.mu.conf.RangeMaxBytes {
 		r.mu.largestPreviousMaxRangeSizeBytes = 0
 	}
 
@@ -929,11 +929,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	tenantID := r.mu.tenantID
 	r.mu.Unlock()
 	if closedTimestampUpdated {
-		// TODO(andrei): Pass in the new closed timestamp to
-		// r.handleClosedTimestampUpdateRaftMuLocked directly after the old closed
-		// ts tracker goes away. Until then we can't do it; we have to let the
-		// method consult r.maxClosed().
-		r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
 	}
 
 	// Record the stats delta in the StoreMetrics.
@@ -1206,7 +1202,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	if cmd.IsLocal() {
 		// Handle the LocalResult.
 		if cmd.localResult != nil {
-			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
+			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult, true /* raftMuHeld */)
 		}
 
 		rejected := cmd.Rejected()

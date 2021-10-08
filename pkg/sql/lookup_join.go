@@ -43,6 +43,18 @@ type lookupJoinNode struct {
 	// used to construct the spans for each lookup.
 	lookupExpr tree.TypedExpr
 
+	// If remoteLookupExpr is set, this is a locality optimized lookup join. In
+	// this case, lookupExpr contains the lookup join conditions targeting ranges
+	// located on local nodes (relative to the gateway region), and
+	// remoteLookupExpr contains the lookup join conditions targeting remote
+	// nodes. The optimizer will only plan a locality optimized lookup join if it
+	// is known that each lookup returns at most one row. This fact allows the
+	// execution engine to use the local conditions in lookupExpr first, and if a
+	// match is found locally for each input row, there is no need to search
+	// remote nodes. If a local match is not found for all input rows, the
+	// execution engine uses remoteLookupExpr to search remote nodes.
+	remoteLookupExpr tree.TypedExpr
+
 	// columns are the produced columns, namely the input columns and (unless the
 	// join type is semi or anti join) the columns in the table scanNode.
 	columns colinfo.ResultColumns

@@ -74,8 +74,8 @@ func (m *memColumn) Append(args SliceArgs) {
 				// bytes-like columns, we append an empty slice.
 				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
 				// {{else}}
-				// {{/* Here WINDOW means slicing which allows us to use APPENDVAL below. */}}
-				toCol = execgen.WINDOW(toCol, 0, args.DestIdx)
+				// {{/* Here Window means slicing which allows us to use APPENDVAL below. */}}
+				toCol = toCol.Window(0, args.DestIdx)
 				// {{end}}
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
@@ -92,110 +92,15 @@ func (m *memColumn) Append(args SliceArgs) {
 	}
 }
 
-// {{/*
-func _COPY_WITH_SEL(
-	m *memColumn, args CopySliceArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
-) { // */}}
-	// {{define "copyWithSel" -}}
-	sel = sel[args.SrcStartIdx:args.SrcEndIdx]
-	n := len(sel)
-	// {{if and (.Global.Sliceable) (not .SelOnDest)}}
-	toCol = toCol[args.DestIdx:]
-	_ = toCol[n-1]
-	// {{end}}
-	if args.Src.MaybeHasNulls() {
-		nulls := args.Src.Nulls()
-		for i := 0; i < n; i++ {
-			//gcassert:bce
-			selIdx := sel[i]
-			if nulls.NullAt(selIdx) {
-				// {{if .SelOnDest}}
-				m.nulls.SetNull(selIdx)
-				// {{else}}
-				m.nulls.SetNull(i + args.DestIdx)
-				// {{end}}
-			} else {
-				// {{with .Global}}
-				v := fromCol.Get(selIdx)
-				// {{end}}
-				// {{if .SelOnDest}}
-				m.nulls.UnsetNull(selIdx)
-				// {{with .Global}}
-				execgen.SET(toCol, selIdx, v)
-				// {{end}}
-				// {{else}}
-				// {{with .Global}}
-				// {{if .Sliceable}}
-				// {{/*
-				//     For the sliceable types, we sliced toCol to start at
-				//     args.DestIdx, so we use index i directly.
-				// */}}
-				//gcassert:bce
-				execgen.SET(toCol, i, v)
-				// {{else}}
-				// {{/*
-				//     For the non-sliceable types, toCol vector is the original
-				//     one (i.e. without an adjustment), so we need to add
-				//     args.DestIdx to set the element at the correct index.
-				// */}}
-				execgen.SET(toCol, i+args.DestIdx, v)
-				// {{end}}
-				// {{end}}
-				// {{end}}
-			}
-		}
-		return
-	}
-	// No Nulls.
-	for i := 0; i < n; i++ {
-		//gcassert:bce
-		selIdx := sel[i]
-		// {{with .Global}}
-		v := fromCol.Get(selIdx)
-		// {{end}}
-		// {{if .SelOnDest}}
-		// {{with .Global}}
-		execgen.SET(toCol, selIdx, v)
-		// {{end}}
-		// {{else}}
-		// {{with .Global}}
-		// {{if .Sliceable}}
-		// {{/*
-		//     For the sliceable types, we sliced toCol to start at
-		//     args.DestIdx, so we use index i directly.
-		// */}}
-		//gcassert:bce
-		execgen.SET(toCol, i, v)
-		// {{else}}
-		// {{/*
-		//     For the non-sliceable types, toCol vector is the original one
-		//     (i.e. without an adjustment), so we need to add args.DestIdx to
-		//     set the element at the correct index.
-		// */}}
-		execgen.SET(toCol, i+args.DestIdx, v)
-		// {{end}}
-		// {{end}}
-		// {{end}}
-	}
-	// {{end}}
-	// {{/*
-}
-
-// */}}
-
-func (m *memColumn) Copy(args CopySliceArgs) {
+func (m *memColumn) Copy(args SliceArgs) {
 	if args.SrcStartIdx == args.SrcEndIdx {
 		// Nothing to copy, so return early.
 		return
 	}
-	if !args.SelOnDest {
+	if m.Nulls().MaybeHasNulls() {
 		// We're about to overwrite this entire range, so unset all the nulls.
 		m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 	}
-	// } else {
-	// SelOnDest indicates that we're applying the input selection vector as a lens
-	// into the output vector as well. We'll set the non-nulls by hand below.
-	// }
 
 	switch m.CanonicalTypeFamily() {
 	// {{range .}}
@@ -206,17 +111,120 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 			fromCol := args.Src.TemplateType()
 			toCol := m.TemplateType()
 			if args.Sel != nil {
-				sel := args.Sel
-				if args.SelOnDest {
-					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
-				} else {
-					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+				n := len(sel)
+				// {{if .Sliceable}}
+				toCol = toCol[args.DestIdx:]
+				_ = toCol[n-1]
+				// {{end}}
+				if args.Src.MaybeHasNulls() {
+					nulls := args.Src.Nulls()
+					for i := 0; i < n; i++ {
+						//gcassert:bce
+						selIdx := sel[i]
+						if nulls.NullAt(selIdx) {
+							m.nulls.SetNull(i + args.DestIdx)
+						} else {
+							v := fromCol.Get(selIdx)
+							// {{if .Sliceable}}
+							// {{/*
+							//     For the sliceable types, we sliced toCol to start at
+							//     args.DestIdx, so we use index i directly.
+							// */}}
+							//gcassert:bce
+							toCol.Set(i, v)
+							// {{else}}
+							// {{/*
+							//     For the non-sliceable types, toCol vector is the original
+							//     one (i.e. without an adjustment), so we need to add
+							//     args.DestIdx to set the element at the correct index.
+							// */}}
+							toCol.Set(i+args.DestIdx, v)
+							// {{end}}
+						}
+					}
+					return
+				}
+				// No Nulls.
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					selIdx := sel[i]
+					v := fromCol.Get(selIdx)
+					// {{if .Sliceable}}
+					// {{/*
+					//     For the sliceable types, we sliced toCol to start at
+					//     args.DestIdx, so we use index i directly.
+					// */}}
+					//gcassert:bce
+					toCol.Set(i, v)
+					// {{else}}
+					// {{/*
+					//     For the non-sliceable types, toCol vector is the original one
+					//     (i.e. without an adjustment), so we need to add args.DestIdx to
+					//     set the element at the correct index.
+					// */}}
+					toCol.Set(i+args.DestIdx, v)
+					// {{end}}
 				}
 				return
 			}
 			// No Sel.
-			execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
-			m.nulls.set(args.SliceArgs)
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			m.nulls.set(args)
+			// {{end}}
+		}
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
+}
+
+// {{/*
+func _COPY_WITH_REORDERED_SOURCE(_SRC_HAS_NULLS bool) { // */}}
+	// {{define "copyWithReorderedSource" -}}
+	for i := 0; i < n; i++ {
+		//gcassert:bce
+		destIdx := sel[i]
+		srcIdx := order[destIdx]
+		// {{if .SrcHasNulls}}
+		if nulls.NullAt(srcIdx) {
+			m.nulls.SetNull(destIdx)
+		} else
+		// {{end}}
+		{
+			v := fromCol.Get(srcIdx)
+			toCol.Set(destIdx, v)
+		}
+	}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
+	if len(sel) == 0 {
+		return
+	}
+	if m.nulls.MaybeHasNulls() {
+		m.nulls.UnsetNulls()
+	}
+	switch m.CanonicalTypeFamily() {
+	// {{range .}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch m.t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			fromCol := src.TemplateType()
+			toCol := m.TemplateType()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				_COPY_WITH_REORDERED_SOURCE(true)
+			} else {
+				_COPY_WITH_REORDERED_SOURCE(false)
+			}
 			// {{end}}
 		}
 		// {{end}}
@@ -236,7 +244,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 execgen.WINDOW(col, start, end),
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 			// {{end}}
@@ -257,7 +265,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		case _TYPE_WIDTH:
 			target := v.TemplateType()
 			newVal := elem.(_GOTYPE)
-			execgen.SET(target, rowIdx, newVal)
+			target.Set(rowIdx, newVal)
 			// {{end}}
 		}
 		// {{end}}

@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -140,5 +141,45 @@ func TestBatchWithBytesAndNulls(t *testing.T) {
 	// safe.
 	for _, idx := range sel {
 		assert.True(t, len(vec.Get(idx)) == 0)
+	}
+}
+
+// Import colconv package in order to inject the implementation of
+// coldata.VecsToStringWithRowPrefix.
+var _ colconv.VecToDatumConverter
+
+func TestBatchString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := coldata.NewMemBatch([]*types.T{types.String}, coldata.StandardColumnFactory)
+	input := []string{"one", "two", "three"}
+	for i := range input {
+		b.ColVec(0).Bytes().Set(i, []byte(input[i]))
+	}
+	getExpected := func(length int, sel []int) string {
+		var result string
+		for i := 0; i < length; i++ {
+			if i > 0 {
+				result += "\n"
+			}
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			result += "['" + input[rowIdx] + "']"
+		}
+		return result
+	}
+	for _, tc := range []struct {
+		length int
+		sel    []int
+	}{
+		{length: 3},
+		{length: 2, sel: []int{0, 2}},
+	} {
+		b.SetSelection(tc.sel != nil)
+		copy(b.Selection(), tc.sel)
+		b.SetLength(tc.length)
+		assert.Equal(t, getExpected(tc.length, tc.sel), b.String())
 	}
 }

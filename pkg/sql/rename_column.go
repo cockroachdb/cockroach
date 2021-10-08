@@ -43,7 +43,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	}
 
 	// Check if table exists.
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, tree.ResolveRequireTableDesc)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +125,13 @@ func (p *planner) renameColumn(
 	isShardColumn := tableDesc.IsShardColumn(col)
 	if isShardColumn && !allowRenameOfShardColumn {
 		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
+	}
+	if col.IsInaccessible() {
+		return false, pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot be renamed",
+			col.GetName(),
+		)
 	}
 	// Understand if the active column already exists before checking for column
 	// mutations to detect assertion failure of empty mutation and no column.

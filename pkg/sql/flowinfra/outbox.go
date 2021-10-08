@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // OutboxBufRows is the maximum number of rows that are buffered by the Outbox
@@ -210,8 +211,8 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
-		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
-		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
+		span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(m.flowCtx.ID.String()))
+		span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(m.streamID)))
 	}
 	// spanFinished specifies whether we've Finish()-ed the span. Some code
 	// paths (e.g. stats collection) need to prematurely call it to get trace
@@ -438,7 +439,7 @@ func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Start starts the outbox.
 func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
-	if m.Types() == nil {
+	if m.OutputTypes() == nil {
 		panic("outbox not initialized")
 	}
 	if wg != nil {

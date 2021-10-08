@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,12 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -54,6 +56,9 @@ type ServerConfig struct {
 
 	// NodeID is the id of the node on which this Server is running.
 	NodeID *base.SQLIDContainer
+
+	// Locality is the locality of the node on which this Server is running.
+	Locality roachpb.Locality
 
 	// Codec is capable of encoding and decoding sql table keys.
 	Codec keys.SQLCodec
@@ -103,7 +108,9 @@ type ServerConfig struct {
 	// because of RocksDB space amplification.
 	ParentDiskMonitor *mon.BytesMonitor
 
-	Metrics *DistSQLMetrics
+	Metrics            *DistSQLMetrics
+	RowMetrics         *row.Metrics
+	InternalRowMetrics *row.Metrics
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
@@ -140,13 +147,16 @@ type ServerConfig struct {
 	// gateway.
 	RangeCache *rangecache.RangeCache
 
-	// HydratedTables is a node-level cache of table descriptors which utilize
-	// user-defined types.
-	HydratedTables *hydratedtables.Cache
-
-	// SQLStatsResetter is an interface used to reset SQL stats without the need to
+	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsResetter tree.SQLStatsResetter
+	SQLStatsController tree.SQLStatsController
+
+	// SQLSQLResponseAdmissionQ is the admission queue to use for
+	// SQLSQLResponseWork.
+	SQLSQLResponseAdmissionQ *admission.WorkQueue
+
+	// CollectionFactory is used to construct descs.Collections.
+	CollectionFactory *descs.CollectionFactory
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -203,6 +213,15 @@ type TestingKnobs struct {
 	// Cannot be set together with ForceDiskSpill.
 	MemoryLimitBytes int64
 
+	// TableReaderBatchBytesLimit, if not 0, overrides the limit that the
+	// TableReader will set on the size of results it wants to get for individual
+	// requests.
+	TableReaderBatchBytesLimit int64
+	// JoinReaderBatchBytesLimit, if not 0, overrides the limit that the
+	// joinReader will set on the size of results it wants to get for individual
+	// lookup requests.
+	JoinReaderBatchBytesLimit int64
+
 	// DrainFast, if enabled, causes the server to not wait for any currently
 	// running flows to complete or give a grace period of minFlowDrainWait
 	// to incoming flows to register.
@@ -227,6 +246,9 @@ type TestingKnobs struct {
 
 	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
 	BackupRestoreTestingKnobs base.ModuleTestingKnobs
+
+	// StreamingTestingKnobs are backup and restore specific testing knobs.
+	StreamingTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
@@ -258,12 +280,22 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 	}
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		return 1
-	} else if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
+	}
+	if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
 		return flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	}
-	if flowCtx.EvalCtx.SessionData.WorkMemLimit <= 0 {
+	if flowCtx.EvalCtx.SessionData().WorkMemLimit <= 0 {
 		// If for some reason workmem limit is not set, use the default value.
 		return DefaultMemoryLimit
 	}
-	return flowCtx.EvalCtx.SessionData.WorkMemLimit
+	return flowCtx.EvalCtx.SessionData().WorkMemLimit
+}
+
+// GetRowMetrics returns the proper RowMetrics for either internal or user
+// queries.
+func (flowCtx *FlowCtx) GetRowMetrics() *row.Metrics {
+	if flowCtx.EvalCtx.SessionData().Internal {
+		return flowCtx.Cfg.InternalRowMetrics
+	}
+	return flowCtx.Cfg.RowMetrics
 }

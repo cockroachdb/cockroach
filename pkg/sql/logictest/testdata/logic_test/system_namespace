@@ -13,6 +13,7 @@ SELECT * FROM system.namespace
 0   0   test                             52
 1   0   public                           29
 1   29  comments                         24
+1   29  database_role_settings           44
 1   29  descriptor                       3
 1   29  eventlog                         12
 1   29  jobs                             15
@@ -20,8 +21,7 @@ SELECT * FROM system.namespace
 1   29  lease                            11
 1   29  locations                        21
 1   29  migrations                       40
-1   29  namespace                        2
-1   29  namespace2                       30
+1   29  namespace                        30
 1   29  protected_ts_meta                31
 1   29  protected_ts_records             32
 1   29  rangelog                         13
@@ -33,12 +33,17 @@ SELECT * FROM system.namespace
 1   29  role_options                     33
 1   29  scheduled_jobs                   37
 1   29  settings                         6
+1   29  span_configurations              47
+1   29  sql_instances                    46
 1   29  sqlliveness                      39
 1   29  statement_bundle_chunks          34
 1   29  statement_diagnostics            36
 1   29  statement_diagnostics_requests   35
+1   29  statement_statistics             42
 1   29  table_statistics                 20
+1   29  tenant_usage                     45
 1   29  tenants                          8
+1   29  transaction_statistics           43
 1   29  ui                               14
 1   29  users                            4
 1   29  web_sessions                     19
@@ -52,5 +57,6 @@ query TTBTTTB
 SHOW COLUMNS FROM system.namespace
 ----
 parentID        INT8    false  NULL  ·  {primary}  false
+parentSchemaID  INT8    false  NULL  ·  {primary}  false
 name            STRING  false  NULL  ·  {primary}  false
-id              INT8    true   NULL  ·  {}         false
+id              INT8    true   NULL  ·  {primary}  false

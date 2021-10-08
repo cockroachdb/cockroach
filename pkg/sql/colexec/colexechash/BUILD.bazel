@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
+        "//pkg/sql/memsize",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",

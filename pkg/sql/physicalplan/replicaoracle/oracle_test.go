@@ -55,7 +55,7 @@ func TestClosest(t *testing.T) {
 		nil, /* txn */
 		&roachpb.RangeDescriptor{
 			InternalReplicas: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
+				{NodeID: 4, StoreID: 4},
 				{NodeID: 2, StoreID: 2},
 				{NodeID: 3, StoreID: 3},
 			},

@@ -134,17 +134,19 @@ func TestIndexConstraints(t *testing.T) {
 				remainingFilter := ic.RemainingFilters()
 				if !remainingFilter.IsTrue() {
 					execBld := execbuilder.New(
-						nil /* execFactory */, f.Memo(), nil /* catalog */, &remainingFilter,
-						&evalCtx, false, /* allowAutoCommit */
+						nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+						&remainingFilter, &evalCtx, false, /* allowAutoCommit */
 					)
 					expr, err := execBld.BuildScalar()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
-					fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-					fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-						ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
-					})
+					fmtCtx := tree.NewFmtCtx(
+						tree.FmtSimple,
+						tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+							ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
+						}),
+					)
 					expr.Format(fmtCtx)
 					fmt.Fprintf(&buf, "Remaining filter: %s\n", fmtCtx.String())
 				}

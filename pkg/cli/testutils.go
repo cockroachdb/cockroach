@@ -13,24 +13,31 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 )
 
 // TestingReset resets global mutable state so that Run can be called multiple
@@ -55,15 +62,23 @@ type TestCLI struct {
 	logScope *log.TestLogScope
 	// if true, doesn't print args during RunWithArgs.
 	omitArgs bool
+	// if true, prints the requested exit code during RunWithArgs.
+	reportExitCode bool
 }
 
 // TestCLIParams contains parameters used by TestCLI.
 type TestCLIParams struct {
-	T           *testing.T
-	Insecure    bool
-	NoServer    bool
-	StoreSpecs  []base.StoreSpec
-	Locality    roachpb.Locality
+	T        *testing.T
+	Insecure bool
+	// NoServer, if true, starts the test without a DB server.
+	NoServer bool
+
+	// The store specifications for the in-memory server.
+	StoreSpecs []base.StoreSpec
+	// The locality tiers for the in-memory server.
+	Locality roachpb.Locality
+
+	// NoNodelocal, if true, disables node-local external I/O storage.
 	NoNodelocal bool
 }
 
@@ -71,6 +86,12 @@ type TestCLIParams struct {
 // test file name. It is used to extract the file name from a uniquely
 // generated (temp directory) file path.
 const testTempFilePrefix = "test-temp-prefix-"
+
+// testUserfileUploadTempDirPrefix is a marker to be used as a prefix for the
+// temp directory created in the Example_userfile_upload_recursive() test.
+// It is used to extract the filepath.Base(), i.e. the directory name,
+// from the uniquely generated (temp directory) file path.
+const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 
 func (c *TestCLI) fail(err interface{}) {
 	if c.t != nil {
@@ -81,38 +102,12 @@ func (c *TestCLI) fail(err interface{}) {
 	}
 }
 
-func createTestCerts(certsDir string) (cleanup func() error) {
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	// Disable embedded certs, or the security library will try to load
-	// our real files as embedded assets.
-	security.ResetAssetLoader()
-
-	assets := []string{
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantClientCACert),
-	}
-
-	for _, a := range assets {
-		_, err := securitytest.RestrictedCopy(a, certsDir, filepath.Base(a))
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return func() error {
-		security.SetAssetLoader(securitytest.EmbeddedAssets)
-		return os.RemoveAll(certsDir)
-	}
-}
-
 // NewCLITest export for cclcli.
 func NewCLITest(params TestCLIParams) TestCLI {
+	return newCLITestWithArgs(params, nil)
+}
+
+func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerArgs)) TestCLI {
 	c := TestCLI{t: params.T}
 
 	certsDir, err := ioutil.TempDir("", "cli-test")
@@ -129,7 +124,7 @@ func NewCLITest(params TestCLIParams) TestCLI {
 
 	if !params.NoServer {
 		if !params.Insecure {
-			c.cleanupFunc = createTestCerts(certsDir)
+			c.cleanupFunc = securitytest.CreateTestCerts(certsDir)
 		}
 
 		args := base.TestServerArgs{
@@ -138,6 +133,14 @@ func NewCLITest(params TestCLIParams) TestCLI {
 			StoreSpecs:    params.StoreSpecs,
 			Locality:      params.Locality,
 			ExternalIODir: filepath.Join(certsDir, "extern"),
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
+			},
+		}
+		if argsFn != nil {
+			argsFn(&args)
 		}
 		if params.NoNodelocal {
 			args.ExternalIODir = ""
@@ -168,11 +171,11 @@ func NewCLITest(params TestCLIParams) TestCLI {
 // e.g. that tests ran with -v have the same output as those without.
 func setCLIDefaultsForTests() {
 	initCLIDefaults()
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
-	cliCtx.tableDisplayFormat = tableDisplayTable
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTable
 }
 
 // stopServer stops the test server.
@@ -184,9 +187,9 @@ func (c *TestCLI) stopServer() {
 	}
 }
 
-// restartServer stops and restarts the test server. The ServingRPCAddr() may
+// RestartServer stops and restarts the test server. The ServingRPCAddr() may
 // have changed after this method returns.
-func (c *TestCLI) restartServer(params TestCLIParams) {
+func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
 	log.Info(context.Background(), "restarting server")
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
@@ -330,14 +333,22 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 		}
 		args = append(args, origArgs[1:]...)
 
-		// `nodelocal upload` CLI tests create test files in unique temp
-		// directories. Given that the expected output for such tests is defined as
-		// a static comment, it is not possible to match against the full file path.
-		// So, we trim the file path upto the sentinel prefix marker, and use only
-		// the file name for comparing against the expected output.
+		// `nodelocal upload` and `userfile upload -r` CLI tests create unique temp
+		// directories with random numbers in their names. Given that the expected
+		// output for such tests is defined as a static comment, it is not possible
+		// to match against the full path. So, we trim the paths as below.
 		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
 			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
 			origArgs[2] = splitFilePath[1]
+		}
+		if len(origArgs) >= 4 && strings.Contains(origArgs[3], testUserfileUploadTempDirPrefix) {
+			hasTrailingSlash := strings.HasSuffix(origArgs[3], "/")
+			origArgs[3] = filepath.Base(origArgs[3])
+			// Maintain trailing slash because the behavior of `userfile upload -r`
+			// depends on it.
+			if hasTrailingSlash {
+				origArgs[3] += "/"
+			}
 		}
 
 		if !c.omitArgs {
@@ -347,7 +358,14 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 
 		return Run(args)
 	}(); err != nil {
-		cliOutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", getExitCode(err))
+		}
+	} else {
+		if c.reportExitCode {
+			fmt.Fprintln(os.Stdout, "exit code:", exit.Success())
+		}
 	}
 }
 
@@ -370,4 +388,104 @@ func (c TestCLI) RunWithCAArgs(origArgs []string) {
 	}(); err != nil {
 		fmt.Println(err)
 	}
+}
+
+// ElideInsecureDeprecationNotice elides the deprecation notice for --insecure.
+func ElideInsecureDeprecationNotice(csvStr string) string {
+	// v20.1 introduces a deprecation notice for --insecure. Skip over it.
+	// TODO(knz): Remove this when --insecure is dropped.
+	// See: https://github.com/cockroachdb/cockroach/issues/53404
+	lines := strings.SplitN(csvStr, "\n", 3)
+	if len(lines) > 0 && strings.HasPrefix(lines[0], "Flag --insecure has been deprecated") {
+		csvStr = lines[2]
+	}
+	return csvStr
+}
+
+// RemoveMatchingLines removes lines from the input string that match any of
+// the provided regexps. Mind that regexp could match a substrings, so you need
+// to put ^ and $ around to ensure full matches.
+func RemoveMatchingLines(output string, regexps []string) string {
+	if len(regexps) == 0 {
+		return output
+	}
+
+	var patterns []*regexp.Regexp
+	for _, weed := range regexps {
+		p := regexp.MustCompile(weed)
+		patterns = append(patterns, p)
+	}
+	filter := func(line string) bool {
+		for _, pattern := range patterns {
+			if pattern.MatchString(line) {
+				return true
+			}
+		}
+		return false
+	}
+
+	result := strings.Builder{}
+	for _, line := range strings.Split(output, "\n") {
+		if filter(line) || len(line) == 0 {
+			continue
+		}
+		result.WriteString(line)
+		result.WriteRune('\n')
+	}
+	return result.String()
+}
+
+// GetCsvNumCols returns the number of columns in the given csv string.
+func GetCsvNumCols(csvStr string) (cols int, err error) {
+	csvStr = ElideInsecureDeprecationNotice(csvStr)
+	reader := csv.NewReader(strings.NewReader(csvStr))
+	records, err := reader.Read()
+	if err != nil {
+		return 0, errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err)
+	}
+	return len(records), nil
+}
+
+// MatchCSV matches a multi-line csv string with the provided regex
+// (matchColRow[i][j] will be matched against the i-th line, j-th column).
+func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s",
+				csvStr, pretty.Sprint(matchColRow), err)
+		}
+	}()
+
+	csvStr = ElideInsecureDeprecationNotice(csvStr)
+	reader := csv.NewReader(strings.NewReader(csvStr))
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	lr, lm := len(records), len(matchColRow)
+	if lr < lm {
+		return errors.Errorf("csv has %d rows, but expected at least %d", lr, lm)
+	}
+
+	// Compare only the last len(matchColRow) records. That is, if we want to
+	// match 4 rows and we have 100 records, we only really compare
+	// records[96:], that is, the last four rows.
+	records = records[lr-lm:]
+
+	for i := range records {
+		if lr, lm := len(records[i]), len(matchColRow[i]); lr != lm {
+			return errors.Errorf("row #%d: csv has %d columns, but expected %d", i+1, lr, lm)
+		}
+		for j := range records[i] {
+			pat, str := matchColRow[i][j], records[i][j]
+			re := regexp.MustCompile(pat)
+			if !re.MatchString(str) {
+				err = errors.Errorf("%v\nrow #%d, col #%d: found %q which does not match %q",
+					err, i+1, j+1, str, pat)
+			}
+		}
+	}
+	return err
 }

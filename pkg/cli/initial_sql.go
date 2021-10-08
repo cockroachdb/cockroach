@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +32,7 @@ import (
 func runInitialSQL(
 	ctx context.Context, s *server.Server, startSingleNode bool, adminUser, adminPassword string,
 ) error {
-	newCluster := s.InitialStart() && s.NodeID() == server.FirstNodeID
+	newCluster := s.InitialStart() && s.NodeID() == kvserver.FirstNodeID
 	if !newCluster {
 		// The initial SQL code only runs the first time the cluster is initialized.
 		return nil

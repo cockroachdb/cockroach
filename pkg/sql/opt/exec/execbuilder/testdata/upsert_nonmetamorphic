@@ -36,26 +36,26 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = 
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/55/1/2/0
-materializer  CPut /Table/55/1/2/0 -> /TUPLE/2:2:Int/3
-materializer  InitPut /Table/55/2/3/0 -> /BYTES/0x8a
-materializer  fast path completed
-exec stmt     rows affected: 1
+colbatchscan            Scan /Table/55/1/2/0
+batch flow coordinator  CPut /Table/55/1/2/0 -> /TUPLE/2:2:Int/3
+batch flow coordinator  InitPut /Table/55/2/3/0 -> /BYTES/0x8a
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/55/1/1/0
-materializer  CPut /Table/55/1/1/0 -> /TUPLE/2:2:Int/2
-materializer  InitPut /Table/55/2/2/0 -> /BYTES/0x89
-materializer  fast path completed
-exec stmt     rows affected: 1
+colbatchscan            Scan /Table/55/1/1/0
+batch flow coordinator  CPut /Table/55/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/55/2/2/0 -> /BYTES/0x89
+batch flow coordinator  fast path completed
+exec stmt               rows affected: 1
 
 statement error duplicate key value
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -63,11 +63,11 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = 
 query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/55/1/2/0
-colbatchscan  fetched: /kv/primary/2/v -> /3
-materializer  Put /Table/55/1/2/0 -> /TUPLE/2:2:Int/2
-materializer  Del /Table/55/2/3/0
-materializer  CPut /Table/55/2/2/0 -> /BYTES/0x8a (expecting does not exist)
-exec stmt     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+colbatchscan            Scan /Table/55/1/2/0
+colbatchscan            fetched: /kv/primary/2/v -> /3
+batch flow coordinator  Put /Table/55/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  Del /Table/55/2/3/0
+batch flow coordinator  CPut /Table/55/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "woo"

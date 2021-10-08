@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -97,6 +98,10 @@ const (
 
 	// Maximum allowable permissions.
 	maxKeyPermissions os.FileMode = 0700
+
+	// Maximum allowable permissions if file is owned by root.
+	maxGroupKeyPermissions os.FileMode = 0740
+
 	// Filename extenstions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
@@ -165,11 +170,6 @@ type CertInfo struct {
 	// Error is any error encountered when loading the certificate/key pair.
 	// For example: bad permissions on the key will be stored here.
 	Error error
-}
-
-func exceedsPermissions(objectMode, allowedMode os.FileMode) bool {
-	mask := os.FileMode(0777) ^ allowedMode
-	return mask&objectMode != 0
 }
 
 func isCertificateFile(filename string) bool {
@@ -380,7 +380,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	// Stat the file. This follows symlinks.
 	info, err := assetLoaderImpl.Stat(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not stat key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not stat key file %s", fullKeyPath)
 	}
 
 	// Only regular files are supported (after following symlinks).
@@ -390,18 +390,16 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	}
 
 	if !cl.skipPermissionChecks {
-		// Check permissions bits.
-		filePerm := fileMode.Perm()
-		if exceedsPermissions(filePerm, maxKeyPermissions) {
-			return errors.Errorf("key file %s has permissions %s, exceeds %s",
-				fullKeyPath, filePerm, maxKeyPermissions)
+		aclInfo := sysutil.GetFileACLInfo(info)
+		if err = checkFilePermissions(os.Getgid(), fullKeyPath, aclInfo); err != nil {
+			return err
 		}
 	}
 
 	// Read key file.
 	keyPEMBlock, err := assetLoaderImpl.ReadFile(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not read key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not read key file %s", fullKeyPath)
 	}
 
 	ci.KeyFilename = keyFilename

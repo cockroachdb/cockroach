@@ -122,3 +122,17 @@ message AlterTableOwner {
   // The name of the new owner.
   string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// AlterDefaultPrivileges is recorded when default privileges are changed.
+message AlterDefaultPrivileges {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected database.
+  string database_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Either role_name should be populated or for_all_roles should be true.
+  // The role having its default privileges altered.
+  string role_name = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // Identifies if FOR ALL ROLES is used.
+  bool for_all_roles = 6 [(gogoproto.jsontag) = ",omitempty"];;
+}

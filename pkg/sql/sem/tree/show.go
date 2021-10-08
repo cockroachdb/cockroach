@@ -22,7 +22,7 @@ package tree
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 )
 
 // ShowVar represents a SHOW statement.
@@ -35,7 +35,7 @@ func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	// Session var names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 }
@@ -50,7 +50,7 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 }
@@ -286,6 +286,21 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowChangefeedJobs represents a SHOW CHANGEFEED JOBS statement
+type ShowChangefeedJobs struct {
+	// If non-nil, a select statement that provides the job ids to be shown.
+	Jobs *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CHANGEFEED JOBS")
+	if node.Jobs != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.Jobs)
+	}
+}
+
 // ShowSurvivalGoal represents a SHOW REGIONS statement
 type ShowSurvivalGoal struct {
 	DatabaseName Name
@@ -427,13 +442,18 @@ func (node *ShowTransactions) Format(ctx *FmtCtx) {
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table *UnresolvedObjectName
+	Table       *UnresolvedObjectName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
 	ctx.FormatNode(node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
@@ -475,14 +495,34 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowCreateMode denotes what kind of SHOW CREATE should be used
+type ShowCreateMode int
+
+const (
+	// ShowCreateModeTable represents SHOW CREATE TABLE
+	ShowCreateModeTable ShowCreateMode = iota
+	// ShowCreateModeView represents SHOW CREATE VIEW
+	ShowCreateModeView
+	// ShowCreateModeSequence represents SHOW CREATE SEQUENCE
+	ShowCreateModeSequence
+	// ShowCreateModeDatabase represents SHOW CREATE DATABASE
+	ShowCreateModeDatabase
+)
+
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
+	Mode ShowCreateMode
 	Name *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreate) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ")
+
+	switch node.Mode {
+	case ShowCreateModeDatabase:
+		ctx.WriteString("DATABASE ")
+	}
 	ctx.FormatNode(node.Name)
 }
 
@@ -492,6 +532,21 @@ type ShowCreateAllTables struct{}
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
+}
+
+// ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
+type ShowCreateSchedules struct {
+	ScheduleID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateSchedules) Format(ctx *FmtCtx) {
+	if node.ScheduleID != nil {
+		ctx.WriteString("SHOW CREATE SCHEDULE ")
+		ctx.FormatNode(node.ScheduleID)
+		return
+	}
+	ctx.Printf("SHOW CREATE ALL SCHEDULES")
 }
 
 // ShowSyntax represents a SHOW SYNTAX statement.
@@ -507,9 +562,9 @@ type ShowSyntax struct {
 func (node *ShowSyntax) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SYNTAX ")
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteByte('_')
+		ctx.WriteString("'_'")
 	} else {
-		ctx.WriteString(lex.EscapeSQLString(node.Statement))
+		ctx.WriteString(lexbase.EscapeSQLString(node.Statement))
 	}
 }
 
@@ -523,11 +578,30 @@ func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
 }
 
 // ShowLastQueryStatistics represents a SHOW LAST QUERY STATS statement.
-type ShowLastQueryStatistics struct{}
+type ShowLastQueryStatistics struct {
+	Columns NameList
+}
+
+// ShowLastQueryStatisticsDefaultColumns is the default list of columns
+// when the USING clause is not specified.
+// Note: the form that does not specify the USING clause is deprecated.
+// Remove it when there are no more clients using it (22.1 or later).
+var ShowLastQueryStatisticsDefaultColumns = NameList([]Name{
+	"parse_latency",
+	"plan_latency",
+	"exec_latency",
+	"service_latency",
+	"post_commit_jobs_latency",
+})
 
 // Format implements the NodeFormatter interface.
 func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW LAST QUERY STATISTICS")
+	ctx.WriteString("SHOW LAST QUERY STATISTICS RETURNING ")
+	// The column names for this statement never contain PII and should
+	// be distinguished for feature tracking purposes.
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
+		ctx.FormatNode(&node.Columns)
+	})
 }
 
 // ShowFullTableScans represents a SHOW FULL TABLE SCANS statement.
@@ -681,11 +755,16 @@ const (
 	// ScheduledBackupExecutor is an executor responsible for
 	// the execution of the scheduled backups.
 	ScheduledBackupExecutor
+
+	// ScheduledSQLStatsCompactionExecutor is an executor responsible for the
+	// execution of the scheduled SQL Stats compaction.
+	ScheduledSQLStatsCompactionExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
-	InvalidExecutor:         "unknown-executor",
-	ScheduledBackupExecutor: "scheduled-backup-executor",
+	InvalidExecutor:                     "unknown-executor",
+	ScheduledBackupExecutor:             "scheduled-backup-executor",
+	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -699,6 +778,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 	switch t {
 	case ScheduledBackupExecutor:
 		return "BACKUP"
+	case ScheduledSQLStatsCompactionExecutor:
+		return "SQL STATISTICS"
 	}
 	return "unsupported-executor"
 }
@@ -761,5 +842,30 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 		// TODO(knz): beware of using ctx.FormatNode here if
 		// FOR changes to support expressions.
 		ctx.Printf(" FOR %s", n.ExecutorType.UserName())
+	}
+}
+
+// ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
+type ShowDefaultPrivileges struct {
+	Roles       NameList
+	ForAllRoles bool
+}
+
+var _ Statement = &ShowDefaultPrivileges{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
+	if len(n.Roles) > 0 {
+		ctx.WriteString("FOR ROLE ")
+		for i, role := range n.Roles {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNode(&role)
+		}
+		ctx.WriteString(" ")
+	} else if n.ForAllRoles {
+		ctx.WriteString("FOR ALL ROLES ")
 	}
 }

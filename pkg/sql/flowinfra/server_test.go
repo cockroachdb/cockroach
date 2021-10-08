@@ -58,10 +58,11 @@ func TestServer(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
-		Table:    *td.TableDesc(),
-		IndexIdx: 0,
-		Reverse:  false,
-		Spans:    []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+		Table:         *td.TableDesc(),
+		IndexIdx:      0,
+		Reverse:       false,
+		Spans:         []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+		NeededColumns: []uint32{0, 1},
 	}
 	post := execinfrapb.PostProcessSpec{
 		Projection:    true,
@@ -168,13 +169,11 @@ func runLocalFlow(
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
-	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, distsql.LocalState{})
+	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		return nil, err
 	}
-	if err = flow.Run(flowCtx, func() {}); err != nil {
-		return nil, err
-	}
+	flow.Run(flowCtx, func() {})
 	flow.Cleanup(flowCtx)
 
 	if !rowBuf.ProducerClosed() {

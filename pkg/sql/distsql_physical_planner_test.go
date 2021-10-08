@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -51,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -262,9 +265,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
+	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper, tr)
 	r := MakeDistSQLReceiver(
 		ctx,
 		&errOnlyResultWriter{}, /* resultWriter */
@@ -338,8 +342,6 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 52682)
-
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
 
@@ -370,12 +372,17 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// precisely control the contents of the range cache on node 4.
 	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
+	// Force the DistSQL on this connection.
+	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always; SET distsql = always`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Do a query on node 4 so that it populates the its cache with an initial
 	// descriptor containing all the SQL key space. If we don't do this, the state
 	// of the cache is left at the whim of gossiping the first descriptor done
 	// during cluster startup - it can happen that the cache remains empty, which
 	// is not what this test wants.
-	_, err := db3.Exec(`SELECT * FROM "left"`)
+	_, err = db3.Exec(`SELECT * FROM "left"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,9 +409,6 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// force DistSQL.
 	txn, err := db3.BeginTx(context.Background(), nil /* opts */)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Exec("SET DISTSQL = ALWAYS"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -453,7 +457,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 49843, "test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
+	skip.UnderShort(t, "takes 20s")
 
 	const n = 100
 	const numNodes = 5
@@ -475,14 +479,25 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		r.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", n*i/5))
 	}
 
+	// Evenly spread the ranges between the first 4 nodes. Only the last range
+	// has a replica on the fifth node.
 	for i := 0; i < numNodes; i++ {
 		r.Exec(t, fmt.Sprintf(
 			"ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d,%d,%d], %d)",
-			i+1, (i+1)%5+1, (i+2)%5+1, n*i/5,
+			i+1, (i+1)%4+1, (i+2)%4+1, n*i/5,
 		))
 	}
-
-	r.Exec(t, "SHOW RANGES FROM TABLE t")
+	r.CheckQueryResults(t,
+		"SELECT start_key, end_key, lease_holder, replicas FROM [SHOW RANGES FROM TABLE t]",
+		[][]string{
+			{"NULL", "/0", "1", "{1}"},
+			{"/0", "/20", "1", "{1,2,3}"},
+			{"/20", "/40", "2", "{2,3,4}"},
+			{"/40", "/60", "3", "{1,3,4}"},
+			{"/60", "/80", "4", "{1,2,4}"},
+			{"/80", "NULL", "5", "{2,3,5}"},
+		},
+	)
 
 	r.Exec(t, fmt.Sprintf("INSERT INTO t SELECT i, i*i FROM generate_series(1, %d) AS g(i)", n))
 
@@ -508,7 +523,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	// Verify the plan (should include all 5 nodes).
 	r.CheckQueryResults(t,
 		"SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
-		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k09LwzAYxu9-CnlOCu9h7bo5e5rHHXQy9SQ91OalFLamJCkoo99d1iDaIskgo8f8-T2_PG1yRC0FP-UH1kjfEYEQgzAHIQFhgYzQKFmw1lKdtlhgIz6RzghV3bTmNJ0RCqkY6RGmMntGitf8Y887zgUrEASbvNr3kkZVh1x9rQ0I29ak1-sYWUeQrflJ6-h8z0NZKi5zI0eal7fHm3V0e3b0b2JbSyVYsRgEZt2F5dFE38_jCakQT1TB4wmpMJ-ogscTUiGZqILHc6mH-E_0jnUja82jBznMywgsSrZvWctWFfysZNGH2-G2391PCNbGrkZ2sKnt0ulYf-HICccDOBrDsdvsUc-ddOKGk5BzL5zw0m1ehpjvnPDKbV6FmO_d_2rmuSbuSzZ2Z93VdwAAAP__XTV6BQ=="}},
+		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF-Lm0AUxd_7KeRC2QQm-CfGdX3K0rVUmt1sY0oLiw_TeCtC4rgzI2wJ-e5FLawJuzOKfXTmnnvO7zrcI4jnPQQQh6vw09bIi9_M-LxZ3xtP4c_H1W30YEzuongbf1tNjX81ojpMXsRzRTmm07ZYJsaPL-EmbPWr6GtoXN3lNOP08PEKCBQsxQd6QAHBE9hAwAECcyDgAoEFJARKznYoBON1ybERROkLBBaBvCgrWR8nBHaMIwRHkLncIwSwpb_2uEGaIjctIJCipPm-sZHLkucHyv8AgbikhQiMmenURetKBsbSgeREgFXytbuQNEMI7BPpn-A2yzhmVDJuLs4DxN_vJ0t7-q6N867Na_eqYDxFjulZ6-SkDmJbw5LMz5LY_Udua0duOtbMdIdPXROiA-uNmbrTn9XRs7rWzPSGs2pCdFivx7DO-7PO9ayeNTP94ayaEB1Wfwyr25_V1bP61mwwqCZBB_Tmf62NN2w2KEpWCLxYH293tuq1gmmG7Q4SrOI7fORs19i0n-tG1xykKGR7a7cfUdFe1QG7Ylspds7E9qXYUTtrrOdKtasWu2NyL5RiT-3sjXG-Vop9tbM_xvlG_a8szTNRP7JL7-T04W8AAAD__wQH0sk="}},
 	)
 
 	// Stop node 5.
@@ -516,20 +531,24 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	testutils.SucceedsSoon(t, runQuery)
 
-	r.CheckQueryResults(t,
-		"SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
-		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k8FK7DAYhff3KS5npZCF6dRx7KouZ6Ejo64ki9j8lEKnKUkKytB3lzaItkg60qHL5M93vpySHlFpRQ_yQBbJKzgYIjCswBBDMNRGZ2StNt3YH96qdyRXDEVVN67bFgyZNoTkCFe4kpDgWb6VtCepyIBBkZNF2QtqUxyk-UgdGHaNS_6nEUTLoBv3lday0z13eW4ol06PNE8v9xcpvzw5-juxqbRRZEgNAkV7Zjlf6PtNeOZUiBaqMOGZU2G1UIUJz7le8S_Re7K1riyNXvMwTzCQysn_CFY3JqNHo7M-3C93_el-Q5F1fsr9Ylv5UXetnzAPwtEA5mM4CsK3YfMqCMdhOJ5z7esgvA6b13PMN0F4EzZv_mQW7b_PAAAA__-DuA-E"}},
-	)
+	// The leaseholder for the last range should have moved to either node 2 or 3.
+	query := "SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'"
+	exp2 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fr2zAQxt_3V4iD0QQUbMuum_kpZfWYWdp0ccYGxQ9adPMMieVKMnSE_O_D9qBJaeWY7NG6-933fZJvB_pxAxGk8Tz-uCJF-UuST8vFLXmIf9zPr5M7MrpJ0lX6dT4m_3p0vR096ceaKxTjrtlk5PvneBl3_Dz5EpOLm4Lnim_fXwCFUgq841vUED2ABxQYUPCBQgAZhUrJNWotVVPetc2JeILIpVCUVW2a44zCWiqEaAemMBuECFb85waXyAUqxwUKAg0vNq2EmVWq2HL1ByikFS91RCYOa5oWtYnIjEG2pyBr8zxdG54jRN6enu7gOs8V5txI5QTHBtJvt6OZN35Thr0p8zy9LqUSqFAcjc72diPTYUb8IyPe6Tfu9d64w9yJE7iEl4J4RJrfqAY_QI-hg9yX5zwAOz03688duBMnHP6z9Zg4yBqek9U_PavfnzV0J850eNYeEwdZr_7XYr0is0RdyVLjiwV7fbLbLB6KHLst1bJWa7xXct3KdJ-LlmsPBGrTVb3uIym7UmPwEPasMDuCvZcws8If7Mq-FQ7scHCO7UsrHNqVw3OUr6zw1K48HaSc7d_9DQAA__-rUWHE"}}
+	exp3 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fr2zAQxt_3V4iD0QQUbMuum_kpZfWYWdp0ccYGxQ9adPMMieVKMnSE_O_D9qBJaeWY7NG6-933fWduB_pxAxGk8Tz-uCJF-UuST8vFLXmIf9zPr5M7MrpJ0lX6dT4m_3p0vR096ceaKxTjrtlk5PvneBl3_Dz5EpOLm4Lnim_fXwCFUgq841vUED2ABxQYUPCBQgAZhUrJNWotVVPetc2JeILIpVCUVW2a54zCWiqEaAemMBuECFb85waXyAUqxwUKAg0vNq2EmVWq2HL1ByikFS91RCYOa5oWtYnIjEG2pyBr8zxdG54jRN6enu7gOs8V5txI5QTHBtJvt6OZN35Thr0p8zy9LqUSqFAcjc72diPTYUb8IyPe6Rv3ejfuMHfiBMOX3mPiIOvlOUtnp2dl_VkDd-KELuGlIB6R5jeqwbl7DB3kDs_J7Z-e2-_PHboTZzr8H_eYOMh69b8O6xWZJepKlhpfHNjrk93m8FDk2F2plrVa472S61am-1y0XPsgUJuu6nUfSdmVGoOHsGeF2RHsvYSZFf5gV_atcGCHg3NsX1rh0K4cnqN8ZYWnduXpIOVs_-5vAAAA__-ToWHE"}}
 
-	// Stop node 2; note that no range had replicas on both 2 and 5.
-	tc.StopServer(1)
+	res := r.QueryStr(t, query)
+	if !reflect.DeepEqual(res, exp2) {
+		if !reflect.DeepEqual(res, exp3) {
+			t.Errorf("query '%s': expected:\neither\n%vor\n%v\ngot:\n%v\n",
+				query, sqlutils.MatrixToStr(exp2), sqlutils.MatrixToStr(exp3), sqlutils.MatrixToStr(res),
+			)
+		}
+	}
+
+	// Stop node 4; note that no range had replicas on both 4 and 5.
+	tc.StopServer(3)
 
 	testutils.SucceedsSoon(t, runQuery)
-
-	r.CheckQueryResults(t,
-		"SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
-		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
-	)
 }
 
 func TestDistSQLDrainingHosts(t *testing.T) {
@@ -713,7 +732,8 @@ func TestPartitionSpans(t *testing.T) {
 
 		gatewayNode int
 
-		// spans to be passed to PartitionSpans
+		// spans to be passed to PartitionSpans. If the second string is empty,
+		// the span is actually a point lookup.
 		spans [][2]string
 
 		// expected result: a map of node to list of spans.
@@ -797,6 +817,32 @@ func TestPartitionSpans(t *testing.T) {
 				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 			},
 		},
+
+		// Test point lookups in isolation.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A2", ""}, {"A1", ""}, {"B1", ""}},
+
+			partitions: map[int][][2]string{
+				1: {{"A2", ""}, {"A1", ""}},
+				2: {{"B1", ""}},
+			},
+		},
+
+		// Test point lookups intertwined with span scans.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C2"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+				2: {{"C", "C2"}},
+			},
+		},
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
@@ -857,8 +903,8 @@ func TestPartitionSpans(t *testing.T) {
 						}
 						return nil
 					},
-					isLive: func(nodeID roachpb.NodeID) (bool, error) {
-						return true, nil
+					isAvailable: func(nodeID roachpb.NodeID) bool {
+						return true
 					},
 				},
 			}
@@ -1041,8 +1087,8 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						// All the nodes are healthy.
 						return nil
 					},
-					isLive: func(roachpb.NodeID) (bool, error) {
-						return true, nil
+					isAvailable: func(roachpb.NodeID) bool {
+						return true
 					},
 				},
 			}
@@ -1140,8 +1186,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				_, err := mockGossip.GetNodeIDAddress(node)
 				return err
 			},
-			isLive: func(roachpb.NodeID) (bool, error) {
-				return true, nil
+			isAvailable: func(roachpb.NodeID) bool {
+				return true
 			},
 		},
 	}
@@ -1205,14 +1251,11 @@ func TestCheckNodeHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	errLive := func(roachpb.NodeID) (bool, error) {
-		return false, errors.New("injected liveness error")
+	notAvailable := func(roachpb.NodeID) bool {
+		return false
 	}
-	notLive := func(roachpb.NodeID) (bool, error) {
-		return false, nil
-	}
-	live := func(roachpb.NodeID) (bool, error) {
-		return true, nil
+	available := func(roachpb.NodeID) bool {
+		return true
 	}
 
 	connHealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
@@ -1224,21 +1267,20 @@ func TestCheckNodeHealth(t *testing.T) {
 	_ = connUnhealthy
 
 	livenessTests := []struct {
-		isLive func(roachpb.NodeID) (bool, error)
-		exp    string
+		isAvailable func(roachpb.NodeID) bool
+		exp         string
 	}{
-		{live, ""},
-		{errLive, "not using n5 due to liveness: injected liveness error"},
-		{notLive, "not using n5 due to liveness: node n5 is not live"},
+		{available, ""},
+		{notAvailable, "not using n5 since it is not available"},
 	}
 
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:     gw,
-				connHealth: connHealthy,
-				isLive:     test.isLive,
+				gossip:      gw,
+				connHealth:  connHealthy,
+				isAvailable: test.isAvailable,
 			}
 			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
@@ -1257,13 +1299,169 @@ func TestCheckNodeHealth(t *testing.T) {
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:     gw,
-				connHealth: test.connHealth,
-				isLive:     live,
+				gossip:      gw,
+				connHealth:  test.connHealth,
+				isAvailable: available,
 			}
 			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
+	}
+}
+
+func TestCheckScanParallelizationIfLocal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	makeTableDesc := func(interleaved bool) catalog.TableDescriptor {
+		var interleave descpb.InterleaveDescriptor
+		if interleaved {
+			interleave = descpb.InterleaveDescriptor{
+				Ancestors: []descpb.InterleaveDescriptor_Ancestor{{}},
+			}
+		}
+		tableDesc := descpb.TableDescriptor{
+			PrimaryIndex: descpb.IndexDescriptor{
+				Interleave: interleave,
+			},
+		}
+
+		b := tabledesc.NewBuilder(&tableDesc)
+		err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
+		if err != nil {
+			log.Fatalf(ctx, "error when building a table descriptor: %v", err)
+		}
+		return b.BuildImmutableTable()
+	}
+
+	scanToParallelize := &scanNode{parallelize: true}
+	for _, tc := range []struct {
+		plan                     planComponents
+		prohibitParallelization  bool
+		hasScanNodeToParallelize bool
+	}{
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{}}},
+			// scanNode.parallelize is not set.
+			hasScanNodeToParallelize: false,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{parallelize: true, reqOrdering: ReqOrdering{{}}}}},
+			// scanNode.reqOrdering is not empty.
+			hasScanNodeToParallelize: false,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: scanToParallelize}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{plan: scanToParallelize}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{source: planDataSource{plan: scanToParallelize}}}},
+			// filterNode might be handled via wrapping a row-execution
+			// processor, so we safely prohibit the parallelization.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
+				plan:  scanToParallelize,
+				funcs: []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
+			}},
+			// Non-filtering aggregation is supported.
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
+				plan:  scanToParallelize,
+				funcs: []*aggregateFuncHolder{{filterRenderIdx: 0}}},
+			}},
+			// Filtering aggregation is not natively supported.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
+				input: scanToParallelize,
+				table: &scanNode{desc: makeTableDesc(false /* interleaved */)},
+			}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
+				input: scanToParallelize,
+				table: &scanNode{desc: makeTableDesc(true /* interleaved */)},
+			}}},
+			// Vectorized index join is only supported for non-interleaved
+			// tables.
+			prohibitParallelization: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{plan: scanToParallelize}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{source: scanToParallelize}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
+				source: planDataSource{plan: scanToParallelize},
+				render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
+			}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
+				source: planDataSource{plan: scanToParallelize},
+				render: []tree.TypedExpr{&tree.IsNullExpr{}},
+			}}},
+			// Not a simple projection (some expressions might be handled by
+			// wrapping a row-execution processor, so we choose to be safe and
+			// prohibit the parallelization for all non-IndexedVar expressions).
+			prohibitParallelization: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{plan: scanToParallelize}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &unionNode{left: scanToParallelize, right: &scanNode{}}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &unionNode{right: scanToParallelize, left: &scanNode{}}}},
+			hasScanNodeToParallelize: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &valuesNode{}}},
+			hasScanNodeToParallelize: false,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{plan: scanToParallelize}}},
+			// windowNode is not fully supported by the vectorized.
+			prohibitParallelization: true,
+		},
+
+		// Unsupported edge cases.
+		{
+			plan:                    planComponents{main: planMaybePhysical{physPlan: &physicalPlanTop{}}},
+			prohibitParallelization: true,
+		},
+		{
+			plan:                    planComponents{cascades: []cascadeMetadata{{}}},
+			prohibitParallelization: true,
+		},
+		{
+			plan:                    planComponents{checkPlans: []checkPlan{{}}},
+			prohibitParallelization: true,
+		},
+	} {
+		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
+		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
+		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
 	}
 }

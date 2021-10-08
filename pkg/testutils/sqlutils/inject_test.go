@@ -77,7 +77,9 @@ ORDER BY gen_random_uuid(); -- to mix it up
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(context.Background())
 
-		require.NoError(t, sqlutils.InjectDescriptors(context.Background(), db, descriptors))
+		require.NoError(t, sqlutils.InjectDescriptors(
+			context.Background(), db, descriptors, true, /* force */
+		))
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		for _, stmt := range afterStmts {

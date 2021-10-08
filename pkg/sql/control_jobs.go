@@ -28,6 +28,7 @@ type controlJobsNode struct {
 	rows          planNode
 	desiredStatus jobs.Status
 	numRows       int
+	reason        string
 }
 
 var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
@@ -60,6 +61,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 				"user %s does not have %s privilege",
 				params.p.User(), roleoption.CONTROLJOB)
 		}
+	}
+
+	if n.desiredStatus != jobs.StatusPaused && len(n.reason) > 0 {
+		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
+			n.desiredStatus, jobs.StatusPaused, n.reason)
 	}
 
 	reg := params.p.ExecCfg().JobRegistry
@@ -106,7 +112,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		switch n.desiredStatus {
 		case jobs.StatusPaused:
-			err = reg.PauseRequested(params.ctx, params.p.txn, jobspb.JobID(jobID))
+			err = reg.PauseRequested(params.ctx, params.p.txn, jobspb.JobID(jobID), n.reason)
 		case jobs.StatusRunning:
 			err = reg.Unpause(params.ctx, params.p.txn, jobspb.JobID(jobID))
 		case jobs.StatusCanceled:

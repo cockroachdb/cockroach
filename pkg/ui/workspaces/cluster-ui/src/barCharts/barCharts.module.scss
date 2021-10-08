@@ -1,0 +1,146 @@
+@import "../core/index.module";
+
+.bar-chart {
+  height: 14px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  > span {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+  }
+
+  &__multiplebars {
+    border-radius: 3px;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  &__label {
+    position: relative;
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
+    line-height: 1.83;
+    color: $colors--neutral-8;
+    width: 75px;
+  }
+
+  &__bar {
+    display: inline-block;
+    height: 13px;
+    border-radius: 3px;
+    flex-shrink: 10;
+
+    &--dev {
+      position: absolute;
+      height: 3px;
+    }
+  }
+
+  .count-first-try,
+  .count-total,
+  .count-retry,
+  .count-max-retries {
+    border-radius: 3px;
+    position: absolute;
+    left: 40px;
+  }
+
+  .count-first-try,
+  .count-total {
+    background-color: $colors--neutral-4;
+  }
+  .count-retry,
+  .count-max-retries {
+    background-color: $colors--alert;
+  }
+
+  .rows,
+  .rows-read,
+  .bytes-read,
+  .rows-written,
+  .max-mem-usage,
+  .network-bytes {
+    background-color: $colors--neutral-4;
+    border-radius: 3px;
+  }
+
+  .rows-dev,
+  .rows-read-dev,
+  .bytes-read-dev,
+  .rows-written-dev,
+  .contention-dev,
+  .max-mem-usage-dev,
+  .network-bytes-dev {
+    background-color: $colors--primary-blue-3;
+  }
+
+  .bar-chart {
+    &__parse,
+    &__plan,
+    &__run,
+    &__overhead,
+    &__overall {
+      background-color: $colors--neutral-4;
+    }
+  }
+
+  &-red {
+    .bar-chart {
+      &__parse,
+      &__plan,
+      &__run,
+      &__overhead,
+      &__overall {
+        background-color: $colors--functional-red-2;
+      }
+    }
+  }
+
+  &__parse-dev,
+  &__plan-dev,
+  &__run-dev,
+  &__overhead-dev,
+  &__overall-dev {
+    background-color: $colors--primary-blue-3;
+  }
+
+  .numeric-stat-legend {
+    white-space: nowrap;
+    width: 282px;
+    font-family: $font-family--semi-bold;
+    font-size: $font-size--small;
+    line-height: 1.67;
+    letter-spacing: 0.3px;
+    color: $adminui-grey-1;
+    font-weight: 600;
+
+    th {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    td {
+      text-align: right;
+    }
+    &__bar {
+      width: 41px;
+      border-radius: 10px;
+      margin-right: 14px;
+
+      &--mean {
+        height: 13px;
+        background-color: $grey-light;
+      }
+      &--dev {
+        height: 3px;
+        background-color: $colors--primary-blue-3;
+      }
+    }
+  }
+}

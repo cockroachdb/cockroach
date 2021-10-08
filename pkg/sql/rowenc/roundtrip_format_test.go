@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +55,8 @@ func TestRandParseDatumStringAs(t *testing.T) {
 			tests = append(tests, types.MakeArray(ty))
 		}
 	}
-	evalCtx := tree.NewTestingEvalContext(nil)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	rng, _ := randutil.NewPseudoRand()
 	for _, typ := range tests {
 		const testsForTyp = 100
@@ -283,7 +285,8 @@ func TestParseDatumStringAs(t *testing.T) {
 			uuid.MakeV4().String(),
 		},
 	}
-	evalCtx := tree.NewTestingEvalContext(nil)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	for typ, exprs := range tests {
 		t.Run(typ.String(), func(t *testing.T) {
 			for _, s := range exprs {
