@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build 386 || amd64
 // +build 386 amd64
 
 package encoding
