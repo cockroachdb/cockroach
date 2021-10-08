@@ -534,8 +534,13 @@ func (b *Builder) scanParams(
 				idx.Name(),
 			)
 		default:
-			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
+			if b.evalCtx.SessionData().DisallowFullTableScans &&
+				(b.ContainsLargeFullTableScan || b.ContainsLargeFullIndexScan) {
+				err = errors.WithHint(err,
+					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+				)
+			}
 		}
 
 		return exec.ScanParams{}, opt.ColMap{}, err
@@ -645,21 +650,6 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
-	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
-	if err != nil {
-		return execPlan{}, err
-	}
-	res := execPlan{outputCols: outputCols}
-	root, err := b.factory.ConstructScan(
-		tab,
-		tab.Index(scan.Index),
-		params,
-		res.reqOrdering(scan),
-	)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	isUnfiltered := scan.IsUnfiltered(md)
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
@@ -673,6 +663,21 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 			b.ContainsFullIndexScan = true
 			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
 		}
+	}
+
+	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{outputCols: outputCols}
+	root, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(scan.Index),
+		params,
+		res.reqOrdering(scan),
+	)
+	if err != nil {
+		return execPlan{}, err
 	}
 
 	res.root = root
