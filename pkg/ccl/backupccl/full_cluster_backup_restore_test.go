@@ -740,6 +740,96 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 }
 
+func TestRestoreFromFullClusterBackupWithPreservingPrivilegeGrants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "CREATE USER app")
+	sqlDB.Exec(t, "GRANT DROP ON DATABASE data TO app")
+	sqlDB.Exec(t, "GRANT DELETE ON TABLE bank TO app")
+	fmt.Println("SHOW GRANTS BEFORE BACKUP:")
+	for _, row := range sqlDB.QueryStr(t, "SHOW GRANTS FOR app") {
+		fmt.Println(row)
+	}
+	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+	sqlDB.Exec(t, `DROP DATABASE data`)
+
+	// Specified user doesn't exist in restoring cluster.
+	t.Run("database", func(t *testing.T) {
+		sqlDB.Exec(t, "DROP USER app")
+		defer sqlDB.Exec(t, "CREATE USER app")
+		sqlDB.ExpectErr(t,
+			"Failed to keep privilege grants for non-existent user app in the restoring cluster",
+			`RESTORE DATABASE data FROM $1 WITH preserve_grants_for = 'app'`, LocalFoo)
+	})
+
+	// Create a user that doesn't exist in the backup
+	sqlDB.Exec(t, `CREATE USER app2`)
+	t.Run("table", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE data`)
+		sqlDB.Exec(t, `RESTORE TABLE bank FROM $1 WITH preserve_grants_for = 'app,app2'`, LocalFoo)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS FOR app", [][]string{
+			{"data", "public", "bank", "app", "DELETE"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON DATABASE data", [][]string{
+			{"data", "admin", "ALL"},
+			{"data", "root", "ALL"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON TABLE bank", [][]string{
+			{"data", "public", "bank", "admin", "ALL"},
+			{"data", "public", "bank", "app", "DELETE"}, // preserved from the table backed up
+			{"data", "public", "bank", "root", "ALL"},
+		})
+	})
+
+	t.Run("database", func(t *testing.T) {
+		sqlDB.Exec(t, `RESTORE DATABASE data FROM $1 WITH preserve_grants_for = 'app'`, LocalFoo)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS FOR app", [][]string{
+			{"data", "NULL", "NULL", "app", "DROP"},
+			{"data", "public", "bank", "app", "DELETE"},
+			{"data", "public", "bank", "app", "DROP"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON DATABASE data", [][]string{
+			{"data", "admin", "ALL"},
+			{"data", "app", "DROP"},
+			{"data", "root", "ALL"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON TABLE bank", [][]string{
+			{"data", "public", "bank", "admin", "ALL"},
+			{"data", "public", "bank", "app", "DELETE"}, // preserved from the table backed up
+			{"data", "public", "bank", "app", "DROP"},   // inherited from parent DB
+			{"data", "public", "bank", "root", "ALL"},
+		})
+	})
+
+	t.Run("database", func(t *testing.T) {
+		sqlDB.Exec(t, `RESTORE DATABASE data FROM $1 WITH preserve_grants_for = '*'`, LocalFoo)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS FOR app", [][]string{
+			{"data", "NULL", "NULL", "app", "DROP"},
+			{"data", "public", "bank", "app", "DELETE"},
+			{"data", "public", "bank", "app", "DROP"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON DATABASE data", [][]string{
+			{"data", "admin", "ALL"},
+			{"data", "app", "DROP"},
+			{"data", "root", "ALL"},
+		})
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON TABLE bank", [][]string{
+			{"data", "public", "bank", "admin", "ALL"},
+			{"data", "public", "bank", "app", "DELETE"}, // preserved from the table backed up
+			{"data", "public", "bank", "app", "DROP"},   // inherited from parent DB
+			{"data", "public", "bank", "root", "ALL"},
+		})
+	})
+}
+
 // A regression test where dropped descriptors would appear in the set of
 // `Descriptors`.
 func TestDropDatabaseRevisionHistory(t *testing.T) {

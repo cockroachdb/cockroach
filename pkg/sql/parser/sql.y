@@ -822,7 +822,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRESERVE_GRANTS_FOR PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -2880,6 +2880,7 @@ opt_with_schedule_options:
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
 //    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
 //    new_db_name: renames the restored database. only applies to database restores
+//    preserve_grants_for: preserving privilege grants to specified users from the backup
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -3023,6 +3024,10 @@ restore_options:
 | NEW_DB_NAME '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
+  }
+| PRESERVE_GRANTS_FOR '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{PreserveGrantsFor: $3.expr()}
   }
 
 import_format:
@@ -13310,6 +13315,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PRESERVE_GRANTS_FOR
 | PRIORITY
 | PRIVILEGES
 | PUBLIC

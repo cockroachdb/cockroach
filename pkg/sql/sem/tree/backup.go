@@ -117,6 +117,7 @@ type RestoreOptions struct {
 	SkipLocalitiesCheck       bool
 	DebugPauseOn              Expr
 	NewDBName                 Expr
+	PreserveGrantsFor         Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -349,6 +350,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("new_db_name = ")
 		ctx.FormatNode(o.NewDBName)
 	}
+
+	if o.PreserveGrantsFor != nil {
+		maybeAddSep()
+		ctx.WriteString("preserve_grants_for = ")
+		ctx.FormatNode(o.PreserveGrantsFor)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -432,6 +439,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("new_db_name specified multiple times")
 	}
 
+	if o.PreserveGrantsFor == nil {
+		o.PreserveGrantsFor = other.PreserveGrantsFor
+	} else if other.PreserveGrantsFor != nil {
+		return errors.New("preserve_grants_for specified multiple times")
+	}
+
 	return nil
 }
 
@@ -448,5 +461,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.DebugPauseOn == options.DebugPauseOn &&
-		o.NewDBName == options.NewDBName
+		o.NewDBName == options.NewDBName &&
+		o.PreserveGrantsFor == options.PreserveGrantsFor
 }

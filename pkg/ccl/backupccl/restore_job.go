@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -43,7 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -340,6 +343,7 @@ func WriteDescriptors(
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
+	preserveGrantsForUsers map[security.SQLUsername]bool,
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
@@ -349,7 +353,7 @@ func WriteDescriptors(
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 		for i := range databases {
 			desc := databases[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, desc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, desc, user, wroteDBs, descCoverage, preserveGrantsForUsers)
 			if err != nil {
 				return err
 			}
@@ -375,7 +379,7 @@ func WriteDescriptors(
 		// Write namespace and descriptor entries for each schema.
 		for i := range schemas {
 			sc := schemas[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, sc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, sc, user, wroteDBs, descCoverage, preserveGrantsForUsers)
 			if err != nil {
 				return err
 			}
@@ -397,7 +401,7 @@ func WriteDescriptors(
 
 		for i := range tables {
 			table := tables[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, table, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, table, user, wroteDBs, descCoverage, preserveGrantsForUsers)
 			if err != nil {
 				return err
 			}
@@ -428,7 +432,7 @@ func WriteDescriptors(
 		// the system.descriptor table.
 		for i := range types {
 			typ := types[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, typ, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, typ, user, wroteDBs, descCoverage, preserveGrantsForUsers)
 			if err != nil {
 				return err
 			}
@@ -1044,6 +1048,35 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	return ok
 }
 
+func checkUsersInRestoringCluster(
+	ctx context.Context, txn *kv.Txn, p sql.JobExecContext, users map[security.SQLUsername]bool,
+) error {
+	usersInRestoringCluster := make(map[security.SQLUsername]bool)
+	rows, err := p.ExecCfg().InternalExecutor.QueryBufferedEx(ctx, "query-system-users", txn,
+		sessiondata.InternalExecutorOverride{User: p.User()},
+		`SELECT username FROM system.users`)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		usersInRestoringCluster[security.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))] = true
+	}
+	var usersAccumulated string
+	for user := range users {
+		if exists := usersInRestoringCluster[user]; !exists {
+			if len(usersAccumulated) != 0 {
+				usersAccumulated += ","
+			}
+			usersAccumulated += user.Normalized()
+		}
+	}
+	if len(usersAccumulated) != 0 {
+		return errors.Errorf("Failed to keep privilege grants for non-existent user %s in the restoring cluster",
+			usersAccumulated)
+	}
+	return nil
+}
+
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
@@ -1073,7 +1106,14 @@ func createImportingDescriptors(
 
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 
+	sqlUsersWithGrants := make(map[security.SQLUsername]bool)
 	for _, desc := range sqlDescs {
+		// Collect all SQL users in the backup
+		for _, u := range desc.GetPrivileges().Users {
+			sqlUsersWithGrants[u.User()] = true
+		}
+		sqlUsersWithGrants[desc.GetPrivileges().Owner()] = true
+
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
 			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
@@ -1100,6 +1140,21 @@ func createImportingDescriptors(
 		}
 	}
 
+	preserveGrantsForUsers := make(map[security.SQLUsername]bool)
+	// Validate and collect specified users to keep privilege grants for
+	if details.PreserveGrantsFor == "*" {
+		preserveGrantsForUsers = sqlUsersWithGrants
+	} else {
+		for _, user := range strings.Split(details.PreserveGrantsFor, ",") {
+			if user != "" {
+				sqlUser, err := security.MakeSQLUsernameFromUserInput(user, security.UsernameValidation)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "Invalid username %s specified in option 'preserve_grants_for'", user)
+				}
+				preserveGrantsForUsers[sqlUser] = true
+			}
+		}
+	}
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		tempSystemDBID = getTempSystemDBID(details)
@@ -1224,6 +1279,10 @@ func createImportingDescriptors(
 		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
+			err := checkUsersInRestoringCluster(ctx, txn, p, preserveGrantsForUsers)
+			if err != nil {
+				return err
+			}
 			// A couple of pieces of cleanup are required for multi-region databases.
 			// First, we need to find all of the MULTIREGION_ENUMs types and remap the
 			// IDs stored in the corresponding database descriptors to match the type's
@@ -1286,7 +1345,9 @@ func createImportingDescriptors(
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(
 				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
-				details.DescriptorCoverage, nil, /* extra */
+				details.DescriptorCoverage,
+				preserveGrantsForUsers,
+				nil, /* extra */
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
@@ -1448,7 +1509,7 @@ func createImportingDescriptors(
 			}
 
 			// Update the job once all descs have been prepared for ingestion.
-			err := r.job.SetDetails(ctx, txn, details)
+			err = r.job.SetDetails(ctx, txn, details)
 
 			// Emit to the event log now that the job has finished preparing descs.
 			emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
@@ -2444,6 +2505,30 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	return nil
 }
 
+func preservePrivilegeGrantsForUsers(
+	desc catalog.Descriptor,
+	updatedPrivileges *descpb.PrivilegeDescriptor,
+	preserveGrantsFor map[security.SQLUsername]bool,
+) {
+	var objectType privilege.ObjectType
+	switch desc.(type) {
+	case catalog.TableDescriptor:
+		objectType = privilege.Table
+	case catalog.DatabaseDescriptor:
+		objectType = privilege.Database
+	case catalog.TypeDescriptor:
+		objectType = privilege.Type
+	case catalog.SchemaDescriptor:
+		objectType = privilege.Schema
+	}
+
+	for _, p := range desc.GetPrivileges().Users {
+		if ok := preserveGrantsFor[p.User()]; ok {
+			updatedPrivileges.Grant(p.User(), privilege.ListFromBitField(p.Privileges, objectType))
+		}
+	}
+}
+
 func getRestoringPrivileges(
 	ctx context.Context,
 	codec keys.SQLCodec,
@@ -2452,18 +2537,21 @@ func getRestoringPrivileges(
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
+	preserveGrantsForUsers map[security.SQLUsername]bool,
 ) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor, catalog.SchemaDescriptor:
+		// Restoring a database or a full cluster.
 		if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
 			// If we're creating a new database in this restore, the privileges of the
 			// table and schema should be that of the parent DB.
 			//
 			// Leave the privileges of the temp system tables as the default too.
 			if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
+				preservePrivilegeGrantsForUsers(desc, wrote.GetPrivileges(), preserveGrantsForUsers)
 				updatedPrivileges = wrote.GetPrivileges()
 			}
-		} else if descCoverage == tree.RequestedDescriptors {
+		} else if descCoverage == tree.RequestedDescriptors { // Restoring a table only
 			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
@@ -2473,13 +2561,14 @@ func getRestoringPrivileges(
 			immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
 			updatedPrivileges = immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
 				parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
+			preservePrivilegeGrantsForUsers(desc, updatedPrivileges, preserveGrantsForUsers)
 		}
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
 		if descCoverage == tree.RequestedDescriptors {
-			// If the restore is not a cluster restore we cannot know that the users on
-			// the restoring cluster match the ones that were on the cluster that was
-			// backed up. So we wipe the privileges on the type/database.
+			// Besides keeping the default privileges, we preserve grants for specified users as
+			// long as they match the ones that were on the cluster that was backed up.
 			updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+			preservePrivilegeGrantsForUsers(desc, updatedPrivileges, preserveGrantsForUsers)
 		}
 	}
 	return updatedPrivileges, nil
