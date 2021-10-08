@@ -90,6 +90,7 @@ var debugZipTablesPerCluster = []string{
 
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.
+	`"".crdb_internal.create_schema_statements`,
 	`"".crdb_internal.create_statements`,
 	// Ditto, for CREATE TYPE.
 	`"".crdb_internal.create_type_statements`,
