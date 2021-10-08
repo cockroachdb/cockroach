@@ -11,6 +11,7 @@
 // "make test" would normally test this file, but it should only be tested
 // within docker compose.
 
+//go:build compose
 // +build compose
 
 package compare
