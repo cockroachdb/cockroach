@@ -493,6 +493,7 @@ func (h *hasher) HashScanLimit(val ScanLimit) {
 func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.NoZigzagJoin)
+	h.HashBool(val.NoFullScan)
 	h.HashBool(val.ForceIndex)
 	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
