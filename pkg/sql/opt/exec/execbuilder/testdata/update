@@ -199,6 +199,79 @@ vectorized: true
               locking strength: for update
 
 statement ok
+CREATE INDEX y_idx ON xyz (y)
+
+# Ensure that we can use a hint to avoid a full table scan.
+
+# Without the hint, we plan a full table scan.
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ estimated row count: 990 (missing stats)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • filter
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ filter: ((y > 0) AND (y < 1000)) OR ((y > 2000) AND (y < 3000))
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@primary
+              spans: FULL SCAN
+
+# With the hint, we use a constrained scan.
+query T
+EXPLAIN (VERBOSE) UPDATE xyz@{NO_FULL_SCAN} SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ estimated row count: 990 (missing stats)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@primary
+        │ key columns: x
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+statement ok
 CREATE TABLE pks (
   k1 INT,
   k2 INT,

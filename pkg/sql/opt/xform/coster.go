@@ -616,6 +616,16 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 
 	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
+	if scan.Flags.NoFullScan {
+		// Normally a full scan of a partial index would be allowed with the
+		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
+		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
+		// disallow the full index scan.
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(c.mem.Metadata())) {
+			return hugeCost
+		}
+	}
+
 	stats := scan.Relational().Stats
 	rowCount := stats.RowCount
 	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
