@@ -339,6 +339,13 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	f.Release()
 }
 
+// CleanupBeforeRun is part of the Flow interface.
+func (f *vectorizedFlow) CleanupBeforeRun(ctx context.Context) {
+	// TODO(yuzefovich): Cleanup() does more things. Some of them are probably
+	// relevant even if the flow was not started.
+	f.FlowBase.Cleanup(ctx)
+}
+
 // wrapWithVectorizedStatsCollectorBase creates a new
 // colexecop.VectorizedStatsCollector that wraps op and connects the newly
 // created wrapper with those corresponding to operators in inputs (the latter
