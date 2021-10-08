@@ -101,8 +101,9 @@ func ShowCreateView(
 	f.WriteString(" (")
 	for i, col := range desc.PublicColumns() {
 		if i > 0 {
-			f.WriteString(",\n\t")
+			f.WriteString(",")
 		}
+		f.WriteString("\n\t")
 		name := col.GetName()
 		f.FormatNameP(&name)
 	}
@@ -127,7 +128,7 @@ func ShowCreateView(
 		}
 		// Pretty things up a bit more by adding new lines after each column.
 		sequenceReplacedViewQuery = strings.Replace(
-			sequenceReplacedViewQuery, ",", ",\n\t\t", -1)
+			sequenceReplacedViewQuery, ", ", ",\n\t\t", -1)
 		f.WriteString(sequenceReplacedViewQuery)
 	}
 
