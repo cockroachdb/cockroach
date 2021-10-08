@@ -189,7 +189,7 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 // - all three levels of objects satisfy the respective ordering
 //   requirements.
 func TestSerializedRegistryInvariants(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const nonSQLKeyProbability = 0.1
 	const sizeLimit = 5
 	const keySpaceSize = sizeLimit * sizeLimit

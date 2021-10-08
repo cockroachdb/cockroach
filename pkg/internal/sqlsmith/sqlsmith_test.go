@@ -44,7 +44,7 @@ func TestSetups(t *testing.T) {
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
-			rnd, _ := randutil.NewPseudoRand()
+			rnd, _ := randutil.NewTestRand()
 
 			sql := setup(rnd)
 			if _, err := sqlDB.Exec(sql); err != nil {
@@ -84,7 +84,7 @@ func TestRandTableInserts(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, _ := randutil.NewPseudoRand()
+	rnd, _ := randutil.NewTestRand()
 
 	setup := randTablesN(rnd, 10)
 	if _, err := sqlDB.Exec(setup); err != nil {
@@ -145,7 +145,7 @@ func TestGenerateParse(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)

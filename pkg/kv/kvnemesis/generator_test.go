@@ -68,7 +68,7 @@ func TestRandStep(t *testing.T) {
 	const minEachType = 5
 	config := newAllOperationsConfig()
 	config.NumNodes, config.NumReplicas = 2, 1
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	getReplicasFn := func(_ roachpb.Key) []roachpb.ReplicationTarget {
 		return make([]roachpb.ReplicationTarget, rng.Intn(2)+1)
 	}

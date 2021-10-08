@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	r, _ := randutil.NewPseudoRand()
+	r, _ := randutil.NewTestRand()
 	// 127.255.255.255 is special (broadcast), so choose values less
 	// than 255.
 	a := r.Intn(255)

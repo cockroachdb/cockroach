@@ -154,7 +154,7 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
 	// TODO(yuzefovich/mgartner): randomize types as well.
@@ -289,7 +289,7 @@ func TestAllSpooler(t *testing.T) {
 
 func BenchmarkSort(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	k := uint64(128)
 
@@ -341,7 +341,7 @@ func BenchmarkSort(b *testing.B) {
 }
 
 func BenchmarkSortUUID(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
@@ -410,7 +410,7 @@ func BenchmarkSortUUID(b *testing.B) {
 
 func BenchmarkAllSpooler(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {

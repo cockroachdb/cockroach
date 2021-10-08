@@ -654,7 +654,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 				b.Run(fmt.Sprintf("r%d", numRows), func(b *testing.B) {
 					// Generate some data sets, consisting of rows with three values; the
 					// first value is increasing.
-					rng, _ := randutil.NewPseudoRand()
+					rng, _ := randutil.NewTestRand()
 					lastVal := 1
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {

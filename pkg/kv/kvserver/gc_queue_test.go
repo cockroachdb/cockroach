@@ -86,7 +86,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	cfg := quick.Config{
 		MaxCount: 50000,
 		Rand:     rnd,

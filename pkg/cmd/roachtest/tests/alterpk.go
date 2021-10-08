@@ -137,7 +137,7 @@ func registerAlterPK(r registry.Registry) {
 				`ALTER TABLE order_line ALTER PRIMARY KEY USING COLUMNS (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`,
 			}
 
-			rand, _ := randutil.NewPseudoRand()
+			rand, _ := randutil.NewTestRand()
 			randStmt := alterStmts[rand.Intn(len(alterStmts))]
 			t.Status("Running command: ", randStmt)
 

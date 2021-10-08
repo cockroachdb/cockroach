@@ -154,7 +154,7 @@ func TestOutboxInbox(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate a random cancellation scenario.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	type cancellationType int
 	const (
 		// In this scenario, no cancellation happens and all the data is pushed
@@ -462,7 +462,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	require.NoError(t, err)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {
@@ -556,7 +556,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// numNextsBeforeDrain is used in ExplicitDrainRequest. This number is
 	// generated now to avoid racing on rng accesses between this main goroutine
 	// and the Outbox generating random batches.

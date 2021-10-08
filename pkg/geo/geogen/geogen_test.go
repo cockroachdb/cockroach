@@ -24,7 +24,7 @@ import (
 const numRuns = 25
 
 func TestRandomValidLinearRingCoords(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for run := 0; run < numRuns; run++ {
 		t.Run(strconv.Itoa(run), func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestRandomValidLinearRingCoords(t *testing.T) {
 }
 
 func TestRandomGeomT(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for run := 0; run < numRuns; run++ {
 		t.Run(strconv.Itoa(run), func(t *testing.T) {
 			g := RandomGeomT(rng, MakeRandomGeomBoundsForGeography(), geopb.SRID(run), geom.NoLayout)

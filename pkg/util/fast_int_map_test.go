@@ -30,7 +30,7 @@ func TestFastIntMap(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%d-%d", tc.keyRange, tc.valRange), func(t *testing.T) {
 			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			var fm FastIntMap
 			m := make(map[int]int)
 			for i := 0; i < 1000; i++ {
@@ -115,7 +115,7 @@ func BenchmarkFastIntMap(b *testing.B) {
 	}
 	for _, tc := range cases {
 		b.Run(fmt.Sprintf("%dx%d-%d", tc.keyRange, tc.valRange, tc.ops), func(b *testing.B) {
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			inserts := make([][2]int, tc.ops)
 			for i := range inserts {
 				inserts[i] = [2]int{rng.Intn(tc.keyRange), rng.Intn(tc.valRange)}
