@@ -231,8 +231,24 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			objMap = make(map[string]descpb.ID)
 		}
 		if _, ok := objMap[desc.GetName()]; ok {
-			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
-				kind, parentDesc.GetName(), scName, desc.GetName(), desc.GetID(), objMap[desc.GetName()])
+			// We're trying to overwrite an existing name entry.
+			// This is cause for an error, except in the special case of the namespace
+			// system table, whose descriptor gets renamed from `namespace2` to
+			// `namespace` by a tenant migration as well as a post-deserialization
+			// upgrade. In certain time-travel scenarios it is possible to encounter
+			// this name collision here (see #71301 for more details). We resolve this
+			// collision in favor of the non-deprecated namespace table.
+			if desc.GetID() == keys.DeprecatedNamespaceTableID {
+				// In this case we're trying to overwrite the entry pointing to the
+				// non-deprecated table with the deprecated table descriptor.
+				return nil
+			} else if desc.GetID() != keys.NamespaceTableID {
+				return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
+					kind, parentDesc.GetName(), scName, desc.GetName(), desc.GetID(), objMap[desc.GetName()])
+			}
+			// In the implicit `else` case, we're trying to overwrite the entry
+			// pointing to the deprecated table descriptor with the non-deprecated
+			// table descriptor, which we allow.
 		}
 		objMap[desc.GetName()] = desc.GetID()
 		r.ObjsByName[parentDesc.GetID()][scName] = objMap
