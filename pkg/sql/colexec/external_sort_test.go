@@ -52,7 +52,7 @@ func TestExternalSort(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -142,7 +142,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := coldata.BatchSize()*4 + 1
 	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
@@ -261,7 +261,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Use the Bytes type because we can control the size of values with it
 	// easily.
@@ -388,7 +388,7 @@ func BenchmarkExternalSort(b *testing.B) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	var (
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor

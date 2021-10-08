@@ -1924,7 +1924,7 @@ type expectedGroup struct {
 func newBatchesOfRandIntRows(
 	nTuples int, maxRunLength int64, skipValues bool, randomIncrement int64,
 ) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	lCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
 	lCol := lCols[0].Int64()
 	rCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}

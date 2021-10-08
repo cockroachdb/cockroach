@@ -72,7 +72,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		"gc.ttlseconds = 1, range_max_bytes = 1<<18, range_min_bytes = 1<<10;")
 	require.NoError(t, err)
 
-	rRand, _ := randutil.NewPseudoRand()
+	rRand, _ := randutil.NewTestRand()
 	upsertUntilBackpressure := func() {
 		for {
 			_, err := conn.Exec("UPSERT INTO foo VALUES (1, $1)",

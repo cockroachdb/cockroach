@@ -192,7 +192,7 @@ func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T 
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	type test struct {
 		name   string
@@ -814,7 +814,7 @@ func TestDecimalRatRoundtrip(t *testing.T) {
 		require.EqualError(t, err, "cannot convert Infinite form decimal")
 	})
 	t.Run(`rand`, func(t *testing.T) {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		precision := rng.Int31n(10) + 1
 		scale := rng.Int31n(precision + 1)
 		coeff := rng.Int63n(int64(math.Pow10(int(precision))))

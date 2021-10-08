@@ -66,7 +66,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	conn := c.Conn(ctx, 1)
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")

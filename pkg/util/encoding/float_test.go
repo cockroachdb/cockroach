@@ -159,7 +159,7 @@ func TestEncodeFloatValue(t *testing.T) {
 }
 
 func BenchmarkEncodeFloat(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]float64, 10000)
 	for i := range vals {
@@ -175,7 +175,7 @@ func BenchmarkEncodeFloat(b *testing.B) {
 }
 
 func BenchmarkDecodeFloat(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {

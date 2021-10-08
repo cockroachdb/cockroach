@@ -67,7 +67,7 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
-	rRand, _ := randutil.NewPseudoRand()
+	rRand, _ := randutil.NewTestRand()
 	writeGarbage := func(from, to int) {
 		for i := from; i < to; i++ {
 			runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))

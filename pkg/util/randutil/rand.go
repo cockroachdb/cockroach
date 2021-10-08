@@ -49,7 +49,7 @@ func NewPseudoRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
-// NewTestPseudoRand wraps NewPseudoRand logging the seed for recovery later.
+// NewTestPseudoRand wraps NewTestRand logging the seed for recovery later.
 func NewTestPseudoRand() (*rand.Rand, int64) {
 	rng, seed := NewPseudoRand()
 	log.Printf("random seed: %v", seed)

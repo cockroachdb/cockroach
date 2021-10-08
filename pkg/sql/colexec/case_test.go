@@ -115,7 +115,7 @@ func TestCaseOpRandomized(t *testing.T) {
 	}
 
 	var da rowenc.DatumAlloc
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	numWhenArms := 1 + rng.Intn(5)
 	hasElseArm := rng.Float64() < 0.5

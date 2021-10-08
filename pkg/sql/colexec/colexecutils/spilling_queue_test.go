@@ -38,7 +38,7 @@ func TestSpillingQueue(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, rewindable := range []bool{false, true} {
 		for _, memoryLimit := range []int64{
 			10 << 10,                        /* 10 KiB */
@@ -260,7 +260,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	defer cleanup()
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
 	op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 		// TODO(yuzefovich): for some types (e.g. types.MakeArray(types.Int))
@@ -336,7 +336,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -430,7 +430,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()

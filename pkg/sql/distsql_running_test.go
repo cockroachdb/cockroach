@@ -462,7 +462,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 
 	var c cancelFlowsCoordinator
 
-	globalRng, _ := randutil.NewPseudoRand()
+	globalRng, _ := randutil.NewTestRand()
 	numNodes := globalRng.Intn(16) + 2
 	gatewayNodeID := roachpb.NodeID(1)
 
@@ -511,7 +511,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 	for i := 0; i < numQueryRunners; i++ {
 		go func() {
 			defer wg.Done()
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			for i := 0; i < numRunsPerRunner; i++ {
 				c.addFlowsToCancel(makeFlowsToCancel(rng))
 				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
@@ -525,7 +525,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		done := time.After(2 * time.Second)
 		for {
 			select {

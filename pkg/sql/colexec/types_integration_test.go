@@ -57,7 +57,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 	}
 
 	var da rowenc.DatumAlloc
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typesToTest := 20
 
 	for i := 0; i < typesToTest; i++ {
