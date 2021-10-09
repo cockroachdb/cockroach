@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -80,6 +81,8 @@ func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
 
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+        skip.UnderDeadlock(t, "test is flaky under deadlock+stress")
+
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
