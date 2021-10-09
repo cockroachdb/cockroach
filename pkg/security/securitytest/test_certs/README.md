@@ -6,6 +6,8 @@ Contains the following files:
 * ca.key: CA private key
 * node.crt: node client/server certificate
 * node.key: node client/server private key
+* sql-node.crt: SQL tenant client/server certificate for pod-to-pod comms
+* sql-node.key: SQL tenant client/server private key for pod-to-pod comms
 * client.root.crt: admin client certificate
 * client.root.key: admin client private key
 * client.testuser.crt: testing user certificate

@@ -293,6 +293,7 @@ var certCmds = []*cobra.Command{
 	mtCreateTenantClientCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
+	mtCreateSQLNodeCertCmd,
 	mtCreateTenantClientCertCmd,
 	listCertsCmd,
 }

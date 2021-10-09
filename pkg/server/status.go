@@ -814,6 +814,8 @@ func (s *statusServer) Certificates(
 			details.Type = serverpb.CertificateDetails_UI_CA
 		case security.NodePem:
 			details.Type = serverpb.CertificateDetails_NODE
+		case security.TenantNodePem:
+			details.Type = serverpb.CertificateDetails_TENANT_NODE
 		case security.UIPem:
 			details.Type = serverpb.CertificateDetails_UI
 		case security.ClientPem:

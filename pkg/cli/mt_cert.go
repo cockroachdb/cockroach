@@ -84,3 +84,45 @@ Creation fails if the CA expiration time is before the desired certificate expir
 				"failed to write tenant client certificate and key")
 		}),
 }
+
+// A mtCreateSQLNodeCert command generates a SQL server node certificate
+// and stores it in the cert directory.
+var mtCreateSQLNodeCertCmd = &cobra.Command{
+	Use:   "create-tenant-node --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <host 1> <host 2> ... <host N>",
+	Short: "create SQL server certificate and key",
+	Long: `
+Generate a node certificate "<certs-dir>/sql-node.crt" and key "<certs-dir>/sql-node.key".
+
+If --overwrite is true, any existing files are overwritten.
+
+At least one host should be passed in (either IP address or dns name).
+
+Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
+If "ca.crt" contains more than one certificate, the first is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
+`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return errors.Errorf("create-sql-node requires at least one host name or address, none was specified")
+		}
+		return nil
+	},
+	RunE: clierrorplus.MaybeDecorateError(runCreateSQLNodeCert),
+}
+
+// runCreateSQLNodeCert generates key pair and CA certificate and writes them
+// to their corresponding files.
+// TODO(marc): there is currently no way to specify which CA cert to use if more
+// than one is present. We shoult try to load each certificate along with the key
+// and pick the one that works. That way, the key specifies the certificate.
+func runCreateSQLNodeCert(cmd *cobra.Command, args []string) error {
+	return errors.Wrap(
+		security.CreateSQLNodePair(
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.certificateLifetime,
+			certCtx.overwriteFiles,
+			args),
+		"failed to generate SQL server certificate and key")
+}

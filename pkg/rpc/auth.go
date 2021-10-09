@@ -121,21 +121,33 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		return roachpb.TenantID{}, err
 	}
 
-	subj := tlsInfo.State.PeerCertificates[0].Subject
-	if security.Contains(subj.OrganizationalUnit, security.TenantsOU) {
-		// Tenant authentication.
-		return tenantFromCommonName(subj.CommonName)
-	}
+	if a.tenant.tenantID == roachpb.SystemTenantID {
+		// This node is a KV node.
+		//
+		//
+		// Is this a connection from a SQL tenant server?
+		subj := tlsInfo.State.PeerCertificates[0].Subject
+		if security.Contains(subj.OrganizationalUnit, security.TenantsOU) {
+			// Incoming connection originating from a tenant SQL server,
+			// into a KV node.
+			return tenantFromCommonName(subj.CommonName)
+		}
 
-	// KV auth.
-
-	// TODO(benesch): the vast majority of RPCs should be limited to just
-	// NodeUser. This is not a security concern, as RootUser has access to
-	// read and write all data, merely good hygiene. For example, there is
-	// no reason to permit the root user to send raw Raft RPCs.
-	if !security.Contains(certUsers, security.NodeUser) &&
-		!security.Contains(certUsers, security.RootUser) {
-		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
+		// Connection is from another KV node.
+		//
+		// TODO(benesch): the vast majority of RPCs should be limited to just
+		// NodeUser. This is not a security concern, as RootUser has access to
+		// read and write all data, merely good hygiene. For example, there is
+		// no reason to permit the root user to send raw Raft RPCs.
+		if !security.Contains(certUsers, security.NodeUser) &&
+			!security.Contains(certUsers, security.RootUser) {
+			return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
+		}
+	} else {
+		// This node is a SQL tenant server.
+		if !security.Contains(certUsers, security.SQLNodeUser) {
+			return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
+		}
 	}
 	return roachpb.TenantID{}, nil
 }
