@@ -248,6 +248,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().PreferLookupJoinsForFKs = false
 	notStale()
 
+	// Stale PropagateInputOrdering.
+	evalCtx.SessionData().PropagateInputOrdering = true
+	stale()
+	evalCtx.SessionData().PropagateInputOrdering = false
+	notStale()
+
 	// Stale disallow full table scan.
 	evalCtx.SessionData().DisallowFullTableScans = true
 	stale()
