@@ -248,6 +248,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().PreferLookupJoinsForFKs = false
 	notStale()
 
+	// Stale PropagateInputOrdering.
+	evalCtx.SessionData().PropagateInputOrdering = true
+	stale()
+	evalCtx.SessionData().PropagateInputOrdering = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

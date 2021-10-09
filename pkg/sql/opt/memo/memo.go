@@ -145,6 +145,7 @@ type Memo struct {
 	intervalStyleEnabled    bool
 	dateStyle               pgdate.DateStyle
 	intervalStyle           duration.IntervalStyle
+	propagateInputOrdering  bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -187,6 +188,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		dateStyleEnabled:        evalCtx.SessionData().DateStyleEnabled,
 		dateStyle:               evalCtx.SessionData().GetDateStyle(),
 		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:  evalCtx.SessionData().PropagateInputOrdering,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -298,7 +300,8 @@ func (m *Memo) IsStale(
 		m.intervalStyleEnabled != evalCtx.SessionData().IntervalStyleEnabled ||
 		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
-		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() {
+		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
+		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering {
 		return true, nil
 	}
 
