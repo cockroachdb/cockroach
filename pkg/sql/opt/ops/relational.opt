@@ -1167,6 +1167,12 @@ define WithPrivate {
     # default decision for materializing or not materializing tables.
     Mtr MaterializeClause
 
+    # Ordering specifies the order required of the binding, and thus controls
+    # the order in which the rows are materialized. Can only be used when Mtr is
+    # set to always materialize. Only used for the propagate_input_ordering
+    # flag.
+    BindingOrdering OrderingChoice
+
     # Name is used to identify the with for debugging purposes.
     Name string
 }

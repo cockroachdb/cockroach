@@ -309,6 +309,11 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
 		}
 
+	case *WithExpr:
+		if !t.BindingOrdering.Any() && (!t.Mtr.Set || !t.Mtr.Materialize) {
+			panic(errors.AssertionFailedf("with ordering can only be specified with forced materialization"))
+		}
+
 	case *WithScanExpr:
 		// Verify the input columns exist in the binding.
 		binding := m.Metadata().WithBinding(t.With)

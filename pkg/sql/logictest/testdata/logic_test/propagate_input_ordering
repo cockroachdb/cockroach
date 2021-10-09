@@ -67,23 +67,6 @@ SELECT array_agg(i) FROM (SELECT * FROM generate_series(1, 5) i ORDER BY i%2 DES
 
 # The input ordering is not propagated through joins.
 query II
-WITH tmp AS (SELECT * FROM generate_series(1, 2) x),
-     tmp2 AS (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC)
-SELECT * FROM tmp, tmp2;
-----
-1  8
-1  9
-1  10
-1  11
-1  12
-2  8
-2  9
-2  10
-2  11
-2  12
-
-# The input ordering is not propagated through joins.
-query II
 SELECT *
 FROM (SELECT * FROM generate_series(1, 2) x) tmp,
      (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC) tmp2;
@@ -134,4 +117,43 @@ SELECT * FROM tmp ORDER BY i DESC;
 1
 
 statement ok
-RESET propagate_input_ordering;
+CREATE TABLE ab (a int, b int)
+
+statement ok
+INSERT INTO ab VALUES (10, 100), (1, 10), (5, 50)
+
+statement ok
+CREATE TABLE xy (x int, y int);
+
+statement ok
+INSERT INTO xy VALUES (2, 20), (8, 80), (4, 41), (4, 40)
+
+query I
+WITH
+  cte1 AS (SELECT b FROM ab ORDER BY a),
+  cte2 AS (SELECT y FROM xy ORDER BY x, y)
+SELECT * FROM cte1 UNION ALL SELECT * FROM cte2
+----
+10
+50
+100
+20
+40
+41
+80
+
+query I
+WITH
+  cte1 AS (SELECT b FROM ab ORDER BY a+b),
+  cte2 AS (SELECT DISTINCT ON (x) y FROM xy ORDER BY x, y)
+SELECT * FROM cte1 UNION ALL SELECT * FROM cte2
+----
+10
+50
+100
+20
+40
+80
+
+statement ok
+RESET propagate_input_ordering
