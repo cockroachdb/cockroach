@@ -413,58 +413,58 @@ func NewColIndexJoin(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
-
-	typs, columnIdxMap, err := retrieveTypsAndColOrds(
-		ctx, flowCtx, evalCtx, table, nil, /* invertedCol */
-		spec.Visibility, spec.HasSystemColumns,
+	if int(spec.IndexIdx) >= len(table.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", spec.IndexIdx)
+	}
+	index := table.ActiveIndexes()[spec.IndexIdx]
+	tableArgs, err := populateTableArgs(
+		ctx, flowCtx, evalCtx, table, index,
+		nil /* invertedCol */, spec.Visibility, spec.HasSystemColumns,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	indexIdx := int(spec.IndexIdx)
-	if indexIdx >= len(table.ActiveIndexes()) {
-		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-	index := table.ActiveIndexes()[indexIdx]
-
 	// Retrieve the set of columns that the index join needs to fetch.
-	var neededColumns util.FastIntSet
 	if post.OutputColumns != nil {
 		for _, neededColumn := range post.OutputColumns {
-			neededColumns.Add(int(neededColumn))
+			tableArgs.ValNeededForCol.Add(int(neededColumn))
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err = proc.Init(post, typs, semaCtx, evalCtx); err != nil {
+		if err = proc.Init(post, tableArgs.typs, semaCtx, evalCtx); err != nil {
 			return nil, err
 		}
-		neededColumns = proc.NeededColumns()
+		tableArgs.ValNeededForCol = proc.NeededColumns()
 	}
 
-	fetcher, err := initCFetcher(
-		flowCtx, fetcherAllocator, kvFetcherMemAcc, table, index, neededColumns, columnIdxMap, nil, /* invertedColumn */
-		cFetcherArgs{
-			visibility:        spec.Visibility,
-			lockingStrength:   spec.LockingStrength,
-			lockingWaitPolicy: spec.LockingWaitPolicy,
-			hasSystemColumns:  spec.HasSystemColumns,
-			memoryLimit:       execinfra.GetWorkMemLimit(flowCtx),
-		},
-	)
-	if err != nil {
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.cFetcherArgs = cFetcherArgs{
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		execinfra.GetWorkMemLimit(flowCtx),
+		// Note that the correct estimated row count will be set by the index
+		// joiner for each set of spans to read.
+		0,     /* estimatedRowCount */
+		false, /* reverse */
+		flowCtx.TraceKV,
+	}
+	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs); err != nil {
+		fetcher.Release()
 		return nil, err
 	}
 
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns)
+		flowCtx.Codec(), allocator, table, index, inputTypes, tableArgs.ValNeededForCol,
+	)
 
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
 		flowCtx:          flowCtx,
 		rf:               fetcher,
 		spanAssembler:    spanAssembler,
-		ResultTypes:      typs,
+		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
 	}
 	op.prepareMemLimit(inputTypes)
