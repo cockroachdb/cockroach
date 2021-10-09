@@ -25,9 +25,11 @@ import (
 
 // cteSource represents a CTE in the given query.
 type cteSource struct {
-	id           opt.WithID
-	name         tree.AliasClause
-	cols         physical.Presentation
+	id   opt.WithID
+	name tree.AliasClause
+	cols physical.Presentation
+	// ordering is only set if PropagateInputOrdering is used.
+	ordering     opt.Ordering
 	originalExpr tree.Statement
 	expr         memo.RelExpr
 	mtr          tree.MaterializeClause
@@ -84,16 +86,18 @@ func (b *Builder) buildWiths(expr memo.RelExpr, ctes cteSources) memo.RelExpr {
 		// This is a depth-first search achieving a reverse topological sort.
 		expr = b.buildWiths(expr, b.cteRefMap[cte.id])
 
-		expr = b.factory.ConstructWith(
-			ctes[i].expr,
-			expr,
-			&memo.WithPrivate{
-				ID:           ctes[i].id,
-				Name:         string(ctes[i].name.Alias),
-				Mtr:          ctes[i].mtr,
-				OriginalExpr: ctes[i].originalExpr,
-			},
-		)
+		private := &memo.WithPrivate{
+			ID:           ctes[i].id,
+			Name:         string(ctes[i].name.Alias),
+			Mtr:          ctes[i].mtr,
+			OriginalExpr: ctes[i].originalExpr,
+		}
+		if len(ctes[i].ordering) > 0 {
+			private.Mtr.Set = true
+			private.Mtr.Materialize = true
+			private.BindingOrdering.FromOrdering(ctes[i].ordering)
+		}
+		expr = b.factory.ConstructWith(ctes[i].expr, expr, private)
 	}
 	return expr
 }
@@ -132,7 +136,7 @@ func (b *Builder) buildCTEs(
 	outScope.ctes = make(map[string]*cteSource)
 	for i, cte := range with.CTEList {
 		hasRecursive = hasRecursive || with.Recursive
-		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
+		cteExpr, cteCols, cteOrdering := b.buildCTE(cte, outScope, with.Recursive)
 
 		if cteExpr.Relational().CanMutate && !inScope.atRoot {
 			panic(
@@ -156,6 +160,7 @@ func (b *Builder) buildCTEs(
 		addedCTEs[i] = cteSource{
 			name:         cte.Name,
 			cols:         cteCols,
+			ordering:     cteOrdering,
 			originalExpr: cte.Stmt,
 			expr:         cteExpr,
 			id:           id,
@@ -180,19 +185,18 @@ func (b *Builder) buildCTEs(
 }
 
 // buildCTE constructs an expression for a CTE.
+//
+// The returned ordering can only be set if PropagateInputOrdering is set.
 func (b *Builder) buildCTE(
 	cte *tree.CTE, inScope *scope, isRecursive bool,
-) (memo.RelExpr, physical.Presentation) {
+) (memo.RelExpr, physical.Presentation, opt.Ordering) {
 	if !isRecursive {
 		cteScope := b.buildStmt(cte.Stmt, nil /* desiredTypes */, inScope)
 		cteScope.removeHiddenCols()
-		if b.evalCtx.SessionData().PropagateInputOrdering && len(inScope.ordering) == 0 {
-			// Preserve the CTE ordering.
-			inScope.copyOrdering(cteScope)
-		} else {
+		if !b.evalCtx.SessionData().PropagateInputOrdering {
 			b.dropOrderingAndExtraCols(cteScope)
 		}
-		return cteScope.expr, b.getCTECols(cteScope, cte.Name)
+		return cteScope.expr, b.getCTECols(cteScope, cte.Name), cteScope.ordering
 	}
 
 	// WITH RECURSIVE queries are always of the form:
@@ -317,7 +321,7 @@ func (b *Builder) buildCTE(
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
 		cteScope := b.buildSetOp(tree.UnionOp, false /* all */, inScope, initialScope, recursiveScope)
-		return cteScope.expr, b.getCTECols(cteScope, cte.Name)
+		return cteScope.expr, b.getCTECols(cteScope, cte.Name), nil
 	}
 
 	if numRefs != 1 {
@@ -356,7 +360,7 @@ func (b *Builder) buildCTE(
 	}
 
 	expr := b.factory.ConstructRecursiveCTE(cteSrc.expr, initialScope.expr, recursiveScope.expr, &private)
-	return expr, cteSrc.cols
+	return expr, cteSrc.cols, nil
 }
 
 // getCTECols returns a presentation for the scope, renaming the columns to
