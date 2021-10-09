@@ -1464,6 +1464,7 @@ func requireErrorSoon(
 func TestChangefeedFailOnTableOffline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDeadlock(t, "timeout")
 
 	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {

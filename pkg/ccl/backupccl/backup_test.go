@@ -259,6 +259,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+	skip.UnderDeadlock(t, "assertion failure under deadlock")
 
 	ctx := context.Background()
 	datadriven.Walk(t, "testdata/backup-restore/", func(t *testing.T, path string) {
