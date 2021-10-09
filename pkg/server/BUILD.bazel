@@ -114,6 +114,7 @@ go_library(
         "//pkg/spanconfig/spanconfigjob",
         "//pkg/spanconfig/spanconfigkvaccessor",
         "//pkg/spanconfig/spanconfigmanager",
+        "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/sql",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
