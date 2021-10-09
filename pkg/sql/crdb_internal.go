@@ -2228,9 +2228,7 @@ CREATE TABLE crdb_internal.create_type_statements (
   schema_name        STRING,
   descriptor_id      INT,
   descriptor_name    STRING,
-  create_statement   STRING,
-  enum_members       STRING[], -- populated only for ENUM types
-	INDEX (descriptor_id)
+  create_statement   STRING
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2262,7 +2260,6 @@ CREATE TABLE crdb_internal.create_type_statements (
 					tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
 					tree.NewDString(typeDesc.GetName()),       // descriptor_name
 					tree.NewDString(tree.AsString(node)),      // create_statement
-					enumLabelsDatum,
 				); err != nil {
 					return err
 				}

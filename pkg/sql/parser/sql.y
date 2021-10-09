@@ -5625,8 +5625,9 @@ show_transaction_stmt:
 // %Category: DDL
 // %Text:
 // SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
-// SHOW CREATE ALL TABLES
 // SHOW CREATE ALL SCHEMAS
+// SHOW CREATE ALL TABLES
+// SHOW CREATE ALL TYPES
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
   SHOW CREATE table_name
@@ -5653,13 +5654,17 @@ show_create_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeDatabase, Name: $4.unresolvedObjectName()}
 	}
+| SHOW CREATE ALL SCHEMAS
+  {
+    $$.val = &tree.ShowCreateAllSchemas{}
+  }
 | SHOW CREATE ALL TABLES
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
-| SHOW CREATE ALL SCHEMAS
+| SHOW CREATE ALL TYPES
   {
-    $$.val = &tree.ShowCreateAllSchemas{}
+    $$.val = &tree.ShowCreateAllTypes{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
