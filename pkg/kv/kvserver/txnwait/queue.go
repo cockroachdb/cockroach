@@ -590,7 +590,7 @@ func (q *Queue) MaybeWaitForPush(
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
-				ctx, req.PusheeTxn, false, nil, q.cfg.Clock.Now(),
+				ctx, req.PusheeTxn, false, nil,
 			)
 			if pErr != nil {
 				return nil, pErr
@@ -825,7 +825,7 @@ func (q *Queue) startQueryPusherTxn(
 				var pErr *roachpb.Error
 				var updatedPusher *roachpb.Transaction
 				updatedPusher, waitingTxns, pErr = q.queryTxnStatus(
-					ctx, pusher.TxnMeta, true, waitingTxns, q.cfg.Clock.Now(),
+					ctx, pusher.TxnMeta, true, waitingTxns,
 				)
 				if pErr != nil {
 					errCh <- pErr
@@ -886,11 +886,7 @@ func (q *Queue) startQueryPusherTxn(
 // Returns the updated transaction (or nil if not updated) as well as
 // the list of transactions which are waiting on the updated txn.
 func (q *Queue) queryTxnStatus(
-	ctx context.Context,
-	txnMeta enginepb.TxnMeta,
-	wait bool,
-	dependents []uuid.UUID,
-	now hlc.Timestamp,
+	ctx context.Context, txnMeta enginepb.TxnMeta, wait bool, dependents []uuid.UUID,
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
