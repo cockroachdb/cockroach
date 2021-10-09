@@ -42,11 +42,6 @@ https://cockroachdb.github.io/text/decode.html#eJy0k99um0oQxq-zT_GJm9hH5hjbNxFWp
 statement error ENV only supported with \(OPT\) option
 EXPLAIN (ENV) SELECT * FROM x WHERE b = 3
 
-query T
-EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3
-----
-https://cockroachdb.github.io/text/decode.html#eJy0k99um0oQxq-zT_GJm9hH5hjbNxFWpEMcokNLcAQ0TRRFqwU28bZr1l2WlLiqlIfwE-ZJKsifWpGathfhAmlmvt_HDDtr2zjluhKqdDFT-WetWL44PABveJ7VQhZcw_DK4OZBRYhtQ3OlC67pJyXKikqxFAYLVsEsOAp-xWppcMNkzV3stXpeskxyuhbXa3bdUb-Sq7LVq5URS7HmmtYVpwtRGXWt2bL6G2pZSyNyJWllmPkNKVXOpDC39MmioCumjTBClbygoix4Q6ucvdZ24qcoRGWqLxL7UFdXU8C2XwpZbVT7xRueG6XFmr_iSGax76U-Uu8g9LGqMynyfxv0yA5DEKV7iOYpog9hOCA72WPmIZrNoySNvSBKYa20WDJ9a-EkDo69-Bzv_XP0GLxk1h-QnSA69M_Q0IyKokEve8ofecdBeL6F99gAWZ_0p4R4YerHL9sKonf-LEWSemmQpMEswe4FAYBv3bt9rFzJellWlouL52RXYNZzfDnY0mvODC8oM5YLa-yM9mxnZDsjOCPXcVzHsbbE7c8XZW5oruqyBUaOs1Xutoi2C2FuV7z124bLWspncBvT6utPw_FkNJ50te-DP54te5PZulbebjxyuTslxD87Cb0gQm9-kg7gR6d9JH7YHvM_OIrnx2jw8X8_9pFhH5MpsW3bJt09af57XCmC-83mfnN3v7lDrsrKaCZK42I4Ho5cXAwnsDGcXJIfAQAA__-rPEyo
-
 #
 # Multiple Tables.
 #
