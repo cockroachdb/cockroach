@@ -13,7 +13,10 @@ package spanconfig
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -33,6 +36,47 @@ type KVAccessor interface {
 	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
 }
 
+// SQLTranslator translates SQL descriptors and their corresponding zone
+// configurations to constituent spans and span configurations.
+//
+// Concretely, for the following zone configuration hierarchy:
+//    CREATE DATABASE db;
+//    CREATE TABLE db.t1();
+//    ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+//    ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+// The SQLTranslator produces the following translation (represented as a diff
+// against RANGE DEFAULT for brevity):
+// 		Table/5{3-4}                  num_replicas=7 num_voters=5
+type SQLTranslator interface {
+	// Translate generates the implied span configuration state given a list of
+	// Translate generates the span configuration state given a list of
+	// {descriptor, named zone} IDs. No entry is returned for an ID if it doesn't
+	// exist or has been dropped. The timestamp at which the translation is valid
+	// is also returned.
+	//
+	// For every ID we first descend the zone configuration hierarchy with the ID
+	// as the root to accumulate IDs of all leaf objects. Leaf objects are tables
+	// and named zones (other than RANGE DEFAULT) which have actual span
+	// configurations associated with them (as opposed to non-leaf nodes that only
+	// serve to hold zone configurations for inheritance purposes). Then, for
+	// for every one of these accumulated IDs, we generate <span, span config>
+	// tuples by following up the inheritance chain to fully hydrate the span
+	// configuration. Translate also accounts for and negotiates subzone spans.
+	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
+}
+
+// FullTranslate translates the entire SQL zone configuration state to the
+// span configuration state. The timestamp at which such a translation is valid
+// is also returned.
+func FullTranslate(
+	ctx context.Context, s SQLTranslator,
+) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
+	// As RANGE DEFAULT is the root of all zone configurations (including
+	// other named zones for the system tenant), we can construct the entire
+	// span configuration state by starting from RANGE DEFAULT.
+	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -40,11 +84,13 @@ type KVAccessor interface {
 type ReconciliationDependencies interface {
 	KVAccessor
 
-	// TODO(irfansharif): We'll also want access to a "SQLWatcher", something
-	// that watches for changes to system.{descriptor,zones} and be responsible
-	// for generating corresponding span config updates. Put together, the
-	// reconciliation job will react to these updates by installing them into KV
-	// through the KVAccessor.
+	SQLTranslator
+
+	// TODO(arul): We'll also want access to a "SQLWatcher", something that
+	// watches for changes to system.{descriptors, zones} to feed IDs to the
+	// SQLTranslator. These interfaces will be used by the "Reconciler to perform
+	// full/partial reconciliation, checkpoint the span config job, and update KV
+	// with the tenants span config state.
 }
 
 // Store is a data structure used to store spans and their corresponding
