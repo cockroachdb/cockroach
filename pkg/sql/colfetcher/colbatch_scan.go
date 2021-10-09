@@ -208,31 +208,31 @@ func NewColBatchScan(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
-	typs, columnIdxMap, err := retrieveTypsAndColOrds(
-		ctx, flowCtx, evalCtx, table, invertedColumn, spec.Visibility, spec.HasSystemColumns)
+	tableArgs, err := populateTableArgs(
+		ctx, flowCtx, evalCtx, table, table.ActiveIndexes()[spec.IndexIdx],
+		invertedColumn, spec.Visibility, spec.HasSystemColumns,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	var neededColumns util.FastIntSet
 	for _, neededColumn := range spec.NeededColumns {
-		neededColumns.Add(int(neededColumn))
+		tableArgs.ValNeededForCol.Add(int(neededColumn))
 	}
 
-	fetcher, err := initCFetcher(
-		flowCtx, allocator, kvFetcherMemAcc, table, table.ActiveIndexes()[spec.IndexIdx],
-		neededColumns, columnIdxMap, invertedColumn,
-		cFetcherArgs{
-			visibility:        spec.Visibility,
-			lockingStrength:   spec.LockingStrength,
-			lockingWaitPolicy: spec.LockingWaitPolicy,
-			hasSystemColumns:  spec.HasSystemColumns,
-			reverse:           spec.Reverse,
-			memoryLimit:       execinfra.GetWorkMemLimit(flowCtx),
-			estimatedRowCount: estimatedRowCount,
-		},
-	)
-	if err != nil {
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.cFetcherArgs = cFetcherArgs{
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		execinfra.GetWorkMemLimit(flowCtx),
+		estimatedRowCount,
+		spec.Reverse,
+		flowCtx.TraceKV,
+	}
+
+	if err = fetcher.Init(flowCtx.Codec(), allocator, kvFetcherMemAcc, tableArgs); err != nil {
+		fetcher.Release()
 		return nil, err
 	}
 
@@ -288,36 +288,90 @@ func NewColBatchScan(
 		limitHint:       limitHint,
 		batchBytesLimit: batchBytesLimit,
 		parallelize:     spec.Parallelize,
-		ResultTypes:     typs,
+		ResultTypes:     tableArgs.typs,
 	}
 	return s, nil
 }
 
-// retrieveTypsAndColOrds extracts logic that retrieves a slice with the column
-// types and a map between column IDs and ordinal positions for the columns from
-// the given table.
-func retrieveTypsAndColOrds(
+type cFetcherTableArgs struct {
+	desc  catalog.TableDescriptor
+	index catalog.Index
+	// ColIdxMap is a mapping from ColumnID of each column to its ordinal.
+	ColIdxMap        catalog.TableColMap
+	isSecondaryIndex bool
+	// cols are all columns of the table.
+	cols []catalog.Column
+	// The indexes (0 to # of columns - 1) of the columns to return.
+	ValNeededForCol util.FastIntSet
+	// typs are types of all columns of the table.
+	typs []*types.T
+}
+
+var cFetcherTableArgsPool = sync.Pool{
+	New: func() interface{} {
+		return &cFetcherTableArgs{}
+	},
+}
+
+func (a *cFetcherTableArgs) Release() {
+	oldCols := a.cols
+	for i := range oldCols {
+		oldCols[i] = nil
+	}
+	*a = cFetcherTableArgs{
+		// The types are small objects, so we don't bother deeply resetting this
+		// slice.
+		typs: a.typs[:0],
+	}
+	a.cols = oldCols[:0]
+	cFetcherTableArgsPool.Put(a)
+}
+
+// populateTableArgs fills all fields of the cFetcherTableArgs except for
+// ValNeededForCol.
+func populateTableArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	table catalog.TableDescriptor,
+	index catalog.Index,
 	invertedCol catalog.Column,
 	visibility execinfrapb.ScanVisibility,
 	hasSystemColumns bool,
-) ([]*types.T, catalog.TableColMap, error) {
-	cols := table.PublicColumns()
+) (*cFetcherTableArgs, error) {
+	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
+	cols := args.cols[:0]
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.DeletableColumns()
+		cols = append(cols, table.ReadableColumns()...)
+	} else {
+		cols = append(cols, table.PublicColumns()...)
 	}
-	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithInvertedCol(cols, invertedCol)
-
-	// Add all requested system columns to the output.
-	if hasSystemColumns {
-		for _, sysCol := range table.SystemColumns() {
-			typs = append(typs, sysCol.GetType())
-			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
+	if invertedCol != nil {
+		for i, col := range cols {
+			if col.GetID() == invertedCol.GetID() {
+				cols[i] = invertedCol
+				break
+			}
 		}
+	}
+	if hasSystemColumns {
+		cols = append(cols, table.SystemColumns()...)
+	}
+
+	*args = cFetcherTableArgs{
+		desc:             table,
+		index:            index,
+		ColIdxMap:        catalog.ColumnIDToOrdinalMap(cols),
+		isSecondaryIndex: !index.Primary(),
+		cols:             cols,
+	}
+	if cap(args.typs) < len(cols) {
+		args.typs = make([]*types.T, len(cols))
+	} else {
+		args.typs = args.typs[:len(cols)]
+	}
+	for i := range cols {
+		args.typs[i] = cols[i].GetType()
 	}
 
 	// Before we can safely use types from the table descriptor, we need to
@@ -325,11 +379,7 @@ func retrieveTypsAndColOrds(
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
-		return nil, catalog.TableColMap{}, err
-	}
-
-	return typs, columnIdxMap, nil
+	return args, resolver.HydrateTypeSlice(ctx, args.typs)
 }
 
 // Release implements the execinfra.Releasable interface.
