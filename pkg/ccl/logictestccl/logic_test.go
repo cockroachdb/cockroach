@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -22,6 +23,7 @@ const logictestGlob = "logic_test/[^.]*"
 
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlockWithIssue(t, 71366)
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, filepath.Join("testdata/", logictestGlob))
 }
 
@@ -31,6 +33,7 @@ func TestCCLLogic(t *testing.T) {
 // configuration (i.e. "# LogicTest: !3node-tenant") are not run.
 func TestTenantLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlockWithIssue(t, 71366)
 
 	testdataDir := "../../sql/logictest/testdata/"
 	if bazel.BuiltWithBazel() {

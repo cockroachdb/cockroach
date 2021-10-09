@@ -45,6 +45,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/types",
+        "//pkg/testutils/skip",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
