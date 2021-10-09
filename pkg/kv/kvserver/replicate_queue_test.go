@@ -975,6 +975,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	skip.UnderStress(t, 38565)
 	skip.UnderRaceWithIssue(t, 38565)
 	skip.UnderShort(t, 38565)
+	skip.UnderDeadlockWithIssue(t, 38565)
 	ctx := context.Background()
 
 	// Create a cluster with really small ranges.
