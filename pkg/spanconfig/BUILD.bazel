@@ -11,5 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/hlc",
     ],
 )
