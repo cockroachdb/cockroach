@@ -15,6 +15,7 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",

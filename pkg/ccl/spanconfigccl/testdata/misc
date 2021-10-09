@@ -1,0 +1,55 @@
+# Miscellaneous edge case tests for the SQLTranslator.
+
+# Test dropped tables/databases work correctly.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_replicas=5;
+----
+
+translate database=db
+----
+/Table/5{3-4}                  num_replicas=5
+/Table/5{4-5}                  DEFAULT
+
+# Drop the table.
+exec-sql
+DROP TABLE db.t1;
+----
+
+# We still should be able to generate the span configuration for it when
+# starting our translation from the database.
+translate database=db
+----
+/Table/5{3-4}                  num_replicas=5
+/Table/5{4-5}                  DEFAULT
+
+# Same as above, except this time the translation starts from the table's ID.
+translate id=53
+----
+/Table/5{3-4}                  num_replicas=5
+
+# Test schemas/types don't generate a span configuration.
+exec-sql
+CREATE SCHEMA db.sc;
+CREATE TYPE db.typ AS ENUM();
+----
+
+# Schema.
+translate id=55
+----
+
+# Enum.
+translate id=56
+----
+
+# Array type alias.
+translate id=57
+----
+
+# Test that non-existent IDs do not generate span configurations either.
+
+translate id=500
+----

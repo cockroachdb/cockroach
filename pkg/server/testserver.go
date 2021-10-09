@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -935,6 +936,14 @@ func (ts *TestServer) MigrationServer() interface{} {
 // SpanConfigAccessor is part of TestServerInterface.
 func (ts *TestServer) SpanConfigAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
+}
+
+// SpanConfigSQLTranslator is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
+	if ts.sqlServer.spanconfigMgr != nil {
+		return ts.sqlServer.spanconfigMgr.SQLTranslator
+	}
+	return spanconfigsqltranslator.NewDisabled()
 }
 
 // SQLServer is part of TestServerInterface.
