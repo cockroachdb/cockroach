@@ -228,6 +228,78 @@ explain
 
 # Regression: Explain a statement having constant column, but with no ordering.
 norm
-SELECT field FROM [EXPLAIN SELECT 123 AS k]
+SELECT * FROM [EXPLAIN SELECT 123 AS k]
 ----
-error (42703): column "field" does not exist
+project
+ ├── columns: info:3
+ ├── explain
+ │    ├── columns: info:2
+ │    └── values
+ │         ├── columns: k:1!null
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         └── (123,)
+ └── projections
+      └── info:2 [as=info:3, outer=(2)]
+
+# --------------------------------------------------
+# SimplifyWithBindingOrdering
+# --------------------------------------------------
+norm propagate-input-ordering expect=SimplifyWithBindingOrdering
+WITH cte AS (SELECT a, b FROM abcde ORDER BY a, b, c)
+SELECT * FROM cte, xyz
+----
+with &1 (cte)
+ ├── columns: a:8!null b:9 x:10!null y:11 z:12
+ ├── materialized
+ ├── key: (8,10)
+ ├── fd: (8)-->(9), (10)-->(11,12)
+ ├── scan abcde
+ │    ├── columns: abcde.a:1!null abcde.b:2 c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── ordering: +1
+ └── inner-join (cross)
+      ├── columns: a:8!null b:9 x:10!null y:11 z:12
+      ├── key: (8,10)
+      ├── fd: (8)-->(9), (10)-->(11,12)
+      ├── with-scan &1 (cte)
+      │    ├── columns: a:8!null b:9
+      │    ├── mapping:
+      │    │    ├──  abcde.a:1 => a:8
+      │    │    └──  abcde.b:2 => b:9
+      │    ├── key: (8)
+      │    └── fd: (8)-->(9)
+      ├── scan xyz
+      │    ├── columns: x:10!null y:11 z:12
+      │    ├── key: (10)
+      │    └── fd: (10)-->(11,12)
+      └── filters (true)
+
+norm propagate-input-ordering expect=SimplifyWithBindingOrdering
+WITH cte AS (SELECT d, 1 AS one, e FROM abcde ORDER BY d, one, e)
+SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: d:9 one:10!null e:11
+ ├── materialized
+ ├── fd: ()-->(10)
+ ├── project
+ │    ├── columns: one:8!null abcde.d:4 abcde.e:5
+ │    ├── fd: ()-->(8)
+ │    ├── ordering: +4,+5 opt(8) [actual: +4,+5]
+ │    ├── sort
+ │    │    ├── columns: abcde.d:4 abcde.e:5
+ │    │    ├── ordering: +4,+5
+ │    │    └── scan abcde
+ │    │         └── columns: abcde.d:4 abcde.e:5
+ │    └── projections
+ │         └── 1 [as=one:8]
+ └── with-scan &1 (cte)
+      ├── columns: d:9 one:10!null e:11
+      ├── mapping:
+      │    ├──  abcde.d:4 => d:9
+      │    ├──  one:8 => one:10
+      │    └──  abcde.e:5 => e:11
+      └── fd: ()-->(10)
