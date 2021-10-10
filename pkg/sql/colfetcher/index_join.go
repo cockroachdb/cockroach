@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -415,27 +414,11 @@ func NewColIndexJoin(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 
-	cols := table.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.DeletableColumns()
-	}
-	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypes(cols)
-
-	// Add all requested system columns to the output.
-	if spec.HasSystemColumns {
-		for _, sysCol := range table.SystemColumns() {
-			typs = append(typs, sysCol.GetType())
-			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
-		}
-	}
-
-	// Before we can safely use types from the table descriptor, we need to
-	// make sure they are hydrated. In row execution engine it is done during
-	// the processor initialization, but neither ColIndexJoin nor cFetcher are
-	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
+	typs, columnIdxMap, err := retrieveTypsAndColOrds(
+		ctx, flowCtx, evalCtx, table, nil, /* invertedCol */
+		spec.Visibility, spec.HasSystemColumns,
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -453,8 +436,8 @@ func NewColIndexJoin(
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err := proc.Init(post, typs, semaCtx, evalCtx); err != nil {
-			colexecerror.InternalError(err)
+		if err = proc.Init(post, typs, semaCtx, evalCtx); err != nil {
+			return nil, err
 		}
 		neededColumns = proc.NeededColumns()
 	}

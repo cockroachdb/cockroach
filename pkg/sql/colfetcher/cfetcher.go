@@ -66,18 +66,19 @@ type cTableInfo struct {
 	neededValueColsByIdx util.FastIntSet
 
 	// The set of ordinals of the columns that are **not** required. cFetcher
-	// creates an output batch that includes all columns in cols, yet only
+	// creates an output batch that includes all columns of the table, yet only
 	// needed columns are actually populated. The vectors at positions in
 	// notNeededColOrdinals will be set to have all null values.
 	notNeededColOrdinals []int
 
-	// Map used to get the index for columns in cols.
+	// Map used to get the column index based on the descpb.ColumnID.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
 	// time.
 	colIdxMap *colIdxMap
 
 	// One value per column that is part of the key; each value is a column
-	// index (into cols); -1 if we don't need the value for that column.
+	// ordinal among all columns of the table; -1 if we don't need the value for
+	// that column.
 	//
 	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
 	// then values for all columns are needed and, thus, there will be no -1 in
@@ -89,8 +90,8 @@ type cTableInfo struct {
 	compositeIndexColOrdinals util.FastIntSet
 
 	// One number per column coming from the "key suffix" that is part of the
-	// value; each number is a column index (into cols); -1 if we don't need the
-	// value for that column.
+	// value; each number is a column ordinal among all columns of the table; -1
+	// if we don't need the value for that column.
 	//
 	// The "key suffix" columns are only used for secondary indexes:
 	// - for non-unique indexes, these columns are appended to the key (and will
@@ -104,9 +105,9 @@ type cTableInfo struct {
 	// extraValColOrdinals.
 	extraValColOrdinals []int
 
-	// invertedColOrdinal is a column index (into cols), indicating the inverted
-	// column; -1 if there is no inverted column or we don't need the value for
-	// that column.
+	// invertedColOrdinal is a column ordinal among all columns of the table,
+	// indicating the inverted column; -1 if there is no inverted column or we
+	// don't need the value for that column.
 	invertedColOrdinal int
 
 	// maxColumnFamilyID is the maximum possible family id for the configured
@@ -160,34 +161,34 @@ func (c *cTableInfo) Release() {
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
+		neededColsList:       c.neededColsList[:0],
+		notNeededColOrdinals: c.notNeededColOrdinals[:0],
 		colIdxMap:            c.colIdxMap,
+		indexColOrdinals:     c.indexColOrdinals[:0],
+		extraValColOrdinals:  c.extraValColOrdinals[:0],
 		keyValTypes:          c.keyValTypes[:0],
 		extraTypes:           c.extraTypes[:0],
 		extraValDirections:   c.extraValDirections[:0],
-		neededColsList:       c.neededColsList[:0],
-		notNeededColOrdinals: c.notNeededColOrdinals[:0],
-		indexColOrdinals:     c.indexColOrdinals[:0],
-		extraValColOrdinals:  c.extraValColOrdinals[:0],
 	}
 	cTableInfoPool.Put(c)
 }
 
-// colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
-// in the table to fetch. This map is used to figure out what index within a
-// row a particular value-component column goes into. Value-component columns
-// are encoded with a column id prefix, with the guarantee that within any
-// given row, the column ids are always increasing. Because of this guarantee,
-// we can store this map as two sorted lists that the fetcher keeps an index
-// into, giving fast access during decoding.
+// colIdxMap is a "map" that contains the ordinal among all columns of the table
+// for each ColumnID to fetch. This map is used to figure out what index within
+// a row a particular value-component column goes into. Value-component columns
+// are encoded with a column id prefix, with the guarantee that within any given
+// row, the column ids are always increasing. Because of this guarantee, we can
+// store this map as two sorted lists that the fetcher keeps an index into,
+// giving fast access during decoding.
 //
 // It implements sort.Interface to be sortable on vals, while keeping ords
 // matched up to the order of vals.
 type colIdxMap struct {
 	// vals is the sorted list of descpb.ColumnIDs in the table to fetch.
 	vals descpb.ColumnIDs
-	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
-	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
-	// in colIdxVals.
+	// ords is the list of ordinals into all columns of the table for each
+	// column in vals. The ith entry in ords is the ordinal among all columns of
+	// the table for the ith column in vals.
 	ords []int
 }
 
@@ -432,16 +433,20 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(table.colIdxMap)
 	*table = cTableInfo{
-		desc:                tableArgs.Desc,
-		colIdxMap:           table.colIdxMap,
-		index:               tableArgs.Index,
-		isSecondaryIndex:    tableArgs.IsSecondaryIndex,
-		cols:                colDescriptors,
-		neededColsList:      table.neededColsList[:0],
-		indexColOrdinals:    table.indexColOrdinals[:0],
-		extraValColOrdinals: table.extraValColOrdinals[:0],
-		timestampOutputIdx:  noOutputColumn,
-		oidOutputIdx:        noOutputColumn,
+		desc:                 tableArgs.Desc,
+		index:                tableArgs.Index,
+		isSecondaryIndex:     tableArgs.IsSecondaryIndex,
+		cols:                 colDescriptors,
+		neededColsList:       table.neededColsList[:0],
+		notNeededColOrdinals: table.notNeededColOrdinals[:0],
+		colIdxMap:            table.colIdxMap,
+		indexColOrdinals:     table.indexColOrdinals[:0],
+		extraValColOrdinals:  table.extraValColOrdinals[:0],
+		keyValTypes:          table.keyValTypes[:0],
+		extraTypes:           table.extraTypes[:0],
+		extraValDirections:   table.extraValDirections[:0],
+		timestampOutputIdx:   noOutputColumn,
+		oidOutputIdx:         noOutputColumn,
 	}
 
 	if cap(rf.typs) < len(colDescriptors) {
