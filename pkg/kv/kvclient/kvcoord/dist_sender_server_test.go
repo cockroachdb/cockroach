@@ -206,6 +206,10 @@ func checkResumeSpanScanResults(
 				t.Fatalf("satisfied scan %d (%s) has ResumeSpan: %v",
 					i, spans[i], res.ResumeSpan)
 			}
+			if res.ResumeReason != 0 {
+				t.Fatalf("satisfied scan %d (%s) has ResumeReason: %v",
+					i, spans[i], res.ResumeReason)
+			}
 			continue
 		}
 
@@ -547,6 +551,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 						if res.ResumeSpan != nil {
 							b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
 							b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
+							b.Results[i].ResumeReason = newB.Results[j].ResumeReason
 							j++
 						}
 					}
