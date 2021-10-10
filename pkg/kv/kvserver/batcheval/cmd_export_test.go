@@ -311,14 +311,10 @@ INTO
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 100, 2, 100)
 		latestRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		allRespHeader := roachpb.ResponseHeader{
-			ResumeSpan:   nil,
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
+			NumBytes: maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 

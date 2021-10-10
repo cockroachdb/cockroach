@@ -1734,7 +1734,6 @@ func fillSkippedResponses(
 			continue
 		}
 		hdr := resp.GetInner().Header()
-		hdr.ResumeReason = resumeReason
 		origSpan := req.Header().Span()
 		if isReverse {
 			if hdr.ResumeSpan != nil {
@@ -1772,6 +1771,9 @@ func fillSkippedResponses(
 					}
 				}
 			}
+		}
+		if hdr.ResumeSpan != nil {
+			hdr.ResumeReason = resumeReason
 		}
 		br.Responses[i].GetInner().SetHeader(hdr)
 	}
