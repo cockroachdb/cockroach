@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,7 +64,6 @@ func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup 
 func TestBlockingBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDeadlockWithIssue(t, 71364)
 
 	metrics := kvevent.MakeMetrics(time.Minute)
 	ba, release := getBoundAccountWithBudget(4096)
@@ -117,7 +115,6 @@ func TestBlockingBuffer(t *testing.T) {
 func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDeadlockWithIssue(t, 71364)
 
 	metrics := kvevent.MakeMetrics(time.Minute)
 	ba, release := getBoundAccountWithBudget(4096)
