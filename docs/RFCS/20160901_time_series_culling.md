@@ -328,7 +328,7 @@ was also the original design of the time series system.
 Unfortunately, it is not currently possible due to recent changes which were
 required by the replica consistency checker. The engine-level merge component no
 longer aggregates samples, it decimates (discarding only the most recent sample
-for a period). This was necessary to deal with the unforunate reality of raft
+for a period). This was necessary to deal with the unfortunate reality of raft
 command replays.
 
 ### Opportunistic Rollups
