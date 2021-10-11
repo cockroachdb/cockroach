@@ -133,7 +133,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 		return err
 	}
 
-	// Restore the transaction's state, in case we're rewiding after an error.
+	// Restore the transaction's state, in case we're rewinding after an error.
 	tc.mu.txnState = txnPending
 
 	tc.mu.active = sp.active
