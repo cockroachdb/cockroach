@@ -310,7 +310,7 @@ func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
 			Typ:   types.MakeTuple([]*types.T{types.MakeTuple(colTypes)}),
 		}
 	}
-	// Inlining a sngle-column VALUES results in a simple tuple. Example:
+	// Inlining a single-column VALUES results in a simple tuple. Example:
 	//   a IN (VALUES (1), (2))
 	// =>
 	//   a IN (1, 2)
