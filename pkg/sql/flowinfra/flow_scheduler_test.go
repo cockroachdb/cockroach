@@ -106,7 +106,8 @@ func (m *mockFlow) GetID() execinfrapb.FlowID {
 	return execinfrapb.FlowID{UUID: m.flowID}
 }
 
-func (m *mockFlow) Cleanup(_ context.Context) {}
+func (m *mockFlow) Cleanup(_ context.Context)          {}
+func (m *mockFlow) CleanupBeforeRun(_ context.Context) {}
 
 func (m *mockFlow) ConcurrentTxnUse() bool {
 	return false

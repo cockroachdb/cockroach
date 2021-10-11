@@ -660,8 +660,8 @@ func allocateDescriptorRewrites(
 
 				if parentDB.IsMultiRegion() && table.GetLocalityConfig() != nil {
 					// We're restoring a table and not its parent database. We may block
-					// restoring multi-region tables to multi-region databases since regions
-					// may mismatch.
+					// restoring multi-region tables to multi-region databases since
+					// regions may mismatch.
 					if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
 						return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 					}

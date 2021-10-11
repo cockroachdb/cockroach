@@ -125,6 +125,8 @@ type Flow interface {
 	// Cleanup should be called when the flow completes (after all processors and
 	// mailboxes exited).
 	Cleanup(context.Context)
+	// CleanupBeforeRun should be called if the flow will never be run.
+	CleanupBeforeRun(context.Context)
 
 	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
 	// will execute concurrently (i.e. if not all of them have been fused) and
@@ -520,6 +522,11 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if f.doneFn != nil {
 		f.doneFn()
 	}
+}
+
+// CleanupBeforeRun is part of the Flow interface.
+func (f *FlowBase) CleanupBeforeRun(ctx context.Context) {
+	f.Cleanup(ctx)
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
