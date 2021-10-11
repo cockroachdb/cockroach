@@ -297,7 +297,9 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 
 func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 
-func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
+func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {
+	*s = joinReaderNoOrderingStrategy{}
+}
 
 // memUsage returns the size of the data structures in the
 // joinReaderNoOrderingStrategy for memory accounting purposes.
@@ -395,7 +397,9 @@ func (s *joinReaderIndexJoinStrategy) spilled() bool {
 	return false
 }
 
-func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {}
+func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {
+	*s = joinReaderIndexJoinStrategy{}
+}
 
 // partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndices value for
 // semi- and anti-joins, where we only need to know about the existence of a
@@ -677,6 +681,7 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 	if s.lookedUpRows != nil {
 		s.lookedUpRows.Close(ctx)
 	}
+	*s = joinReaderOrderingStrategy{}
 }
 
 // memUsage returns the size of inputRowIdxToLookedUpRowIndices in bytes, to
