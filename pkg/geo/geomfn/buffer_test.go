@@ -88,7 +88,7 @@ func TestParseBufferParams(t *testing.T) {
 }
 
 func TestBuffer(t *testing.T) {
-	t.Run("too many quadrant segements", func(t *testing.T) {
+	t.Run("too many quadrant segments", func(t *testing.T) {
 		g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
 		params, distance, err := ParseBufferParams("quad_segs=1000000", 1000)
 		require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestBuffer(t *testing.T) {
 		)
 	})
 
-	t.Run("too little quadrant segements", func(t *testing.T) {
+	t.Run("too little quadrant segments", func(t *testing.T) {
 		for _, num := range []int{0, -1} {
 			t.Run(fmt.Sprintf("%d", num), func(t *testing.T) {
 				g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")

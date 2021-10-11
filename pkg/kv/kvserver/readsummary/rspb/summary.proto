@@ -51,7 +51,7 @@ message ReadSummary {
   Segment global = 2 [(gogoproto.nullable) = false];
 }
   
-// Segment is a segement of a Range's complete ReadSummary. A ReadSummary has a
+// Segment is a segment of a Range's complete ReadSummary. A ReadSummary has a
 // segment for each of the Range's replicated, addressable contiguous keyspaces
 // (i.e. range-local and global).
 message Segment {
