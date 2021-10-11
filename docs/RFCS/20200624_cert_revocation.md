@@ -298,7 +298,7 @@ In practice, CRLs are fed using two mechanisms:
   Services that support `CRLDistributionPoints` should fetch the CRLs
   prior to validating certs signed by that CA.
 
-  A particular pitfall/chalenge with this field is that there may be
+  A particular pitfall/challenge with this field is that there may be
   multiple intermediate CAs, each with its own
   `CRLDistributionPoints`. Some of the CA certificates may be provided
   only during the TLS connection by the client, as part of the TLS
