@@ -162,7 +162,7 @@ type TenantConsumption struct {
 type TokenBucketRequest struct {
   InstanceID uint32
 
-  // Uniqely identifies this instance (in light of instance ID reuse).
+  // Uniquely identifies this instance (in light of instance ID reuse).
   InstanceLease string
 
   // Sequence number used to detect duplicate requests.
