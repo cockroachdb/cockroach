@@ -188,7 +188,7 @@ and existence checks. Cascading actions that result in mutations to
 other tables themselves append more triggers to run.
 
 Each subsequent step in this cascade of effects is able to read its
-own writes (for futher FK checks).
+own writes (for further FK checks).
 
 We emulate this in CockroachDB by introducing a step boundary between
 iterations of the cascading algorithm.
