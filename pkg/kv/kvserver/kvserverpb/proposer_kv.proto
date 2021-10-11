@@ -181,7 +181,7 @@ message ReplicatedEvalResult {
   // persisted summary may be identical to the summary in this field, but it
   // does not have to be. Notably, we intended for the summary included in the
   // ReplicatedEvalResult to eventually be a much higher-resolution version of
-  // the ReadSummmary than the version persisted. This scheme of persisting a
+  // the ReadSummary than the version persisted. This scheme of persisting a
   // compressed ReadSummary indefinitely and including a higher-resolution
   // ReadSummary on the RaftCommand allows us to optimize for the common case
   // where the lease transfer is applied on the new leaseholder through Raft log
