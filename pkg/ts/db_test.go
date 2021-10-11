@@ -237,8 +237,8 @@ func (tm *testModelRunner) storeInModel(r Resolution, data tspb.TimeSeriesData) 
 
 	key := resolutionModelKey(data.Name, r)
 	if tm.DB.WriteColumnar() {
-		firstColumar, ok := tm.firstColumnarTimestamp[key]
-		if candidate := data.Datapoints[0].TimestampNanos; !ok || candidate < firstColumar {
+		firstColumnar, ok := tm.firstColumnarTimestamp[key]
+		if candidate := data.Datapoints[0].TimestampNanos; !ok || candidate < firstColumnar {
 			tm.firstColumnarTimestamp[key] = candidate
 		}
 	}
