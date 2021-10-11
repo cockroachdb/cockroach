@@ -32,7 +32,7 @@ import (
 // state. Additionally, if the unionNode has an ordering then we can hint it
 // down to left and right and force the condition for this first optimization.
 //
-// All six of the operations can be completed without cacheing rows by
+// All six of the operations can be completed without caching rows by
 // iterating one side then the other and keeping counts of unique rows
 // in a map. The logic is common for all six. However, because EXCEPT
 // needs to iterate the right side first, the common code always reads
