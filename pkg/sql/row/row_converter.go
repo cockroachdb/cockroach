@@ -34,7 +34,7 @@ import (
 // KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
 
-// CPut is not implmented.
+// CPut is not implemented.
 func (i KVInserter) CPut(key, value interface{}, expValue []byte) {
 	panic("unimplemented")
 }

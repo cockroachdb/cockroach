@@ -62,5 +62,5 @@ type Cluster interface {
 // in the cluster. It depends on a majority of the nodes being up, and does
 // the check against the node at index i.
 func Consistent(ctx context.Context, c Cluster, i int) error {
-	return errors.Errorf("Consistency checking is unimplmented and should be re-implemented using SQL")
+	return errors.Errorf("Consistency checking is unimplemented and should be re-implemented using SQL")
 }
