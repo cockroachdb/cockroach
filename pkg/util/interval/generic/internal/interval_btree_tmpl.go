@@ -1022,10 +1022,10 @@ func (i *iterator) Cur() T {
 //
 // The scan algorithm works like a standard btree forward scan with the
 // following augmentations:
-// 1. before tranversing the tree, the scan performs a binary search on the
+// 1. before traversing the tree, the scan performs a binary search on the
 //    root node's items to determine a "soft" lower-bound constraint position
 //    and a "hard" upper-bound constraint position in the root's children.
-// 2. when tranversing into a child node in the lower or upper bound constraint
+// 2. when traversing into a child node in the lower or upper bound constraint
 //    position, the constraint is refined by searching the child's items.
 // 3. the initial traversal down the tree follows the left-most children
 //    whose upper bound end keys are equal to or greater than the start key
