@@ -100,12 +100,12 @@ type schedt struct {
 
 	lock mutex
 
-	// When increasing nmidle, nmidlelocked, nmsys, or nmfreed, be
+	// When increasing nmiddle, nmiddlelocked, nmsys, or nmfreed, be
 	// sure to call checkdead().
 
-	midle        muintptr // idle m's waiting for work
-	nmidle       int32    // number of idle m's waiting for work
-	nmidlelocked int32    // number of locked m's waiting for work
+	middle        muintptr // idle m's waiting for work
+	nmiddle       int32    // number of idle m's waiting for work
+	nmiddlelocked int32    // number of locked m's waiting for work
 	mnext        int64    // number of m's that have been created and next M ID
 	maxmcount    int32    // maximum number of m's allowed (or die)
 	nmsys        int32    // number of system m's not counted for deadlock
