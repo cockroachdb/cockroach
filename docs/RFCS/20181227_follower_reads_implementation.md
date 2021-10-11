@@ -113,7 +113,7 @@ and `BEGIN TRANSACTION` statements to allow a clause analagous to `AS OF SYSTEM
 TIME` for `SELECT` statements today. This change will ease the multi-statement
 historical reads, potentially enabling use of existing code which relies on a 
 transaction object, and will provide a mechanism to run historical reads with
-a HIGH transaction priority, eliminating the posibility of blocking on a
+a HIGH transaction priority, eliminating the possibility of blocking on a
 long-running read-write transaction. `SET TRANSACTION` must be the first
 statement following `BEGIN`. Note that `SET TRANSACTION AS OF SYSTEM
 TIME` implies `READ ONLY`. A historical read only transaction thus will look 
