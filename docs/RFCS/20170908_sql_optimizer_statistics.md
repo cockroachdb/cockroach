@@ -405,7 +405,7 @@ A DistSQL plan for this operation will look like this:
 
 ### Stats cache
 
-To cache statistics, we emply two caches:
+To cache statistics, we employ two caches:
   1. *statistics cache*: at the level of table and stores information
      for all statistics available for each table. The information
      excludes the histogram data.
