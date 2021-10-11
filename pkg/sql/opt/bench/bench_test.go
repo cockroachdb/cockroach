@@ -224,7 +224,7 @@ var queries = [...]benchQuery{
 
 	// 1. Table with many columns.
 	// 2. Multi-column primary key.
-	// 3. Mutiple indexes to consider.
+	// 3. Multiple indexes to consider.
 	// 4. Multiple placeholder values.
 	{
 		name: "tpcc-new-order",
