@@ -848,7 +848,7 @@ if options.prod_release:
 if not hidedownloads:
     print("""Get future release notes emailed to you:
 
-{% include marketo.html %}
+{% include_cached marketo.html %}
 """)
     print()
 
@@ -862,13 +862,13 @@ if not hidedownloads:
 </div>
 
 <section class="filter-content" data-scope="windows">
-{% include windows_warning.md %}
+{% include_cached windows_warning.md %}
 </section>
 """)
 
     print("""### Docker image
 
-{% include copy-clipboard.html %}
+{% include_cached copy-clipboard.html %}
 ~~~shell
 $ docker pull cockroachdb/cockroach""" + (":" if options.prod_release else "-unstable:") + current_version + """
 ~~~
@@ -933,7 +933,7 @@ if len(missing_release_notes) > 0:
 # Print the Doc Updates section.
 print("### Doc updates")
 print()
-print("Docs team: Please add these manually.")
+print("{% comment %}Docs team: Please add these manually.{% endcomment %}")
 print()
 
 # Print the Contributors section.
