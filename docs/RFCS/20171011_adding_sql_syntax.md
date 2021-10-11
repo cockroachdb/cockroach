@@ -221,7 +221,7 @@ situations can arise:
 - no similar functionality *as a whole* is available elsewhere:
   - does the functionality "group" with other existing SQL statements?
     - if so, reuse at least the first keyword and the general structure
-  - does the functionality create / delete entitites?
+  - does the functionality create / delete entities?
     - do not forget about IF EXISTS / IF NOT EXISTS
   - does the functionality take optional parameters?
     - consider WITH
