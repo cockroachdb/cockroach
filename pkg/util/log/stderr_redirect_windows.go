@@ -29,7 +29,7 @@ func dupFD(fd uintptr) (uintptr, error) {
 
 // redirectStderr is used to redirect internal writes to the error
 // handle to the specified file. This is needed to ensure that
-// harcoded writes to the error handle by e.g. the Go runtime are
+// hardcoded writes to the error handle by e.g. the Go runtime are
 // redirected to a log file of our choosing.
 //
 // We also override os.Stderr for those other parts of Go which use
