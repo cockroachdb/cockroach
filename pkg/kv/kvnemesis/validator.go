@@ -462,7 +462,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// replicas.
 		} else if resultIsErrorStr(t.Result, `merge failed: ranges not collocated`) {
 			// A merge requires that the two ranges have replicas on the same nodes,
-			// but Generator intentiontally does not try to avoid this so that this
+			// but Generator intentionally does not try to avoid this so that this
 			// edge case is exercised.
 		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
 			// Probably should be transparently retried.
