@@ -614,7 +614,7 @@ func TestDropTable(t *testing.T) {
 
 	// Test that deleted table cannot be used. This prevents
 	// regressions where name -> descriptor ID caches might make
-	// this statement erronously work.
+	// this statement erroneously work.
 	if _, err := sqlDB.Exec(
 		`SELECT * FROM t.kv`,
 	); !testutils.IsError(err, `relation "t.kv" does not exist`) {

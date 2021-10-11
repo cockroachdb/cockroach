@@ -137,7 +137,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(contents2), stderrText) {
-		t.Errorf("secondary log erronously contains stderr text\n%s", contents2)
+		t.Errorf("secondary log erroneously contains stderr text\n%s", contents2)
 	}
 }
 
