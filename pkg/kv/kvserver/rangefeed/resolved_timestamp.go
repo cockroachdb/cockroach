@@ -505,7 +505,7 @@ func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
 	return wasMin
 }
 
-// AllowNegRefCount instruts the unresolvedIntentQueue on whether or not to
+// AllowNegRefCount instructs the unresolvedIntentQueue on whether or not to
 // allow the reference count on transactions to drop below zero. If disallowed,
 // the method also asserts that all unresolved intent refcounts for transactions
 // currently in the queue are positive. Assertion takes O(n) time, where n is
