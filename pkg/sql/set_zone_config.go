@@ -340,7 +340,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		default:
 			deleteZone = true
 		}
-		// Trim spaces, to detect empty zonfigurations.
+		// Trim spaces, to detect empty configurations.
 		// We'll add back the missing newline below.
 		yamlConfig = strings.TrimSpace(yamlConfig)
 	}
