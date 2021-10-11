@@ -53,7 +53,7 @@ secondary index and then dropping the old one.
 
 It is frequently desirable to enforce that there is never a row in an
 interleaved table without a corresponding row in the parent table. This can be
-done with a table-level foreign key constaint, but a shorthand will also be
+done with a table-level foreign key constraint, but a shorthand will also be
 created: `INTERLEAVE IN PARENT customers ON DELETE CASCADE|RESTRICT`. `ON DELETE
 CASCADE` will delete interleaved rows if a parent is deleted. `ON DELETE
 RESTRICT` will allow removal of parent rows with no interleaved rows, but will

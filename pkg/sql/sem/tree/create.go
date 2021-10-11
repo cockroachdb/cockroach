@@ -910,7 +910,7 @@ type ColumnCheckConstraint struct {
 	Expr Expr
 }
 
-// ColumnFKConstraint represents a FK-constaint on a column.
+// ColumnFKConstraint represents a FK-constraint on a column.
 type ColumnFKConstraint struct {
 	Table   TableName
 	Col     Name // empty-string means use PK

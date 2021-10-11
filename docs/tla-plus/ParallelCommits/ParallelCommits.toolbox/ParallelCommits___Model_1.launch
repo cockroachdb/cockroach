@@ -43,7 +43,7 @@
         <listEntry value="PREVENTERS;;{p1, p2};1;1"/>
         <listEntry value="MAX_ATTEMPTS;;3;0;0"/>
     </listAttribute>
-    <stringAttribute key="modelParameterContraint" value=""/>
+    <stringAttribute key="modelParameterConstraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
     <stringAttribute key="modelParameterModelValues" value="{}"/>
     <stringAttribute key="modelParameterNewDefinitions" value=""/>

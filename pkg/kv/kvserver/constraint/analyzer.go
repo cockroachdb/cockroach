@@ -82,7 +82,7 @@ func AnalyzeConstraints(
 
 // ConjunctionsCheck checks a store against a single set of constraints (out of
 // the possibly numerous sets that apply to a range), returning true iff the
-// store matches the constraints. The contraints are AND'ed together; a store
+// store matches the constraints. The constraints are AND'ed together; a store
 // matches the conjunction if it matches all of them.
 func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []roachpb.Constraint) bool {
 	for _, constraint := range constraints {

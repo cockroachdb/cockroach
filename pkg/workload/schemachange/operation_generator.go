@@ -375,13 +375,13 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		return "", err
 	}
 
-	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+	constraintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
 
 	columnExistsOnTable, err := columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
 	if err != nil {
 		return "", err
 	}
-	constraintExists, err := constraintExists(ctx, tx, constaintName)
+	constraintExists, err := constraintExists(ctx, tx, constraintName)
 	if err != nil {
 		return "", err
 	}
@@ -420,7 +420,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
 	}
 
-	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
+	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constraintName, columnForConstraint.name), nil
 }
 
 func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx) (string, error) {

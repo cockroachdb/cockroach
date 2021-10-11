@@ -219,7 +219,7 @@ manner that a user doesn't expect.
 
 ## Debugging
 
-A simple tool that will allow users to specify contraints and view the matching
+A simple tool that will allow users to specify constraints and view the matching
 stores will be added to the web UI. This will allow users to vet any changes
 before actually using them. In addition, it will also highlight any existing
 invalid configurations such as out of order locality tags, and failing
