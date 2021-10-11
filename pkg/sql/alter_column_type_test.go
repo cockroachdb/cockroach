@@ -412,3 +412,61 @@ ALTER TABLE t.test ADD COLUMN y INT;
 	waitBeforeContinuing <- struct{}{}
 	wg.Wait()
 }
+
+func TestSetDataTypeNotMatchingDefaultClause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+
+	expected := "pq: cannot change column type with incompatible DEFAULT expression"
+
+	sqlDB.ExpectErr(t, expected, `
+	CREATE DATABASE d;
+	CREATE TABLE d.test (x STRING DEFAULT 'blank');
+	ALTER TABLE d.test alter column x type int;
+	INSERT into d.test values (1);
+	`)
+
+	sqlDB.ExpectErr(t, expected, `
+create table t (a int primary key, b timestamp default current_timestamp());
+alter table t alter column b set data type timestamptz;
+insert into t values (1);
+`)
+}
+
+func TestSetDataTypeNotMatchingOnUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+
+	expected := "pq: cannot change column type with incompatible ON UPDATE expression"
+
+	sqlDB.ExpectErr(t, expected, `
+	CREATE DATABASE d;
+	CREATE TABLE d.test (x STRING ON UPDATE 'blank');
+	ALTER TABLE d.test alter column x type int;
+	INSERT into d.test values (1);
+	`)
+
+	sqlDB.ExpectErr(t, expected, `
+create table t (a int primary key, b timestamp ON UPDATE current_timestamp());
+alter table t alter column b set data type timestamptz;
+insert into t values (1);
+`)
+}

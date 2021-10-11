@@ -131,6 +131,29 @@ func AlterColumnType(
 			"the requested type conversion (%s -> %s) requires an explicit USING expression",
 			col.GetType().SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
+		// Postgres would allow the type change and modify the
+		// default clause to match, we've chosen to be stricter
+		// with type conversion for the time being.
+		if col.HasDefault() {
+			if !typ.Equivalent(col.GetType()) {
+				return errors.WithHintf(
+					pgerror.New(pgcode.DatatypeMismatch, "cannot change column type with incompatible DEFAULT expression"),
+					`you may need to specify "USING %s::%s"`,
+					col.GetName(),
+					typ.String(),
+				)
+			}
+		}
+		if col.HasOnUpdate() {
+			if !typ.Equivalent(col.GetType()) {
+				return errors.WithHintf(
+					pgerror.New(pgcode.DatatypeMismatch, "cannot change column type with incompatible ON UPDATE expression"),
+					`you may need to specify "USING %s::%s"`,
+					col.GetName(),
+					typ.String(),
+				)
+			}
+		}
 		col.ColumnDesc().Type = typ
 	case schemachange.ColumnConversionGeneral, schemachange.ColumnConversionValidate:
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
@@ -335,30 +358,64 @@ func alterColumnTypeGeneral(
 
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
+	hasUpdate := col.HasOnUpdate()
 	var newColDefaultExpr *string
 	if hasDefault {
-		if col.ColumnDesc().HasNullDefault() {
-			s := tree.Serialize(tree.DNull)
-			newColDefaultExpr = &s
-		} else {
-			// The default expression for the new column is applying the
-			// computed expression to the previous default expression.
-			expr, err := parser.ParseExpr(col.GetDefaultExpr())
-			if err != nil {
-				return err
-			}
-			typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
-			if err != nil {
-				return err
-			}
-			castExpr := tree.NewTypedCastExpr(typedExpr, toType)
-			newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
-			if err != nil {
-				return err
-			}
-			s := tree.Serialize(newDefaultComputedExpr)
-			newColDefaultExpr = &s
+		expr, err := parser.ParseExpr(col.GetDefaultExpr())
+		if err != nil {
+			return err
 		}
+		typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
+		if err != nil {
+			return err
+		}
+
+		if !toType.Equivalent(typedExpr.ResolvedType()) {
+			colName := col.ColName()
+			return errors.WithHintf(
+				pgerror.New(pgcode.DatatypeMismatch, "cannot change column type with incompatible DEFAULT expression"),
+				`you may need to specify "USING %s::%s"`,
+				colName.String(),
+				toType.String(),
+			)
+		}
+
+		castExpr := tree.NewTypedCastExpr(typedExpr, toType)
+		newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newDefaultComputedExpr)
+		newColDefaultExpr = &s
+	}
+
+	if hasUpdate {
+		expr, err := parser.ParseExpr(col.GetOnUpdateExpr())
+		if err != nil {
+			return err
+		}
+		typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
+		if err != nil {
+			return err
+		}
+
+		if !toType.Equivalent(typedExpr.ResolvedType()) {
+			colName := col.ColName()
+			return errors.WithHintf(
+				pgerror.New(pgcode.DatatypeMismatch, "cannot change column type with incompatible ON UPDATE expression"),
+				`you may need to specify "USING %s::%s"`,
+				colName.String(),
+				toType.String(),
+			)
+		}
+
+		castExpr := tree.NewTypedCastExpr(typedExpr, toType)
+		newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(newDefaultComputedExpr)
+		newColDefaultExpr = &s
 	}
 
 	newCol := descpb.ColumnDescriptor{
