@@ -289,7 +289,7 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 		}
 	}
 
-	// store data in the model. Even for rollup resolutoins we store the original
+	// store data in the model. Even for rollup resolutions we store the original
 	// data points in the model, with the expectation that queries will be
 	// identical to those based on rollups.
 	for _, d := range data {
