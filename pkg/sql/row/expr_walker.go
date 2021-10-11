@@ -218,7 +218,7 @@ func makeImportRand(c *CellInfoAnnotation) randomSource {
 //
 // #default_rowid_cols * rowIndex + colPosition (among those with default unique_rowid)
 //
-// To avoid collisions with the SQL-genenerated IDs (at least for a
+// To avoid collisions with the SQL-generated IDs (at least for a
 // very long time) we also flip the top bit to 1.
 //
 // Producing sequential keys in non-overlapping spans for each source yields

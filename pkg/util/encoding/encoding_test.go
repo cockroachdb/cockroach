@@ -985,7 +985,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 
 	// test cases are negative, increasing, duration offsets from the
 	// zeroTime. The positive, increasing, duration offsets are automatically
-	// genarated below.
+	// generated below.
 	testCases := []string{
 		"-1345600h45m34s234ms",
 		"-600h45m34s234ms",
