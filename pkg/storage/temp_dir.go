@@ -40,7 +40,7 @@ func lockFile(filename string) (lockStruct, error) {
 	return lockStruct{closer: closer}, nil
 }
 
-// unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+// unlockFile unlocks the file associated with the specified lock and GCs any allocated memory for the lock.
 func unlockFile(lock lockStruct) error {
 	if lock.closer != nil {
 		return lock.closer.Close()
