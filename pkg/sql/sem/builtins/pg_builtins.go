@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -229,10 +228,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err := ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_indexdef",
 				ctx.Txn,
-				sessiondata.InternalExecutorOverride{
-					User:     security.RootUserName(),
-					Database: ctx.SessionData().Database,
-				},
+				ctx.SessionData(),
 				"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1", args[0])
 			if err != nil {
 				return nil, err
@@ -249,10 +245,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err = ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_indexdef",
 				ctx.Txn,
-				sessiondata.InternalExecutorOverride{
-					User:     security.RootUserName(),
-					Database: ctx.SessionData().Database,
-				},
+				ctx.SessionData(),
 				`SELECT ischema.column_name as pg_get_indexdef 
 		               FROM information_schema.statistics AS ischema 
 											INNER JOIN pg_catalog.pg_indexes AS pgindex 
@@ -287,10 +280,7 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err := ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_viewdef",
 				ctx.Txn,
-				sessiondata.InternalExecutorOverride{
-					User:     security.RootUserName(),
-					Database: ctx.SessionData().Database,
-				},
+				ctx.SessionData(),
 				"SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
 					"c.relname=v.viewname WHERE oid=$1", args[0])
 			if err != nil {
@@ -315,10 +305,7 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err := ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_constraintdef",
 				ctx.Txn,
-				sessiondata.InternalExecutorOverride{
-					User:     security.RootUserName(),
-					Database: ctx.SessionData().Database,
-				},
+				ctx.SessionData(),
 				"SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
 			if err != nil {
 				return nil, err
@@ -457,11 +444,7 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 		return "", errors.AssertionFailedf("unexpected arg type %T", t)
 	}
 	r, err := ctx.Planner.QueryRowEx(ctx.Ctx(), "get-name-for-arg",
-		ctx.Txn, sessiondata.InternalExecutorOverride{
-			User:              security.RootUserName(),
-			Database:          ctx.SessionData().Database,
-			StubCatalogTables: ctx.SessionData().StubCatalogTablesEnabled,
-		}, query, arg)
+		ctx.Txn, ctx.SessionData(), query, arg)
 	if err != nil || r == nil {
 		return "", err
 	}
@@ -491,10 +474,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 	case *tree.DOid:
 		r, err := ctx.Planner.QueryRowEx(ctx.Ctx(), "get-table-name-for-arg",
 			ctx.Txn,
-			sessiondata.InternalExecutorOverride{
-				User:     security.RootUserName(),
-				Database: ctx.SessionData().Database,
-			},
+			ctx.SessionData(),
 			`SELECT n.nspname, c.relname FROM pg_class c
 			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 			WHERE c.oid = $1`, t)
@@ -664,10 +644,7 @@ func evalPrivilegeCheck(
 		privilege.ALL, priv, schema, infoTable, pred)
 	r, err := ctx.Planner.QueryRowEx(
 		ctx.Ctx(), "eval-privilege-check", ctx.Txn,
-		sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
-			Database: ctx.SessionData().Database,
-		},
+		ctx.SessionData(),
 		query, allRoles,
 	)
 	if err != nil {
@@ -816,10 +793,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_function_result",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					},
+					ctx.SessionData(),
 					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
 				if err != nil {
 					return nil, err
@@ -847,10 +821,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_function_identity_arguments",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					}, `SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
+					ctx.SessionData(),
+					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -1040,10 +1012,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_userbyid",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					}, "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
+					ctx.SessionData(),
+					"SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
 				if err != nil {
 					return nil, err
 				}
@@ -1071,10 +1041,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				r, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_sequence_parameters",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					}, `SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid `+
+					ctx.SessionData(),
+					`SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid `+
 						`FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 				if err != nil {
 					return nil, err
@@ -1159,12 +1127,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				// on pg_description and let predicate push-down do its job.
 				r, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_coldesc",
-
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					},
+					ctx.SessionData(),
 					`
 SELECT COALESCE(c.comment, pc.comment) FROM system.comments c
 FULL OUTER JOIN crdb_internal.predefined_comments pc
@@ -1236,10 +1200,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 
 				r, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_shobjdesc", ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					}, fmt.Sprintf(`
+					ctx.SessionData(),
+					fmt.Sprintf(`
 SELECT description
   FROM pg_catalog.pg_shdescription
  WHERE objoid = %[1]d
@@ -1313,10 +1275,7 @@ SELECT description
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_function_is_visible",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					},
+					ctx.SessionData(),
 					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", int(oid.DInt))
 				if err != nil {
 					return nil, err
@@ -1827,10 +1786,7 @@ SELECT description
 				if r, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "has-sequence-privilege",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					},
+					ctx.SessionData(),
 					`SELECT sequence_name FROM information_schema.sequences `+
 						`WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
 					tn.CatalogName, tn.SchemaName, tn.ObjectName); err != nil {
@@ -2311,10 +2267,7 @@ SELECT description
 				r, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "information_schema._pg_index_position",
 					ctx.Txn,
-					sessiondata.InternalExecutorOverride{
-						User:     security.RootUserName(),
-						Database: ctx.SessionData().Database,
-					},
+					ctx.SessionData(),
 					`SELECT (ss.a).n FROM
 					  (SELECT information_schema._pg_expandarray(indkey) AS a
 					   FROM pg_catalog.pg_index WHERE indexrelid = $1) ss
@@ -2479,10 +2432,7 @@ func getPgObjDesc(ctx *tree.EvalContext, catalogName string, oid int) (tree.Datu
 	}
 	r, err := ctx.Planner.QueryRowEx(
 		ctx.Ctx(), "pg_get_objdesc", ctx.Txn,
-		sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
-			Database: ctx.SessionData().Database,
-		},
+		ctx.SessionData(),
 		fmt.Sprintf(`
 SELECT description
   FROM pg_catalog.pg_description

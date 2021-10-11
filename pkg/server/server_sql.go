@@ -763,7 +763,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
-	// SessionBoundInternalExecutorFactory. The same applies for setting a
+	// InternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
@@ -777,9 +777,24 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
+
+	ieFactoryForBuiltins := func(
+		ctx context.Context, sessionData *sessiondata.SessionData, extraTxnState sql.ExtraTxnState,
+	) sql.InternalExecutor {
+		ie := sql.MakeInternalExecutor(
+			ctx,
+			pgServer.SQLServer,
+			internalMemMetrics,
+			cfg.Settings,
+		)
+		ie.SetExtraTxnState(extraTxnState)
+		ie.SetSessionData(sessionData)
+		return ie
+	}
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg, ieFactory)
+	execCfg.InternalExecutorFactory = ieFactoryForBuiltins
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 

@@ -3229,7 +3229,7 @@ type EvalPlanner interface {
 		ctx context.Context,
 		opName string,
 		txn *kv.Txn,
-		session sessiondata.InternalExecutorOverride,
+		session *sessiondata.SessionData,
 		stmt string,
 		qargs ...interface{}) (Datums, error)
 
@@ -3237,7 +3237,7 @@ type EvalPlanner interface {
 		ctx context.Context,
 		opName string,
 		txn *kv.Txn,
-		session sessiondata.InternalExecutorOverride,
+		session *sessiondata.SessionData,
 		stmt string,
 		qargs ...interface{},
 	) (InternalRows, error)
@@ -3245,6 +3245,9 @@ type EvalPlanner interface {
 
 // InternalRows is an iterator interface that's exposed by the internal
 // executor. It provides access to the rows from a query.
+// InternalRows is a copy of the one in sql/internal.go excluding the
+// Types function - we don't need the Types function for use cases where
+// QueryIteratorEx is used from the InternalExecutor on the EvalPlanner.
 type InternalRows interface {
 	// Next advances the iterator by one row, returning false if there are no
 	// more rows in this iterator or if an error is encountered (the latter is

@@ -26,11 +26,6 @@ type InternalExecutorOverride struct {
 	// DatabaseIDToTempSchemaID represents the mapping for temp schemas used which
 	// allows temporary schema resolution by ID.
 	DatabaseIDToTempSchemaID map[uint32]uint32
-	// StubCatalogTables overrides the StubCatalogTables session variable on
-	// the InternalExecutor.
-	StubCatalogTables bool
-	// SessionData overrides all of the InternalExecutor's SessionData.
-	SessionData *SessionData
 }
 
 // NodeUserSessionDataOverride is an InternalExecutorOverride which overrides

@@ -794,7 +794,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalExecutor,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)

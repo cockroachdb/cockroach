@@ -238,7 +238,6 @@ func rewriteBenchmarkExpectations(t *testing.T, benchmarks []string) {
 			t.Fatalf("duplicate expecatations for Name %s", expectations[i].name)
 		}
 	}
-
 	writeExpectationsFile(t, expectations)
 }
 
