@@ -32,7 +32,7 @@ import (
 // We don't need this monitor to run very frequent. Normally, the schedule
 // should remain in the system table once it is created. However, some operations
 // such as RESTORE would wipe the system table and populate it with the data
-// from BAKCUP. In this case, it would be nice for us to preemptively check
+// from BACKUP. In this case, it would be nice for us to preemptively check
 // for the abnormal state of the schedule and restore it.
 var defaultScanInterval = time.Hour * 6
 
