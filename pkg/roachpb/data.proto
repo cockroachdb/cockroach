@@ -537,7 +537,7 @@ message Intent {
 }
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
-// with a specified durbility level over a Span of keys.
+// with a specified durability level over a Span of keys.
 message LockAcquisition {
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
