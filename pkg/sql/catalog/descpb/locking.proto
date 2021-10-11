@@ -22,7 +22,7 @@ option go_package = "descpb";
 // However, there are cases where a SQL scan would like to acquire locks on each
 // of the keys that it reads to more carefully control concurrent access to the
 // data that it reads. The prototypical example of this is a scan that is used
-// to fetch the initial value of a row that its transction intends to later
+// to fetch the initial value of a row that its transaction intends to later
 // update. In this case, it would be beneficial to acquire a lock on the row
 // during the initial scan instead of waiting until the mutation to acquire a
 // lock. This prevents the row from being modified between the scan and the
