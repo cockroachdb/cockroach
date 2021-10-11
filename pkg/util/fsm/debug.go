@@ -92,7 +92,7 @@ func makeDebugInfo(t Transitions) debugInfo {
 	return di
 }
 
-// panicWriter wraps an io.Writer, panicing if a call to Write ever fails.
+// panicWriter wraps an io.Writer, panicking if a call to Write ever fails.
 type panicWriter struct {
 	w io.Writer
 }
