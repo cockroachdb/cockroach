@@ -658,7 +658,7 @@ message ChangefeedProgress {
 
   // Checkpoint describes changefeed checkpoint.
   // Checkpoints are needed when performing certain operations, such as backfill.
-  // When changefeed restarts from previouis high water mark timestamp, all
+  // When changefeed restarts from previous high water mark timestamp, all
   // spans in checkpoint fill be filtered out during initial scan.
   // That is: this checkpoint describes spans that have already advanced to the high water mark.
   message Checkpoint {
