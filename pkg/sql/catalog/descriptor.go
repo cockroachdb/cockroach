@@ -636,7 +636,7 @@ type TypeDescriptor interface {
 	// enum, including `READ ONLY` regions which are in the process of transitioning.
 	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
 	// RegionNamesForValidation returns all regions on the multi-region
-	// enum to make validation with the public zone configs and partitons
+	// enum to make validation with the public zone configs and partitions
 	// possible.
 	// Since the partitions and zone configs are only updated when a transaction
 	// commits, this must ignore all regions being added (since they will not be
