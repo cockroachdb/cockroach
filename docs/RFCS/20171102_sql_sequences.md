@@ -28,7 +28,7 @@ existing `unique_rowid()` function.
 A *sequence* is a named database object which exists in a schema alongside
 tables, views and other sequences, and is used to hold a `BIGINT` value which
 can be read and incremented atomically, usually for the purpose of giving out
-unique ids as rows are inserted into a table. In additon to their values,
+unique ids as rows are inserted into a table. In addition to their values,
 sequences have settings such as start value, amount to increment by, and max
 value. (See "Sequence settings details" below)
 
