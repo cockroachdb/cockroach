@@ -404,7 +404,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
 				}
-				l.Printf("%d of %d resolved timestamps received from kafka, latest is %s behind realtime, %s beind realtime when sent to kafka",
+				l.Printf("%d of %d resolved timestamps received from kafka, latest is %s behind realtime, %s behind realtime when sent to kafka",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()), m.Timestamp.Sub(resolved.GoTime()))
 				if v.NumResolvedWithRows >= requestedResolved {
 					atomic.StoreInt64(&doneAtomic, 1)
