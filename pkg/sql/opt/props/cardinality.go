@@ -30,7 +30,7 @@ var AnyCardinality = Cardinality{Min: 0, Max: math.MaxUint32}
 // that indicates there is no limit to the number of returned rows. Max should
 // always be >= Min, or method results are undefined. Cardinality is determined
 // from the relational properties, and are "hard" bounds that are never
-// incorrect. This constrasts with row cardinality derived by the statistics
+// incorrect. This contrasts with row cardinality derived by the statistics
 // code, which are only estimates and may be incorrect.
 type Cardinality struct {
 	Min uint32
