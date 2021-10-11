@@ -49,7 +49,7 @@ single locality, making it impossible to satisfy this goal. In general,
 we'd like to minimize the aggregate RTT for accessing the range which
 makes the mixture of reads and writes important (reads only need a
 round-trip from the gateway to the leaseholder while writes need a
-round-trip to the leaseholder and from the leaseholder to a quorom of
+round-trip to the leaseholder and from the leaseholder to a quorum of
 followers). Also, this goal is at odds with the second goal of
 distributing load throughout a cluster and we'll need to be careful
 with heuristics here. It may be beneficial to place the leaseholder in
