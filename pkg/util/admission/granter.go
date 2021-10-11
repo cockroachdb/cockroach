@@ -39,7 +39,7 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 // overloaded store.
 var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
 	"admission.l0_file_count_overload_threshold",
-	"when the L0 file count exceeds this theshold, the store is considered overloaded",
+	"when the L0 file count exceeds this threshold, the store is considered overloaded",
 	l0FileCountOverloadThreshold, settings.PositiveInt)
 
 // L0SubLevelCountOverloadThreshold sets a sub-level count threshold that
