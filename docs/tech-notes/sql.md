@@ -75,7 +75,7 @@ There are multiple things that can be said about this state of affairs:
   components. The fact that this document is able to reconstruct a
   relatively sane architectural model from the source code *despite
   the lack of explicit overarching architectural guidelines so far* is
-  a testatement to the quality of said source code and the work of all
+  a testament to the quality of said source code and the work of all
   past and current contributors.
 
 - nevertheless, *it exerts a high resistance against the onboarding of
