@@ -385,7 +385,7 @@ func TestRangeCacheAssumptions(t *testing.T) {
 // TestRangeCache is a simple test which verifies that metadata ranges
 // are being cached and retrieved properly. It sets up a fake backing
 // store for the cache, and measures how often that backing store is
-// lookuped when looking up metadata keys through the cache.
+// lookedup when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
