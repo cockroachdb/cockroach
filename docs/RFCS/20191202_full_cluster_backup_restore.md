@@ -378,7 +378,7 @@ can assume that all system tables included in those backups are safe to restore
   failure in the middle of the backup. It will clean up the data following the
   normal backup procedures. In the case that there is a failure while updating
   the system tables, the cluster should be started up again. Since we enforce
-  that the cluster we are restoring to has no user data, this is acceptible.
+  that the cluster we are restoring to has no user data, this is acceptable.
 
 # Drawbacks
 
