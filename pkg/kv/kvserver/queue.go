@@ -1254,7 +1254,7 @@ func (bq *baseQueue) addLocked(item *replicaItem) {
 // error) or from the priority queue by index. Caller must hold mutex.
 func (bq *baseQueue) removeLocked(item *replicaItem) {
 	if item.processing {
-		// The item is processing. We can't intererupt the processing
+		// The item is processing. We can't interrupt the processing
 		// or remove it from the replica set yet, but we can make sure
 		// it doesn't get requeued.
 		item.requeue = false
