@@ -33,7 +33,7 @@ message CommonSQLExecDetails {
   string error_text = 4 [(gogoproto.jsontag) = ",omitempty"];
   // Age of the query in milliseconds.
   float age = 5 [(gogoproto.jsontag) = ",omitempty"];
-  // Number of retries, when the txn was reretried automatically by the server.
+  // Number of retries, when the txn was retried automatically by the server.
   uint32 num_retries = 6 [(gogoproto.jsontag) = ",omitempty"];
   // Whether the query contains a full table scan.
   bool full_table_scan = 7 [(gogoproto.jsontag) = ",omitempty"];
