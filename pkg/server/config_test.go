@@ -223,7 +223,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 			t.Fatal(err)
 		}
 		if port == "UNKNOWN" {
-			t.Fatalf("expected port defined in resover: %# v", pretty.Formatter(addresses))
+			t.Fatalf("expected port defined in resolver: %# v", pretty.Formatter(addresses))
 		}
 		if host != expectedName {
 			t.Errorf("expected name %q, got %q", expectedName, host)
@@ -250,7 +250,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 			t.Fatal(err)
 		}
 		if port == "UNKNOWN" {
-			t.Fatalf("expected port defined in resover: %# v", pretty.Formatter(addresses))
+			t.Fatalf("expected port defined in resolver: %# v", pretty.Formatter(addresses))
 		}
 		if port != "111" {
 			t.Fatalf("expected port 111 from SRV, got %q", port)
