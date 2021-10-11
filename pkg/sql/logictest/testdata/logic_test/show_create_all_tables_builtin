@@ -54,16 +54,16 @@ CREATE TABLE public.parent (
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     UNIQUE INDEX full_test_x_key (x ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
-CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1;
 ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
@@ -100,16 +100,16 @@ CREATE TABLE public.parent (
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     UNIQUE INDEX full_test_x_key (x ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
-CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1;
 ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
@@ -195,17 +195,17 @@ CREATE TABLE public.d (
     FAMILY f1 (i, e, f)
 );
 CREATE TABLE public.c (
-    i INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+                                                                                               i INT8 NULL,
+                                                                                               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                                                               FAMILY "primary" (i, rowid)
 );
-CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 1;
 CREATE TABLE public.s_tbl (
-    id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (id ASC),
-    FAMILY f1 (id, v)
+                                                                                                                     id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+                                                                                                                     v INT8 NULL,
+                                                                                                                     CONSTRAINT "primary" PRIMARY KEY (id ASC),
+                                                                                                                     FAMILY f1 (id, v)
 );
 ALTER TABLE public.a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES public.b(i);
 ALTER TABLE public.f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES public.g(i);
@@ -368,7 +368,7 @@ CREATE SEQUENCE s1 INCREMENT 123;
 query T
 SELECT crdb_internal.show_create_all_tables('test_sequence')
 ----
-CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
+CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1 CACHE 1;
 
 # Ensure that the builtin can be run in unused and used transactions.
 
