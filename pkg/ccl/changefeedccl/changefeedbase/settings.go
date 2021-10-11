@@ -113,7 +113,7 @@ type SinkThrottleConfig struct {
 var NodeSinkThrottleConfig = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		"changefeed.node_throttle_config",
-		"specifies node level throttling configuration for all changefeeeds",
+		"specifies node level throttling configuration for all changefeeds",
 		"",
 		validateSinkThrottleConfig,
 	)
