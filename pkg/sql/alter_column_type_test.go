@@ -412,3 +412,25 @@ ALTER TABLE t.test ADD COLUMN y INT;
 	waitBeforeContinuing <- struct{}{}
 	wg.Wait()
 }
+
+func TestDefClause(t *testing.T){
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	s, db, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+
+	sqlDB.Exec(t, `
+create table t (a int primary key, b timestamp default current_timestamp());
+alter table t alter column b set data type timestamptz;
+insert into t values (1);
+`)
+}
