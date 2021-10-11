@@ -998,7 +998,7 @@ Pros:
 
 Cons:
 
-- insivible characters may cause surprise
+- invisible characters may cause surprise
 - copy-paste with external tools could mis-behave
 
 ### Using other markers
@@ -1028,7 +1028,7 @@ Discussion "‹" and "›" vs other markers:
 
 - Invisible unicode markers e.g. INVISIBLE SEPARATOR' (U+2063) / ZERO WIDTH JOINER (U+200D)
 
-  Pros/cons: same as in [Using invisible markers](#using-invisble-markers) above,
+  Pros/cons: same as in [Using invisible markers](#using-invisible-markers) above,
   except that the markers are multibyte.
 
 - Other rarely-used ASCII characters: for example, using the `~`
