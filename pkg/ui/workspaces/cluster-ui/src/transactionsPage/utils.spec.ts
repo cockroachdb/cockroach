@@ -132,7 +132,7 @@ describe("Filter transactions", () => {
     const filter: Filters = {
       app: "All",
       timeNumber: "40",
-      timeUnit: "miliseconds",
+      timeUnit: "milliseconds",
       nodes: "",
       regions: "",
     };

@@ -36,7 +36,7 @@ var (
 
 	TokenBucketPeriod = FlagInfo{
 		Name:        "token-bucket-period",
-		Description: "Number of miliseconds before a token is added to the connection attempt bucket.",
+		Description: "Number of milliseconds before a token is added to the connection attempt bucket.",
 	}
 
 	TokenBucketSize = FlagInfo{
