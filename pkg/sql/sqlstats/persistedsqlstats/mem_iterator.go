@@ -26,22 +26,28 @@ import (
 type memStmtStatsIterator struct {
 	*sslocal.StmtStatsIterator
 	aggregatedTs time.Time
+	aggInterval  time.Duration
 }
 
 func newMemStmtStatsIterator(
-	stats *sslocal.SQLStats, options *sqlstats.IteratorOptions, aggregatedTS time.Time,
+	stats *sslocal.SQLStats,
+	options *sqlstats.IteratorOptions,
+	aggregatedTS time.Time,
+	aggInterval time.Duration,
 ) *memStmtStatsIterator {
 	return &memStmtStatsIterator{
 		StmtStatsIterator: stats.StmtStatsIterator(options),
 		aggregatedTs:      aggregatedTS,
+		aggInterval:       aggInterval,
 	}
 }
 
-// Cur calls the m.StmtStatsIterator.Cur() and populates the m.aggregatedTs
-// field.
+// Cur calls the m.StmtStatsIterator.Cur() and populates the c.AggregatedTs
+// field and c.AggregationInterval field.
 func (m *memStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
 	c := m.StmtStatsIterator.Cur()
 	c.AggregatedTs = m.aggregatedTs
+	c.AggregationInterval = m.aggInterval
 	return c
 }
 
@@ -53,21 +59,27 @@ func (m *memStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
 type memTxnStatsIterator struct {
 	*sslocal.TxnStatsIterator
 	aggregatedTs time.Time
+	aggInterval  time.Duration
 }
 
 func newMemTxnStatsIterator(
-	stats *sslocal.SQLStats, options *sqlstats.IteratorOptions, aggregatedTS time.Time,
+	stats *sslocal.SQLStats,
+	options *sqlstats.IteratorOptions,
+	aggregatedTS time.Time,
+	aggInterval time.Duration,
 ) *memTxnStatsIterator {
 	return &memTxnStatsIterator{
 		TxnStatsIterator: stats.TxnStatsIterator(options),
 		aggregatedTs:     aggregatedTS,
+		aggInterval:      aggInterval,
 	}
 }
 
-// Cur calls the m.TxnStatsIterator.Cur() and populates the m.aggregatedTs
-// field.
+// Cur calls the m.TxnStatsIterator.Cur() and populates the stats.AggregatedTs
+// and stats.AggregationInterval fields.
 func (m *memTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
 	stats := m.TxnStatsIterator.Cur()
 	stats.AggregatedTs = m.aggregatedTs
+	stats.AggregationInterval = m.aggInterval
 	return stats
 }
