@@ -120,7 +120,7 @@ This is similar to any other case of a schema change running into a runtime erro
 - **This method is contingent on changing the index backfiller to support 
 column mutations which is currently blocked due an issue with supporting 
 interleaved tables**
-    - Read more in the [Github Issue](https://github.com/cockroachdb/cockroach/issues/47989)
+    - Read more in the [GitHub Issue](https://github.com/cockroachdb/cockroach/issues/47989)
 - The index backfill method is logically the same as the column backfill
 method in how the column is added.
 - The only difference is that, we would always recreate a new primary key
