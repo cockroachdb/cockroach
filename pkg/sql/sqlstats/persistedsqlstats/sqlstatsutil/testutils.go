@@ -44,7 +44,7 @@ type randomData struct {
 	Time     time.Time
 }
 
-var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
+var alphabet = []rune("abcdefghijklmnopqrstuvwxyz")
 
 func genRandomData() randomData {
 	r := randomData{}
