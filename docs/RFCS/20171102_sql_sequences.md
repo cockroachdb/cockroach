@@ -354,7 +354,7 @@ Options are:
   - Advantages: Would keep the KV operations for a sequence-using `INSERT`
     local to one range (until the table splits)
   - Sequences can be used by multiple tables; in this situation we wouldn't know
-    where to put it. We could allow users to tell us using a syntax extention
+    where to put it. We could allow users to tell us using a syntax extension
     to `CREATE|ALTER SEQUENCE`, but we should really be directing them toward
     `unique_rowid`.
 - All sequences in one range
