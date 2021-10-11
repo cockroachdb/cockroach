@@ -433,7 +433,7 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	require.Greater(t, len(expReport), 0, "unexpected empty report")
 
 	realIter = makeMeta2RangeIter(db, 10000 /* batchSize */)
-	errorIter := erroryRangeIterator{
+	errorIter := errorRangeIterator{
 		iter:           realIter,
 		injectErrAfter: 3,
 	}
@@ -443,15 +443,15 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	require.Equal(t, expReport, v.report)
 }
 
-type erroryRangeIterator struct {
+type errorRangeIterator struct {
 	iter           meta2RangeIter
 	rangesReturned int
 	injectErrAfter int
 }
 
-var _ RangeIterator = &erroryRangeIterator{}
+var _ RangeIterator = &errorRangeIterator{}
 
-func (it *erroryRangeIterator) Next(ctx context.Context) (roachpb.RangeDescriptor, error) {
+func (it *errorRangeIterator) Next(ctx context.Context) (roachpb.RangeDescriptor, error) {
 	if it.rangesReturned == it.injectErrAfter {
 		// Don't inject any more errors.
 		it.injectErrAfter = -1
@@ -470,7 +470,7 @@ func (it *erroryRangeIterator) Next(ctx context.Context) (roachpb.RangeDescripto
 	return rd, err
 }
 
-func (it *erroryRangeIterator) Close(ctx context.Context) {
+func (it *errorRangeIterator) Close(ctx context.Context) {
 	it.iter.Close(ctx)
 }
 
