@@ -524,7 +524,7 @@ message TransactionRecord {
 //
 // Note: avoid constructing Intent directly; consider using MakeIntent() instead.
 message Intent {
-  // SingleKeySpan preseves wire compatibility with an earlier version of this
+  // SingleKeySpan preserves wire compatibility with an earlier version of this
   // proto which used a Span. An Intent never spans keys, so there was no need
   // for this to contain an EndKey.
   message SingleKeySpan {
