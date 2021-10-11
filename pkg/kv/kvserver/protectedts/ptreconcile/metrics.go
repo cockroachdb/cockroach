@@ -17,7 +17,7 @@ import (
 
 // Metrics encapsulates the metrics exported by the Reconciler.
 type Metrics struct {
-	ReconcilationRuns    *metric.Counter
+	ReconciliationRuns    *metric.Counter
 	RecordsProcessed     *metric.Counter
 	RecordsRemoved       *metric.Counter
 	ReconciliationErrors *metric.Counter
@@ -25,7 +25,7 @@ type Metrics struct {
 
 func makeMetrics() Metrics {
 	return Metrics{
-		ReconcilationRuns:    metric.NewCounter(metaReconciliationRuns),
+		ReconciliationRuns:    metric.NewCounter(metaReconciliationRuns),
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),
 		ReconciliationErrors: metric.NewCounter(metaReconciliationErrors),

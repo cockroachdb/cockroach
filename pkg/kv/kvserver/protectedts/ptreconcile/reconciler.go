@@ -186,5 +186,5 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		}
 		return true
 	})
-	r.metrics.ReconcilationRuns.Inc(1)
+	r.metrics.ReconciliationRuns.Inc(1)
 }

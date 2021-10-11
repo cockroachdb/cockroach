@@ -672,7 +672,7 @@ message ChangefeedProgress {
   // corresponding to this job. While the job ought to clean up the record
   // when it enters a terminal state, there may be cases where it cannot or
   // does not run the code to do so. To deal with this there is a background
-  // reconcilliation loop to ensure that protected timestamps are cleaned up.
+  // reconciliation loop to ensure that protected timestamps are cleaned up.
   //
   // A record is created with the job if the job requires an initial backfill.
   // Furthermore, once subsequent backfills begin, record will be created and
