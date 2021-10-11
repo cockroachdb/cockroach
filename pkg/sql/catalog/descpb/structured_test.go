@@ -74,7 +74,7 @@ func TestColumnIDsPermutationOf(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tt.columnIDsOne.PermutationOf(tt.columnIDsTwo)
 			if result != tt.expectedResult {
-				t.Errorf("PermuationOf() %s: got %v, want %v", tt.name, result, tt.expectedResult)
+				t.Errorf("PermutationOf() %s: got %v, want %v", tt.name, result, tt.expectedResult)
 			}
 		})
 	}
