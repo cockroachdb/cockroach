@@ -651,7 +651,7 @@ func restore(
 	// worth revisiting.
 	// It tries to take the cluster size into account so that larger clusters
 	// distribute more chunks amongst them so that after scattering there isn't
-	// a large varience in the distribution of entries.
+	// a large variance in the distribution of entries.
 	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numNodes
 	if chunkSize == 0 {
 		chunkSize = 1
