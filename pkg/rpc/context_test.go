@@ -1017,7 +1017,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 // that's what we're testing here. Likewise, serverside keepalive ensures that
 // if a ping is not seen within a timeout, the transport will also be closed.
 //
-// In this test we use a TestingHeartbeatStreamService as oppposed to a standard
+// In this test we use a TestingHeartbeatStreamService as opposed to a standard
 // HeartbeatService. This is important to test scenarios where the
 // client->server connection is partitioned but the server->client connection is
 // healthy, because a TestingHeartbeatStreamService will continue to respond on
