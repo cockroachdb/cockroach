@@ -123,7 +123,7 @@ func testRangeDescriptor() *roachpb.RangeDescriptor {
 	}
 }
 
-// boostrapMode controls how the first range is created in testContext.
+// bootstrapMode controls how the first range is created in testContext.
 type bootstrapMode int
 
 const (

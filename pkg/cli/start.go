@@ -555,7 +555,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		}
 	}
 
-	// DelayedBoostrapFn will be called if the boostrap process is
+	// DelayedBootstrapFn will be called if the bootstrap process is
 	// taking a bit long.
 	serverCfg.DelayedBootstrapFn = func() {
 		const msg = `The server appears to be unable to contact the other nodes in the cluster. Please try:

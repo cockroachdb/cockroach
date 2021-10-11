@@ -192,7 +192,7 @@ func (db *testSender) Send(
 type testStoreOpts struct {
 	// If createSystemRanges is not set, the store will have a single range. If
 	// set, the store will have all the system ranges that are generally created
-	// for a cluster at boostrap.
+	// for a cluster at bootstrap.
 	createSystemRanges bool
 }
 
