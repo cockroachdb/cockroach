@@ -369,7 +369,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
 }
 
-// TestEmptyFullClusterResotre ensures that we can backup and restore a full
+// TestEmptyFullClusterRestore ensures that we can backup and restore a full
 // cluster backup with only metadata (no user data). Regression test for #49573.
 func TestEmptyFullClusterRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
