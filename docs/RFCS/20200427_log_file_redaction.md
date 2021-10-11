@@ -68,7 +68,7 @@ From a user's perspective, the feature would work as follows:
 - when enabled, the log files on disk at the running cluster would
   still contain all the details, sensitive and all.
 
-- however, the parts of the error messages that contain sensitve
+- however, the parts of the error messages that contain sensitive
   information would be annotated with special markers, for example:
   `advertising CockroachDB node at ‹kenax:26258›` the
   sensitive string `kenax:26258` is enclosed.
