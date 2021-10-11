@@ -188,7 +188,7 @@ Additionally, `ALTER SEQUENCE` will use machinery designed for table schema
 changes: all nodes will be notified of the change and read the new version of
 the descriptor using the lease-based descriptor caching system.
 
-See the "Sequence metadata" section under "Rationale and Alterantives" for a
+See the "Sequence metadata" section under "Rationale and Alternatives" for a
 discussion of alternate approaches.
 
 #### Sequence values
