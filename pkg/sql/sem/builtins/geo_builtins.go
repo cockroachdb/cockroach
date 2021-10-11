@@ -1684,7 +1684,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{
-				info: "Returns a GeoHash representation of the geeographywith full precision if a point is provided, or with variable precision based on the size of the feature.",
+				info: "Returns a GeoHash representation of the geography with full precision if a point is provided, or with variable precision based on the size of the feature.",
 			},
 			tree.VolatilityImmutable,
 		),
