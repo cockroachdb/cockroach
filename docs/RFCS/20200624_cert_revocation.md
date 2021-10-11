@@ -194,7 +194,7 @@ to a large interval (default 24 hours).
 To achieve this, we define a new system config key `LastCertificateRevocationRefreshRequestTimestamp`.
 
 Upon triggering the cache refresh, the node where the refresh was
-triggerred writes the current time to this key. Gossip then propagates
+triggered writes the current time to this key. Gossip then propagates
 the update to all other nodes. Eventually all nodes learn of the the
 refresh request.
 

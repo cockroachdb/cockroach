@@ -2042,7 +2042,7 @@ func TestStoreRangeMergeRHSLeaseTransfers(t *testing.T) {
 	//
 	// In the past, this lease transfer would get blocked on the mergeComplete
 	// channel. While in this state, it would block the lease acquisition
-	// triggerred by the Subsume request because a replica only performs a
+	// triggered by the Subsume request because a replica only performs a
 	// single lease operation at a time. As a result, this would deadlock and
 	// neither the lease transfer nor the merge would ever complete.
 	err = tc.TransferRangeLease(rhsDesc, tc.Target(1))
