@@ -66,7 +66,7 @@ type Storage interface {
 	// so callers should be sure to generate new IDs when creating records.
 	Protect(context.Context, *kv.Txn, *ptpb.Record) error
 
-	// GetRecord retreives the record with the specified UUID as well as the MVCC
+	// GetRecord retrieves the record with the specified UUID as well as the MVCC
 	// timestamp at which it was written. If no corresponding record exists
 	// ErrNotExists is returned.
 	//
@@ -89,10 +89,10 @@ type Storage interface {
 	// passed txn remains safe for future use.
 	Release(context.Context, *kv.Txn, uuid.UUID) error
 
-	// GetMetadata retreives the metadata with the provided Txn.
+	// GetMetadata retrieves the metadata with the provided Txn.
 	GetMetadata(context.Context, *kv.Txn) (ptpb.Metadata, error)
 
-	// GetState retreives the entire state of protectedts.Storage with the
+	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
 	GetState(context.Context, *kv.Txn) (ptpb.State, error)
 
