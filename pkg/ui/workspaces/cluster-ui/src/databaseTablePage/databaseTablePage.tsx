@@ -90,7 +90,7 @@ export interface DatabaseTablePageDataStats {
 
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
-  refreshTableStats: (databse: string, table: string) => void;
+  refreshTableStats: (database: string, table: string) => void;
   refreshNodes?: () => void;
 }
 
