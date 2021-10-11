@@ -425,7 +425,7 @@ it's possible that one of these other options would be a better choice for our c
    acquired by different SQL statements. For example, a `SELECT` command (without `FOR UPDATE`)
    implicitly acquires the `ACCESS SHARE` lock on every table it accesses. This prevents concurrent
    calls to `DROP TABLE, TRUNCATE,` etc. on the same table, since those commands must acquire
-   an `ACCESS EXCLUSIVE` lock, wchich conflicts with `ACCESS SHARE`. See the
+   an `ACCESS EXCLUSIVE` lock, which conflicts with `ACCESS SHARE`. See the
    [PG docs](https://www.postgresql.org/docs/current/static/explicit-locking.html#locking-tables) 
    for the full list of conflicts.
 2. <b>Row Level Locks:</b>
