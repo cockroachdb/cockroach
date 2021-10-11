@@ -1210,7 +1210,7 @@ var charts = []sectionDescription{
 				Metrics: []string{"requests.slow.lease"},
 			},
 			{
-				Title: "Succcess Rate",
+				Title: "Success Rate",
 				Metrics: []string{
 					"leases.error",
 					"leases.success",
