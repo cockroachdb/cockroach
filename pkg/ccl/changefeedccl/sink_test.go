@@ -332,9 +332,9 @@ func TestKafkaTopicNameWithPrefix(t *testing.T) {
 	p := newAsyncProducerMock(1)
 	const topicPrefix = "prefix-"
 	const topicOverride = "☃"
-	sink, clenaup := makeTestKafkaSink(
+	sink, cleanup := makeTestKafkaSink(
 		t, topicPrefix, topicOverride, p, "particular0", "particular1")
-	defer clenaup()
+	defer cleanup()
 
 	//the prefix is applied and the name is escaped
 	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroAlloc))
