@@ -55,7 +55,7 @@ root_type Tensor;
 /// ----------------------------------------------------------------------
 /// EXPERIMENTAL: Data structures for sparse tensors
 
-/// Coodinate format of sparse tensor index.
+/// Coordinate format of sparse tensor index.
 table SparseTensorIndexCOO {
   /// COO's index list are represented as a NxM matrix,
   /// where N is the number of non-zero values,

@@ -209,7 +209,7 @@ func TensorEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 /// ----------------------------------------------------------------------
 /// EXPERIMENTAL: Data structures for sparse tensors
-/// Coodinate format of sparse tensor index.
+/// Coordinate format of sparse tensor index.
 type SparseTensorIndexCOO struct {
 	_tab flatbuffers.Table
 }
