@@ -194,7 +194,7 @@ CREATE TABLE vehicles (
 
 The `type` field is unstructured and can be anything from "BMW Z4" to "Vespa
 Scooter" to "1980s military tank". The `status` field is updated when the
-vehicle becomes available or unavilable.
+vehicle becomes available or unavailable.
 
 This is watched by a changefeed and emitted to Kafka:
 
