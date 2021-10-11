@@ -24,7 +24,7 @@ const (
 	// an entire region failure.
 	SurvivalGoalRegionFailure
 	// SurvivalGoalZoneFailure indicates a database being able to
-	// withstand a failure of an availibility zone.
+	// withstand a failure of an availability zone.
 	SurvivalGoalZoneFailure
 )
 
