@@ -33,7 +33,7 @@ export type SendNotification = (
   message: string,
 ) => void;
 
-export function* notifificationsSaga() {
+export function* notificationsSaga() {
   // ***************************** //
   // Terminate Query notifications //
   // ***************************** //

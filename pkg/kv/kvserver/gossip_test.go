@@ -228,7 +228,7 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 		db2000.DescriptorProto()))
 
 	const someTime = 10 * time.Millisecond
-	clearNotifictions := func(ch <-chan struct{}) {
+	clearNotifications := func(ch <-chan struct{}) {
 		for {
 			select {
 			case <-ch:
@@ -238,7 +238,7 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 		}
 	}
 	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).RegisterSystemConfigChannel()
-	clearNotifictions(systemConfChangeCh)
+	clearNotifications(systemConfChangeCh)
 	require.NoError(t, txB.Commit(ctx))
 	select {
 	case <-systemConfChangeCh:
