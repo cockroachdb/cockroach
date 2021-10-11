@@ -38,7 +38,7 @@ against the cluster. To that effect, `roachtest run` takes the `--cockroach`,
 so that they do not need to be specified in the common case. Besides, when
 the binaries have nonstandard names, it is often more convenient to move them
 to the location `roachtest` expects (it will tell you) rather than to specify
-the flags. However, when multiple binaries are around, it might be preferrable
+the flags. However, when multiple binaries are around, it might be preferable
 to be explicit, to avoid accidentally running tests against against the wrong
 version of CockroachDB.
 
