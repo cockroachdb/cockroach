@@ -228,7 +228,7 @@ func TestMakeImportSpans(t *testing.T) {
 				),
 				makeBackupManifest(
 					ts[2], ts[3],
-					// We should be able to backup table 53 incremenatally after
+					// We should be able to backup table 53 incrementally after
 					// it has been introduced.
 					[]roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
 					noIntroducedSpans,
@@ -256,7 +256,7 @@ func TestMakeImportSpans(t *testing.T) {
 				),
 				makeBackupManifest(
 					ts[2], ts[3],
-					// We should be able to backup table 53 incremenatally after
+					// We should be able to backup table 53 incrementally after
 					// it has been introduced.
 					[]roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
 					noIntroducedSpans,
