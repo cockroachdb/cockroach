@@ -262,7 +262,7 @@ The sub-operations create sub-spans and fork the `Context`:
 ### Context cancellation
 
 Contexts make distributed cancellation easy.
-A context object has a broadast "cancellation" channel which
+A context object has a broadcast "cancellation" channel which
 client components can check to see if the work is still "useful".
 For example a context for the worker of a network connection
 will be canceled by `net.Conn` if the remote connection
