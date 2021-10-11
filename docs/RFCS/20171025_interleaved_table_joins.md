@@ -359,7 +359,7 @@ Looking through the implementation of `RowFetcher`, specifically the call chain
 RowFetcher --> RowFetcher.NextKey --> RowFetcher.ReadIndexKey --> DecodeIndexKey (table.go)
 ```
 it doesn't seem like `RowFetcher` is very permissive when it comes to allow
-1-pass through on an interleaved hierarchy. Specfically, [`DecodeIndexKey` in
+1-pass through on an interleaved hierarchy. Specifically, [`DecodeIndexKey` in
 `table.go`](https://github.com/cockroachdb/cockroach/blob/de7337dc5ca5b4e5ee17e812c817e4bba5a449ca/pkg/sql/sqlbase/table.go#L778L780)
  will need to be refactored so that it returns `true` for KV pairs if
 it matches either the target `parent` index or `child2` index. This is
