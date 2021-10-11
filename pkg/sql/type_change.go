@@ -857,7 +857,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				}
 				if foundUsage {
 					return pgerror.Newf(pgcode.DependentObjectsStillExist,
-						"could not remove enum value %q as it is being used in a default expresion of %q",
+						"could not remove enum value %q as it is being used in a default expression of %q",
 						member.LogicalRepresentation, desc.GetName())
 				}
 			}
