@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
-// Export exports the configuration in the PlantUML synax.
+// Export exports the configuration in the PlantUML syntax.
 // onlyChans, if non-empty, restricts the output to only
 // those rules that target the specified channels.
 func (c *Config) Export(onlyChans ChannelList) (string, string) {
