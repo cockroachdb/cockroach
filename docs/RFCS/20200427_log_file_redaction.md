@@ -361,7 +361,7 @@ var myData = safeFunc()
 log.Infof("hello %s", log.Safe(myData))
 ```
 
-Later, it's possible to modifify the initial assignment to `var myData
+Later, it's possible to modify the initial assignment to `var myData
 = unsafeFunc()` and neither the author of that change nor the reviewer
 will be reminded to switch the `log.Safe` call 100 lines later.
 
