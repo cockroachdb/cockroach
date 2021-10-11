@@ -134,7 +134,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	// ts 8 is still unknown
 	requireChannelEmpty(t, errCh8)
 
-	// always return the earlist error seen (so waiting for ts 10 immediately
+	// always return the earliest error seen (so waiting for ts 10 immediately
 	// returns the 9 error now, it returned the ts 10 error above)
 	require.EqualError(t, m.waitForTS(ctx, ts(9)), `descriptor: oh no!`)
 
