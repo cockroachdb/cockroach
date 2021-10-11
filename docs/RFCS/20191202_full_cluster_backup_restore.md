@@ -212,7 +212,7 @@ locality if appropriate. The user data will then be restored, and finally the
 rest of the system tables.
 
 First, a check is performed to ensure that no user data exists in this cluster.
-This is acheived by ensuring that no descriptors exist with ID greater than or
+This is achieved by ensuring that no descriptors exist with ID greater than or
 equal to `MinNonPredefinedUserDescID`. Then the `DescIDGenerator` needs to be
 restored. This key is used to determine that value of the next descriptor ID
 (such as during the creation of a table or database). This check would also
