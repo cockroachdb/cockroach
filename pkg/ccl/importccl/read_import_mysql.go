@@ -202,7 +202,7 @@ const (
 
 // mysqlValueToDatum attempts to convert a value, as parsed from a mysqldump
 // INSERT statement, in to a Cockroach Datum of type `desired`. The MySQL parser
-// does not parse the values themselves to Go primitivies, rather leaving the
+// does not parse the values themselves to Go primitives, rather leaving the
 // original bytes uninterpreted in a value wrapper. The possible mysql value
 // wrapper types are: StrVal, IntVal, FloatVal, HexNum, HexVal, ValArg, BitVal
 // as well as NullVal.
