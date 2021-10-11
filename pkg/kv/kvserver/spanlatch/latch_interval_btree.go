@@ -1030,7 +1030,7 @@ func (i *iterator) Cur() *latch {
 //    whose upper bound end keys are equal to or greater than the start key
 //    of the search range. The children followed will be equal to or less
 //    than the soft lower bound constraint.
-// 4. once the initial tranversal completes and the scan is in the left-most
+// 4. once the initial traversal completes and the scan is in the left-most
 //    btree node whose upper bound overlaps the search range, key comparisons
 //    must be performed with each item in the tree. This is necessary because
 //    any of these items may have end keys that cause them to overlap with the
