@@ -312,7 +312,7 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 	if showSchemas {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "create_statement", Typ: types.String})
 	}
-	if _, shouldShowPrivleges := opts[backupOptWithPrivileges]; shouldShowPrivleges {
+	if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}

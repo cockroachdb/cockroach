@@ -78,7 +78,7 @@ func TestPutUserFileTable(t *testing.T) {
 	})
 }
 
-func createUserGrantAllPrivieleges(
+func createUserGrantAllPrivileges(
 	username security.SQLUsername, database string, sqlDB *gosql.DB,
 ) error {
 	_, err := sqlDB.Exec(fmt.Sprintf("CREATE USER %s", username.SQLIdentifier()))
@@ -110,9 +110,9 @@ func TestUserScoping(t *testing.T) {
 
 	// Create two users and grant them all privileges on defaultdb.
 	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	require.NoError(t, createUserGrantAllPrivieleges(user1, "defaultdb", sqlDB))
+	require.NoError(t, createUserGrantAllPrivileges(user1, "defaultdb", sqlDB))
 	user2 := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	require.NoError(t, createUserGrantAllPrivieleges(user2, "defaultdb", sqlDB))
+	require.NoError(t, createUserGrantAllPrivileges(user2, "defaultdb", sqlDB))
 
 	// Write file as user1.
 	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
