@@ -112,7 +112,7 @@ by follower reads. This document proposes an extension to the `SET TRANSACTION`
 and `BEGIN TRANSACTION` statements to allow a clause analagous to `AS OF SYSTEM
 TIME` for `SELECT` statements today. This change will ease the multi-statement
 historical reads, potentially enabling use of existing code which relies on a 
-transaction object, and will provide a mechnaism to run historical reads with
+transaction object, and will provide a mechanism to run historical reads with
 a HIGH transaction priority, eliminating the posibility of blocking on a
 long-running read-write transaction. `SET TRANSACTION` must be the first
 statement following `BEGIN`. Note that `SET TRANSACTION AS OF SYSTEM
