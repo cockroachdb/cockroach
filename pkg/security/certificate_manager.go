@@ -90,7 +90,7 @@ var (
 //
 // The nomenclature for certificates is as follows, all within the certs-dir.
 // - ca.crt             main CA certificate.
-//                      Used to verify everything unless overridden by more specifica CAs.
+//                      Used to verify everything unless overridden by more specific CAs.
 // - ca-client.crt      CA certificate to verify client certificates. If it does not exist,
 //                      fall back on 'ca.crt'.
 // - node.crt           node certificate.

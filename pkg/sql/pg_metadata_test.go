@@ -1129,7 +1129,7 @@ func (v *pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 			v.pgCode.fixableTables[v.schema] = none
 		}
 	case *ast.CallExpr:
-		// These are actual function calls, we look for specifc function calls
+		// These are actual function calls, we look for specific function calls
 		// to see where to insert new columns.
 		fun, ok := n.Fun.(*ast.Ident)
 		if !ok {
