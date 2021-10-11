@@ -606,7 +606,7 @@ how we do the reading component of `InterleaveReaderJoiner` (and `RowFetcher`):
 ### [2] Logical planning > physical planning
 
 For planning interleaved table joins, one can either introduce the branching
-point (that is, the point at which an `InterleavedRaederJoiner` is introduced)
+point (that is, the point at which an `InterleavedReaderJoiner` is introduced)
 in the physical plan (processor-level in the distributed execution engine) or
 in the logical plan (which affects both execution engines).
 
