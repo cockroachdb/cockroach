@@ -66,10 +66,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				aliveAt := l.Start.ToTimestamp().Prev()
 				ts := aliveAt.Prev()
 				args := makeArgs(r, ts, aliveAt)
-				willApply, doesNotApplyReaason, err := r.protectedTimestampRecordApplies(ctx, &args)
+				willApply, doesNotApplyReason, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
-				require.Empty(t, doesNotApplyReaason)
+				require.Empty(t, doesNotApplyReason)
 			},
 		},
 		// If the GC threshold is already newer than the timestamp we want to
