@@ -32,7 +32,7 @@ import (
 // testBase sets the provided HTTPDefaults, logs "hello World", captures the
 // resulting request to the server, and validates the body with the provided
 // requestTestFunc.
-// Options also given to cause the server to hang (which naturally skips the body valiation)
+// Options also given to cause the server to hang (which naturally skips the body validation)
 // and to set a maximum duration for the log call.
 func testBase(
 	t *testing.T,
