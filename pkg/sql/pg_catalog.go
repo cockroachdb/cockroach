@@ -3529,7 +3529,7 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				// available in the table descriptor that can be changed by ALTER
 				// SEQUENCE sequencename OWNER TO username. Sequence opts have a
 				// table.column owner which is the value that can be modified by ALTER
-				// SEQUENE sequencename OWNED BY table.column, This is not the expected
+				// SEQUENCE sequencename OWNED BY table.column, This is not the expected
 				// value on sequenceowner.
 				return addRow(
 					tree.NewDString(scName),                 // schemaname
