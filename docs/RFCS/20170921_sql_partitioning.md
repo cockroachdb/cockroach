@@ -521,7 +521,7 @@ SELECT *
   ON a.id = b.article_id
 ```
 
-The implementation is purely syntatic sugar and simply transforms each
+The implementation is purely syntactic sugar and simply transforms each
 `PARTITION` clause into an additional constraint. The join query above, for
 example, would be rewritten to include `WHERE user_views.country IN ('CA', 'MX',
 'US') AND articles.published >= 'recent cutoff'`.
