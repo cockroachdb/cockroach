@@ -117,7 +117,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 	}
 	return func(to, from, evalCtx, toType string) string {
 		// convStr is a format string expecting three arguments:
-		// 1. the code snippet that performs an assigment of int64 local
+		// 1. the code snippet that performs an assignment of int64 local
 		//    variable named '_i' to the result, possibly performing the bounds
 		//    checks
 		// 2. the original value variable name
