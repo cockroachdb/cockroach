@@ -418,7 +418,7 @@ The `ScheduledJobExecutor` is defined as follows:
 ```go
 type ScheduledJobExecutor interface {
   ExecuteJob(context, ExecutionArguments) error
-  NotifyJobTermination(schedulID, md *jobspb.JobMetadata, txn *kv.Txn) error
+  NotifyJobTermination(scheduleID, md *jobspb.JobMetadata, txn *kv.Txn) error
 }
 ```
 
