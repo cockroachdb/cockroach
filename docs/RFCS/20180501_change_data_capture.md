@@ -436,7 +436,7 @@ bounds on the catch up scans.
 ### Intent tracking
 
 Once the catch up scans finish, the buffered data is processed. Single range
-fastpath transations and committed intents are passed on to the next stage.
+fastpath transactions and committed intents are passed on to the next stage.
 Aborted intents and unrelated data are filtered. This is guaranteed to emit
 individual keys in mvcc timestamp order. Opened intents are tracked as follows.
 
