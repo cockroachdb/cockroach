@@ -831,7 +831,7 @@ func (c *CustomFuncs) GroupingCols(grouping *memo.GroupingPrivate) opt.ColSet {
 }
 
 // AddColsToGrouping returns a new GroupByDef that is a copy of the given
-// GroupingPrivate, except with the given set of grouping columns union'ed with
+// GroupingPrivate, except with the given set of grouping columns unioned with
 // the existing grouping columns.
 func (c *CustomFuncs) AddColsToGrouping(
 	private *memo.GroupingPrivate, groupingCols opt.ColSet,
