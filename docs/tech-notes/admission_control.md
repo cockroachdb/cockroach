@@ -210,7 +210,7 @@ throttles the latter kinds of work.
 We monitor the following state of the goroutine scheduler: the number
 of processors, and the number of goroutines that are runnable (i.e.,
 they are ready to run, but not running). The latter represents
-queueing inside the goroutine scheduler, since these groutines are
+queueing inside the goroutine scheduler, since these goroutines are
 waiting to be scheduled.  KV work concurrency slots are adjusted by
 gradually decreasing or increasing the total slots (additive
 decrements or increments), when the runnable count, normalized by the
