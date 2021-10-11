@@ -143,7 +143,7 @@ func (t *typeDef) isListType() bool {
 //   type SomeExpr struct {
 //     expr    opt.ScalarExpr
 //     filters FiltersExpr
-//     var     *VariablExpr
+//     var     *VariableExpr
 //   }
 //
 func (t *typeDef) asField() string {
