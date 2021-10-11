@@ -97,7 +97,7 @@ go_test(
     ],
 )
 
-# Define a gerator for expression definitions and functions.
+# Define a generator for expression definitions and functions.
 genrule(
     name = "gen-expr",
     srcs = ["//pkg/sql/opt:ops"],
