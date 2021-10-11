@@ -387,7 +387,7 @@ func TestMeta2RangeIter(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// First make an interator with a large page size and use it to determine the numner of ranges.
+	// First make an iterator with a large page size and use it to determine the numner of ranges.
 	iter := makeMeta2RangeIter(db, 10000 /* batchSize */)
 	numRanges := 0
 	for {
@@ -400,7 +400,7 @@ func TestMeta2RangeIter(t *testing.T) {
 	}
 	require.Greater(t, numRanges, 20, "expected over 20 ranges, got: %d", numRanges)
 
-	// Now make an interator with a small page size and check that we get just as many ranges.
+	// Now make an iterator with a small page size and check that we get just as many ranges.
 	iter = makeMeta2RangeIter(db, 2 /* batch size */)
 	numRangesPaginated := 0
 	for {
