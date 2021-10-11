@@ -842,7 +842,7 @@ func normalizeLngLat(lng float64, lat float64) (float64, float64) {
 }
 
 // normalizeGeographyGeomT limits geography coordinates to spherical coordinates
-// by converting geom.T cordinates inplace
+// by converting geom.T coordinates inplace
 func normalizeGeographyGeomT(t geom.T) {
 	switch repr := t.(type) {
 	case *geom.GeometryCollection:
