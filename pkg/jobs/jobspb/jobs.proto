@@ -598,7 +598,7 @@ message ChangefeedDetails {
   //
   // - A watched table is stored here under its table id
   // - TODO(dan): A watched database is stored here under its database id
-  // - TODO(dan): A db.* expansion is treated identicially to watching the
+  // - TODO(dan): A db.* expansion is treated identically to watching the
   //   database
   //
   // Note that the TODOs mean this field currently is guaranteed to only hold
