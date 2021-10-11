@@ -1515,3 +1515,31 @@ CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, I
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
 ALTER TYPE enum_for_predicate DROP VALUE 'a'
+
+subtest regression_71388
+
+statement ok
+CREATE TYPE enum_test AS ENUM ('a', 'b');
+CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
+INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
+
+query TTBBBB
+SELECT
+  a.elems,
+  b.elems,
+  a.elems = b.elems,
+  a.elems < b.elems,
+  a.elems <= b.elems,
+  a.elems IS NOT DISTINCT FROM b.elems
+FROM enum_array_table a, enum_array_table b
+ORDER BY a.id, b.id
+----
+{a}    {a}    true   false  true   true
+{a}    {b}    false  true   true   false
+{a}    {a,b}  false  true   true   false
+{b}    {a}    false  false  false  false
+{b}    {b}    true   false  true   true
+{b}    {a,b}  false  false  false  false
+{a,b}  {a}    false  false  false  false
+{a,b}  {b}    false  true   true   false
+{a,b}  {a,b}  true   false  true   true

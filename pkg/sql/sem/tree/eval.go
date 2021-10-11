@@ -2067,7 +2067,7 @@ func cmpOpFixups(
 	}
 
 	// Array equality comparisons.
-	for _, t := range types.Scalar {
+	for _, t := range append(types.Scalar, types.AnyEnum) {
 		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
