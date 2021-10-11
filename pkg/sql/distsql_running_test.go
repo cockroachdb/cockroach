@@ -259,7 +259,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
 		},
 		{
-			// A non-aborted retriable error does not overried the
+			// A non-aborted retriable error does not override the
 			// TransactionAbortedError.
 			err:    retryErr,
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
