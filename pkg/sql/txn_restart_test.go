@@ -1219,7 +1219,7 @@ SELECT * from t.test WHERE k = 'test_key';
 	}
 
 	if u := atomic.LoadInt32(&clockUpdate); u != 1 {
-		t.Errorf("expected exacltly one clock update, but got %d", u)
+		t.Errorf("expected exactly one clock update, but got %d", u)
 	}
 	if u, e := atomic.LoadInt32(&restartDone), int32(refreshAttempts+1); u != e {
 		t.Errorf("expected exactly %d restarts, but got %d", e, u)
