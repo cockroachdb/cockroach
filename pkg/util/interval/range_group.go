@@ -129,7 +129,7 @@ func (n *rangeListNode) findIdx(r Range, inclusive bool) (int, bool) {
 	return n.len, false
 }
 
-// rangeList is an implementation of a RangeGroup using a bucketted linked list
+// rangeList is an implementation of a RangeGroup using a bucketed linked list
 // to sequentially order non-overlapping ranges.
 //
 // rangeList is not safe for concurrent use by multiple goroutines.
@@ -146,7 +146,7 @@ func NewRangeList() RangeGroup {
 	return &rl
 }
 
-// findNode returns the upper-bound node that the range would be bucketted in,
+// findNode returns the upper-bound node that the range would be bucketed in,
 // along with that node's previous element. It also returns whether the range
 // overlaps with the bounds of the node.
 func (rl *rangeList) findNode(r Range, inclusive bool) (prev, cur *list.Element, inCur bool) {
