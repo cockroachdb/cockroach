@@ -262,7 +262,7 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
-	// If we're configured to reject txns over budget, we pre-emptively check
+	// If we're configured to reject txns over budget, we preemptively check
 	// whether this current batch is likely to push us over the edge and, if it
 	// does, we reject it. Note that this check is not precise because generally
 	// we can't know exactly the size of the locks that will be taken by a
@@ -291,7 +291,7 @@ func (tp *txnPipeliner) SendLocked(
 	// don't want to condense the lock spans (even if it turns out that we did go
 	// over budget). The point of the rejection setting is to avoid condensing
 	// because of the possible performance cliff when doing so. As such, if we did
-	// go over budget despite the earlier pre-emptive check, then we stay over
+	// go over budget despite the earlier preemptive check, then we stay over
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
 	tp.updateLockTracking(ctx, ba, br, pErr, maxBytes, !rejectOverBudget /* condenseLocksIfOverBudget */)

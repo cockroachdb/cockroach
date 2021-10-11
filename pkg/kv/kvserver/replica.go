@@ -1507,7 +1507,7 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 // in practice because the replica should only be receiving messages as the
 // newer replica ID after it has been added to the range. Prior to learner
 // replicas we would only add a store to a range after we've successfully
-// applied a pre-emptive snapshot. If the store were to split between the
+// applied a preemptive snapshot. If the store were to split between the
 // preemptive snapshot and the addition then the addition would fail due to
 // the conditional put logic. If the store were to then enable learners then
 // we're still okay because we won't promote a learner unless we succeed in

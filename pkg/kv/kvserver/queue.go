@@ -928,7 +928,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 				// We checked this when adding the replica, but we need to check it again
 				// in case this is a different replica with the same range ID (see #14193).
 				// This is possible in the case where the replica was enqueued while not
-				// having a replica ID, perhaps due to a pre-emptive snapshot, and has
+				// having a replica ID, perhaps due to a preemptive snapshot, and has
 				// since been removed and re-added at a different replica ID.
 				return errors.New("cannot process uninitialized replica")
 			}

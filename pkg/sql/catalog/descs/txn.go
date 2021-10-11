@@ -34,7 +34,7 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 // the leases to drain on old versions of descriptors modified or deleted in the
 // transaction; callers do not need to call lease.WaitForOneVersion.
 //
-// The passed transaction is pre-emptively anchored to the system config key on
+// The passed transaction is preemptively anchored to the system config key on
 // the system tenant.
 func (cf *CollectionFactory) Txn(
 	ctx context.Context,

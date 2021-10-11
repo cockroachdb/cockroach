@@ -1520,13 +1520,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			replicaDesc, found := desc.GetReplicaDescriptor(s.StoreID())
 			if !found {
-				// This is a pre-emptive snapshot. It's also possible that this is a
+				// This is a preemptive snapshot. It's also possible that this is a
 				// range which has processed a raft command to remove itself (which is
 				// possible prior to 19.2 or if the DisableEagerReplicaRemoval is
 				// enabled) and has not yet been removed by the replica gc queue.
 				// We treat both cases the same way. These should no longer exist in
 				// 20.2 or after as there was a migration in 20.1 to remove them and
-				// no pre-emptive snapshot should have been sent since 19.2 was
+				// no preemptive snapshot should have been sent since 19.2 was
 				// finalized.
 				return errors.AssertionFailedf(
 					"found RangeDescriptor for range %d at generation %d which does not"+

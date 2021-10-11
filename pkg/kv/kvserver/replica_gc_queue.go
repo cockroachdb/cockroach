@@ -312,7 +312,7 @@ func (rgcq *replicaGCQueue) process(
 		// replica became "non-gc'able" in the meantime by checking (with raftMu
 		// held throughout) whether the replicaID is still smaller than the
 		// NextReplicaID. Given non-zero replica IDs don't change, this is only
-		// possible if we currently think we're processing a pre-emptive snapshot
+		// possible if we currently think we're processing a preemptive snapshot
 		// but discover in RemoveReplica that this range has since been added and
 		// knows that.
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{

@@ -1283,7 +1283,7 @@ var builtins = map[string]builtinDefinition{
 					buf.WriteString("minus-")
 					if val == math.MinInt64 {
 						// Converting MinInt64 to positive overflows the value.
-						// Take the first digit pre-emptively.
+						// Take the first digit preemptively.
 						digits = append(digits, digitNames[8])
 						val /= 10
 					}

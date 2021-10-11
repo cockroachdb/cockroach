@@ -1954,7 +1954,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 
 					// Make sure that committing works. This is particularly relevant for
 					// testcases where we ended up over budget but we didn't return an
-					// error (because we failed to pre-emptively detect that we're going
+					// error (because we failed to preemptively detect that we're going
 					// to be over budget and the response surprised us with a large
 					// ResumeSpan). Committing in these situations is allowed, since the
 					// harm has already been done.

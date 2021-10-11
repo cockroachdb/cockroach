@@ -1277,7 +1277,7 @@ func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	// Hijack the pre-emptive refresh code path to perform the refresh but
+	// Hijack the preemptive refresh code path to perform the refresh but
 	// provide the force flag to ensure that the refresh occurs unconditionally.
 	// We provide an empty BatchRequest - maybeRefreshPreemptivelyLocked just
 	// needs the transaction proto. The function then returns a BatchRequest

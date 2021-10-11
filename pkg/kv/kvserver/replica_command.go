@@ -2490,7 +2490,7 @@ func (r *Replica) sendSnapshot(
 		},
 		RangeSize: r.GetMVCCStats().Total(),
 		// Recipients currently cannot choose to decline any snapshots.
-		// In 19.2 and earlier versions pre-emptive snapshots could be declined.
+		// In 19.2 and earlier versions preemptive snapshots could be declined.
 		//
 		// TODO(ajwerner): Consider removing the CanDecline flag.
 		CanDecline: false,
