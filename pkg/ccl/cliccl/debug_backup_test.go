@@ -626,7 +626,7 @@ func TestExportDataAOST(t *testing.T) {
 			expectedData: "1,123,'foo cat'\n7,723,'cockroach'\n",
 		},
 		{
-			name:         "show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-single-full-backup",
+			name:         "show-data-with-rev-history-as-of-time-after-deletion-should-work-in-a-single-full-backup",
 			tableName:    "testDB.fooschema.fooTable",
 			backupPaths:  []string{backupPathWithRev},
 			asof:         ts1.AsOfSystemTime(),
@@ -643,7 +643,7 @@ func TestExportDataAOST(t *testing.T) {
 			expectedData: "1,123,'foo cat'\n7,723,'cockroach'\n",
 		},
 		{
-			name:      "show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-chain-of-backups",
+			name:      "show-data-with-rev-history-as-of-time-after-deletion-should-work-in-a-chain-of-backups",
 			tableName: "testDB.fooschema.fooTable",
 			backupPaths: []string{
 				backupPathWithRev,
