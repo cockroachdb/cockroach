@@ -70,7 +70,7 @@ func registerAllocator(r registry.Registry) {
 
 		m = c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
-			t.Status("waiting for reblance")
+			t.Status("waiting for rebalance")
 			return waitForRebalance(ctx, t.L(), db, maxStdDev)
 		})
 		m.Wait()
