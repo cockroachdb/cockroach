@@ -30,7 +30,7 @@ go_test(
     size = "medium",
     srcs = [
         "main_test.go",
-        "stament_diagnostics_helpers_test.go",
+        "statement_diagnostics_helpers_test.go",
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
