@@ -151,7 +151,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
 		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
-		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
+		catconstants.CrdbInternalCrossDbReferences:                 crdbInternalCrossDbReferences,
 		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
 		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
 		catconstants.CrdbInternalRegionsTable:                     crdbInternalRegionsTable,
