@@ -893,7 +893,7 @@ Lease transfers are freeze-aware, so the freeze will persist even if the lease
 moves around on the RHS during the merge or if the leaseholder restarts. The
 implementation of the freeze ab(uses) the span latch manager, to flush out
 in-flight commands on the RHS, an intent on the local range descriptor, to
-ensure the freeze persists if the lease is transfered, and an RPC that
+ensure the freeze persists if the lease is transferred, and an RPC that
 repeatedly polls the RHS to wait until it is fully caught up.
 
 ## Appendix
