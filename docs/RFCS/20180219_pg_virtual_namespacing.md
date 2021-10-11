@@ -703,7 +703,7 @@ tables in the right position.  For example, the word
 
 ### Separate resolution rules for persistent objects, columns and sub-parts of complex values
 
-Four separate rules (set of algoritms) apply to the different
+Four separate rules (set of algorithms) apply to the different
 syntactic constructs for names in SQL:
 
 1. **resolution of persistent objects:** (algorithms A1 & A2 in the [reference-level explanation](#reference-level-explanation))
