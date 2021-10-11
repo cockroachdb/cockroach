@@ -3702,7 +3702,7 @@ Standard packages:
 - `errors.fundamental` stack trace is not exposed on its own (embedded via `%+v` formatting)
 - messages not directly exposed, `Error()` and formats will always embed the rest of the chain in the result string
   - it's possible to "extract" the message by rendering the wrapper and its cause separately,
-    and "substracting" one from the other.
+    and "subtracting" one from the other.
 
 ### `github.com/hashicorp/errwrap`
 

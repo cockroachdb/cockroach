@@ -369,7 +369,7 @@ The overall design can be understood as follows:
   - read operations operate "at" a particular seqnum- a MVCC read that
     encounters an intent ignores the values written at later seqnums
     and returns the most recent value at that seqnum instead, also
-    substracting any past value at seqnums marked to be ignored due to
+    subtracting any past value at seqnums marked to be ignored due to
     rollbacks.
   - intent resolution also throws away any values inside the rolled
     back seqnum ranges.
