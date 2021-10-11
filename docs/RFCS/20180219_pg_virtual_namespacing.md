@@ -713,7 +713,7 @@ syntactic constructs for names in SQL:
    - the naming of in-db objects in CREATE, DROP, ALTER RENAME, etc.
 
 2. **resolution of column references:** (algorithm B in the reference-level explanation)
-   - a column reference is always composed of an optional persisent object name as prefix, followed by
+   - a column reference is always composed of an optional persistent object name as prefix, followed by
      a mandatory column identifier.
 
 3. **resolution of sub-parts inside a complex value**, when the engine supports
