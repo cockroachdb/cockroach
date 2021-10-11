@@ -1603,7 +1603,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
+	// An inconsistent LeaseInfoRequest on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
 	leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
