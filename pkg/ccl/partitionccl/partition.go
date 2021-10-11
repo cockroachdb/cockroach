@@ -456,7 +456,7 @@ func selectPartitionExprs(
 // as TypedOrdinalReferences with an ordinal of the column ID.
 //
 // NB Subpartitions do not affect the expression for their parent partitions. So
-// if a partition foo (a=3) is then subpartitiond by (b=5) and no DEFAULT, the
+// if a partition foo (a=3) is then subpartitioned by (b=5) and no DEFAULT, the
 // expression for foo is still `a=3`, not `a=3 AND b=5`. This means that if some
 // partition is requested, we can omit all of the subpartitions, because they'll
 // also necessarily select subsets of the rows it will. "requested" here is
