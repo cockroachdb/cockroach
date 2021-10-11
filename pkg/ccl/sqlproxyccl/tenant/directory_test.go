@@ -416,7 +416,7 @@ func TestLoadBalancing(t *testing.T) {
 	require.Equal(t, float32(0.9), pod.Load)
 	require.Equal(t, processes[processAddrs[1]].SQL.String(), pod.Addr)
 
-	// There's no way to syncronize on the directory updating it's internal
+	// There's no way to synchronize on the directory updating it's internal
 	// state. It requires 2 loop iterations, so 250ms should be more than
 	// enough.
 	time.Sleep(250 * time.Millisecond)
