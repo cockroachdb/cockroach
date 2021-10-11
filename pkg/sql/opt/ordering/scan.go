@@ -29,7 +29,7 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 
 // ScanIsReverse returns true if the scan must be performed in reverse order
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
-// required ordering), reutrns false. The scan must be able to satisfy the
+// required ordering), returns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
 func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
