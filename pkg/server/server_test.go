@@ -154,7 +154,7 @@ func TestEngineTelemetry(t *testing.T) {
 		count++
 	}
 	if count < 1 {
-		t.Fatal("expected engine type telemetry counter to be emiitted")
+		t.Fatal("expected engine type telemetry counter to be emitted")
 	}
 }
 

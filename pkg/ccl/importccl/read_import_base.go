@@ -537,13 +537,13 @@ func runParallelImport(
 		parallelism = runtime.GOMAXPROCS(0)
 	}
 
-	minEmited := make([]int64, parallelism)
+	minEmitted := make([]int64, parallelism)
 	group.GoCtx(func(ctx context.Context) error {
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-rows-to-datums")
 		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
-			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
+			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmitted)
 		})
 	})
 
