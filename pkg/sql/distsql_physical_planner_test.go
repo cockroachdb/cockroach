@@ -1123,7 +1123,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 // Test that a node whose descriptor info is not accessible through gossip is
 // not used. This is to simulate nodes that have been decommissioned and also
 // nodes that have been "replaced" by another node at the same address (which, I
-// guess, is also a type of decomissioning).
+// guess, is also a type of decommissioning).
 func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
