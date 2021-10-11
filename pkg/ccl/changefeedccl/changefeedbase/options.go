@@ -73,7 +73,7 @@ const (
 
 	// OptInitialScan enables an initial scan. This is the default when no
 	// cursor is specified, leading to an initial scan at the statement time of
-	// the creation of the changeffed. If used in conjunction with a cursor,
+	// the creation of the changefeed. If used in conjunction with a cursor,
 	// an initial scan will be performed at the cursor timestamp.
 	OptInitialScan = `initial_scan`
 	// OptInitialScan enables an initial scan. This is the default when a

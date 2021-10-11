@@ -759,7 +759,7 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 	})
 
 	withDisabledOutbound := func(args *base.TestServerArgs) { args.ExternalIODirConfig.DisableOutbound = true }
-	t.Run("sinkless changfeeds are allowed with disabled external io",
+	t.Run("sinkless changefeeds are allowed with disabled external io",
 		sinklessTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
@@ -1078,7 +1078,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			sqlDB.Exec(t, `INSERT INTO multiple_alters VALUES (1, '1')`)
 			sqlDB.Exec(t, `INSERT INTO multiple_alters VALUES (2, '2')`)
 
-			// Set up a hook to pause the changfeed on the next emit.
+			// Set up a hook to pause the changefeed on the next emit.
 			var wg sync.WaitGroup
 			waitSinkHook := func(_ context.Context) error {
 				wg.Wait()

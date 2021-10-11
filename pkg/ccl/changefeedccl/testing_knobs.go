@@ -22,7 +22,7 @@ type TestingKnobs struct {
 	BeforeEmitRow func(context.Context) error
 	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
 	MemMonitor *mon.BytesMonitor
-	// HandleDistChangfeedError is called with the result error from
+	// HandleDistChangefeedError is called with the result error from
 	// the distributed changefeed.
 	HandleDistChangefeedError func(error) error
 	// WrapSink, if set, is a function that is invoked before the Sink is returned.

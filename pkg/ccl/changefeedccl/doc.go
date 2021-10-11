@@ -37,7 +37,7 @@ CREATE CHANGEFEED request.
 
 The major components of this system are:
 
-changfeedAggregator: Reads events from a kvfeed, encodes and emits
+changefeedAggregator: Reads events from a kvfeed, encodes and emits
 KV events to the sink and forwards resolved to the changeFrontier.
 
 changeFrontier: Keeps track of the high-watermark of resolved
