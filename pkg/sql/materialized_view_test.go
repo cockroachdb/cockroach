@@ -85,7 +85,7 @@ REFRESH MATERIALIZED VIEW t.v;
 }
 
 // TestMaterializedViewRefreshVisibility ensures that intermediate results written
-// as part of the refresh backfill process aren't visibile until the refresh is done.
+// as part of the refresh backfill process aren't visible until the refresh is done.
 func TestMaterializedViewRefreshVisibility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
