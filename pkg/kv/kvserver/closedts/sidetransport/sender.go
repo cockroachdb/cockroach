@@ -171,7 +171,7 @@ type BumpSideTransportClosedResult struct {
 	Policy roachpb.RangeClosedTimestampPolicy
 }
 
-// CantCloseReason enumerates the reasons why BunpSideTransportClosed might fail
+// CantCloseReason enumerates the reasons why BumpSideTransportClosed might fail
 // to close a timestamp.
 type CantCloseReason int
 
