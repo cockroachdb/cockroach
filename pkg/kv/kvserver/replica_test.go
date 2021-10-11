@@ -8614,7 +8614,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	r := tc.repl
 	r.mu.Lock()
 	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
-		// We're going to recognize the first time the commnand for the EndTxn is
+		// We're going to recognize the first time the command for the EndTxn is
 		// proposed and we're going to hackily force a low MaxLeaseIndex, so that
 		// the processing gets rejected further on.
 		ut := p.Local.UpdatedTxns

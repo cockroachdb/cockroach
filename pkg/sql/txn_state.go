@@ -335,7 +335,7 @@ const (
 	advanceOne
 	// skipBatch means that the cursor should skip over any remaining commands
 	// that are part of the current batch and be positioned on the first
-	// comamnd in the next batch.
+	// command in the next batch.
 	skipBatch
 
 	// rewind means that the cursor should be moved back to the position indicated
