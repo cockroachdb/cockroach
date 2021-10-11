@@ -35,7 +35,9 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 	backoffConfig := backoff.DefaultConfig
 	backoffConfig.MaxDelay = maxBackoff
-	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
+	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoffConfig,
+		MinConnectTimeout: minConnectionTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),
