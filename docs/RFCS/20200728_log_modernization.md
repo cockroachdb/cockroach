@@ -910,7 +910,7 @@ to achieve the semantics described above.
   logger.
 
 - the [API explained
-  above](#from-the-perspective-of-cockroachdb-develoeprs) is
+  above](#from-the-perspective-of-cockroachdb-developers) is
   auto-generated via a script, to provide the severity and channel as
   separate arguments to the (internal, non-exported) logging code.
 
