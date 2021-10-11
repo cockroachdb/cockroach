@@ -213,7 +213,7 @@ accepts a read-only `BatchRequest` with a `min_timestamp_bound` set in its
 `kv.Txn` while providing the [bounded staleness guarantee](#guarantees).
 
 Second, it will provide access to a `BoundedStalenessNegotiator` instance
-through a new `Negtiator` method on a `kv.DB`, which is capable of determining
+through a new `Negotiator` method on a `kv.DB`, which is capable of determining
 the `local_resolved_timestamp` for a set of spans.
 
 Together, the additions to the API will look like:
