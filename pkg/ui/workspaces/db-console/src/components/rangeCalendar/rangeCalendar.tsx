@@ -197,7 +197,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
       locale={locale}
       showToday={false}
       showDateInput={false}
-      seperator=""
+      separator=""
       renderFooter={renderFooter}
       className={cx("crl-calendar", {
         "crl-calendar__no-borders": !showBorders,

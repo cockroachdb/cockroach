@@ -495,7 +495,7 @@ func TestStatusGetFiles(t *testing.T) {
 		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
 			Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
 		_, err = client.GetFiles(context.Background(), &request)
-		if !testutils.IsError(err, "invalid pattern: cannot have path seperators") {
+		if !testutils.IsError(err, "invalid pattern: cannot have path separators") {
 			t.Errorf("GetFiles: path separators allowed in pattern")
 		}
 	})

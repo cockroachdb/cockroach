@@ -989,7 +989,7 @@ func (s *statusServer) GetFiles(
 // Only patterns to match filenames are acceptable, not more general paths.
 func checkFilePattern(pattern string) error {
 	if strings.Contains(pattern, string(os.PathSeparator)) {
-		return errors.New("invalid pattern: cannot have path seperators")
+		return errors.New("invalid pattern: cannot have path separators")
 	}
 	return nil
 }
