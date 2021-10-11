@@ -178,7 +178,7 @@ func getTablesInTest(scName string) (tableNames []string) {
 	// Most of the backups name their table the test name.
 	tableNames = []string{scName}
 
-	// Some create multiple tables thouhg.
+	// Some create multiple tables though.
 	switch scName {
 	case "midmultitable":
 		tableNames = []string{"midmultitable1", "midmultitable2"}
