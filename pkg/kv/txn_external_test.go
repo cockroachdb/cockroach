@@ -78,7 +78,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 		{
 			name:      "STAGING",
 			txnStatus: roachpb.STAGING,
-			// The rollback succeeds. This behavior is undersired. See #48301.
+			// The rollback succeeds. This behavior is undesired. See #48301.
 			expCommitted:   false,
 			expRollbackErr: "",
 		},
