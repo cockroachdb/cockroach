@@ -62,14 +62,16 @@ func newPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (*pebbleTempEngine, fs.FS, error) {
 	var loc Location
+	var cacheSize int64 = 128 << 20
 	if tempStorage.InMemory {
 		loc = InMemory()
+		cacheSize = 0
 	} else {
 		loc = Filesystem(tempStorage.Path)
 	}
 
 	p, err := Open(ctx, loc,
-		CacheSize(128<<20),
+		CacheSize(cacheSize),
 		func(cfg *engineConfig) error {
 			cfg.UseFileRegistry = storeSpec.UseFileRegistry
 			cfg.EncryptionOptions = storeSpec.EncryptionOptions
@@ -82,6 +84,7 @@ func newPebbleTempEngine(
 			cfg.Opts.DisableWAL = true
 			cfg.Opts.TablePropertyCollectors = nil
 			cfg.Opts.Experimental.KeyValidationFunc = nil
+
 			return nil
 		},
 	)
