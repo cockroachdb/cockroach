@@ -141,7 +141,7 @@ export function Duration(nanoseconds: number): string {
 }
 
 /**
- * Cast nanonseconds to provided scale units
+ * Cast nanoseconds to provided scale units
  */
 export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   if (!nanoseconds) {

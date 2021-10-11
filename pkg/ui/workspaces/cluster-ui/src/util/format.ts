@@ -151,7 +151,7 @@ export function Duration(nanoseconds: number): string {
 }
 
 /**
- * Cast nanonseconds to provided scale units
+ * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
 export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
