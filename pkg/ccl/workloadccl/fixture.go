@@ -90,7 +90,7 @@ type Fixture struct {
 }
 
 // FixtureTable describes pre-computed data for a single table in a Generator,
-// allowing quick initializaiton of large clusters.
+// allowing quick initialization of large clusters.
 type FixtureTable struct {
 	TableName string
 	BackupURI string
