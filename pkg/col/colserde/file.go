@@ -189,7 +189,7 @@ func NewFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserialize
 	// right now with mmap.RDONLY).
 	buf, err := mmap.Map(f, mmap.COPY, 0 /* flags */)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.Io, `mmaping %s`, path)
+		return nil, pgerror.Wrapf(err, pgcode.Io, `mmapping %s`, path)
 	}
 	return newFileDeserializer(typs, buf, buf.Unmap)
 }
