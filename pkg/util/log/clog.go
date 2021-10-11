@@ -221,6 +221,12 @@ func FatalChan() <-chan struct{} {
 	return logging.mu.fatalCh
 }
 
+func (l *loggingT) idPayload() idPayload {
+	l.idMu.RLock()
+	defer l.idMu.RUnlock()
+	return l.idMu.idPayload
+}
+
 // s ignalFatalCh signals the listeners of l.mu.fatalCh by closing the
 // channel.
 // l.mu is not held.
