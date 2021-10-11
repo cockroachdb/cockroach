@@ -65,7 +65,7 @@ func uuidFromString(input string) uuid.UUID {
 // - the encoded keys of all created data.
 // - the subset of the encoded keys that are replicated keys.
 //
-// TODO(sumeer): add lock table and corrsponding MVCC keys.
+// TODO(sumeer): add lock table and corresponding MVCC keys.
 func createRangeData(
 	t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor,
 ) ([]storage.MVCCKey, []storage.MVCCKey) {
