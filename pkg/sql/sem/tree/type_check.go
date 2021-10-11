@@ -81,7 +81,7 @@ type SemaProperties struct {
 }
 
 type semaRequirements struct {
-	// context is the name of the semantic anlysis context, for use in
+	// context is the name of the semantic analysis context, for use in
 	// error messages.
 	context string
 
