@@ -2040,7 +2040,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Run the queued job which updates the database descriptor to contain the
 			// newly created schemas.
-			// NB: Seems like the registry eventually adopts the job anyways but this
+			// NB: Seems like the registry eventually adopts the job anyway but this
 			// is in keeping with the semantics we use when creating a schema during
 			// sql execution. Namely, queue job in the txn which creates the schema
 			// desc and run once the txn has committed.

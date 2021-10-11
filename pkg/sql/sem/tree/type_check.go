@@ -2078,7 +2078,7 @@ func typeCheckComparisonOp(
 
 	// For comparisons, we do not stimulate the typing of untyped NULL with the
 	// other side's type, because comparisons of NULL with anything else are
-	// defined to return NULL anyways. Should the SQL dialect ever be extended with
+	// defined to return NULL anyway. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(

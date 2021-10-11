@@ -633,7 +633,7 @@ one can identify the plan tree pattern that has a `joinNode` as the root and
 two `scanNode` leaves that correspond to the parent and child tables. For the
 simple case, one can verify that the join column(s) are on the primary key of
 the parent table (and a prefix of the interleaved index of the child table, but
-this is mandated by `INTERLEAVE` anyways), but this can of course be
+this is mandated by `INTERLEAVE` anyway), but this can of course be
 generalized.
 
 #### [3a] Common ancestor joins
@@ -1044,5 +1044,5 @@ implement should work fine with interleave boundaries too.
   approach #1 the safer option since we won't know how RocksDB cache behaves in
   production (i.e. when it runs out of cache space, since the amount RocksDB
   will need to cache is far greater than what we need cached). The point of
-  approach #2 is if RocksDB caches our blocks anyways, then we don't need to
+  approach #2 is if RocksDB caches our blocks anyway, then we don't need to
   store as much in memory.
