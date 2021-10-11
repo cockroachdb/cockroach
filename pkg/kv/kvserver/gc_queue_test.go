@@ -302,7 +302,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		t.Fatalf("cache key missing: %s with %s", cacheKey, pretty.Sprint(*ms))
 	}
 	firstSl := make([]enginepb.MVCCStats, 0, cacheFirstLen)
-	// Pick random bytes once; they don't matter for stats but we want reproducability.
+	// Pick random bytes once; they don't matter for stats but we want reproducibility.
 	key, value := []byte("0123456789"), cws.value(size)
 
 	initialNow := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
