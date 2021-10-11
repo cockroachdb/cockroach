@@ -24,7 +24,7 @@ import (
 type Explain struct {
 	ExplainOptions
 
-	// Statement is the statement being EXPLAINed.
+	// Statement is the statement being EXPLAIN-ed.
 	Statement Statement
 }
 
@@ -32,7 +32,7 @@ type Explain struct {
 type ExplainAnalyze struct {
 	ExplainOptions
 
-	// Statement is the statement being EXPLAINed.
+	// Statement is the statement being EXPLAIN-ed.
 	Statement Statement
 }
 
