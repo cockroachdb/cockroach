@@ -853,7 +853,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	})
 }
 
-// TestFlowConcurrenTxnUse tests that FlowBase correctly returns whether there
+// TestFlowConcurrentTxnUse tests that FlowBase correctly returns whether there
 // will be concurrent txn usage. This test lives in this package for easier
 // instantiation of processors.
 func TestFlowConcurrentTxnUse(t *testing.T) {
