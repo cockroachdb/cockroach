@@ -77,7 +77,7 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 // rng is initialized to a rand.Rand if crdbTestBuild is enabled.
 var rng *rand.Rand
 
-// DisableMetamorphicEnvVar can be used to disable metamorhpic tests for
+// DisableMetamorphicEnvVar can be used to disable metamorphic tests for
 // sub-processes. If it exists and is set to something truthy as defined by
 // strconv.ParseBool then metamorphic testing will not be enabled.
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
