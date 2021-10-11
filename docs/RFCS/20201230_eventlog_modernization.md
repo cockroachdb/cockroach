@@ -54,7 +54,7 @@ It was incomplete and unsatisfactory in many ways:
 - the same event type was mistakenly used for different events (e.g.
   "rename_database" for both RENAME DATABASE and CONVERT TO SCHEMA)
 
-- the same event type was abusingly over-used for multiple separate
+- the same event type was amusingly over-used for multiple separate
   operations, e.g. a single event would be generated for a multi-table,
   multi-user GRANT or REVOKE operation.
 
