@@ -559,7 +559,7 @@ semantics of SQL mutations.
 The code changes will introduce the following principles *for SQL
 transactions* (non-SQL txns are unaffected):
 
-1) *seqnums will not reset to 0 when a txn epoch is increemented* so
+1) *seqnums will not reset to 0 when a txn epoch is incremented* so
    that seqnums can continue to increase monotonically across txn epochs
    and there is no seqnum reuse across epochs.
 
