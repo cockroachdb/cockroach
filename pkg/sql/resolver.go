@@ -454,7 +454,7 @@ func (p *planner) ResolveType(
 	tn := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), name.Object())
 	tdesc := desc.(catalog.TypeDescriptor)
 
-	// Disllow cross-database type resolution. Note that we check
+	// Disallow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
 	// accessing types in the database with ID = p.contextDatabaseID by
 	// p.runWithOptions. So, check to see if the resolved descriptor's parentID
