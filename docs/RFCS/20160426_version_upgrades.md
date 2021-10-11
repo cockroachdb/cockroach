@@ -174,7 +174,7 @@ Assume someone decides that our heartbeat interval needs to be smaller
 `base.DefaultHeartbeatInterval` without thinking it through. That variable
 is used in `PushTxn` to decide whether the transaction record is abandoned, so
 during an update we might have transactions which are both aborted and not
-aborted. Many such examples exist and I'm afraid even Sysiphus could get tired
+aborted. Many such examples exist and I'm afraid even Sisyphus could get tired
 of finding and building lints around them all.
 
 ### Model case: Simple proto change
