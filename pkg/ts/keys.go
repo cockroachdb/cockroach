@@ -23,7 +23,7 @@ import (
 )
 
 // Time series keys are carefully constructed to usefully sort the data in the
-// key-value store for the purpose of queries. Time series data is queryied by
+// key-value store for the purpose of queries. Time series data is queried by
 // providing a series name and a timespan; we therefore expose the series name
 // and the collection time prominently on the key.
 //

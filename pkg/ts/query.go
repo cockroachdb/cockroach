@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// timeSeriesSpan represents a queryed time span for a single time series. This
+// timeSeriesSpan represents a queried time span for a single time series. This
 // is reprented as an ordered slice of data slabs, where each slab contains
 // samples.
 type timeSeriesSpan []roachpb.InternalTimeSeriesData
