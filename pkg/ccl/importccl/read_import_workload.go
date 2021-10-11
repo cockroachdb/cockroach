@@ -217,7 +217,7 @@ func NewWorkloadKVConverter(
 // relevant when ordered workload batches produce ordered PK data, since the
 // workers feed into a shared kvCH so then contiguous blocks of PK data will
 // usually be buffered together and thus batched together in the SST builder,
-// minimzing the amount of overlapping SSTs ingested.
+// minimizing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
 func (w *WorkloadKVConverter) Worker(
