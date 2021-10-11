@@ -82,7 +82,7 @@ type Tracker interface {
 	//
 	// Synthetic timestamps: The Tracker doesn't necessarily track synthetic /
 	// physical timestamps precisely; the only guarantee implementations need to
-	// make is that, if no synthethic timestamp is inserted into the tracked set
+	// make is that, if no synthetic timestamp is inserted into the tracked set
 	// for a while, eventually the LowerBound value will not be synthetic.
 	LowerBound(context.Context) hlc.Timestamp
 

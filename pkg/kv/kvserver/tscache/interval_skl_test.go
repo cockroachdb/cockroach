@@ -911,7 +911,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 
 // TestIntervalSklRotateWithSyntheticTimestamps tests that if a page is evicted
 // and subsumed by the floor timestamp, then the floor timestamp will continue
-// to carry the synthtic flag, if necessary.
+// to carry the synthetic flag, if necessary.
 func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
 	manual := hlc.NewManualClock(200)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
