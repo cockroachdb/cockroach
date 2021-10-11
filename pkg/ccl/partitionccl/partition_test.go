@@ -1255,7 +1255,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// TODO(dan): The expression simplification in this method is all done
 		// by our normal SQL expression simplification code. Seems like it could
 		// use some targeted work to clean these up. Ideally the following would
-		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`. Some of them work
+		// all simplify to  `(a, b) IN ((3, 3), (4, 4))`. Some of them work
 		// because for every requested partition, all descendent partitions are
 		// omitted, which is an optimization to save a little work with the side
 		// benefit of making more of these what we want.
