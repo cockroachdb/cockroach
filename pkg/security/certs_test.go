@@ -127,7 +127,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 	defer cleanup()
 
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
-	require.NoError(t, security.CreateTenantClientCAPair(
+	require.NoError(t, security.CreateTenantCAPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -136,15 +136,16 @@ func TestGenerateTenantCerts(t *testing.T) {
 		false, // overwrite
 	))
 
-	cp, err := security.CreateTenantClientPair(
+	cp, err := security.CreateTenantPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
 		time.Hour,
 		999,
+		[]string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
-	require.NoError(t, security.WriteTenantClientPair(certsDir, cp, false))
+	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
 
 	cl := security.NewCertificateLoader(certsDir)
 	require.NoError(t, cl.Load())
@@ -163,11 +164,11 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}
 	require.Equal(t, []*security.CertInfo{
 		{
-			FileUsage: security.TenantClientCAPem,
+			FileUsage: security.TenantCAPem,
 			Filename:  "ca-client-tenant.crt",
 		},
 		{
-			FileUsage: security.TenantClientPem,
+			FileUsage: security.TenantPem,
 			Filename:  "client-tenant.999.crt",
 			Name:      "999",
 		},
@@ -244,20 +245,20 @@ func generateBaseCerts(certsDir string) error {
 	}
 
 	{
-		caKey := filepath.Join(certsDir, security.EmbeddedTenantClientCAKey)
-		if err := security.CreateTenantClientCAPair(
+		caKey := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
+		if err := security.CreateTenantCAPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*96, true, true,
 		); err != nil {
 			return err
 		}
 
-		tcp, err := security.CreateTenantClientPair(certsDir, caKey,
-			testKeySize, time.Hour*48, 10)
+		tcp, err := security.CreateTenantPair(certsDir, caKey,
+			testKeySize, time.Hour*48, 10, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}
-		if err := security.WriteTenantClientPair(certsDir, tcp, true); err != nil {
+		if err := security.WriteTenantPair(certsDir, tcp, true); err != nil {
 			return err
 		}
 	}

@@ -290,10 +290,10 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createClientCACertCmd,
-	mtCreateTenantClientCACertCmd,
+	mtCreateTenantCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
-	mtCreateTenantClientCertCmd,
+	mtCreateTenantCertCmd,
 	listCertsCmd,
 }
 

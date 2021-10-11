@@ -127,7 +127,7 @@ func TestTenantFromCert(t *testing.T) {
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
 
-			tenID, err := kvAuth{}.authenticate(ctx)
+			tenID, err := kvAuth{tenant: tenantAuthorizer{tenantID: roachpb.SystemTenantID}}.authenticate(ctx)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)

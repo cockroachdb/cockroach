@@ -74,9 +74,15 @@ func PGUrlWithOptionalClientCertsE(
 		return url.URL{}, func() {}, err
 	}
 
+	// This CA is the one used by the SQL client driver to authenticate KV nodes on the host cluster.
 	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	tempCAPath, err := securitytest.RestrictedCopy(caPath, tempDir, "ca")
 	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+	// This CA is the one used by the SQL client driver to authenticate SQL tenant servers.
+	tenantCAPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantCACert)
+	if err := securitytest.AppendFile(tenantCAPath, tempCAPath); err != nil {
 		return url.URL{}, func() {}, err
 	}
 	options := url.Values{}
