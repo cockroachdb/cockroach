@@ -416,7 +416,7 @@ func TestOutboxInbox(t *testing.T) {
 			// The Inbox propagates this cancellation on its host.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			// Recving on a canceled stream produces a context canceled error
+			// Receiving on a canceled stream produces a context canceled error
 			// which prompts the watchdog goroutine of the outbox to cancel the
 			// flow.
 			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
