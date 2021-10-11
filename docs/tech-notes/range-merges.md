@@ -419,7 +419,7 @@ advancing over several merges, or a combination of several merges and splits, in
 which case there will be several RHSes to subsume.
 
 This turns out to be relatively straightforward to handle. If an initialized
-replica receives a snapshot that widens it, it can infer that a merge occured,
+replica receives a snapshot that widens it, it can infer that a merge occurred,
 and it simply subsumes all replicas that are overlapped by the snapshot in one
 shot. This requires the same delicate synchronization dance, mentioned at the
 end of the [merge transaction](#merge-transaction) section, to update bookkeeping
