@@ -321,7 +321,7 @@ type CreateStatementDiagnosticsAlertPayload = {
 export const createStatementDiagnosticsAlertLocalSetting = new LocalSetting<
   AdminUIState,
   CreateStatementDiagnosticsAlertPayload
->("create_stmnt_diagnostics_alert", localSettingsSelector, { show: false });
+>("create_stmt_diagnostics_alert", localSettingsSelector, { show: false });
 
 export const createStatementDiagnosticsAlertSelector = createSelector(
   createStatementDiagnosticsAlertLocalSetting.selector,

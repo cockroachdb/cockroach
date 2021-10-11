@@ -150,7 +150,7 @@ describe("selectStatements", () => {
 
   it('filters out statements with app set when app param is "(internal)"', () => {
     const state = makeStateWithStatements([
-      makeFingerprint(1, "$ internal_stmnt_app"),
+      makeFingerprint(1, "$ internal_stmt_app"),
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
@@ -424,7 +424,7 @@ describe("selectStatement", () => {
   });
 
   it('filters out statements with app set when app param is "(internal)"', () => {
-    const stmtA = makeFingerprint(1, "$ internal_stmnt_app");
+    const stmtA = makeFingerprint(1, "$ internal_stmt_app");
     const state = makeStateWithStatements([
       stmtA,
       makeFingerprint(2, "bar"),
