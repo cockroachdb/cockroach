@@ -539,7 +539,7 @@ func (rh ResponseHeader) Header() ResponseHeader {
 	return rh
 }
 
-// Verify implements the Response interface for ResopnseHeader with a
+// Verify implements the Response interface for ResponseHeader with a
 // default noop. Individual response types should override this method
 // if they contain checksummed data which can be verified.
 func (rh *ResponseHeader) Verify(req Request) error {
