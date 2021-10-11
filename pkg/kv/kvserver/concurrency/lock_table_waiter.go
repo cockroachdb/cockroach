@@ -559,7 +559,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// We always poison due to limitations of the API: not poisoning equals
 	// clearing the AbortSpan, and if our pushee transaction first got pushed
 	// for timestamp (by us), then (by someone else) aborted and poisoned, and
-	// then we run the below code, we're clearing the AbortSpan illegaly.
+	// then we run the below code, we're clearing the AbortSpan illegally.
 	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended up
 	// with the responsibility to abort the intents (for example if we find the
 	// transaction aborted). To do better here, we need per-intent information
