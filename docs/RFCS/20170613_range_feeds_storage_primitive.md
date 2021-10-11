@@ -77,7 +77,7 @@ presented here: We
   spans).
 - emit checkpoint notifications with attached key ranges since that is a natural
   consequence of the Range-based sharding in CockroachDB, and fine-grained
-  information is always preferrable. When not necessary, the key range can be
+  information is always preferable. When not necessary, the key range can be
   processed away by an intermediate stage that tracks the minimum checkpointed
   timestamp over all tracked key spans and emits that (with a global key range)
   whenever it changes.
