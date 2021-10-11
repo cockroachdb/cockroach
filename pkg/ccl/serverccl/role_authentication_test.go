@@ -112,7 +112,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"root", "", true, false, "crypto/bcrypt"},
 		{"some_admin", "", true, false, "crypto/bcrypt"},
 		{"", "", false, false, "does not exist"},
-		{"doesntexist", "zxcvbn", false, false, "does not exist"},
+		{"doesnotexist", "zxcvbn", false, false, "does not exist"},
 
 		{"richardc", "12345", false, false,
 			"richardc does not have login privilege"},
