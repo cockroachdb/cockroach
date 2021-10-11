@@ -1142,8 +1142,21 @@ func createImportingDescriptors(
 		}
 	}
 
-	// Assign new IDs to all of the type descriptors that need to be written.
-	if err := rewriteTypeDescs(typesToWrite, details.DescriptorRewrites); err != nil {
+	// Perform rewrites on ALL type descriptors that are present in the rewrite
+	// mapping.
+	//
+	// `types` contains a mix of existing type descriptors in the restoring
+	// cluster, and new type descriptors we will write from the backup.
+	//
+	// New type descriptors need to be rewritten with their generated IDs before
+	// they are written out to disk.
+	//
+	// Existing type descriptors need to be rewritten to the type ID of the type
+	// they are referring to in the restoring cluster. This ID is different from
+	// the ID the descriptor had when it was backed up. Changes to existing type
+	// descriptors will not be written to disk, and is only for accurate,
+	// in-memory resolution hereon out.
+	if err := rewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -1316,7 +1329,11 @@ func createImportingDescriptors(
 					return err
 				}
 				typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-					return typesByID[id], nil
+					t, ok := typesByID[id]
+					if !ok {
+						return nil, errors.AssertionFailedf("type with id %d was not found in rewritten type mapping", id)
+					}
+					return t, nil
 				})
 				if err != nil {
 					return err
