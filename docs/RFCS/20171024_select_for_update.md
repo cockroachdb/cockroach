@@ -421,7 +421,7 @@ it's possible that one of these other options would be a better choice for our c
 1. <b>Table Level Locks:</b>
    Postgres provides eight different types of table level locks: `ACCESS SHARE, ROW SHARE,`
    `ROW EXCLUSIVE, SHARE UPDATE EXCLUSIVE, SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE,` and `ACCESS EXCLUSIVE`.
-   These locks can be acquired explicity using the `LOCK` command, but they are also implicitly
+   These locks can be acquired explicitly using the `LOCK` command, but they are also implicitly
    acquired by different SQL statements. For example, a `SELECT` command (without `FOR UPDATE`)
    implicitly acquires the `ACCESS SHARE` lock on every table it accesses. This prevents concurrent
    calls to `DROP TABLE, TRUNCATE,` etc. on the same table, since those commands must acquire
