@@ -584,7 +584,7 @@ as well as updates to in-memory structures.
 
 The above steps include the work measured in 'raft.process.commandcommit.latency',
 as well as 'raft.process.applycommitted.latency'. Note that matching percentiles
-of these metrics may nevertheless be *higher* than that of the handlready latency.
+of these metrics may nevertheless be *higher* than that of the handleready latency.
 This is because not every handleready cycle leads to an update to the applycommitted
 and commandcommit latencies. For example, under tpcc-100 on a single node, the
 handleready count is approximately twice the logcommit count (and logcommit count
