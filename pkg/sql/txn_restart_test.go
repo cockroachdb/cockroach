@@ -244,7 +244,7 @@ type TxnAborter struct {
 }
 
 type restartInfo struct {
-	// The numberic value being inserted in col 'k'.
+	// The numeric value being inserted in col 'k'.
 	key int
 	// The remaining number of times to abort the txn.
 	abortCount     int
