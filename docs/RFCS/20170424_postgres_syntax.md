@@ -45,7 +45,7 @@ Postgres or Spanner.
 With our recent goal of supporting various ORMs, these previous decisions
 (or lack thereof) become more complicated. We are advertising ourselves
 as an implementer of the Postgres protocol and syntax, and we mostly
-do. There are some syntax or featurs we do not yet support, and we rightly
+do. There are some syntax or features we do not yet support, and we rightly
 return errors for that. However we now have various features ([integer
 division](https://github.com/cockroachdb/cockroach/pull/3308), [bitwise xor
 (~) operator](https://github.com/cockroachdb/cockroach/pull/14908), [shift
