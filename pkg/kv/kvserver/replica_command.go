@@ -2349,7 +2349,7 @@ func recordRangeEventsInLog(
 // returns true, this is communicated back to the sender, which then proceeds to
 // call `kvBatchSnapshotStrategy.Send`. This uses the iterator captured earlier
 // to send the data in chunks, each chunk a streaming grpc message. The sender
-// then sends a final message with an indicaton that it's done and blocks again,
+// then sends a final message with an indication that it's done and blocks again,
 // waiting for a second and final response from the recipient which indicates if
 // the snapshot was a success.
 //
