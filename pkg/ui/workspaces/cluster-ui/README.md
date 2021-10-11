@@ -227,7 +227,7 @@ $ make ui-generate -B
 If you have not done so already, request publishing permissions from the Cluster
 UI team at Cockroach Labs. You will be required to create an account on [npm](https://www.npmjs.com/)
 and configure two factor authentication. You will then be added to the `@cockroachlabs`
-npm organization and given permission to publish the `clutser-ui` package.
+npm organization and given permission to publish the `cluster-ui` package.
 
 #### Setup your npm registry login details
 
