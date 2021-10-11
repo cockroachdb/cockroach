@@ -339,7 +339,7 @@ type UserPrivilegeString struct {
 	Privileges []string
 }
 
-// PrivilegeString returns a string of comma-separted privilege names.
+// PrivilegeString returns a string of comma-separated privilege names.
 func (u UserPrivilegeString) PrivilegeString() string {
 	return strings.Join(u.Privileges, ",")
 }
