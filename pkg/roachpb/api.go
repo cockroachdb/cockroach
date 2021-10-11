@@ -83,7 +83,7 @@ const (
 	isAlone                         // requests which must be alone in a batch
 	isPrefix                        // requests which should be grouped with the next request in a batch
 	isUnsplittable                  // range command that must not be split during sending
-	skipLeaseCheck                  // commands which skip the check that the evaluting replica has a valid lease
+	skipLeaseCheck                  // commands which skip the check that the evaluating replica has a valid lease
 	updatesTSCache                  // commands which update the timestamp cache
 	updatesTSCacheOnErr             // commands which make read data available on errors
 	needsRefresh                    // commands which require refreshes to avoid serializable retries
