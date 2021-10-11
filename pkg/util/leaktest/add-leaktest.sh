@@ -9,7 +9,7 @@
 #
 # Usage: add-leaktest.sh pkg/*_test.go
 
-# Note that go:generate does not do expansion. So "go:generate add-leakest.sh
+# Note that go:generate does not do expansion. So "go:generate add-leaktest.sh
 # *_test.go" will call into here with a single argument of "*_test.go"
 
 set -eu
