@@ -582,7 +582,7 @@ apply. This flag is experimental.
 		Name: "locality-advertise-addr",
 		Description: `
 List of ports to advertise to other CockroachDB nodes for intra-cluster
-communication for some locality. This should be specified as a commma
+communication for some locality. This should be specified as a comma
 separated list of locality@address. Addresses can also include ports.
 For example:
 <PRE>
