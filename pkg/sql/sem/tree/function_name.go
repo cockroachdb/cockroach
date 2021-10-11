@@ -28,7 +28,7 @@ import (
 // first call to its Resolve() method.
 
 // ResolvableFunctionReference implements the editable reference cell
-// of a FuncExpr. The FunctionRerence is updated by the Normalize()
+// of a FuncExpr. The FunctionReference is updated by the Normalize()
 // method.
 type ResolvableFunctionReference struct {
 	FunctionReference
