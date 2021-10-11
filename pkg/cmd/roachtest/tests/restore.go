@@ -425,7 +425,7 @@ func registerRestore(r registry.Registry) {
 						// If the nodes are large enough (specifically, if they
 						// have enough memory we can increase the parallelism
 						// of restore). Machines with 16 vCPUs typically have
-						// enough memory to supoprt 3 concurrent workers.
+						// enough memory to support 3 concurrent workers.
 						c.Run(ctx, c.Node(1),
 							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 5"`)
 						c.Run(ctx, c.Node(1),
