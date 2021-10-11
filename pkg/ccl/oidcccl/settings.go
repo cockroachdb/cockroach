@@ -232,7 +232,7 @@ var OIDCClaimJSONKey = func() *settings.StringSetting {
 }()
 
 // OIDCPrincipalRegex is a regular expression to apply to the OIDC id_token
-// claim value to conver it to a DB principal.
+// claim value to convert it to a DB principal.
 var OIDCPrincipalRegex = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCPrincipalRegexSettingName,
