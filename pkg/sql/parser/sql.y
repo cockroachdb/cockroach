@@ -3939,7 +3939,7 @@ drop_database_stmt:
 
 // %Help: DROP TYPE - remove a type
 // %Category: DDL
-// %Text: DROP TYPE [IF EXISTS] <type_name> [, ...] [CASCASE | RESTRICT]
+// %Text: DROP TYPE [IF EXISTS] <type_name> [, ...] [CASCADE | RESTRICT]
 drop_type_stmt:
   DROP TYPE type_name_list opt_drop_behavior
   {

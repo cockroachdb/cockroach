@@ -108,7 +108,7 @@ interleaves.
 Interleaving row data of multiple tables inherently adds complexity to scans and
 deletes. Deletes such as `DELETE FROM orders WHERE id < 100` currently rely on a
 fast path which will have to be disabled for interleaved tables, unless the
-table was declared as `ON DELETE CASCASE`. Fortunately, it is expected that
+table was declared as `ON DELETE CASCADE`. Fortunately, it is expected that
 `CASCADE` will be the common case, and so it may not be a problem in practice.
 If it is, a new kv operation with knowledge of sql keys can be created to delete
 a range of data while skipping interleaved rows.
