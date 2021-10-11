@@ -879,7 +879,7 @@ sinks:
     sql-perf:
       channels: SQL_PERF
     sql-perf-internal-only:
-      channeks: SQL_INTERNAL_PERF
+      channels: SQL_INTERNAL_PERF
 stray-error-capture:
   # dir inherited from file-defaults
   # max-group-size inherited from file-defaults
