@@ -414,7 +414,7 @@ var partialJoinSentinel = []int{-1}
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to
-// joinReaderOderingStrategy.processLookedUpRow(), which will match it against
+// joinReaderOrderingStrategy.processLookedUpRow(), which will match it against
 // all the corresponding input rows, producing (1, x), (4, x). These two rows
 // are not emitted because that would violate the input ordering (well, (1, x)
 // could be emitted, but we're not smart enough). So, they are buffered until
