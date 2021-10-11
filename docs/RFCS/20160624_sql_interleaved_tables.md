@@ -116,7 +116,7 @@ a range of data while skipping interleaved rows.
 When scanning either a parent or interleaved table, the scan code will have to
 skip over the other table's data. This logic will initially be implemented using
 existing kv operations. One approach is to iterate the entire range and ignore
-the other table's rows. Or, when a key from the other table is enountered, a
+the other table's rows. Or, when a key from the other table is encountered, a
 `Scan` can be constructed to skip past it. The former may overfetch many keys
 and the latter may involve many round-trips, but the two approaches can be
 combined to minimize the worst case behaviors. Additionally, with distributed
