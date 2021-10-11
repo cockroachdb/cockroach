@@ -385,7 +385,7 @@ spans in an LRU interval cache.
 
 Calls into the `BoundedStalenessNegotiator` provide a minimum timestamp bound
 and the spans the caller intends to read from. Any requested span that is
-contained by a cache entry's span which has a resolved timeststamp equal to or
+contained by a cache entry's span which has a resolved timestamp equal to or
 greater than the minimum timestamp bound skips the `QueryResolvedTimestamp`
 request and uses the cached span directly. Otherwise, the negotiator issues a
 `QueryResolvedTimestamp` request over the span and uses the result to update its
