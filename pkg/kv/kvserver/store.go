@@ -2688,7 +2688,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 }
 
 // ClusterNodeCount returns this store's view of the number of nodes in the
-// cluster. This is the metric used for adapative zone configs; ranges will not
+// cluster. This is the metric used for adaptive zone configs; ranges will not
 // be reported as underreplicated if it is low. Tests that wait for full
 // replication by tracking the underreplicated metric must also check for the
 // expected ClusterNodeCount to avoid catching the cluster while the first node
