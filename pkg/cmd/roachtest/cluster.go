@@ -937,7 +937,7 @@ func attachToExistingCluster(
 		expiration:     exp,
 		encryptDefault: encrypt.asBool(),
 		destroyState: destroyState{
-			// If we're attaching to an existing cluster, we're not going to destoy it.
+			// If we're attaching to an existing cluster, we're not going to destroy it.
 			owned: false,
 		},
 		r: r,
