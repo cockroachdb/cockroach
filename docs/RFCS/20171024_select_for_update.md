@@ -449,8 +449,8 @@ it's possible that one of these other options would be a better choice for our c
 
 There are valid arguments for using each of these different lock types in different applications.
 However, I do not think that either table-level locks or advisory locks will be a good
-substitue for our customers that require explicit row-level locks.
-Table-level locks are not a good substitue for `FOR UPDATE` and the other row-level locks
+substitute for our customers that require explicit row-level locks.
+Table-level locks are not a good substitute for `FOR UPDATE` and the other row-level locks
 because they are too coarse-grained and will cause unnecessary performance degradation.
 Advisory locks place too much responsibility on the application developer(s) to ensure that the
 appropriate lock is always acquired before accessing a given row. This doesn't mean we
