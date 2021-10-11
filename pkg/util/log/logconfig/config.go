@@ -409,7 +409,7 @@ type FileSinkConfig struct {
 	prefix string
 }
 
-// HTTPDefaults refresents the configuration defaults for HTTP sinks.
+// HTTPDefaults represents the configuration defaults for HTTP sinks.
 type HTTPDefaults struct {
 	// Address is the network address of the http server. The
 	// host/address and port parts are separated with a colon. IPv6
