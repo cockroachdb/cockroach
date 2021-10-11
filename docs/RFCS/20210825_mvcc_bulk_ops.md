@@ -324,7 +324,7 @@ large degree, with such a block-iterating-and-modifying transformation being
 observed as incurring no more than 3% additional CPU overhead on a read-heavy
 workload. Additionally, a compaction will materialize any keys it reads from one
 of these ingested files, and thus produce a normal, no-transform-required file 
-for future reads. Such a compaction may not happen soon e.g. on RESTORE'ed data
+for future reads. Such a compaction may not happen soon e.g. on RESTORE-d data
 that ingests directly to L6, but could be prioritized if this measured overhead 
 was determined to be too large.
 
