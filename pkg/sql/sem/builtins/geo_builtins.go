@@ -7219,7 +7219,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 	copy(newOverloads, def.overloads)
 
 	for i := range def.overloads {
-		// Define independntly as it is used by a closure below.
+		// Define independently as it is used by a closure below.
 		ov := def.overloads[i]
 
 		argTypes, ok := ov.Types.(tree.ArgTypes)
