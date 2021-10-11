@@ -451,7 +451,7 @@ func visitAncestors(
 	}
 
 	// TODO(ajwerner): Reconsider how this zone config picking apart happens. This
-	// isn't how we want to be retreiving table descriptors in general.
+	// isn't how we want to be retrieving table descriptors in general.
 	var desc descpb.Descriptor
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err

@@ -668,7 +668,7 @@ func TestErrorsFromSQL(t *testing.T) {
 		return err
 	}), "failed to read metadata: boom")
 	// Test that we get an error retrieving the records in GetState.
-	// The preceding call tested the error while retriving the metadata in a
+	// The preceding call tested the error while retrieving the metadata in a
 	// call to GetState.
 	var seen bool
 	wrappedIE.setErrFunc(func(string) error {
