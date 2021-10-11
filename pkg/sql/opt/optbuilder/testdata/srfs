@@ -672,9 +672,9 @@ SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
-inner-join (cross)
+inner-join-apply
  ├── columns: a:1 upper:2 generate_series:3 c:4
- ├── inner-join (cross)
+ ├── inner-join-apply
  │    ├── columns: upper:1 upper:2 generate_series:3
  │    ├── project-set
  │    │    ├── columns: upper:1
@@ -894,3 +894,70 @@ project-set
                           │         ├── columns: tab31755.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3
                           │         └── limit hint: 1.00
                           └── 1
+
+# Regression test for #70342.
+exec-ddl
+CREATE TABLE t70342 (i INT PRIMARY KEY, j JSON);
+----
+
+# Verify that an SRF is implicitly lateral.
+build
+WITH data AS (SELECT j AS row FROM t70342)
+SELECT count(*)
+FROM data, json_each_text(data.row);
+----
+with &1 (data)
+ ├── columns: count:7!null
+ ├── project
+ │    ├── columns: j:2
+ │    └── scan t70342
+ │         └── columns: i:1!null j:2 crdb_internal_mvcc_timestamp:3
+ └── scalar-group-by
+      ├── columns: count_rows:7!null
+      ├── project
+      │    └── inner-join-apply
+      │         ├── columns: row:4 key:5 value:6
+      │         ├── with-scan &1 (data)
+      │         │    ├── columns: row:4
+      │         │    └── mapping:
+      │         │         └──  j:2 => row:4
+      │         ├── project-set
+      │         │    ├── columns: key:5 value:6
+      │         │    ├── values
+      │         │    │    └── ()
+      │         │    └── zip
+      │         │         └── json_each_text(row:4)
+      │         └── filters (true)
+      └── aggregations
+           └── count-rows [as=count_rows:7]
+
+# Verify that an SRF is implicitly lateral when using the JOIN syntax.
+build
+WITH data AS (SELECT j AS row FROM t70342)
+SELECT count(*)
+FROM data CROSS JOIN json_each_text(data.row);
+----
+with &1 (data)
+ ├── columns: count:7!null
+ ├── project
+ │    ├── columns: j:2
+ │    └── scan t70342
+ │         └── columns: i:1!null j:2 crdb_internal_mvcc_timestamp:3
+ └── scalar-group-by
+      ├── columns: count_rows:7!null
+      ├── project
+      │    └── inner-join-apply
+      │         ├── columns: row:4 key:5 value:6
+      │         ├── with-scan &1 (data)
+      │         │    ├── columns: row:4
+      │         │    └── mapping:
+      │         │         └──  j:2 => row:4
+      │         ├── project-set
+      │         │    ├── columns: key:5 value:6
+      │         │    ├── values
+      │         │    │    └── ()
+      │         │    └── zip
+      │         │         └── json_each_text(row:4)
+      │         └── filters (true)
+      └── aggregations
+           └── count-rows [as=count_rows:7]
