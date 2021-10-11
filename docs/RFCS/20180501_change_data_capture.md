@@ -626,7 +626,7 @@ TODO: Description of kafka transactions and how they could be used for this.
 [Kafka] is used for all sorts of things, including as a pub/sub. The fundamental
 abstraction is a named _topic_, which is a stream of _records_.
 
-A topic is subdivided into a number of (essentially totally independant)
+A topic is subdivided into a number of (essentially totally independent)
 _partitions_. Each partition is a distributed, replicated, ordered, immutable
 sequence of records that is continually appended to. Records are a timestamped
 key/value byte pair. Keys are not required. If the timestamp is not specified,
