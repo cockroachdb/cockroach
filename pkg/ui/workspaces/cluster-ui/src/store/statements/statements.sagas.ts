@@ -47,7 +47,7 @@ export function* receivedStatementsSaga(delayMs: number) {
   yield put(actions.invalidated());
 }
 
-export function* updateStatementesDateRangeSaga(
+export function* updateStatementsDateRangeSaga(
   action: PayloadAction<UpdateDateRangePayload>,
 ) {
   const { start, end } = action.payload;
@@ -82,6 +82,6 @@ export function* statementsSaga(
       receivedStatementsSaga,
       cacheInvalidationPeriod,
     ),
-    takeLatest(actions.updateDateRange, updateStatementesDateRangeSaga),
+    takeLatest(actions.updateDateRange, updateStatementsDateRangeSaga),
   ]);
 }
