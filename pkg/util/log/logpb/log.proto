@@ -32,7 +32,7 @@ enum Severity {
   // where normal operation could not proceed as expected.
   // Other operations can continue mostly unaffected.
   ERROR = 3;
-  // FATAL is used for situations that require an immedate, hard
+  // FATAL is used for situations that require an immediate, hard
   // server shutdown. A report is also sent to telemetry if telemetry
   // is enabled.
   FATAL = 4;

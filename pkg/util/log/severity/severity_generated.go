@@ -21,7 +21,7 @@ const WARNING = logpb.Severity_WARNING
 // Other operations can continue mostly unaffected.
 const ERROR = logpb.Severity_ERROR
 
-// FATAL is used for situations that require an immedate, hard
+// FATAL is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 const FATAL = logpb.Severity_FATAL

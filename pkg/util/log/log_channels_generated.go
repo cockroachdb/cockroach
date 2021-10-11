@@ -728,7 +728,7 @@ func ErrorfDepth(ctx context.Context, depth int, format string, args ...interfac
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -753,7 +753,7 @@ func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{})
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -778,7 +778,7 @@ func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args .
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) Fatal(ctx context.Context, msg string) {
@@ -802,7 +802,7 @@ func (loggerDev) Fatal(ctx context.Context, msg string) {
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -827,7 +827,7 @@ func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -850,7 +850,7 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -875,7 +875,7 @@ func VFatalf(ctx context.Context, level Level, format string, args ...interface{
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func Fatal(ctx context.Context, msg string) {
@@ -899,7 +899,7 @@ func Fatal(ctx context.Context, msg string) {
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -1304,7 +1304,7 @@ func (loggerOps) ErrorfDepth(ctx context.Context, depth int, format string, args
 // - [Cluster setting](cluster-settings.html) changes
 // - [Zone configuration](configure-replication-zones.html) changes
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -1329,7 +1329,7 @@ func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{})
 // - [Cluster setting](cluster-settings.html) changes
 // - [Zone configuration](configure-replication-zones.html) changes
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -1354,7 +1354,7 @@ func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args .
 // - [Cluster setting](cluster-settings.html) changes
 // - [Zone configuration](configure-replication-zones.html) changes
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) Fatal(ctx context.Context, msg string) {
@@ -1378,7 +1378,7 @@ func (loggerOps) Fatal(ctx context.Context, msg string) {
 // - [Cluster setting](cluster-settings.html) changes
 // - [Zone configuration](configure-replication-zones.html) changes
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -1704,7 +1704,7 @@ func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, a
 // - Range and table leasing events
 // - Up- and down-replication, range unavailability
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -1726,7 +1726,7 @@ func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface
 // - Range and table leasing events
 // - Up- and down-replication, range unavailability
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -1748,7 +1748,7 @@ func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, arg
 // - Range and table leasing events
 // - Up- and down-replication, range unavailability
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) Fatal(ctx context.Context, msg string) {
@@ -1769,7 +1769,7 @@ func (loggerHealth) Fatal(ctx context.Context, msg string) {
 // - Range and table leasing events
 // - Up- and down-replication, range unavailability
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2005,7 +2005,7 @@ func (loggerStorage) ErrorfDepth(ctx context.Context, depth int, format string, 
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -2021,7 +2021,7 @@ func (loggerStorage) Fatalf(ctx context.Context, format string, args ...interfac
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2037,7 +2037,7 @@ func (loggerStorage) VFatalf(ctx context.Context, level Level, format string, ar
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) Fatal(ctx context.Context, msg string) {
@@ -2052,7 +2052,7 @@ func (loggerStorage) Fatal(ctx context.Context, msg string) {
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2388,7 +2388,7 @@ func (loggerSessions) ErrorfDepth(ctx context.Context, depth int, format string,
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -2412,7 +2412,7 @@ func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interfa
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2436,7 +2436,7 @@ func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, a
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) Fatal(ctx context.Context, msg string) {
@@ -2459,7 +2459,7 @@ func (loggerSessions) Fatal(ctx context.Context, msg string) {
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2853,7 +2853,7 @@ func (loggerSqlSchema) ErrorfDepth(ctx context.Context, depth int, format string
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -2880,7 +2880,7 @@ func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interf
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2907,7 +2907,7 @@ func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, 
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
@@ -2933,7 +2933,7 @@ func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -3291,7 +3291,7 @@ func (loggerUserAdmin) ErrorfDepth(ctx context.Context, depth int, format string
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -3315,7 +3315,7 @@ func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interf
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -3339,7 +3339,7 @@ func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, 
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
@@ -3362,7 +3362,7 @@ func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -3686,7 +3686,7 @@ func (loggerPrivileges) ErrorfDepth(ctx context.Context, depth int, format strin
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -3708,7 +3708,7 @@ func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...inter
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -3730,7 +3730,7 @@ func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string,
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
@@ -3751,7 +3751,7 @@ func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4099,7 +4099,7 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4123,7 +4123,7 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4147,7 +4147,7 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
@@ -4170,7 +4170,7 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4466,7 +4466,7 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
 // - uncaught Go panic errors during the execution of a SQL statement.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4486,7 +4486,7 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
 // - uncaught Go panic errors during the execution of a SQL statement.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4506,7 +4506,7 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
 // - uncaught Go panic errors during the execution of a SQL statement.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
@@ -4525,7 +4525,7 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
 // - uncaught Go panic errors during the execution of a SQL statement.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4855,7 +4855,7 @@ func (loggerSqlPerf) ErrorfDepth(ctx context.Context, depth int, format string, 
 // with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4878,7 +4878,7 @@ func (loggerSqlPerf) Fatalf(ctx context.Context, format string, args ...interfac
 // with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4901,7 +4901,7 @@ func (loggerSqlPerf) VFatalf(ctx context.Context, level Level, format string, ar
 // with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
@@ -4923,7 +4923,7 @@ func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
 // with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -5189,7 +5189,7 @@ func (loggerSqlInternalPerf) ErrorfDepth(ctx context.Context, depth int, format 
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -5207,7 +5207,7 @@ func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -5225,7 +5225,7 @@ func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format st
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
@@ -5242,7 +5242,7 @@ func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -5484,7 +5484,7 @@ func (loggerTelemetry) ErrorfDepth(ctx context.Context, depth int, format string
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -5501,7 +5501,7 @@ func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interf
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -5518,7 +5518,7 @@ func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, 
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
@@ -5534,7 +5534,7 @@ func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The `FATAL` severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immediate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
