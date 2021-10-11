@@ -1460,8 +1460,8 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 	} {
-		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
+		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
-		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
+		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallelize)
 	}
 }
