@@ -310,7 +310,7 @@ clause.
 
 While it might on some level seem reasonable to allow for arbitrary read-write
 queries to be performed at historical timestamps, due to the mechanisms of
-closed timestamps, write operations could never succesfully commit. Because the
+closed timestamps, write operations could never successfully commit. Because the
 MinProposalTracker would effectively block write operations, we'll enforce that
 `SET TRANSACTION AS OF SYSTEM TIME` implies `SET TRANSACTION READ ONLY`.
 
