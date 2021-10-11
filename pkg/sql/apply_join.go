@@ -25,7 +25,7 @@ import (
 
 // applyJoinNode implements apply join: the execution component of correlated
 // subqueries. Note that only correlated subqueries that the optimizer's
-// tranformations couldn't decorrelate get planned using apply joins.
+// transformations couldn't decorrelate get planned using apply joins.
 // The node reads rows from the left planDataSource, and for each
 // row, re-plans the right side of the join after replacing its outer columns
 // with the corresponding values from the current row on the left. The new right
