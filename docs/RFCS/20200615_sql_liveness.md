@@ -197,7 +197,7 @@ the current expiration has already passed.
 In this straw man, each instance's `Storage` implementation will periodically
 poll all of the instances and remove entries for `Session`s which are
 expired. This background bumping may not be ideal for rapid resource
-reclaimation. Resource reclamation is left to the individual subsystems which
+reclamation. Resource reclamation is left to the individual subsystems which
 serialize the `SessionID` as a claim.
 
 ### Storage implementation
