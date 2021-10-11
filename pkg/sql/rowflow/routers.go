@@ -212,7 +212,7 @@ type routerBase struct {
 	numNonDrainingStreams int32
 
 	// aggregatedStatus is an atomic that maintains a unified view across all
-	// streamStatus'es.  Namely, if at least one of them is NeedMoreRows, this
+	// streamStatus-es.  Namely, if at least one of them is NeedMoreRows, this
 	// will be NeedMoreRows. If all of them are ConsumerClosed, this will
 	// (eventually) be ConsumerClosed. Otherwise, this will be DrainRequested.
 	aggregatedStatus uint32
