@@ -320,7 +320,7 @@ the start of a transaction would effectively set intents on all of the rows in t
 The proposed solution is to "lock" rows by writing dummy write intents on each row as part
 of an update operation. However, there are a couple of alternative implementations worth
 considering, specifically row-level intents set as part of a scan operation,
-range-level intents, and isolation ugrade.
+range-level intents, and isolation upgrade.
 
 ### Row-level intents set during scan
 
