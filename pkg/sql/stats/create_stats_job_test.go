@@ -181,7 +181,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	// Attempt to start an automatic stats run. It should fail.
 	autoStatsRunShouldFail()
 
-	// PAUSE JOB does not bloack until the job is paused but only requests it.
+	// PAUSE JOB does not block until the job is paused but only requests it.
 	// Wait until the job is set to paused.
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
