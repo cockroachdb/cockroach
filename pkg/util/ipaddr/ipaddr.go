@@ -528,12 +528,12 @@ func (ip Addr) WriteIPv6Bytes(writer io.Writer) error {
 	return binary.Write(writer, binary.BigEndian, ip.Lo)
 }
 
-// Equal wraps the Uint128 equivilance.
+// Equal wraps the Uint128 equivalence.
 func (ip Addr) Equal(o Addr) bool {
 	return uint128.Uint128(ip).Equal(uint128.Uint128(o))
 }
 
-// Compare wraps the Uint128 equivilance.
+// Compare wraps the Uint128 equivalence.
 func (ip Addr) Compare(o Addr) int {
 	return uint128.Uint128(ip).Compare(uint128.Uint128(o))
 }
