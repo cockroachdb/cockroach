@@ -25,7 +25,7 @@ import (
 )
 
 // timeSeriesSpan represents a queried time span for a single time series. This
-// is reprented as an ordered slice of data slabs, where each slab contains
+// is represented as an ordered slice of data slabs, where each slab contains
 // samples.
 type timeSeriesSpan []roachpb.InternalTimeSeriesData
 
