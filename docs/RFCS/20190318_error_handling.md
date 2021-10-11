@@ -1424,7 +1424,7 @@ message EncodedErrorDetails {
 message ErrorTypeMark {
   // The family name identifies the error type.
   // This is equal to original_type_name above in the common case, but
-  // can be overriden when e.g. the package that defines the type
+  // can be overridden when e.g. the package that defines the type
   // changes path.
   // This is the field also used for looking up a decode function.
   string family_name = 1;

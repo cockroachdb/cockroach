@@ -31,7 +31,7 @@ import (
 )
 
 // ScrubTypes is the schema for TableReaders that are doing a SCRUB
-// check. This schema is what TableReader output streams are overrided
+// check. This schema is what TableReader output streams are overridden
 // to for check. The column types correspond to:
 // - Error type.
 // - Primary key as a string, if it was obtainable.
