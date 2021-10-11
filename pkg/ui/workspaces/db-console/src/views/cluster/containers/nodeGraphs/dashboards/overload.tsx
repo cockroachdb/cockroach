@@ -88,13 +88,13 @@ export default function(props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.granter.total_slots.kv"
-              title="Total Slots"
+              title={"Total Slots " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
             />
             <Metric
               key={nid}
               name="cr.node.admission.granter.used_slots.kv"
-              title="Used Slots"
+              title={"Used Slots " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
             />
           </>
@@ -111,7 +111,7 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
-            title="IO Exhausted"
+            title={"IO Exhausted " + nodeDisplayName(nodesSummary, nid)}
             sources={[nid]}
             nonNegativeRate
           />
@@ -126,28 +126,34 @@ export default function(props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.admitted.kv"
-              title="KV request rate"
+              title={"KV request rate " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.admitted.kv-stores"
-              title="KV write request rate"
+              title={
+                "KV write request rate " + nodeDisplayName(nodesSummary, nid)
+              }
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.admitted.sql-kv-response"
-              title="SQL-KV response rate"
+              title={
+                "SQL-KV response rate " + nodeDisplayName(nodesSummary, nid)
+              }
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.admitted.sql-sql-response"
-              title="SQL-SQL response rate"
+              title={
+                "SQL-SQL response rate " + nodeDisplayName(nodesSummary, nid)
+              }
               sources={[nid]}
               nonNegativeRate
             />
@@ -163,28 +169,28 @@ export default function(props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_sum.kv"
-              title="KV"
+              title={"KV " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_sum.kv-stores"
-              title="KV write"
+              title={"KV write " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_sum.sql-kv-response"
-              title="SQL-KV response"
+              title={"SQL-KV response " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_sum.sql-sql-response"
-              title="SQL-SQL response"
+              title={"SQL-SQL response " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               nonNegativeRate
             />
@@ -200,28 +206,28 @@ export default function(props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.kv-p75"
-              title="KV"
+              title={"KV " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.kv-stores-p75"
-              title="KV write"
+              title={"KV write " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.sql-kv-response-p75"
-              title="SQL-KV response"
+              title={"SQL-KV response " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.sql-sql-response-p75"
-              title="SQL-SQL response"
+              title={"SQL-SQL response " + nodeDisplayName(nodesSummary, nid)}
               sources={[nid]}
               downsampleMax
             />
