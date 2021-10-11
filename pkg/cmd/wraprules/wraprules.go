@@ -49,7 +49,7 @@ func main() {
 	var outFile string
 	rootCmd := &cobra.Command{
 		Use:     "wraprules",
-		Short:   "wraprules wraps one or more promethus monitoring files into a PrometheusRule object",
+		Short:   "wraprules wraps one or more prometheus monitoring files into a PrometheusRule object",
 		Example: "wraprules -o alert-rules.yaml monitoring/rules/*.rules.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(outFile) == 0 {

@@ -827,7 +827,7 @@ func getFollowerReadCounts(ctx context.Context, c cluster.Cluster) ([]int, error
 // follower_reads_success_count{store="1"} 27606
 var prometheusMetricStringPattern = `^(?P<metric>\w+)(?:\{` +
 	`(?P<labelvalues>(\w+=\".*\",)*(\w+=\".*\")?)\})?\s+(?P<value>.*)$`
-var promethusMetricStringRE = regexp.MustCompile(prometheusMetricStringPattern)
+var prometheusMetricStringRE = regexp.MustCompile(prometheusMetricStringPattern)
 
 type prometheusMetric struct {
 	metric      string
@@ -836,7 +836,7 @@ type prometheusMetric struct {
 }
 
 func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
-	matches := promethusMetricStringRE.FindStringSubmatch(s)
+	matches := prometheusMetricStringRE.FindStringSubmatch(s)
 	if matches == nil {
 		return nil, false
 	}
