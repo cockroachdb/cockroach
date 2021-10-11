@@ -106,7 +106,7 @@ func newSQLStats(
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and
-// transaction fingerprints stored in the currnet SQLStats.
+// transaction fingerprints stored in the current SQLStats.
 func (s *SQLStats) GetTotalFingerprintCount() int64 {
 	return atomic.LoadInt64(&s.atomic.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.atomic.uniqueTxnFingerprintCount)
 }

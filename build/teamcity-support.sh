@@ -159,7 +159,7 @@ get_release_branches() {
     | sort -t- -k2 -n -r -s
 }
 
-# Returns the number of commits in the curent branch that are not shared with
+# Returns the number of commits in the current branch that are not shared with
 # the given branch.
 get_branch_distance() {
   git rev-list --count $1..HEAD

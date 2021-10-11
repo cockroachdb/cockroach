@@ -256,12 +256,12 @@ func (it iterator) valid(b *ringBuf) bool {
 	return it >= 0 && int(it) < len(b.buf)
 }
 
-// index returns the index of the entry at iterator's curent position.
+// index returns the index of the entry at iterator's current position.
 func (it iterator) index(b *ringBuf) uint64 {
 	return b.buf[it].Index
 }
 
-// entry returns the entry at iterator's curent position.
+// entry returns the entry at iterator's current position.
 func (it iterator) entry(b *ringBuf) *raftpb.Entry {
 	return &b.buf[it]
 }
