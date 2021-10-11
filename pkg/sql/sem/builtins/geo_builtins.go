@@ -6974,7 +6974,7 @@ func geographyOverload1WithUseSpheroid(
 	}
 }
 
-// geographyOverload2 hides the boilerplate for builtins operating on two geographys.
+// geographyOverload2 hides the boilerplate for builtins operating on two geographies.
 func geographyOverload2(
 	f func(*tree.EvalContext, *tree.DGeography, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
@@ -6997,7 +6997,7 @@ func geographyOverload2(
 	}
 }
 
-// geographyOverload2 hides the boilerplate for builtins operating on two geographys
+// geographyOverload2 hides the boilerplate for builtins operating on two geographies
 // and the overlap wraps a binary predicate.
 func geographyOverload2BinaryPredicate(
 	f func(geo.Geography, geo.Geography) (bool, error), ib infoBuilder,
