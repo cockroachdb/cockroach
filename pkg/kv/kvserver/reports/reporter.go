@@ -806,7 +806,7 @@ func getReportGenerationTime(
 
 	if len(row) != 1 {
 		return time.Time{}, errors.AssertionFailedf(
-			"expected 1 column from intenal query, got: %d", len(row))
+			"expected 1 column from internal query, got: %d", len(row))
 	}
 	generated, ok := row[0].(*tree.DTimestampTZ)
 	if !ok {
