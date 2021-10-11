@@ -165,7 +165,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		// that none of the transaction's intents will ever be committed.
 		// This means that we can stop tracking the transaction entirely.
 		// Doing so is critical to ensure forward progress of the resolved
-		// timestamp in situtations where the oldest transaction on a range
+		// timestamp in situations where the oldest transaction on a range
 		// is abandoned and the locations of its intents are unknown.
 		//
 		// However, the transaction may also still be writing, updating, and
