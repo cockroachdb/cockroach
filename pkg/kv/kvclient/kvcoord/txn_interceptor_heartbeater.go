@@ -198,7 +198,7 @@ func (h *txnHeartbeater) SendLocked(
 		et := etArg.(*roachpb.EndTxnRequest)
 
 		// Set the EndTxn request's TxnHeartbeating flag. Set to true if
-		// a hearbeat loop was started which indicates that transaction has
+		// a heartbeat loop was started which indicates that transaction has
 		// a transaction record.
 		//
 		// TODO(erikgrinaker): In v21.2 we always heartbeat the txn record, so
