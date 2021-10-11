@@ -266,7 +266,7 @@ func (s *Storage) isAlive(
 // reading from the database. If passed expiration is non-zero and the existing
 // record has the same expiration, the record will be deleted and false will
 // be returning, indicating that it no longer exists. If the record exists and
-// has a differring expiration timestamp, true and the associated expiration
+// has a differing expiration timestamp, true and the associated expiration
 // will be returned.
 func (s *Storage) deleteOrFetchSession(
 	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
