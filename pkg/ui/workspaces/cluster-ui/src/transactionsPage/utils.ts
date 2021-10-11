@@ -264,7 +264,7 @@ const withFingerprint = function(
 };
 
 // addTransactionStats adds together two stat objects into one using their counts to compute a new
-// average for the numeric statistics. It's modeled after the similar `addStatementStats` functionj
+// average for the numeric statistics. It's modeled after the similar `addStatementStats` function
 function addTransactionStats(
   a: TransactionStats,
   b: TransactionStats,
