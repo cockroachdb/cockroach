@@ -190,7 +190,7 @@ func (d *immutable) CreatePrivilegesFromDefaultPrivileges(
 
 // ForEachDefaultPrivilegeForRole implements the
 // catalog.DefaultPrivilegeDescriptor interface.
-// ForEachDefaultPrivilegeForRole loops through the DefaultPrivilegeDescriptior's
+// ForEachDefaultPrivilegeForRole loops through the DefaultPrivilegeDescriptor's
 // DefaultPrivilegePerRole entry and calls f on it.
 func (d *immutable) ForEachDefaultPrivilegeForRole(
 	f func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error,

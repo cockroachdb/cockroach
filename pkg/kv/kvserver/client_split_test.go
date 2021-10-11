@@ -2977,7 +2977,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	//       ...      [j, p)      ...
 	//
 	// We then initiate a range lookup for key "k". This lookup will begin
-	// scanning on the first meta2 range but won't find its desired desriptor. Normally,
+	// scanning on the first meta2 range but won't find its desired descriptor. Normally,
 	// it would continue scanning onto the second meta2 range and find the descriptor
 	// for range [j, p) at "/meta2/p" (see TestRangeLookupAfterMeta2Split). However,
 	// because RangeLookup scans are non-transactional, this can race with a split.

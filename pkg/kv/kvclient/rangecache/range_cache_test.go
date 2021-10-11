@@ -1536,7 +1536,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
 	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
 
-	// EvictAndReplace() with a speculative descriptor. Should update decriptor,
+	// EvictAndReplace() with a speculative descriptor. Should update descriptor,
 	// remove lease, and retain closed timestamp policy.
 	tok.speculativeDesc = &desc3
 	tok.EvictAndReplace(ctx)
