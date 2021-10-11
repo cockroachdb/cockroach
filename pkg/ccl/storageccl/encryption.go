@@ -46,7 +46,7 @@ const encryptionVersionIVPrefix = 1
 // v2 is an IV followed by 1 or more sealed GCM messages representing chunks of
 // the original input. The last chunk is always less than full size (and may be
 // empty) prior to being sealed, which is verified by the reader to
-// authticate against truncation at a chunk boundary.
+// authenticate against truncation at a chunk boundary.
 const encryptionVersionChunk = 2
 
 // encryptionChunkSizeV2 is the chunk-size used by v2, i.e. 64kb, which should
