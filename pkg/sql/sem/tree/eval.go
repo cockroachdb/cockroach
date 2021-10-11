@@ -117,10 +117,10 @@ func unaryOpFixups(
 ) map[UnaryOperatorSymbol]unaryOpOverload {
 	for op, overload := range ops {
 		for i, impl := range overload {
-			casted := impl.(*UnaryOp)
-			casted.types = ArgTypes{{"arg", casted.Typ}}
-			casted.retType = FixedReturnType(casted.ReturnType)
-			ops[op][i] = casted
+			cast := impl.(*UnaryOp)
+			cast.types = ArgTypes{{"arg", cast.Typ}}
+			cast.retType = FixedReturnType(cast.ReturnType)
+			ops[op][i] = cast
 		}
 	}
 	return ops
@@ -476,18 +476,18 @@ func initNonArrayToNonArrayConcatenation() {
 			NullableArgs: false,
 			Fn: func(evalCtx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if leftType == types.String {
-					casted, err := PerformCast(evalCtx, right, types.String)
+					cast, err := PerformCast(evalCtx, right, types.String)
 					if err != nil {
 						return nil, err
 					}
-					return NewDString(string(MustBeDString(left)) + string(MustBeDString(casted))), nil
+					return NewDString(string(MustBeDString(left)) + string(MustBeDString(cast))), nil
 				}
 				if rightType == types.String {
-					casted, err := PerformCast(evalCtx, left, types.String)
+					cast, err := PerformCast(evalCtx, left, types.String)
 					if err != nil {
 						return nil, err
 					}
-					return NewDString(string(MustBeDString(casted)) + string(MustBeDString(right))), nil
+					return NewDString(string(MustBeDString(cast)) + string(MustBeDString(right))), nil
 				}
 				return nil, errors.New("neither LHS or RHS matched DString")
 			},
@@ -520,10 +520,10 @@ func init() {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			casted := impl.(*BinOp)
-			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			casted.retType = FixedReturnType(casted.ReturnType)
-			BinOps[op][i] = casted
+			cast := impl.(*BinOp)
+			cast.types = ArgTypes{{"left", cast.LeftType}, {"right", cast.RightType}}
+			cast.retType = FixedReturnType(cast.ReturnType)
+			BinOps[op][i] = cast
 		}
 	}
 }
@@ -533,9 +533,9 @@ type binOpOverload []overloadImpl
 
 func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	for _, fn := range o {
-		casted := fn.(*BinOp)
-		if casted.matchParams(left, right) {
-			return casted, true
+		cast := fn.(*BinOp)
+		if cast.matchParams(left, right) {
+			return cast, true
 		}
 	}
 	return nil, false
@@ -2098,9 +2098,9 @@ func cmpOpFixups(
 
 	for op, overload := range cmpOps {
 		for i, impl := range overload {
-			casted := impl.(*CmpOp)
-			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			cmpOps[op][i] = casted
+			cast := impl.(*CmpOp)
+			cast.types = ArgTypes{{"left", cast.LeftType}, {"right", cast.RightType}}
+			cmpOps[op][i] = cast
 		}
 	}
 
@@ -2112,9 +2112,9 @@ type cmpOpOverload []overloadImpl
 
 func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {
-		casted := fn.(*CmpOp)
-		if casted.matchParams(left, right) {
-			return casted, true
+		cast := fn.(*CmpOp)
+		if cast.matchParams(left, right) {
+			return cast, true
 		}
 	}
 	return nil, false

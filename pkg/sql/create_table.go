@@ -2783,7 +2783,7 @@ func makeDeprecatedHashShardComputeExpr(colNames []string, buckets int) *string 
 		}
 	}
 
-	// Construct an expression which is the sum of all of the casted and hashed
+	// Construct an expression which is the sum of all of the cast and hashed
 	// columns.
 	var expr tree.Expr
 	for i := len(colNames) - 1; i >= 0; i-- {

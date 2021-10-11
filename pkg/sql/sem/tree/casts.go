@@ -465,7 +465,7 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
 		fromTypes := from.TupleContents()
 		toTypes := to.TupleContents()
-		// Handle case where an overload makes a tuple get casted to tuple{}.
+		// Handle case where an overload makes a tuple get cast to tuple{}.
 		if len(toTypes) == 1 && toTypes[0].Family() == types.AnyFamily {
 			return VolatilityStable, true
 		}

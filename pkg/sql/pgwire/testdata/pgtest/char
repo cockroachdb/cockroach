@@ -32,7 +32,7 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# Make sure that values casted to "char" get their type oid and type size
+# Make sure that values cast to "char" get their type oid and type size
 # reported correctly via pgwire.
 
 send

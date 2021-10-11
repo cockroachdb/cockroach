@@ -684,7 +684,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{es(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
 		{es(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
-		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if casted
+		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if cast
 		// to int carelessly, results in -6.
 		{encoding.EncodeVarintAscending(tenSysCodec.TablePrefix(999), 322434), "malformed table key"},
 		// Same test cases, but for tenant 5.

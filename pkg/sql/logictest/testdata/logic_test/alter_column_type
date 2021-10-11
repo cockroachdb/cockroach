@@ -266,7 +266,7 @@ t6  CREATE TABLE public.t6 (
     FAMILY f2 (id2)
 )
 
-# Ensure default expressions are casted correctly.
+# Ensure default expressions are cast correctly.
 statement ok
 CREATE TABLE t7 (x INT DEFAULT 1, y INT);
 INSERT INTO t7 (y) VALUES (1), (2), (3);
@@ -370,7 +370,7 @@ Backhaus
 Bär
 Baz
 
-# Ensure ALTER COLUMN TYPE fails if the DEFAULT EXPR cannot be casted to the new type.
+# Ensure ALTER COLUMN TYPE fails if the DEFAULT EXPR cannot be cast to the new type.
 statement ok
 CREATE TABLE t17 (x STRING DEFAULT 'HELLO');
 

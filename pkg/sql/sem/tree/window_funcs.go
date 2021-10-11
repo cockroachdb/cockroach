@@ -682,7 +682,7 @@ func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, err
 func compareForWindow(evalCtx *EvalContext, left, right Datum) (int, error) {
 	if types.IsDateTimeType(left.ResolvedType()) && left.ResolvedType() != types.Interval {
 		// Datetime values (other than Intervals) are converted to timestamps for
-		// comparison. Note that the right side never needs to be casted.
+		// comparison. Note that the right side never needs to be cast.
 		ts, err := timeFromDatumForComparison(evalCtx, left)
 		if err != nil {
 			return 0, err

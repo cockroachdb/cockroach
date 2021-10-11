@@ -851,7 +851,7 @@ DROP TABLE a
 
 # Element append
 
-# Postgres also requires that the string be explicitly casted, so we're no worse
+# Postgres also requires that the string be explicitly cast, so we're no worse
 # for wear despite this being a little annoying.
 query T
 SELECT ARRAY['a','b','c'] || 'd'::text
@@ -1720,7 +1720,7 @@ END
 ----
 (2,{-23791})
 
-# Test that string literals can be implicitly casted to array types
+# Test that string literals can be implicitly cast to array types
 statement ok
 DROP TABLE t;
 CREATE TABLE t (
