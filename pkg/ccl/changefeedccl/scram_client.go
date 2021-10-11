@@ -19,7 +19,7 @@ import (
 var (
 	// sha256ClientGenerator returns a SCRAMClient for the
 	// SCRAM-SHA-256 SASL mechanism. This can used as a
-	// SCRAMCLientGeneratorFunc when constructing a sarama SASL
+	// SCRAMClientGeneratorFunc when constructing a sarama SASL
 	// configuration.
 	sha256ClientGenerator = func() sarama.SCRAMClient {
 		return &scramClient{HashGeneratorFcn: sha256.New}
@@ -27,7 +27,7 @@ var (
 
 	// sha512ClientGenerator returns a SCRAMClient for the
 	// SCRAM-SHA-512 SASL mechanism. This can used as a
-	// SCRAMCLientGeneratorFunc when constructing a sarama SASL
+	// SCRAMClientGeneratorFunc when constructing a sarama SASL
 	// configuration.
 	sha512ClientGenerator = func() sarama.SCRAMClient {
 		return &scramClient{HashGeneratorFcn: sha512.New}

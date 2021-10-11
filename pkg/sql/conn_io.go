@@ -77,7 +77,7 @@ const (
 // to be skipped. Batches correspond either to multiple queries received in a
 // single query string (when the SQL client sends a semicolon-separated list of
 // queries as part of the "simple" protocol), or to different commands pipelined
-// by the cliend, separated from "sync" messages.
+// by the client, separated from "sync" messages.
 //
 // push() can be called concurrently with CurCmd().
 //
