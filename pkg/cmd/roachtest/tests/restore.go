@@ -59,7 +59,7 @@ func NewHealthChecker(t test.Test, c cluster.Cluster, nodes option.NodeListOptio
 	}
 }
 
-// Done signals the HeatlthChecker's Runner to shut down.
+// Done signals the HealthChecker's Runner to shut down.
 func (hc *HealthChecker) Done() {
 	close(hc.doneCh)
 }
