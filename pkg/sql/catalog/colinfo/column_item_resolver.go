@@ -63,7 +63,7 @@ type ColumnItemResolver interface {
 
 // ColumnSourceMeta is an opaque reference passed through column item resolution.
 type ColumnSourceMeta interface {
-	// ColumnSourcMeta is the interface anchor.
+	// ColumnSourceMeta is the interface anchor.
 	ColumnSourceMeta()
 }
 

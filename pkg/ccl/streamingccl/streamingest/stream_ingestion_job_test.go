@@ -51,7 +51,7 @@ func TestTenantStreaming(t *testing.T) {
 	source, sourceDB, _ := serverutils.StartServer(t, args)
 	defer source.Stopper().Stop(ctx)
 
-	// Start tenant server in the srouce cluster.
+	// Start tenant server in the source cluster.
 	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
 	defer tenantConn.Close()
