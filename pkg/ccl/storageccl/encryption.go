@@ -162,7 +162,7 @@ func (e *encWriter) Close() error {
 	// Note: there may not be any plaintext left to seal if the chunk we just
 	// finished was the end of it, but sealing the (empty) remainder in a final
 	// chunk maintains the invariant that a chunked file always ends in a sealed
-	// chunk of less than chunk size, thus making tuncation, even along a chunk
+	// chunk of less than chunk size, thus making truncation, even along a chunk
 	// boundary, detectable.
 	err := e.flush()
 	return errors.CombineErrors(err, e.ciphertext.Close())

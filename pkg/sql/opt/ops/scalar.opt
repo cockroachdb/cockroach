@@ -631,7 +631,7 @@ define UnaryCbrt {
 }
 
 # Cast converts the input expression into an expression of the target type.
-# Note that the conversion may cause trunction based on the target types' width,
+# Note that the conversion may cause truncation based on the target types' width,
 # such as in this example:
 #
 #   'hello'::VARCHAR(2)
