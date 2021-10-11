@@ -32,7 +32,7 @@ import (
 // relations that involve modified rows; any row that is returned by these FK
 // check queries indicates a foreign key violation.
 //
-// -- Cacades --
+// -- Cascades --
 //
 // The foreign key cascades are "potential" future queries that perform
 // cascading mutations of child tables. These queries are constructed later as
