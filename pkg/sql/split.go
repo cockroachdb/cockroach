@@ -106,7 +106,7 @@ func getRowKey(
 	return key, nil
 }
 
-// parseExpriationTime parses an expression into a hlc.Timestamp representing
+// parseExpirationTime parses an expression into a hlc.Timestamp representing
 // the expiration time of the split.
 func parseExpirationTime(
 	evalCtx *tree.EvalContext, expireExpr tree.TypedExpr,
