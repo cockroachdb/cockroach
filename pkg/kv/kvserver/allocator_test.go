@@ -2203,7 +2203,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		{replicas(1, 3, 10), []roachpb.StoreID{5, 6, 7, 8}},
 		// This last case is a bit more interesting - the difference in range count
 		// between s10 an s9 is significant enough to motivate a rebalance if they
-		// were the only two valid options, but they're both considered underful
+		// were the only two valid options, but they're both considered underfull
 		// relative to the other equally valid placement options (s3 and s4), so
 		// the system doesn't consider it helpful to rebalance between them. It'd
 		// prefer to move replicas onto both s9 and s10 from other stores.
