@@ -753,7 +753,7 @@ func TestMain(m *testing.M) {
 //   * Test ParseDate()
 //   * Pick an example time input: 12:34:56
 //     * Derive a timestamp from date + time
-//     * Test ParseTimestame()
+//     * Test ParseTimestamp()
 //     * Test ParseDate()
 //     * Test ParseTime()
 //   * Test one-off timestamp formats

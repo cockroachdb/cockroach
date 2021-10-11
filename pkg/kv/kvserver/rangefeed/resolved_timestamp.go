@@ -61,7 +61,7 @@ import (
 // waiting for the intent resolution to result in a rangefeed publication.
 //
 // It follows that the closed timestamp mechanism is a necessary, but not
-// sufficient, solution to creating a resolved timstamp. The closed timestamp is
+// sufficient, solution to creating a resolved timestamp. The closed timestamp is
 // a necessary basis for the resolved timestamp because without it there could
 // never be any guarantee about new changes to a range. However, the closed
 // timestamp is not sufficient and could not replace the resolved timestamp

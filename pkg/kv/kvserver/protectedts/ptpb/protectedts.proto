@@ -28,7 +28,7 @@ import "util/hlc/timestamp.proto";
 // on the record one day.
 //
 // message ProtectedTimestamp {
-//     hlc.Timestamp timetamp
+//     hlc.Timestamp timestamp
 //     ProtectionMode mode
 //     repeated roachpb.Span spans
 // }

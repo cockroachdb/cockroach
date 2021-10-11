@@ -37,7 +37,7 @@ var AllSystemColumnDescs = []descpb.ColumnDescriptor{
 	TableOIDColumnDesc,
 }
 
-// MVCCTimestampColumnID is the ColumnID of the MVCC timesatmp column. Future
+// MVCCTimestampColumnID is the ColumnID of the MVCC timestamp column. Future
 // system columns will have ID's that decrement from this value.
 const MVCCTimestampColumnID = math.MaxUint32
 

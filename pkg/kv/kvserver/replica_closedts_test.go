@@ -448,7 +448,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 // 7. The lease acquisition gets rejected below Raft because the previous lease
 //    it asserts doesn't correspond to the lease that it applies under.
 // 8. The two writes from step 5 are proposed. The closed timestamp that they
-//    each carry has a lower bound of rep2.assignedClosedTimestmap. If this was
+//    each carry has a lower bound of rep2.assignedClosedTimestamp. If this was
 //    200, then the second one would violate the closed timestamp carried by the
 //    first one - the first one says that 200 is closed, but then the second
 //    tries to write at 100. Note that the first write is OK writing at 100 even
