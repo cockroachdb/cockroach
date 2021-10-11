@@ -98,7 +98,7 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 	fileNum := 1
 
 	// Process the file sinks in sorted order,
-	// so the output order is deteministic.
+	// so the output order is deterministic.
 	var sortedNames []string
 	for prefix := range c.Sinks.FileGroups {
 		sortedNames = append(sortedNames, prefix)

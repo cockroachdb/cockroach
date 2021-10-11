@@ -103,7 +103,7 @@ Wraps: (2) attached stack trace
 Wraps: (3) some error
 Error types: (1) *safedetails.withSafeDetails (2) *withstack.withStack (3) *errutil.leafError`
 
-	// Edit non-determinstic stack trace filenames from the message.
+	// Edit non-deterministic stack trace filenames from the message.
 	actSafeRedactedMessage := fileref.ReplaceAllString(
 		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN")
 

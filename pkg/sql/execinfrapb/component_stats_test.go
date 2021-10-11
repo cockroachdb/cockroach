@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 )
 
-func TestComponentStatsMakeDeterminstic(t *testing.T) {
+func TestComponentStatsMakeDeterministic(t *testing.T) {
 	testCases := []struct {
 		stats    ComponentStats
 		expected string

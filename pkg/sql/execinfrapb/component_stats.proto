@@ -77,7 +77,7 @@ message ComponentStats {
   optional FlowStats flow_stats = 8 [(gogoproto.nullable) = false];
 
   // WARNING! If any new fields are added, corresponding code must be added in
-  // Union() and possibly MakeDeterminstic().
+  // Union() and possibly MakeDeterministic().
 }
 
 // InputStats contains statistics about the rows received as an input to a
