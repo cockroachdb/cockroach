@@ -145,7 +145,7 @@ This manual procedure could be further automated to prevent restarting the nodes
 
 ## Detailed design
 
-How: new CLI flag, populates `server.Config`, used in hearbeat checks.
+How: new CLI flag, populates `server.Config`, used in heartbeat checks.
 
 Optionally picked up by the `Nodes()` status RPC and `crdb_internal.gossip_nodes`.
 
