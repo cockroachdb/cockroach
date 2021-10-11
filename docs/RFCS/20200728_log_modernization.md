@@ -545,7 +545,7 @@ The following sinks are supported:
   - `max-group-size`: approximate max combined size of all files
     generated for the channel before old files are automatically
     deleted. Can be set to zero to disable removal of old files.
-  - `sync-writes`: disable buffering and synchronzie writes. This flag
+  - `sync-writes`: disable buffering and synchronize writes. This flag
     is useful to define audit logs but can incur a performance overhead
 	and higher disk IOPS consumption.
 
