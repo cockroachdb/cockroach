@@ -92,7 +92,7 @@ enum ScanLockingStrength {
   // UPDATE that does not acquire a FOR UPDATE lock.
   //
   // The locking mode was introduced into Postgres as an alternative to FOR
-  // UDPATE to improve concurrency between foreign key validation scans, which
+  // UPDATE to improve concurrency between foreign key validation scans, which
   // acquire FOR KEY SHARE locks, and UPDATEs to existing rows, which acquire
   // FOR NO KEY UPDATE locks.
   //
