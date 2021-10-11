@@ -42,7 +42,7 @@ type cachedProtectedTimestampState struct {
 }
 
 // clearIfNotNewer clears the state in ts if it is not newer than the passed
-// value. This is used in conjunction with Replica.maybedUpdateCachedProtectedTS().
+// value. This is used in conjunction with Replica.maybeUpdateCachedProtectedTS().
 // This optimization allows most interactions with protected timestamps to
 // operate using a shared lock. Only in cases where the cached value is known to
 // be older will the update be attempted.
