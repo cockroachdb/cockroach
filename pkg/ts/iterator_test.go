@@ -711,7 +711,7 @@ func TestDownsampleSpans(t *testing.T) {
 				}},
 			},
 		},
-		// AVG downsamper. Should re-use original span data.
+		// AVG downsampler. Should re-use original span data.
 		{
 			inputDesc: []dataDesc{
 				{0, 10, []tspb.TimeSeriesDatapoint{
@@ -740,7 +740,7 @@ func TestDownsampleSpans(t *testing.T) {
 				}},
 			},
 		},
-		// MAX downsamper. Should re-use original span data; note that the sum and
+		// MAX downsampler. Should re-use original span data; note that the sum and
 		// count values are NOT overwritten.
 		{
 			inputDesc: []dataDesc{
@@ -770,7 +770,7 @@ func TestDownsampleSpans(t *testing.T) {
 				}},
 			},
 		},
-		// MIN downsamper. Should re-use original span data; note that the sum and
+		// MIN downsampler. Should re-use original span data; note that the sum and
 		// count values are NOT overwritten.
 		{
 			inputDesc: []dataDesc{
