@@ -876,7 +876,7 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`at least one of LIST or RANGE partitioning must be used`,
 			// Verify that validatePartitioning is hooked up. The rest of these
-			// tests are in TestValidatePartitionion.
+			// tests are in TestValidatePartitioning.
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
