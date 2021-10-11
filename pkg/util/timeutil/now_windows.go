@@ -29,7 +29,7 @@ func init() {
 // (~2000x) and requires Windows 8+.
 //
 // TODO(tamird): consider removing this in go1.9. go1.9 is expected to add
-// monotonic clock support to values retured from time.Now, which this
+// monotonic clock support to values returned from time.Now, which this
 // implementation will not support. The monotonic clock support may also
 // obviate the need for this, since we only need the higher precision when
 // subtracting `time.Time`s.
