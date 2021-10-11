@@ -250,3 +250,70 @@ WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
 ----
 batch flow coordinator  DelRange /Table/57/1/5 - /Table/57/1/5/#
 dist sender send        r43: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX (y)
+)
+
+# Ensure that we can use a hint to avoid a full table scan.
+
+# Without the hint, we plan a full table scan.
+query T
+EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (z)
+│ estimated row count: 990 (missing stats)
+│
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
+    │
+    └── • filter
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ filter: ((y > 0) AND (y < 1000)) OR ((y > 2000) AND (y < 3000))
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@primary
+              spans: FULL SCAN
+
+# With the hint, we use a constrained scan.
+query T
+EXPLAIN (VERBOSE) DELETE FROM xyz@{NO_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (z)
+│ estimated row count: 990 (missing stats)
+│
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@primary
+        │ key columns: x
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@xyz_y_idx
+              spans: /1-/1000 /2001-/3000

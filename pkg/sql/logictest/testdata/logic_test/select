@@ -728,11 +728,31 @@ statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
-CREATE TABLE t_disallow_scans(a INT, b INT, INDEX b_idx(b));
+CREATE TABLE t_disallow_scans(a INT, b INT, INDEX b_idx(b), INDEX b_partial(b) WHERE a > 0);
 
 statement ok
 SELECT * FROM t_disallow_scans
 
+# First disable full scans with a hint.
+statement error pq: could not produce a query plan conforming to the NO_FULL_SCAN hint
+SELECT * FROM t_disallow_scans@{NO_FULL_SCAN}
+
+statement error pq: could not produce a query plan conforming to the NO_FULL_SCAN hint
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,NO_FULL_SCAN}
+
+statement error pq: could not produce a query plan conforming to the NO_FULL_SCAN hint
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{NO_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,NO_FULL_SCAN} WHERE b > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE a > 0 AND b = 1
+
+# Now disable full scans with the session variable.
 statement ok
 SET disallow_full_table_scans = true;
 
@@ -740,8 +760,12 @@ SET disallow_full_table_scans = true;
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
+
+# Full scans of partial indexes are allowed.
+statement ok
+SELECT * FROM t_disallow_scans@b_partial WHERE a > 0
 
 # Disable 'large_full_scan_rows' heuristic and inject the stats in order to
 # test 'disallow_full_table_scans' in isolation.
@@ -776,7 +800,7 @@ ALTER TABLE t_disallow_scans INJECT STATISTICS '[
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Internal statements should still be allowed with this setting.
@@ -804,7 +828,7 @@ SET large_full_scan_rows = 2
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: query `SELECT \* FROM t_disallow_scans@b_idx` contains a full table/index scan which is explicitly disallowed
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Cleanup
