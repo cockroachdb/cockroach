@@ -525,7 +525,7 @@ type rangeVisitor interface {
 	// As soon as the range is not covered by it, visitNewZone() is called again.
 	// The idea is that visitors can maintain state about that zone that applies
 	// to multiple ranges, and so visitSameZone() allows them to efficiently reuse
-	// that state (in particular, not unmarshall ZoneConfigs again).
+	// that state (in particular, not unmarshal ZoneConfigs again).
 	visitNewZone(context.Context, *roachpb.RangeDescriptor) error
 	visitSameZone(context.Context, *roachpb.RangeDescriptor)
 
