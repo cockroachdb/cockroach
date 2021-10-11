@@ -65,44 +65,44 @@ func checkArrayContainsScalar(ary jsonArray, s JSON) (bool, error) {
 	return false, nil
 }
 
-// containsable is an interface used internally for the implementation of @>.
-type containsable interface {
-	contains(other containsable) (bool, error)
+// containable is an interface used internally for the implementation of @>.
+type containable interface {
+	contains(other containable) (bool, error)
 }
 
-// containsableScalar is a preprocessed JSON scalar. The JSON it holds will
+// containableScalar is a preprocessed JSON scalar. The JSON it holds will
 // never be a JSON object or a JSON array.
-type containsableScalar struct{ JSON }
+type containableScalar struct{ JSON }
 
-// containsableArray is a preprocessed JSON array.
+// containableArray is a preprocessed JSON array.
 // * scalars will always be scalars and will always be sorted,
-// * arrays will only contain containsableArrays,
-// * objects will only contain containsableObjects
+// * arrays will only contain containableArrays,
+// * objects will only contain containableObjects
 // (the last two are stored interfaces for reuse, though)
-type containsableArray struct {
-	scalars []containsableScalar
-	arrays  []containsable
-	objects []containsable
+type containableArray struct {
+	scalars []containableScalar
+	arrays  []containable
+	objects []containable
 }
 
-type containsableKeyValuePair struct {
+type containableKeyValuePair struct {
 	k jsonString
-	v containsable
+	v containable
 }
 
-// containsableObject is a preprocessed JSON object.
+// containableObject is a preprocessed JSON object.
 // Same as a jsonObject, it is stored as a sorted-by-key list of key-value
 // pairs.
-type containsableObject []containsableKeyValuePair
+type containableObject []containableKeyValuePair
 
-func (j jsonNull) preprocessForContains() (containsable, error)   { return containsableScalar{j}, nil }
-func (j jsonFalse) preprocessForContains() (containsable, error)  { return containsableScalar{j}, nil }
-func (j jsonTrue) preprocessForContains() (containsable, error)   { return containsableScalar{j}, nil }
-func (j jsonNumber) preprocessForContains() (containsable, error) { return containsableScalar{j}, nil }
-func (j jsonString) preprocessForContains() (containsable, error) { return containsableScalar{j}, nil }
+func (j jsonNull) preprocessForContains() (containable, error)   { return containableScalar{j}, nil }
+func (j jsonFalse) preprocessForContains() (containable, error)  { return containableScalar{j}, nil }
+func (j jsonTrue) preprocessForContains() (containable, error)   { return containableScalar{j}, nil }
+func (j jsonNumber) preprocessForContains() (containable, error) { return containableScalar{j}, nil }
+func (j jsonString) preprocessForContains() (containable, error) { return containableScalar{j}, nil }
 
-func (j jsonArray) preprocessForContains() (containsable, error) {
-	result := containsableArray{}
+func (j jsonArray) preprocessForContains() (containable, error) {
+	result := containableArray{}
 	for _, e := range j {
 		switch e.Type() {
 		case ArrayJSONType:
@@ -122,7 +122,7 @@ func (j jsonArray) preprocessForContains() (containsable, error) {
 			if err != nil {
 				return nil, err
 			}
-			result.scalars = append(result.scalars, preprocessed.(containsableScalar))
+			result.scalars = append(result.scalars, preprocessed.(containableScalar))
 		}
 	}
 
@@ -143,8 +143,8 @@ func (j jsonArray) preprocessForContains() (containsable, error) {
 	return result, nil
 }
 
-func (j jsonObject) preprocessForContains() (containsable, error) {
-	preprocessed := make(containsableObject, len(j))
+func (j jsonObject) preprocessForContains() (containable, error) {
+	preprocessed := make(containableObject, len(j))
 
 	for i := range preprocessed {
 		preprocessed[i].k = j[i].k
@@ -158,8 +158,8 @@ func (j jsonObject) preprocessForContains() (containsable, error) {
 	return preprocessed, nil
 }
 
-func (j containsableScalar) contains(other containsable) (bool, error) {
-	if o, ok := other.(containsableScalar); ok {
+func (j containableScalar) contains(other containable) (bool, error) {
+	if o, ok := other.(containableScalar); ok {
 		result, err := j.JSON.Compare(o.JSON)
 		if err != nil {
 			return false, err
@@ -169,8 +169,8 @@ func (j containsableScalar) contains(other containsable) (bool, error) {
 	return false, nil
 }
 
-func (j containsableArray) contains(other containsable) (bool, error) {
-	if contained, ok := other.(containsableArray); ok {
+func (j containableArray) contains(other containable) (bool, error) {
+	if contained, ok := other.(containableArray); ok {
 		// Since both slices of scalars are sorted via the preprocessing, we can
 		// step through them together via binary search.
 		remainingScalars := j.scalars[:]
@@ -224,7 +224,7 @@ func (j containsableArray) contains(other containsable) (bool, error) {
 // quadraticJSONArrayContains does an O(n^2) check to see if every value in
 // `other` is contained within a value in `container`. `container` and `other`
 // should not contain scalars.
-func quadraticJSONArrayContains(container, other []containsable) (bool, error) {
+func quadraticJSONArrayContains(container, other []containable) (bool, error) {
 	for _, otherVal := range other {
 		found := false
 		for _, containerVal := range container {
@@ -244,8 +244,8 @@ func quadraticJSONArrayContains(container, other []containsable) (bool, error) {
 	return true, nil
 }
 
-func (j containsableObject) contains(other containsable) (bool, error) {
-	if contained, ok := other.(containsableObject); ok {
+func (j containableObject) contains(other containable) (bool, error) {
+	if contained, ok := other.(containableObject); ok {
 		// We can iterate through the keys of `other` and scan through to find the
 		// corresponding keys in `j` since they're both sorted.
 		objIdx := 0

@@ -799,7 +799,7 @@ func (j *jsonEncoded) HasContainerLeaf() (bool, error) {
 }
 
 // preprocessForContains implements the JSON interface.
-func (j *jsonEncoded) preprocessForContains() (containsable, error) {
+func (j *jsonEncoded) preprocessForContains() (containable, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.preprocessForContains()
 	}

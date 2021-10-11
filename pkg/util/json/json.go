@@ -201,7 +201,7 @@ type JSON interface {
 
 	// preprocessForContains converts a JSON document to an internal interface
 	// which is used to efficiently implement the @> operator.
-	preprocessForContains() (containsable, error)
+	preprocessForContains() (containable, error)
 
 	// encode appends the encoding of the JSON document to appendTo, returning
 	// the result alongside the JEntry for the document. Note that some values
