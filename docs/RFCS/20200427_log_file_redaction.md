@@ -542,7 +542,7 @@ The following areas in CockroachDB need to be worked on soon
 after the basic infrastructure is in place:
 
 - Pebble and RocksDB logging: this code is interfacing with the rest
-  of CockroachDB via Go's basic `log` interaace and pre-formats log
+  of CockroachDB via Go's basic `log` interface and pre-formats log
   entries, so that CockroachDB's `log` package considers all
   Pebble/RocksDB log entries as "unsafe"; for example:
 
