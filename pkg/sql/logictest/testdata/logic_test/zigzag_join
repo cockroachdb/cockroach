@@ -274,3 +274,11 @@ query I
 SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
 ----
 1
+
+# Regression test for mistakenly attempting to fetch columns not needed by ON
+# expr that are not in the index (#71271).
+statement ok
+CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
+
+statement ok
+SELECT d FROM t71271 WHERE c = 3 AND d = 4

@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for first_value.eg.go, last_value.eg.go,
 // and nth_value.eg.go. It's formatted in a special way, so it's both valid Go

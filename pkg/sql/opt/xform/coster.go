@@ -67,7 +67,8 @@ type Coster interface {
 // and index statistics that are propagated throughout the logical expression
 // tree.
 type coster struct {
-	mem *memo.Memo
+	evalCtx *tree.EvalContext
+	mem     *memo.Memo
 
 	// locality gives the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -442,6 +443,7 @@ func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation fl
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*c = coster{
+		evalCtx:      evalCtx,
 		mem:          mem,
 		locality:     evalCtx.Locality,
 		perturbation: perturbation,
@@ -636,15 +638,35 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 }
 
 func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
-	// Scanning an index with a few columns is faster than scanning an index with
-	// many columns. Ideally, we would want to use statistics about the size of
-	// each column. In lieu of that, use the number of columns.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index || scan.Flags.ForceZigzag {
 		// If we are forcing an index, any other index has a very high cost. In
 		// practice, this will only happen when this is a primary index scan.
 		return hugeCost
 	}
-	rowCount := scan.Relational().Stats.RowCount
+
+	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
+	if scan.Flags.NoFullScan {
+		// Normally a full scan of a partial index would be allowed with the
+		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
+		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
+		// disallow the full index scan.
+		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(c.mem.Metadata())) {
+			return hugeCost
+		}
+	}
+
+	stats := scan.Relational().Stats
+	rowCount := stats.RowCount
+	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
+		isLarge := !stats.Available || rowCount > c.evalCtx.SessionData().LargeFullScanRows
+		if isLarge {
+			return hugeCost
+		}
+	}
+
+	// Scanning an index with a few columns is faster than scanning an index with
+	// many columns. Ideally, we would want to use statistics about the size of
+	// each column. In lieu of that, use the number of columns.
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
 	numSpans := 1
@@ -675,7 +697,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// Add a penalty to full table scans. All else being equal, we prefer a
 	// constrained scan. Adding a few rows worth of cost helps prevent surprising
 	// plans for very small tables.
-	if scan.IsUnfiltered(c.mem.Metadata()) {
+	if isUnfiltered {
 		rowCount += fullScanRowCountPenalty
 
 		// For tables with multiple partitions, add the cost of visiting each

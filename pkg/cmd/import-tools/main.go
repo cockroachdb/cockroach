@@ -11,6 +11,7 @@
 // import-tools adds a blank import to tools we use such that `go mod tidy`
 // doesn't clean up needed dependencies when running `go install`.
 
+//go:build tools
 // +build tools
 
 package main

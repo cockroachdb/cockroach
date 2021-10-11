@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build fast_int_set_small || fast_int_set_large
 // +build fast_int_set_small fast_int_set_large
 
 // This file implements two variants of FastIntSet used for testing which always

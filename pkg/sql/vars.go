@@ -1709,6 +1709,24 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(txnRowsReadErr.Get(sv), 10)
 		},
 	},
+
+	// CockroachDB extension. Allows for testing of transaction retry logic
+	// using the cockroach_restart savepoint.
+	`inject_retry_errors_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`retry_errors_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("inject_retry_errors_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetInjectRetryErrorsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().InjectRetryErrorsEnabled)
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

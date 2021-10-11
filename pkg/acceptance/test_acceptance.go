@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build acceptance
 // +build acceptance
 
 // Acceptance tests are comparatively slow to run, so we use the above build

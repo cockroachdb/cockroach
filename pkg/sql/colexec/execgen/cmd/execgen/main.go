@@ -146,6 +146,7 @@ func (g *execgenTool) generate(path string, entry entry) error {
 	b = emptyCommentRegex.ReplaceAll(b, []byte{})
 	b = emptyBlockCommentRegex.ReplaceAll(b, []byte{})
 	// Delete execgen_template build tag.
+	b = bytes.ReplaceAll(b, []byte("//go:build execgen_template"), []byte{})
 	b = bytes.ReplaceAll(b, []byte("// +build execgen_template"), []byte{})
 
 	if g.fmtSources {

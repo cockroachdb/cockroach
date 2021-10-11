@@ -2968,6 +2968,10 @@ func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
 	m.data.LargeFullScanRows = val
 }
 
+func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
+	m.data.InjectRetryErrorsEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

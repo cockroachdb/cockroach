@@ -1075,6 +1075,20 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
+	if res.Err() == nil {
+		// numTxnRetryErrors is the number of times an error will be injected if
+		// the transaction is retried using SAVEPOINTs.
+		const numTxnRetryErrors = 3
+		if ex.sessionData().InjectRetryErrorsEnabled && stmt.AST.StatementTag() != "SET" {
+			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+				retryErr := planner.Txn().GenerateForcedRetryableError(
+					ctx, "injected by `inject_retry_errors_enabled` session variable")
+				res.SetError(retryErr)
+			} else {
+				ex.state.lastEpoch = planner.Txn().Epoch()
+			}
+		}
+	}
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 

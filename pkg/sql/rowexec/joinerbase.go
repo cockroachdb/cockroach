@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -214,4 +215,15 @@ func (jb *joinerBase) renderForOutput(lrow, rrow rowenc.EncDatumRow) rowenc.EncD
 		return lrow
 	}
 	return jb.combine(lrow, rrow)
+}
+
+// addColumnsNeededByOnExpr updates neededCols to include all IndexedVars from
+// onCond that are used and that have ordinals in [startIdx, endIdx) range.
+// Notably, every added needed column ordinal is shifted down by startIdx.
+func (jb *joinerBase) addColumnsNeededByOnExpr(neededCols *util.FastIntSet, startIdx, endIdx int) {
+	for _, v := range jb.onCond.Vars.GetIndexedVars() {
+		if v.Used && v.Idx >= startIdx && v.Idx < endIdx {
+			neededCols.Add(v.Idx - startIdx)
+		}
+	}
 }
