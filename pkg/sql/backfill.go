@@ -160,7 +160,7 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor)
 
 // HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
 // passes the fn the exported InternalExecutor instead of the whole unexported
-// extendedEvalContenxt, so it can be implemented outside pkg/sql.
+// extendedEvalContext, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
 
 // makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
