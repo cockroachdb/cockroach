@@ -586,7 +586,7 @@ func (tc *TxnCoordSender) Send(
 // of the gateway they use. This ensures that all causally dependent
 // transactions commit with higher timestamps, even if their read and writes
 // sets do not conflict with the original transaction's. This obviates the
-// need for uncertainty intervals and prevents the "causal reverse" anamoly
+// need for uncertainty intervals and prevents the "causal reverse" anomaly
 // which can be observed by a third, concurrent transaction.
 //
 // For more, see https://www.cockroachlabs.com/blog/consistency-model/ and

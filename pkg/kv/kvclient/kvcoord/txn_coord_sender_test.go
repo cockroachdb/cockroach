@@ -1254,7 +1254,7 @@ func TestTxnCommitWait(t *testing.T) {
 		// gateway they use. This ensures that all causally dependent
 		// transactions commit with higher timestamps, even if their read and
 		// writes sets do not conflict with the original transaction's. This, in
-		// turn, prevents the "causal reverse" anamoly which can be observed by
+		// turn, prevents the "causal reverse" anomaly which can be observed by
 		// a third, concurrent transaction. See the following blog post for
 		// more: https://www.cockroachlabs.com/blog/consistency-model/.
 		maxClockOffset := s.Clock.MaxOffset()
