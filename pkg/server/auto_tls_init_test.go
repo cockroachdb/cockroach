@@ -298,7 +298,7 @@ func TestRotationOnUninitializedNode(t *testing.T) {
 
 }
 
-func TestRotationOnIntializedNode(t *testing.T) {
+func TestRotationOnInitializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
@@ -339,7 +339,7 @@ func TestRotationOnIntializedNode(t *testing.T) {
 	compareBundleServiceCerts(t, certBundle, diskBundle, false)
 }
 
-func TestRotationOnPartialIntializedNode(t *testing.T) {
+func TestRotationOnPartialInitializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
@@ -402,8 +402,8 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 		diskBundle.AdminUIService.HostKey, "AdminUIService host key")
 }
 
-// TestRotationOnBrokenIntializedNode in the partially provisioned case (remove the Client and UI CAs).
-func TestRotationOnBrokenIntializedNode(t *testing.T) {
+// TestRotationOnBrokenInitializedNode in the partially provisioned case (remove the Client and UI CAs).
+func TestRotationOnBrokenInitializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
