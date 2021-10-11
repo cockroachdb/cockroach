@@ -22,7 +22,7 @@ groups:
     expr: node:capacity_available{job="cockroachdb"} / node:capacity{job="cockroachdb"}
   - record: cluster:capacity_available:ratio
     expr: cluster:capacity_available{job="cockroachdb"} / cluster:capacity{job="cockroachdb"}
-  # Histogram rules: these are fairly expensive to compute live, so we precompute a few percetiles.
+  # Histogram rules: these are fairly expensive to compute live, so we precompute a few percentiles.
   - record: txn_durations_bucket:rate1m
     expr: rate(txn_durations_bucket{job="cockroachdb"}[1m])
   - record: txn_durations:rate1m:quantile_50
