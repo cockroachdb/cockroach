@@ -76,7 +76,7 @@ func (b *buildContext) dropSchemaDesc(
 			if err != nil {
 				panic(err)
 			}
-			b.dropTypeDesc(ctx, typeDesc, behavior, true /* ignoreAlises*/)
+			b.dropTypeDesc(ctx, typeDesc, behavior, true /* ignoreAliases*/)
 		} else {
 			panic(err)
 		}
