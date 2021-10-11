@@ -130,7 +130,7 @@ There are two scenarios of interest:
 The design as proposed makes the cluster name consistent across all nodes.
 
 Once the cluster name has been set to a new value, it becomes harder to change it.
-The RFC as-is enables the following procedure to change the cluter name:
+The RFC as-is enables the following procedure to change the cluster name:
 
 1. restart all nodes in rolling fashion, adding the parameter
    `--disable-cluster-name-verification` and changing `--cluster-name` to the new value.
