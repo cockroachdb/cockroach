@@ -239,7 +239,7 @@ scan. If we need to reduce this number later we can add a new setting just for `
 
 One issue that is not discussed in detail in the Postgres documentation is the order in which
 locks are acquired. Acquiring locks in a consistent order is an important tool to prevent deadlocks
-from occuring. For the CockroachDB implementation of `FOR UPDATE`, we will not implement the feature
+from occurring. For the CockroachDB implementation of `FOR UPDATE`, we will not implement the feature
 in DistSQL at this time (DistSQL does not currently support writes), so our implementation
 will most likely produce a consistent ordering of write intents (we currently have no evidence
 to the contrary). It is difficult to guarantee a particular ordering, however, since the implementation
