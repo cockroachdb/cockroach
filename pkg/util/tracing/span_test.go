@@ -241,7 +241,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 		Payload: anyPayload,
 	}
 
-	numStructuredRecordings := maxStructuredBytesPerSpan / structuredRecord.Size()
+	numStructuredRecordings := maxStructuredBytesPerSpan / structuredRecord.MemorySize()
 	const extra = 10
 	for i := 1; i <= numStructuredRecordings+extra; i++ {
 		sp.RecordStructured(payload(i))
@@ -286,7 +286,7 @@ func TestSpanRecordLimit(t *testing.T) {
 
 	// Determine the size of a log record by actually recording once.
 	sp.Recordf("%s", msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].Size()
+	logSize := sp.GetRecording()[0].Logs[0].MemorySize()
 	sp.ResetRecording()
 
 	numLogs := maxLogBytesPerSpan / logSize
@@ -383,7 +383,7 @@ func TestSpanReset(t *testing.T) {
 
 	msg := func(i int) string { return fmt.Sprintf("msg: %010d", i) }
 	sp.Record(msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].Size()
+	logSize := sp.GetRecording()[0].Logs[0].MemorySize()
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
 
