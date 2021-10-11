@@ -53,7 +53,7 @@ var errReadOlderVersion = errors.New("read older descriptor version from store")
 // LeaseDuration controls the duration of sql descriptor leases.
 var LeaseDuration = settings.RegisterDurationSetting(
 	"sql.catalog.descriptor_lease_duration",
-	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	"mean duration of sql descriptor leases, this actual duration is jittered",
 	base.DefaultDescriptorLeaseDuration)
 
 func between0and1inclusive(f float64) error {
@@ -66,7 +66,7 @@ func between0and1inclusive(f float64) error {
 // LeaseJitterFraction controls the percent jitter around sql lease durations
 var LeaseJitterFraction = settings.RegisterFloatSetting(
 	"sql.catalog.descriptor_lease_jitter_fraction",
-	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	"mean duration of sql descriptor leases, this actual duration is jittered",
 	base.DefaultDescriptorLeaseJitterFraction,
 	between0and1inclusive)
 

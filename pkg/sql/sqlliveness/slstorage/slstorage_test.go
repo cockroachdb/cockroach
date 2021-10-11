@@ -272,7 +272,7 @@ func TestStorage(t *testing.T) {
 		}
 	})
 	t.Run("test-jitter", func(t *testing.T) {
-		// We want to test that the GC runs a number of times but is jitterred.
+		// We want to test that the GC runs a number of times but is jittered.
 		_, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
 		storage.Start(ctx)
