@@ -53,7 +53,7 @@ func (tc *Collection) GetMutableDescriptorByIDWithFlags(
 	return desc.(catalog.MutableDescriptor), nil
 }
 
-// GetImmutableDescriptorByID returns an immmutable implementation of the
+// GetImmutableDescriptorByID returns an immutable implementation of the
 // descriptor with the requested id. An error is returned if no descriptor exists.
 // Deprecated in favor of GetMutableDescriptorByIDWithFlags.
 func (tc *Collection) GetImmutableDescriptorByID(
