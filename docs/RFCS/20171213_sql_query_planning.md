@@ -272,7 +272,7 @@ SELECT * FROM
 ### Stats
 
 Table statistics power both the cost model and the search of alternate
-query plans. A simple example of where stastistics guide the search of
+query plans. A simple example of where statistics guide the search of
 alternate query plans is in join ordering:
 
 ```sql
