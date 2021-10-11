@@ -12711,7 +12711,7 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 // transfer or change to the gc threshold). This test works to exercise the
 // invariant that when a proposal has been reproposed at different MaxLeaseIndex
 // values are not additionally reproposed or acknowledged after applying
-// locally. The test verfies this condition by asserting that the
+// locally. The test verifies this condition by asserting that the
 // span used to trace the execution of the proposal is not used after the
 // proposal has been finished as it would be if the proposal were reproposed
 // after applying locally.
