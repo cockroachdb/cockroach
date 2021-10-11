@@ -147,7 +147,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	  xor_agg(fnv64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.GetID())
-	// If were'in in an AOST context, propagate it to the inner statement so that
+	// If we're in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outer one.
 	if params.p.EvalContext().AsOfSystemTime != nil {
