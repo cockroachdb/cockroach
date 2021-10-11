@@ -1557,7 +1557,7 @@ func ValidateInvertedIndexes(
 
 	for i, idx := range indexes {
 		// Shadow i and idx to prevent the values from changing within each
-		// gorountine.
+		// goroutine.
 		i, idx := i, idx
 		countReady[i] = make(chan struct{})
 
@@ -1719,7 +1719,7 @@ func ValidateForwardIndexes(
 
 	// Compute the size of each index.
 	for _, idx := range indexes {
-		// Shadow idx to prevent its value from changing within each gorountine.
+		// Shadow idx to prevent its value from changing within each goroutine.
 		idx := idx
 
 		grp.GoCtx(func(ctx context.Context) error {
