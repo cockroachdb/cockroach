@@ -558,7 +558,7 @@ var useDefaultBuiltin *customFunc
 
 // Given that imports can be retried and resumed, we want to
 // ensure that the default functions return the same value given
-// the same arguments, even on retries. Therfore we decide to support
+// the same arguments, even on retries. Therefore we decide to support
 // only a limited subset of non-immutable functions, which are
 // all listed here.
 var supportedImportFuncOverrides = map[string]*customFunc{
