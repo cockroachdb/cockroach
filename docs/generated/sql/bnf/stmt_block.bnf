@@ -646,8 +646,9 @@ show_constraints_stmt ::=
 
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
-	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
 	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
+	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
+	| 'SHOW' 'CREATE' 'ALL' 'TYPES'
 
 show_create_schedules_stmt ::=
 	'SHOW' 'CREATE' 'ALL' 'SCHEDULES'
