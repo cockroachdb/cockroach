@@ -582,7 +582,7 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return sum
 }
 
-// collectReadSummaryFromTimestampCache constucts a read summary for the range
+// collectReadSummaryFromTimestampCache constructs a read summary for the range
 // with the specified descriptor using the timestamp cache.
 func collectReadSummaryFromTimestampCache(
 	tc tscache.Cache, desc *roachpb.RangeDescriptor,
