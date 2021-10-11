@@ -607,8 +607,8 @@ func (t *Tracer) startSpanGeneric(
 		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
-	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
-	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
+	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
+	helper.crdbSpan.mu.recording.structured = makeSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
 	helper.crdbSpan.mu.tags = helper.tagsAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
