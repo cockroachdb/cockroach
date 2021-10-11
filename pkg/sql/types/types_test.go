@@ -531,7 +531,7 @@ func TestTypes(t *testing.T) {
 			}
 
 			// Roundtrip type by marshaling, then unmarshaling. Only do this for non-
-			// nested array types (since we don't yet support marshaling/ummarshaling
+			// nested array types (since we don't yet support marshaling/unmarshaling
 			// nested arrays).
 			if tc.actual.Family() == ArrayFamily && tc.actual.ArrayContents().Family() == ArrayFamily {
 				return
