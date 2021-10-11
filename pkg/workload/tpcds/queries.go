@@ -3987,7 +3987,7 @@ LIMIT
 
 	query44 = `
 SELECT
-	asceding.rnk,
+	ascending.rnk,
 	i1.i_product_name AS best_performing,
 	i2.i_product_name AS worst_performing
 FROM
@@ -4036,7 +4036,7 @@ FROM
 		WHERE
 			rnk < 11
 	)
-		AS asceding,
+		AS ascending,
 	(
 		SELECT
 			*
@@ -4086,11 +4086,11 @@ FROM
 	item AS i1,
 	item AS i2
 WHERE
-	asceding.rnk = descending.rnk
-	AND i1.i_item_sk = asceding.item_sk
+	ascending.rnk = descending.rnk
+	AND i1.i_item_sk = ascending.item_sk
 	AND i2.i_item_sk = descending.item_sk
 ORDER BY
-	asceding.rnk
+	ascending.rnk
 LIMIT
 	100;
 `
