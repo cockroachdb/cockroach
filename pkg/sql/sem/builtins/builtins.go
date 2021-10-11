@@ -1748,7 +1748,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
 			},
 			types.Bool,
-			"Matches case insensetively `unescaped` with `pattern` using `escape` as an escape token.",
+			"Matches case insensitively `unescaped` with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1764,7 +1764,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches case insensetively with `pattern` using `escape` as an escape token.",
+			"Checks whether `unescaped` not matches case insensitively with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
