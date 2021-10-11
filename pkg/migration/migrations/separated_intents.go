@@ -477,7 +477,7 @@ func runSeparatedIntentsMigration(
 		if p := job.Progress().Details; p != nil {
 			if prog := p.(*jobspb.Progress_Migration); prog != nil && len(prog.Migration.Watermark) > 0 {
 				startFrom = prog.Migration.Watermark
-				log.Infof(ctx, "resuming separated intent migraiton from persisted progress position %s", startFrom)
+				log.Infof(ctx, "resuming separated intent migration from persisted progress position %s", startFrom)
 			}
 		}
 	}
