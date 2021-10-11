@@ -678,7 +678,7 @@ specifically defined to be *schema names*.  Also they are very much
 defined to designate *virtual schemas* that *must exist in every
 catalog*.
 
-The working intution is that the virtual tables in the virtual schemas
+The working intuition is that the virtual tables in the virtual schemas
 only contain rows pertaining to the catalog in which they are
 (virtually) contained:
 
