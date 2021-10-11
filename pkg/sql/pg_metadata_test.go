@@ -1601,7 +1601,7 @@ func validateUndefinedTablesField(t *testing.T) {
 	assertProperty(t, property, virtualSchemaType)
 }
 
-// validateTableDefsField checkes the definition of virtualSchema that
+// validateTableDefsField checks the definition of virtualSchema that
 // have a tableDefs field which can be rewritten by this code.
 func validateTableDefsField(t *testing.T) {
 	propertyIndex := strings.IndexRune(tableDefsDeclaration, ':')
