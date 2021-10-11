@@ -207,7 +207,10 @@ message LocalOnlySessionData {
   // transaction to return a transaction retry error. It is intended for
   // developers to test their app's retry logic.
   bool inject_retry_errors_enabled = 54;
-
+  // NullOrderedLast controls whether NULL is ordered last. We default to
+  // NULLS FIRST for ascending order by default, whereas postgres defaults
+  // to NULLS LAST.
+  bool null_ordered_last = 55;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
