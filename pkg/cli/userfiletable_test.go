@@ -47,7 +47,7 @@ func Example_userfile_upload() {
 	c.Run(fmt.Sprintf("userfile upload %s /test/../../file1.csv", file))
 	c.Run(fmt.Sprintf("userfile upload %s /test/./file1.csv", file))
 	c.Run(fmt.Sprintf("userfile upload %s test/file1.csv", file))
-	c.Run("userfile upload notexist.csv /test/file1.csv")
+	c.Run("userfile upload nonexistent.csv /test/file1.csv")
 	c.Run(fmt.Sprintf("userfile upload %s /test/À.csv", file))
 	// Test fully qualified URI specifying db.schema.tablename_prefix.
 	c.Run(fmt.Sprintf("userfile upload %s userfile://defaultdb.public.foo/test/file1.csv", file))
@@ -71,8 +71,8 @@ func Example_userfile_upload() {
 	// ERROR: path /test/./file1.csv changes after normalization to /test/file1.csv. userfile upload does not permit such path constructs
 	// userfile upload test.csv test/file1.csv
 	// ERROR: destination file already exists for /test/file1.csv
-	// userfile upload notexist.csv /test/file1.csv
-	// ERROR: open notexist.csv: no such file or directory
+	// userfile upload nonexistent.csv /test/file1.csv
+	// ERROR: open nonexistent.csv: no such file or directory
 	// userfile upload test.csv /test/À.csv
 	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/À.csv
 	// userfile upload test.csv userfile://defaultdb.public.foo/test/file1.csv

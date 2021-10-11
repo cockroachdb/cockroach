@@ -33,7 +33,7 @@ func Example_nodelocal() {
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file2.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/../../file1.csv", file))
-	c.Run("nodelocal upload notexist.csv /test/file1.csv")
+	c.Run("nodelocal upload nonexistent.csv /test/file1.csv")
 
 	// Output:
 	// nodelocal upload test.csv /test/file1.csv
@@ -44,8 +44,8 @@ func Example_nodelocal() {
 	// ERROR: destination file already exists for /test/file1.csv
 	// nodelocal upload test.csv /test/../../file1.csv
 	// ERROR: local file access to paths outside of external-io-dir is not allowed: ../file1.csv
-	// nodelocal upload notexist.csv /test/file1.csv
-	// ERROR: open notexist.csv: no such file or directory
+	// nodelocal upload nonexistent.csv /test/file1.csv
+	// ERROR: open nonexistent.csv: no such file or directory
 }
 
 func Example_nodelocal_disabled() {

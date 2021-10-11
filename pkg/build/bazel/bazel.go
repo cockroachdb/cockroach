@@ -66,7 +66,7 @@ func SetGoEnv() {
 	// GOPATH has to be set to some value (not equal to GOROOT) in order for `go env` to work.
 	// See https://github.com/golang/go/issues/43938 for the details.
 	// Specify a name under the system TEMP/TMP directory in order to be platform agnostic.
-	if err := os.Setenv("GOPATH", filepath.Join(os.TempDir(), "nonexist-gopath")); err != nil {
+	if err := os.Setenv("GOPATH", filepath.Join(os.TempDir(), "nonexistent-gopath")); err != nil {
 		panic(err)
 	}
 	if err := os.Setenv("GOROOT", filepath.Dir(filepath.Dir(gobin))); err != nil {

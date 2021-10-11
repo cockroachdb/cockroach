@@ -326,7 +326,7 @@ func TestPruneTimeSeries(t *testing.T) {
 		tm.prune(
 			now,
 			timeSeriesResolutionInfo{
-				Name:       "metric.notexists",
+				Name:       "metric.nonexistent",
 				Resolution: resolutions[0],
 			},
 		)

@@ -85,7 +85,7 @@ genrule(
        GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
        # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
        sed -e 's/type Type encodingtype.T/type Type int/' $(location encoding.go) > encoding_tmp.go && \
-       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexistent-gopath \
          $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type encoding_tmp.go
     """,
     exec_tools = [

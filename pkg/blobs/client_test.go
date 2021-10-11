@@ -146,7 +146,7 @@ func TestBlobClientReadFile(t *testing.T) {
 		{
 			"read-file-not-exist",
 			remoteNodeID,
-			"test/notexist.csv",
+			"test/nonexistent.csv",
 			nil,
 			"no such file",
 		},
