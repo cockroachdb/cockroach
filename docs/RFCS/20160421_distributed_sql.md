@@ -1139,7 +1139,7 @@ scales well with the query size: if a query draws data from a single node, we
 will do all the aggregation on that node; if a query draws data from many nodes,
 we will distribute the aggregation among those nodes.
 
-We will also support configuring things to minimize the distribution - gettting
+We will also support configuring things to minimize the distribution - getting
 everything back on the single gateway node as quickly as possible. This will be
 useful to compare with the current "everything on the gateway" approach; it is
 also a conservative step that might avoid some problems when distributing
