@@ -31,7 +31,7 @@ import (
 // may not be a well-formed UTF8 string.
 type SessionID string
 
-// Provider is a wrapper around the sqllivness subsystem for external
+// Provider is a wrapper around the sqlliveness subsystem for external
 // consumption.
 type Provider interface {
 	Start(ctx context.Context)
