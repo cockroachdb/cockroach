@@ -160,7 +160,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			`"char"`,
-			types.MakeQChar(0),
+			types.QChar,
 			true,
 		},
 		{
