@@ -387,7 +387,7 @@ func TestMeta2RangeIter(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// First make an iterator with a large page size and use it to determine the numner of ranges.
+	// First make an iterator with a large page size and use it to determine the number of ranges.
 	iter := makeMeta2RangeIter(db, 10000 /* batchSize */)
 	numRanges := 0
 	for {
