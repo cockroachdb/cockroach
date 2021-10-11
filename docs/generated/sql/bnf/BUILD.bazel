@@ -210,7 +210,6 @@ genrule(
         "show_transactions_stmt.bnf",
         "show_types_stmt.bnf",
         "show_users_stmt.bnf",
-        "show_var.bnf",
         "show_zone_stmt.bnf",
         "simple_select_clause.bnf",
         "sort_clause.bnf",

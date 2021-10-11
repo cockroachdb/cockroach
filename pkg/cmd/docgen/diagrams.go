@@ -1216,16 +1216,6 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
 	},
 	{
-		name: "show_var",
-		stmt: "show_stmt",
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'SHOW' 'ALL' 'CLUSTER'"),
-			regexp.MustCompile("'SHOW' 'IN"),       // INDEX, INDEXES
-			regexp.MustCompile("'SHOW' '[B-HJ-Z]"), // Keep ALL and IDENT.
-		},
-		replace: map[string]string{"identifier": "var_name"},
-	},
-	{
 		name: "show_cluster_setting",
 		stmt: "show_csettings_stmt",
 	},
