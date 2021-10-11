@@ -223,7 +223,7 @@ func registerKV(r registry.Registry) {
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
 		}
 		if opts.splits != 0 { // support legacy test name which didn't include splits
-			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
+			nameParts = append(nameParts, fmt.Sprintf("split=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")

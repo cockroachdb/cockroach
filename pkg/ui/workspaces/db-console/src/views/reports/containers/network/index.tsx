@@ -290,7 +290,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
               const valueLocality = searchQuery(values.locality).split(",");
               const itemLocality = searchQuery(item.locality);
               valueLocality.forEach(val => {
-                const itemLocalitySplited = val.match(/^\w+/gi)
+                const itemLocalitySplit = val.match(/^\w+/gi)
                   ? val.match(/^\w+/gi)[0]
                   : null;
                 if (val === "cluster" && value === "cluster") {
@@ -302,7 +302,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
                     },
                   ];
                 } else if (
-                  itemLocalitySplited === value &&
+                  itemLocalitySplit === value &&
                   !sortValue.filters.reduce(
                     (accumulator, vendor) =>
                       accumulator ||
