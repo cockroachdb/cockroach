@@ -117,10 +117,10 @@ more details.
 
 Additionally, incremental cluster backups and restoration is supported using
 the same syntax as the existing `BACKUP`. In addition to checking that the
-previous backups cover the necassary span of keybase and time, a check must be
+previous backups cover the necessary span of keybase and time, a check must be
 added `backupPlanHook` to verify that every backup that this incremental backup
 builds upon are also cluster backups. Additionally, full cluster restore should
-only be permitted on Therefore it is necasary to add a flag in the backup
+only be permitted on Therefore it is necessary to add a flag in the backup
 manifest (`BackupDescriptor`) indicating whether or not a given backup is a
 full cluster backup or not. The primary reason for this bit is to ensure that
 full cluster restore can only restore full cluster backup files.
