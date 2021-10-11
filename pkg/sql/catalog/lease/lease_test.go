@@ -1343,7 +1343,7 @@ CREATE TABLE t.test2 ();
 	}
 	eo2 := ts2.Expiration()
 
-	// Reset testAcquisitionBlockCount as the first acqusition will always block.
+	// Reset testAcquisitionBlockCount as the first acquisition will always block.
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
 
 	testutils.SucceedsSoon(t, func() error {
