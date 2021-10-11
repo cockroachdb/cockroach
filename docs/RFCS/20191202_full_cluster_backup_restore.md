@@ -200,7 +200,7 @@ have options: `RequestedDescriptors`, which is the default and is what existing
 backups will have going forward, and `AllDescriptors` for full cluster backup.
 This enum is required to prevent a full cluster restore being performed from a
 non-full cluster backup file. In particular, this requirement exists because
-full cluster RESTORE guarnatees that the entire cluster has been RESTOREd (so we
+full cluster RESTORE guarantees that the entire cluster has been RESTOREd (so we
 need the entire cluster to be in the backup file).
 
 ## Restore
