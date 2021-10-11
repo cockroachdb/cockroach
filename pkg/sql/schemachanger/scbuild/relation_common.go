@@ -57,7 +57,7 @@ func (b *buildContext) removeTypeBackRefDeps(
 }
 
 // removeColumnTypeBackRefs removes type back references for a given table
-// column from default expressions and comptued expressions.
+// column from default expressions and computed expressions.
 func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, id descpb.ColumnID) {
 	visitor := &tree.TypeCollectorVisitor{
 		OIDs: make(map[oid.Oid]struct{}),

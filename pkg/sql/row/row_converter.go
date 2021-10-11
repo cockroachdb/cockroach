@@ -84,7 +84,7 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 //   have default values in defaultExprs.
 // - the computed values for any additional columns in insertCols
 //   that are computed. The mapping in rowContainerForComputedCols
-//   maps the indexes of the comptuedCols/computeExpr slices
+//   maps the indexes of the computedCols/computeExpr slices
 //   back into indexes in the result row tuple.
 //
 func GenerateInsertRow(
@@ -153,7 +153,7 @@ func GenerateInsertRow(
 	// but this is not possible because of some brain damage in the
 	// Insert() constructor, which causes insertCols to contain
 	// duplicate columns descriptors: computed columns are listed twice,
-	// one will receive a NULL value and one will receive a comptued
+	// one will receive a NULL value and one will receive a computed
 	// value during execution. It "works out in the end" because the
 	// latter (non-NULL) value overwrites the earlier, but
 	// enforceLocalColumnConstraints() does not know how to reason about
