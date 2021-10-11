@@ -43,7 +43,7 @@ type pageCache struct {
 
 type p struct {
 	id          int32
-	status      uint32 // one of pidle/prunning/...
+	status      uint32 // one of pidle/pruning/...
 	link        puintptr
 	schedtick   uint32     // incremented on every scheduler call
 	syscalltick uint32     // incremented on every system call
