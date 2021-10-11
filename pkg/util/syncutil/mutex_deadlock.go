@@ -18,6 +18,9 @@ import (
 	deadlock "github.com/sasha-s/go-deadlock"
 )
 
+// DeadlockEnabled is true if the deadlock detector is enabled.
+const DeadlockEnabled = true
+
 func init() {
 	deadlock.Opts.DeadlockTimeout = 5 * time.Minute
 }

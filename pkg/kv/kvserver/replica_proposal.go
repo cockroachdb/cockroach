@@ -839,6 +839,8 @@ func (r *Replica) evaluateProposal(
 		ba.RequiresConsensus()
 
 	if needConsensus {
+		log.VEventf(ctx, 2, "need consensus on write batch with op count=%d", batch.Count())
+
 		// Set the proposal's WriteBatch, which is the serialized representation of
 		// the proposals effect on RocksDB.
 		res.WriteBatch = &kvserverpb.WriteBatch{

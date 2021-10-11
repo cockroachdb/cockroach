@@ -96,7 +96,7 @@ func (e *inlineScheduledJobExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	schedule *ScheduledJob,
+	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")

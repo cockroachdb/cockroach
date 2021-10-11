@@ -2023,6 +2023,7 @@ func createSchemaChangeEvalCtx(
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
+			Tracer:             execCfg.AmbientCtx.Tracer,
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
@@ -2214,7 +2215,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
 				// Delete the zone config entry for this database.
-				if err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd()); err != nil {
+				if _, err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */); err != nil {
 					return err
 				}
 			}

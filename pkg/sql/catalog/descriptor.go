@@ -122,11 +122,9 @@ type NameEntry interface {
 
 var _ NameKey = descpb.NameInfo{}
 
-// Descriptor is an interface to be shared by individual descriptor
-// types.
-type Descriptor interface {
-	NameEntry
-
+// LeasableDescriptor is an interface for objects which can be leased via the
+// descriptor leasing system.
+type LeasableDescriptor interface {
 	// IsUncommittedVersion returns true if this descriptor represent a version
 	// which is not the currently committed version. Implementations may return
 	// false negatives here in cases where a descriptor may have crossed a
@@ -134,19 +132,51 @@ type Descriptor interface {
 	// remote nodes as well as during some scenarios in schema changes.
 	IsUncommittedVersion() bool
 
-	// Metadata for descriptor leasing.
+	// GetVersion returns this descriptor's version. The version field of a
+	// descriptor is incremented each time the descriptor is modified. It's used
+	// to maintain the "2-version invariant", which says that a descriptor ID can
+	// exist around the cluster in at most 2 adjacent versions.
 	GetVersion() descpb.DescriptorVersion
-	GetModificationTime() hlc.Timestamp
-	GetDrainingNames() []descpb.NameInfo
 
+	// GetModificationTime returns the timestamp of the transaction which last
+	// modified this descriptor.
+	GetModificationTime() hlc.Timestamp
+
+	// GetDrainingNames returns the list of "draining names" for this descriptor.
+	// Draining names are names that were in use by this descriptor, but are no
+	// longer due to renames.
+	GetDrainingNames() []descpb.NameInfo
+}
+
+// Descriptor is an interface to be shared by individual descriptor
+// types.
+type Descriptor interface {
+	NameEntry
+	LeasableDescriptor
+
+	// GetPrivileges returns this descriptor's PrivilegeDescriptor, which
+	// describes the set of privileges that users have to use, modify, or delete
+	// the object represented by this descriptor. Each descriptor type may have a
+	// different set of capabilities represented by the PrivilegeDescriptor.
 	GetPrivileges() *descpb.PrivilegeDescriptor
+	// DescriptorType returns the type of this descriptor (like relation, type,
+	// schema, database).
 	DescriptorType() DescriptorType
+	// GetAuditMode returns the audit mode for this descriptor. The audit mode
+	// describes what kind of auditing (logging) actions should be taken when
+	// this descriptor is modified.
 	GetAuditMode() descpb.TableDescriptor_AuditMode
 
+	// Public returns true if this descriptor is public. A public descriptor is
+	// one that is allowed to be used normally.
 	Public() bool
+	// Adding returns true if the table is being added.
 	Adding() bool
+	// Dropped returns true if the table is being dropped.
 	Dropped() bool
+	// Offline returns true if the table is importing.
 	Offline() bool
+	// GetOfflineReason returns a user-visible reason for why a table is offline.
 	GetOfflineReason() string
 
 	// DescriptorProto prepares this descriptor for serialization.
@@ -170,15 +200,30 @@ type Descriptor interface {
 type DatabaseDescriptor interface {
 	Descriptor
 
+	// DatabaseDesc returns the backing protobuf for this database.
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
+	// GetRegionConfig returns region information for this database.
 	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig
+	// IsMultiRegion returns whether the database has multi-region properties
+	// configured. If so, GetRegionConfig can be used.
 	IsMultiRegion() bool
+	// PrimaryRegionName returns the primary region for a multi-region database.
 	PrimaryRegionName() (descpb.RegionName, error)
+	// MultiRegionEnumID returns the ID of the multi-region enum if the database
+	// is a multi-region database, and an error otherwise.
 	MultiRegionEnumID() (descpb.ID, error)
+	// ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
+	// iterutil.StopIteration is supported.
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
+	// GetSchemaID returns the ID in the schema mapping entry for the
+	// given name, 0 otherwise.
 	GetSchemaID(name string) descpb.ID
+	// GetNonDroppedSchemaName returns the name in the schema mapping entry for the
+	// given ID, if it's not marked as dropped, empty string otherwise.
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
+	// GetDefaultPrivilegeDescriptor returns the default privileges for this
+	// database.
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
 }
 
@@ -186,26 +231,98 @@ type DatabaseDescriptor interface {
 type TableDescriptor interface {
 	Descriptor
 
+	// TableDesc returns the backing protobuf for this database.
 	TableDesc() *descpb.TableDescriptor
 
+	// GetState returns the raw state of this descriptor. This information is
+	// mimicked by the Dropped(), Added(), etc information in Descriptor.
 	GetState() descpb.DescriptorState
+
+	// IsTable returns true if the TableDescriptor actually describes a
+	// Table resource, as opposed to a different resource (like a View).
+	IsTable() bool
+	// IsView returns true if the TableDescriptor actually describes a
+	// View resource rather than a Table.
+	IsView() bool
+	// IsSequence returns true if the TableDescriptor actually describes a
+	// Sequence resource rather than a Table.
+	IsSequence() bool
+	// IsTemporary returns true if this is a temporary table.
+	IsTemporary() bool
+	// IsVirtualTable returns true if the TableDescriptor describes a
+	// virtual Table (like the information_schema tables) and thus doesn't
+	// need to be physically stored.
+	IsVirtualTable() bool
+	// IsPhysicalTable returns true if the TableDescriptor actually describes a
+	// physical Table that needs to be stored in the kv layer, as opposed to a
+	// different resource like a view or a virtual table. Physical tables have
+	// primary keys, column families, and indexes (unlike virtual tables).
+	// Sequences count as physical tables because their values are stored in
+	// the KV layer.
+	IsPhysicalTable() bool
+	// IsInterleaved returns true if any part of this this table is interleaved with
+	// another table's data.
+	IsInterleaved() bool
+	// MaterializedView returns whether or not this TableDescriptor is a
+	// MaterializedView.
+	MaterializedView() bool
+	// IsAs returns true if the TableDescriptor describes a Table that was created
+	// with a CREATE TABLE AS command.
+	IsAs() bool
+
+	// GetSequenceOpts returns the sequence options for this table. Only valid if
+	// IsSequence is true.
 	GetSequenceOpts() *descpb.TableDescriptor_SequenceOpts
+
+	// GetCreateQuery returns the full CREATE TABLE AS query that was used for
+	// table's creation. Only valid if IsAs is true.
 	GetCreateQuery() string
-	GetViewQuery() string
-	GetLease() *descpb.TableDescriptor_SchemaChangeLease
+	// GetCreateAsOfTime returns the transaction timestamp that this table was
+	// created at, for materialized views and CREATE TABLE AS. Only valid if
+	// IsAs or MaterializedView returns true.
 	GetCreateAsOfTime() hlc.Timestamp
-	GetModificationTime() hlc.Timestamp
+
+	// GetViewQuery returns this view's CREATE VIEW declaration. Only valid if
+	// IsView is true.
+	GetViewQuery() string
+
+	// GetLease returns this table's schema change lease.
+	GetLease() *descpb.TableDescriptor_SchemaChangeLease
+	// GetDropTime returns the timestamp at which the table is truncated or
+	// dropped. It's represented as the current time in nanoseconds since the
+	// epoch.
 	GetDropTime() int64
+	// GetFormatVersion returns the format version that the data in this table
+	// is encoded into.
 	GetFormatVersion() descpb.FormatVersion
 
+	// GetPrimaryIndexID returns the ID of the primary index.
 	GetPrimaryIndexID() descpb.IndexID
+	// GetPrimaryIndex returns the primary index in the form of a catalog.Index
+	// interface.
 	GetPrimaryIndex() Index
+	// IsPartitionAllBy returns whether the table has a PARTITION ALL BY clause.
 	IsPartitionAllBy() bool
+
+	// PrimaryIndexSpan returns the Span that corresponds to the entire primary
+	// index; can be used for a full table scan.
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
+	// IndexSpan returns the Span that corresponds to an entire index; can be used
+	// for a full index scan.
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	// AllIndexSpans returns the Spans for each index in the table, including those
+	// being added in the mutations.
 	AllIndexSpans(codec keys.SQLCodec) roachpb.Spans
+	// TableSpan returns the Span that corresponds to the entire table.
 	TableSpan(codec keys.SQLCodec) roachpb.Span
+	// GetIndexMutationCapabilities returns:
+	// 1. Whether the index is a mutation
+	// 2. if so, is it in state DELETE_AND_WRITE_ONLY
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
+	// KeysPerRow returns the maximum number of keys used to encode a row for the
+	// given index. If a secondary index doesn't store any columns, then it only
+	// has one k/v pair, but if it stores some columns, it can return up to one
+	// k/v pair per family in the table, just like a primary index.
 	KeysPerRow(id descpb.IndexID) (int, error)
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
@@ -276,78 +393,202 @@ type TableDescriptor interface {
 	// canonical order, see Index.Ordinal().
 	FindIndexWithName(name string) (Index, error)
 
+	// GetNextIndexID returns the next unused index ID for the table. Index IDs
+	// are unique within a table, but not globally.
 	GetNextIndexID() descpb.IndexID
 
+	// HasPrimaryKey returns true if the table has a primary key. This will be
+	// true except for in a transaction where a user has dropped a primary key
+	// in preparation to add a new one. In CockroachDB, all tables have primary
+	// keys, even if they're not defined by the user.
 	HasPrimaryKey() bool
+	// PrimaryKeyString returns the pretty-printed primary key declaration for a
+	// table descriptor.
 	PrimaryKeyString() string
 
+	// AllColumns returns a slice of Column interfaces containing the
+	// table's public columns and column mutations, in the canonical order:
+	// - all public columns in the same order as in the underlying
+	//   desc.TableDesc().Columns slice;
+	// - all column mutations in the same order as in the underlying
+	//   desc.TableDesc().Mutations slice.
+	// - all system columns defined in colinfo.AllSystemColumnDescs.
 	AllColumns() []Column
+	// PublicColumns returns a slice of Column interfaces containing the
+	// table's public columns, in the canonical order.
 	PublicColumns() []Column
+	// WritableColumns returns a slice of Column interfaces containing the
+	// table's public columns and DELETE_AND_WRITE_ONLY mutations, in the canonical
+	// order.
 	WritableColumns() []Column
+	// DeletableColumns returns a slice of Column interfaces containing the
+	// table's public columns and mutations, in the canonical order.
 	DeletableColumns() []Column
+	// NonDropColumns returns a slice of Column interfaces containing the
+	// table's public columns and ADD mutations, in the canonical order.
 	NonDropColumns() []Column
+	// VisibleColumns returns a slice of Column interfaces containing the table's
+	// visible columns, in the canonical order. Visible columns are public columns
+	// with Hidden=false and Inaccessible=false. See ColumnDescriptor.Hidden and
+	// ColumnDescriptor.Inaccessible for more details.
 	VisibleColumns() []Column
+	// AccessibleColumns returns a slice of Column interfaces containing the table's
+	// accessible columns, in the canonical order. Accessible columns are public
+	// columns with Inaccessible=false. See ColumnDescriptor.Inaccessible for more
+	// details.
 	AccessibleColumns() []Column
+	// ReadableColumns is a list of columns (including those undergoing a schema
+	// change) which can be scanned. Columns in the process of a schema change
+	// are all set to nullable while column backfilling is still in
+	// progress, as mutation columns may have NULL values.
 	ReadableColumns() []Column
+	// UserDefinedTypeColumns returns a slice of Column interfaces
+	// containing the table's columns with user defined types, in the
+	// canonical order.
 	UserDefinedTypeColumns() []Column
+	// SystemColumns returns a slice of Column interfaces
+	// containing the table's system columns, as defined in
+	// colinfo.AllSystemColumnDescs.
 	SystemColumns() []Column
 
+	// FindColumnWithID returns the first column found whose ID matches the
+	// provided target ID, in the canonical order.
+	// If no column is found then an error is also returned.
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
+	// FindColumnWithName returns the first column found whose name matches the
+	// provided target name, in the canonical order.
+	// If no column is found then an error is also returned.
 	FindColumnWithName(name tree.Name) (Column, error)
 
+	// NamesForColumnIDs returns the names for the given column ids, or an error
+	// if one or more column ids was missing. Note - this allocates! It's not for
+	// hot path code.
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
+	// ContainsUserDefinedTypes returns whether or not this table descriptor has
+	// any columns of user defined types.
 	ContainsUserDefinedTypes() bool
+	// GetNextColumnID returns the next unused column ID for this table. Column
+	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
+	// CheckConstraintUsesColumn returns whether the check constraint uses the
+	// specified column.
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 
+	// GetFamilies returns the column families of this table. All tables contain
+	// at least one column family. The returned list is sorted by family ID.
 	GetFamilies() []descpb.ColumnFamilyDescriptor
+	// NumFamilies returns the number of column families in the descriptor.
 	NumFamilies() int
+	// FindFamilyByID finds the family with specified ID.
 	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
+	// ForeachFamily calls f for every column family key in desc until an
+	// error is returned.
 	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
+	// GetNextFamilyID returns the next unused family ID for this table. Family
+	// IDs are unique per table, but not unique globally.
 	GetNextFamilyID() descpb.FamilyID
 
-	IsTable() bool
-	IsView() bool
-	IsSequence() bool
-	IsTemporary() bool
-	IsVirtualTable() bool
-	IsPhysicalTable() bool
-	IsInterleaved() bool
-	MaterializedView() bool
-	IsAs() bool
-
+	// HasColumnBackfillMutation returns whether the table has any queued column
+	// mutations that require a backfill.
 	HasColumnBackfillMutation() bool
+	// MakeFirstMutationPublic creates a Mutable from the
+	// immutable by making the first mutation public.
+	// This is super valuable when trying to run SQL over data associated
+	// with a schema mutation that is still not yet public: Data validation,
+	// error reporting.
 	MakeFirstMutationPublic(includeConstraints MutationPublicationFilter) (TableDescriptor, error)
+	// MakePublic creates a Mutable from the immutable by making the it public.
 	MakePublic() TableDescriptor
+	// AllMutations returns all of the table descriptor's mutations.
 	AllMutations() []Mutation
+	// GetGCMutations returns the table descriptor's GC mutations.
 	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
+	// GetMutationJobs returns the table descriptor's mutation jobs.
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
+	// GetReplacementOf tracks prior IDs by which this table went -- e.g. when
+	// TRUNCATE creates a replacement of a table and swaps it in for the the old
+	// one, it should note on the new table the ID of the table it replaced. This
+	// can be used when trying to track a table's history across truncations.
+	// Note: This was only used in pre-20.2 truncate and 20.2 mixed version and
+	// is now deprecated.
 	GetReplacementOf() descpb.TableDescriptor_Replacement
+	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
+	// this table references. It takes in a function that returns the TypeDescriptor
+	// with the desired ID.
 	GetAllReferencedTypeIDs(
 		databaseDesc DatabaseDescriptor, getType func(descpb.ID) (TypeDescriptor, error),
 	) (referencedAnywhere, referencedInColumns descpb.IDs, _ error)
 
+	// ForeachDependedOnBy runs a function on all indexes, including those being
+	// added in the mutations.
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
+	// GetDependedOnBy returns information on all relations that depend on this one.
 	GetDependedOnBy() []descpb.TableDescriptor_Reference
+	// GetDependsOn returns the IDs of all relations that this view depends on.
+	// It's only non-nil if IsView is true.
 	GetDependsOn() []descpb.ID
+	// GetDependsOnTypes returns the IDs of all types that this view depends on.
+	// It's only non-nil if IsView is true.
 	GetDependsOnTypes() []descpb.ID
+
+	// GetConstraintInfoWithLookup returns a summary of all constraints on the
+	// table using the provided function to fetch a TableDescriptor from an ID.
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
-	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	GetChecks() []*descpb.TableDescriptor_CheckConstraint
-	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
-	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
-	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
-	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
-	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
+	// GetConstraintInfo returns a summary of all constraints on the table.
 	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
+
+	// GetUniqueWithoutIndexConstraints returns all the unique constraints defined
+	// on this table that are not enforced by an index.
+	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
+	// AllActiveAndInactiveUniqueWithoutIndexConstraints returns all unique
+	// constraints that are not enforced by an index, including both "active"
+	// ones on the table descriptor which are being enforced for all writes, and
+	// "inactive" ones queued in the mutations list.
+	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
+
+	// ForeachOutboundFK calls f for every outbound foreign key in desc until an
+	// error is returned.
+	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
+	// ForeachInboundFK calls f for every inbound foreign key in desc until an
+	// error is returned.
+	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
+	// AllActiveAndInactiveForeignKeys returns all foreign keys, including both
+	// "active" ones on the index descriptor which are being enforced for all
+	// writes, and "inactive" ones queued in the mutations list. An error is
+	// returned if multiple foreign keys (including mutations) are found for the
+	// same index.
 	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
 
+	// GetChecks returns information about this table's check constraints, if
+	// there are any. Only valid if IsTable returns true.
+	GetChecks() []*descpb.TableDescriptor_CheckConstraint
+	// AllActiveAndInactiveChecks returns all check constraints, including both
+	// "active" ones on the table descriptor which are being enforced for all
+	// writes, and "inactive" new checks constraints queued in the mutations list.
+	// Additionally,  if there are any dropped mutations queued inside the mutation
+	// list, those will not cancel any "active" or "inactive" mutations.
+	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
+	// ActiveChecks returns a list of all check constraints that should be enforced
+	// on writes (including constraints being added/validated). The columns
+	// referenced by the returned checks are writable, but not necessarily public.
+	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+
+	// GetLocalityConfig returns the locality config for this table, which
+	// describes the table's multi-region locality policy if one is set (e.g.
+	// GLOBAL or REGIONAL BY ROW).
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
+	// IsLocalityRegionalByRow returns true if the table is REGIONAL BY ROW.
 	IsLocalityRegionalByRow() bool
+	// IsLocalityRegionalByTable returns true if the table is REGIONAL BY TABLE.
 	IsLocalityRegionalByTable() bool
+	// IsLocalityGlobal returns true if the table is GLOBAL.
 	IsLocalityGlobal() bool
+	// GetRegionalByTableRegion returns the region a REGIONAL BY TABLE table is
+	// homed in.
 	GetRegionalByTableRegion() (descpb.RegionName, error)
+	// GetRegionalByRowTableRegionColumnName returns the region column name of a
+	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
 }
 
@@ -355,28 +596,79 @@ type TableDescriptor interface {
 // It is implemented by (Imm|M)utableTypeDescriptor.
 type TypeDescriptor interface {
 	Descriptor
+	// TypeDesc returns the backing descriptor for this type, if one exists.
 	TypeDesc() *descpb.TypeDescriptor
+	// HydrateTypeInfoWithName fills in user defined type metadata for
+	// a type and also sets the name in the metadata to the passed in name.
+	// This is used when hydrating a type with a known qualified name.
+	//
+	// Note that if the passed type is already hydrated, regardless of the version
+	// with which it has been hydrated, this is a no-op.
 	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
+	// MakeTypesT creates a types.T from the input type descriptor.
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
+	// HasPendingSchemaChanges returns whether or not this descriptor has schema
+	// changes that need to be completed.
 	HasPendingSchemaChanges() bool
+	// GetIDClosure returns all type descriptor IDs that are referenced by this
+	// type descriptor.
 	GetIDClosure() (map[descpb.ID]struct{}, error)
+	// IsCompatibleWith returns whether the type "desc" is compatible with "other".
+	// As of now "compatibility" entails that disk encoded data of "desc" can be
+	// interpreted and used by "other".
 	IsCompatibleWith(other TypeDescriptor) error
-
-	PrimaryRegionName() (descpb.RegionName, error)
-	RegionNames() (descpb.RegionNames, error)
-	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
-	RegionNamesForValidation() (descpb.RegionNames, error)
-	TransitioningRegionNames() (descpb.RegionNames, error)
-
+	// GetArrayTypeID returns the globally unique ID for the implicitly created
+	// array type for this type. It is only set when the type descriptor points to
+	// a non-array type.
 	GetArrayTypeID() descpb.ID
+
+	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
 
+	// The following fields are only valid for multi-region enum types.
+
+	// PrimaryRegionName returns the primary region for a multi-region enum.
+	PrimaryRegionName() (descpb.RegionName, error)
+	// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
+	// that are in the process of being added/removed (`READ_ONLY`) are omitted.
+	RegionNames() (descpb.RegionNames, error)
+	// RegionNamesIncludingTransitioning returns all the regions on a multi-region
+	// enum, including `READ ONLY` regions which are in the process of transitioning.
+	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
+	// RegionNamesForValidation returns all regions on the multi-region
+	// enum to make validation with the public zone configs and partitons
+	// possible.
+	// Since the partitions and zone configs are only updated when a transaction
+	// commits, this must ignore all regions being added (since they will not be
+	// reflected in the zone configuration yet), but it must include all region
+	// being dropped (since they will not be dropped from the zone configuration
+	// until they are fully removed from the type descriptor, again, at the end
+	// of the transaction).
+	RegionNamesForValidation() (descpb.RegionNames, error)
+	// TransitioningRegionNames returns regions which are transitioning to PUBLIC
+	// or are being removed.
+	TransitioningRegionNames() (descpb.RegionNames, error)
+
+	// The following fields are set if the type is an enum or a multi-region enum.
+
+	// NumEnumMembers returns the number of enum members if the type is an
+	// enumeration type, 0 otherwise.
 	NumEnumMembers() int
+	// GetMemberPhysicalRepresentation returns the physical representation of the
+	// enum member at ordinal enumMemberOrdinal.
 	GetMemberPhysicalRepresentation(enumMemberOrdinal int) []byte
+	// GetMemberLogicalRepresentation returns the logical representation of the enum
+	// member at ordinal enumMemberOrdinal.
 	GetMemberLogicalRepresentation(enumMemberOrdinal int) string
+	// IsMemberReadOnly returns true iff the enum member at ordinal
+	// enumMemberOrdinal is read-only.
 	IsMemberReadOnly(enumMemberOrdinal int) bool
 
+	// NumReferencingDescriptors returns the number of descriptors referencing this
+	// type, directly or indirectly.
 	NumReferencingDescriptors() int
+	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
+	// ordinal refOrdinal.
 	GetReferencingDescriptorID(refOrdinal int) descpb.ID
 }
 

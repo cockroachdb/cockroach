@@ -101,6 +101,8 @@ type ClientOperationConfig struct {
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
 	DeleteExisting int
+	// DeleteRange is an operation that Deletes a key range that may contain values.
+	DeleteRange int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -179,6 +181,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		ReverseScanForUpdate: 1,
 		DeleteMissing:        1,
 		DeleteExisting:       1,
+		DeleteRange:          1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -223,6 +226,12 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
+	// TODO(sarkesian): Enable non-transactional DelRange once #69642 is fixed.
+	config.Ops.DB.DeleteRange = 0
+	config.Ops.Batch.Ops.DeleteRange = 0
+	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
+	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
 	// TODO(dan): This fails with a WriteTooOld error if the same key is Put twice
 	// in a single batch. However, if the same Batch is committed using txn.Run,
 	// then it works and only the last one is materialized. We could make the
@@ -421,6 +430,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
+	addOpGen(allowed, randDelRange, c.DeleteRange)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -463,12 +473,7 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
-	key, endKey := randKey(rng), randKey(rng)
-	if endKey < key {
-		key, endKey = endKey, key
-	} else if endKey == key {
-		endKey = string(roachpb.Key(key).Next())
-	}
+	key, endKey := randSpan(rng)
 	return scan(key, endKey)
 }
 
@@ -499,6 +504,13 @@ func randDelMissing(g *generator, rng *rand.Rand) Operation {
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
 	return del(key)
+}
+
+func randDelRange(g *generator, rng *rand.Rand) Operation {
+	// We don't write any new keys to `g.keys` on a DeleteRange operation,
+	// because DelRange(..) only deletes existing keys.
+	key, endKey := randSpan(rng)
+	return delRange(key, endKey)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -653,6 +665,16 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 	return keys[rng.Intn(len(keys))]
 }
 
+func randSpan(rng *rand.Rand) (string, string) {
+	key, endKey := randKey(rng), randKey(rng)
+	if endKey < key {
+		key, endKey = endKey, key
+	} else if endKey == key {
+		endKey = string(roachpb.Key(key).Next())
+	}
+	return key, endKey
+}
+
 func step(op Operation) Step {
 	return Step{Op: op}
 }
@@ -707,6 +729,10 @@ func reverseScanForUpdate(key, endKey string) Operation {
 
 func del(key string) Operation {
 	return Operation{Delete: &DeleteOperation{Key: []byte(key)}}
+}
+
+func delRange(key, endKey string) Operation {
+	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey)}}
 }
 
 func split(key string) Operation {

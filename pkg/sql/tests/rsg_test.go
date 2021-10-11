@@ -165,7 +165,9 @@ func (db *verifyFormatDB) execWithTimeout(
 					}
 				}
 			}
-			if es := err.Error(); strings.Contains(es, "internal error") ||
+			// TODO(yuzefovich): allow "no volatility for cast tuple" errors to
+			// fail once #70831 is resolved.
+			if es := err.Error(); (strings.Contains(es, "internal error") && !strings.Contains(es, "no volatility for cast tuple")) ||
 				strings.Contains(es, "driver: bad connection") ||
 				strings.Contains(es, "unexpected error inside CockroachDB") {
 				return &crasher{

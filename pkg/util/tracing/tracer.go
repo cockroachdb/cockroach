@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
@@ -187,7 +188,19 @@ type Tracer struct {
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
-	testing *testingKnob
+	testing TracerTestingKnobs
+}
+
+// TracerTestingKnobs contains knobs for a Tracer.
+type TracerTestingKnobs struct {
+	// Clock allows the time source for spans to be controlled.
+	Clock timeutil.TimeSource
+	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
+	// is otherwise disabled.
+	ForceRealSpans bool
+	// RecordEmptyTraces, if set, forces the Tracer to generate recordings for
+	// "empty" traces.
+	RecordEmptyTraces bool
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -198,8 +211,66 @@ func NewTracer() *Tracer {
 	t.activeSpans.m = make(map[uint64]*Span)
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
-	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
+	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
 	return t
+}
+
+// NewTracerWithOpt creates a Tracer and configures it according to the
+// passed-in options.
+func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
+	var o tracerOptions
+	for _, opt := range opts {
+		opt.apply(&o)
+	}
+
+	t := NewTracer()
+	if o.sv != nil {
+		t.Configure(ctx, o.sv)
+	}
+	t.testing = o.knobs
+	return t
+}
+
+// tracerOptions groups configuration for Tracer construction.
+type tracerOptions struct {
+	sv    *settings.Values
+	knobs TracerTestingKnobs
+}
+
+// TracerOption is implemented by the arguments to the Tracer constructor.
+type TracerOption interface {
+	apply(opt *tracerOptions)
+}
+
+type clusterSettingsOpt struct {
+	sv *settings.Values
+}
+
+func (o clusterSettingsOpt) apply(opt *tracerOptions) {
+	opt.sv = o.sv
+}
+
+var _ TracerOption = clusterSettingsOpt{}
+
+// WithClusterSettings configures the Tracer according to the relevant cluster
+// settings. Future changes to those cluster settings will update the Tracer.
+func WithClusterSettings(sv *settings.Values) TracerOption {
+	return clusterSettingsOpt{sv: sv}
+}
+
+type knobsOpt struct {
+	knobs TracerTestingKnobs
+}
+
+func (o knobsOpt) apply(opt *tracerOptions) {
+	opt.knobs = o.knobs
+}
+
+var _ TracerOption = knobsOpt{}
+
+// WithTestingKnobs configures the Tracer with the specified knobs.
+func WithTestingKnobs(knobs TracerTestingKnobs) TracerOption {
+	return knobsOpt{knobs: knobs}
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -413,6 +484,9 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
+	if t.testing.ForceRealSpans {
+		return true
+	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil
 }
@@ -436,6 +510,11 @@ func (t *Tracer) startSpanGeneric(
 			// parent should have been optimized away by the
 			// WithParentAndAutoCollection option.
 			panic("invalid no-op parent")
+		}
+		if opts.Parent.IsSterile() {
+			// A sterile parent should have been optimized away by
+			// WithParentAndAutoCollection.
+			panic("invalid sterile parent")
 		}
 	}
 
@@ -523,7 +602,7 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
-		testing: t.testing,
+		testing: &t.testing,
 	}
 	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
@@ -537,6 +616,7 @@ func (t *Tracer) startSpanGeneric(
 		crdb:     &helper.crdbSpan,
 		otelSpan: otelSpan,
 		netTr:    netTr,
+		sterile:  opts.Sterile,
 	}
 
 	// Copy over the parent span's root span reference, and if there isn't one
@@ -650,6 +730,12 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
 		// empty map as a noop context.
 		return nil
 	}
+	// If the span has been marked as not wanting children, we don't propagate any
+	// information about it through the carrier (the point of propagating span
+	// info is to create a child from it).
+	if sm.sterile {
+		return nil
+	}
 
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(sm.traceID, 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
@@ -749,6 +835,10 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
 		Baggage:       baggage,
+		// The sterile field doesn't make it across the wire. The simple fact that
+		// there was any tracing info in the carrier means that the parent span was
+		// not sterile.
+		sterile: false,
 	}, nil
 }
 
@@ -828,6 +918,26 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 		collectionOpt = WithParentAndAutoCollection(sp)
 	}
 	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collectionOpt)
+}
+
+// EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
+// creates a root span.
+func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
+	sp := SpanFromContext(ctx)
+	var opts []SpanOption
+	// If there's a span in ctx, we use it as a parent.
+	if sp != nil {
+		tr = sp.Tracer()
+		if !tr.ShouldRecordAsyncSpans() {
+			opts = append(opts, WithParentAndManualCollection(sp.Meta()))
+		} else {
+			// Using auto collection here ensures that recordings from async spans
+			// also show up at the parent.
+			opts = append(opts, WithParentAndAutoCollection(sp))
+		}
+		opts = append(opts, WithFollowsFrom())
+	}
+	return tr.StartSpanCtx(ctx, opName, opts...)
 }
 
 // ChildSpan creates a child span of the current one, if any. Recordings from

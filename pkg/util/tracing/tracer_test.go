@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"testing"
@@ -220,6 +221,35 @@ func TestStartChildSpan(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestSterileSpan(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+
+	// Check that a children of sterile spans are roots.
+	sp1 := tr.StartSpan("parent", WithSterile())
+	// Make the span verbose so that we can use its recording below to assert that
+	// there were no children.
+	sp1.SetVerbose(true)
+	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
+	require.Zero(t, sp2.i.crdb.parentSpanID)
+
+	require.True(t, sp1.Meta().sterile)
+	require.False(t, sp2.Meta().sterile)
+	sp3 := tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
+	require.Zero(t, sp3.i.crdb.parentSpanID)
+
+	sp2.Finish()
+	sp3.Finish()
+	require.NoError(t, CheckRecordedSpans(sp1.GetRecording(), `
+		span: parent
+			tags: _unfinished=1 _verbose=1
+	`))
+
+	// Check that the meta of a sterile span doesn't get injected into carriers.
+	carrier := metadataCarrier{metadata.MD{}}
+	require.NoError(t, tr.InjectMetaInto(sp1.Meta(), carrier))
+	require.Len(t, carrier.MD, 0)
 }
 
 func TestTracerInjectExtract(t *testing.T) {

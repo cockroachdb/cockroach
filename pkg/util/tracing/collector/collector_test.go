@@ -120,8 +120,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
 
-	localTracer := tc.Server(0).Tracer().(*tracing.Tracer)
-	remoteTracer := tc.Server(1).Tracer().(*tracing.Tracer)
+	localTracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	remoteTracer := tc.Server(1).TracerI().(*tracing.Tracer)
 
 	traceCollector := collector.New(
 		tc.Server(0).NodeDialer().(*nodedialer.Dialer),

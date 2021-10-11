@@ -8624,7 +8624,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 // Regression test for #66797 ensuring that the span merging optimization
 // doesn't produce an error when there are span-merging opportunities on
 // descriptor revisions from before the GC threshold of the table.
-func TestSpanMergeingBeforeGCThreshold(t *testing.T) {
+func TestSpanMergingBeforeGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -8884,4 +8884,27 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 	// Should fail because we just restored new_fkbd into cluster
 	sqlDB.ExpectErr(t, `database "new_fkdb" already exists`,
 		"RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", LocalFoo)
+}
+
+// TestRestoreRemappingOfExistingUDTInColExpr is a regression test for a nil
+// pointer exception when restoring tables that point to existing types. When
+// updating the back references of the existing types we would index into a map
+// keyed on pre-rewrite IDs using a post rewrite ID.
+func TestRestoreRemappingOfExistingUDTInColExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TABLE foo (id INT PRIMARY KEY, what status default 'open');
+BACKUP DATABASE data to 'nodelocal://0/foo';
+DROP TABLE foo CASCADE;
+DROP TYPE status;
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+RESTORE TABLE foo FROM 'nodelocal://0/foo';
+`)
 }
