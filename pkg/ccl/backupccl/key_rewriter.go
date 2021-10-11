@@ -267,7 +267,7 @@ func (kr *KeyRewriter) rewriteTableKey(key []byte, isFromSpan bool) ([]byte, boo
 			// here, if we fail to decode because of one of those manipulations, we
 			// can assume that we are at the end of the key as far as fields where a
 			// table ID which needs to be replaced can appear and consider the rewrite
-			// of this key as being compelted successfully.
+			// of this key as being completed successfully.
 			//
 			// Finally unlike key rewrites of actual row-data, span rewrites do not
 			// need to be perfect: spans are only rewritten for use in pre-splitting

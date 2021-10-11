@@ -8412,7 +8412,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	//  2. Backfill started
 	//  3. Inc 1
 	//  4. Inc 2
-	//  5. Backfill completeed
+	//  5. Backfill completed
 	//  6. Inc 3
 	//  7. Drop index
 	//  8. Inc 4
