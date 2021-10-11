@@ -220,7 +220,7 @@ func topologicalSort(
 
 	// Account for memory of map.
 	// The key value entry into the map is only the memory of an int64 since
-	// the value stuct{}{} uses no memory.
+	// the value struct{}{} uses no memory.
 	if err := acc.Grow(ctx, memsize.Int64+mapEntryOverhead); err != nil {
 		return err
 	}
