@@ -1037,7 +1037,7 @@ func (i *iterator) Cur() *latch {
 //    search range.
 // 5. once the scan reaches the lower bound constraint position (the first item
 //    with a start key equal to or greater than the search range's start key),
-//    it can begin scaning without performing key comparisons. This is allowed
+//    it can begin scanning without performing key comparisons. This is allowed
 //    because all items from this point forward will have end keys that are
 //    greater than the search range's start key.
 // 6. once the scan reaches the upper bound constraint position, it terminates.
