@@ -380,7 +380,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		modified := MaybeFixUsagePrivForTablesAndDBs(&desc)
 
 		if tc.modified != modified {
-			t.Errorf("expected modifed to be %v, was %v", tc.modified, modified)
+			t.Errorf("expected modified to be %v, was %v", tc.modified, modified)
 		}
 
 		for u, p := range tc.output {
