@@ -51,7 +51,7 @@ type auditor struct {
 	paymentsByLastName    uint64
 	orderStatusByLastName uint64
 
-	skippedDelivieries uint64
+	skippedDeliveries uint64
 }
 
 func newAuditor(warehouses int) *auditor {
@@ -130,9 +130,9 @@ func check9217(a *auditor) auditResult {
 	} else {
 		threshold = 1
 	}
-	if a.skippedDelivieries > threshold {
+	if a.skippedDeliveries > threshold {
 		return newFailResult(
-			"expected no more than %d skipped deliveries, got %d", threshold, a.skippedDelivieries)
+			"expected no more than %d skipped deliveries, got %d", threshold, a.skippedDeliveries)
 	}
 	return passResult
 }
