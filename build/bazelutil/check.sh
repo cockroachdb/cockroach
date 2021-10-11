@@ -63,7 +63,7 @@ git grep 'go:generate stringer' pkg | while read LINE; do
 done
 
 # We exclude stringer and add-leaktest.sh -- the former is already all
-# Bazelfied, and the latter can be safely ignored since we have a lint to check
+# Bazelified, and the latter can be safely ignored since we have a lint to check
 # the same thing: https://github.com/cockroachdb/cockroach/issues/64440
 git grep '//go:generate' -- './*.go' | grep -v stringer | grep -v 'add-leaktest\.sh' | while read LINE; do
     if [[ "$EXISTING_GO_GENERATE_COMMENTS" == *"$LINE"* ]]; then
