@@ -15,5 +15,5 @@ examples:
 * `com_github_grpc_ecosystem_grpc_gateway.patch` replaces some dependencies that
   Gazelle infers (those under `@io_bazel_rules_go//proto/wkt`) with the build
   targets using pre-generated `.pb.go` files under
-  `@com_github_golang_protbuf//ptypes`. We do this because the `wkt` rules
+  `@com_github_golang_protobuf//ptypes`. We do this because the `wkt` rules
   create conflicts in our build.
