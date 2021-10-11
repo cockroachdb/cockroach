@@ -4767,7 +4767,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 				tc.AddVotersOrFatal(t, key, tc.Target(i))
 			}
 
-			// Begin peforming a write on the Range.
+			// Begin performing a write on the Range.
 			magicTS = tc.Servers[0].Clock().Now()
 			atomic.StoreInt32(&filterActive, 1)
 			ch := make(chan *roachpb.Error, 1)
