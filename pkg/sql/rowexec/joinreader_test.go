@@ -55,6 +55,8 @@ var sixIntColsAndStringCol = []*types.T{
 
 func TestJoinReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -977,6 +979,8 @@ func TestJoinReader(t *testing.T) {
 
 func TestJoinReaderDiskSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1203,6 +1207,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 func TestIndexJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

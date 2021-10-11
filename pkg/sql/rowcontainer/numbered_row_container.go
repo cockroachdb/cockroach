@@ -216,6 +216,7 @@ func (d *DiskBackedNumberedRowContainer) Close(ctx context.Context) {
 	if d.deduper != nil {
 		d.deduper.Close(ctx)
 	}
+	d.cacheMap = nil
 }
 
 // numberedDiskRowIterator wraps a numberedRowIterator and adds two pieces
