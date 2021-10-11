@@ -959,7 +959,7 @@ RPC for ranges with tons of lookups. In this case, the idea is to push a bunch
 of the computation to the data, so the flow passed to `ScheduleFlows` will be a
 copy of the physical nodes downstream of the aggregator, including filtering
 and aggregation. We imagine the processor will take the decision to move to
-this heavywight process once it sees that it's batching a lot of lookups for
+this heavyweight process once it sees that it's batching a lot of lookups for
 the same range.
 
 ## Retiring flows
