@@ -623,7 +623,7 @@ var interleavedTableDisabledMigrationError = pgnotice.Newf(
 // and if the interleaved option should be ignored.
 func interleavedTableDeprecationAction(params runParams) (ignoreInterleave bool, err error) {
 	// Once interleave tables should be prevented, we should
-	// return a client notice and ignore opeartions.
+	// return a client notice and ignore operations.
 	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.PreventNewInterleavedTables) {
 		params.p.BufferClientNotice(
 			params.ctx,
