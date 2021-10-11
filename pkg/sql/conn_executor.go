@@ -1588,7 +1588,7 @@ func (ex *connExecutor) activate(
 // error is propagated from query execution. Note that query errors are not
 // propagated as errors to this layer; only things that are supposed to
 // terminate the session are (e.g. client communication errors and ctx
-// cancelations).
+// cancellations).
 // run() is expected to react on ctx cancelation, but the caller needs to also
 // close the stmtBuf at the same time as canceling the ctx. If cancelation
 // happens in the middle of a query execution, that's expected to interrupt the

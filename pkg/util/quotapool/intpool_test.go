@@ -625,7 +625,7 @@ func TestLen(t *testing.T) {
 	go doAcquire(ctx)
 	assertLenSoon(1)
 	// Create more goroutines which will block to be canceled later in order to
-	// ensure that cancelations deduct from the length.
+	// ensure that cancellations deduct from the length.
 	const numToCancel = 12 // an arbitrary number
 	ctxToCancel, cancel := context.WithCancel(ctx)
 	for i := 0; i < numToCancel; i++ {
