@@ -341,7 +341,7 @@ import (
 //                are tested. This can be useful for example when
 //                troubleshooting errors that cause the database/test
 //                to stop before the test completes.  When -show-sql
-//                is set, individual test results are annoted with
+//                is set, individual test results are annotated with
 //                either "OK" (test passed as expected), "XFAIL"
 //                (expected failure, test failed as expected), or
 //                "FAIL" to indicate an unexpected/undesired test
