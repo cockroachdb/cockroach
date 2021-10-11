@@ -131,8 +131,8 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	writeCtx, canecelWriteCtx := context.WithCancel(ctx)
-	f.cancel = canecelWriteCtx
+	writeCtx, cancelWriteCtx := context.WithCancel(ctx)
+	f.cancel = cancelWriteCtx
 	f.w, err = store.Writer(writeCtx, "")
 	if err != nil {
 		return nil, err
