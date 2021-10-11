@@ -62,7 +62,7 @@ func TestStoresRemoveStore(t *testing.T) {
 	ls.RemoveStore(&Store{Ident: &roachpb.StoreIdent{StoreID: storeID}})
 
 	if ls.HasStore(storeID) {
-		t.Errorf("expted local sender to remove storeID=%d", storeID)
+		t.Errorf("expected local sender to remove storeID=%d", storeID)
 	}
 }
 

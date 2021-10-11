@@ -384,7 +384,7 @@ func TestFilterBucket(t *testing.T) {
 						t.Fatalf("for span %s expected an error", testCase.span)
 					}
 					if !reflect.DeepEqual(testCase.expected, actual) {
-						t.Fatalf("for span %s exected %v but found %v", testCase.span, testCase.expected, actual)
+						t.Fatalf("for span %s expected %v but found %v", testCase.span, testCase.expected, actual)
 					}
 				}
 			}

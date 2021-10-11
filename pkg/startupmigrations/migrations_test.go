@@ -738,7 +738,7 @@ func TestUpdateSystemLocationData(t *testing.T) {
 	var count int
 	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
 	if count != 0 {
-		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+		t.Fatalf("Expected to find 0 rows in system.locations. Found  %d instead", count)
 	}
 
 	// Run the migration to insert locations.
@@ -749,6 +749,6 @@ func TestUpdateSystemLocationData(t *testing.T) {
 	// Check that we have all of the expected locations.
 	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
 	if count != len(roachpb.DefaultLocationInformation) {
-		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+		t.Fatalf("Expected to find 0 rows in system.locations. Found  %d instead", count)
 	}
 }

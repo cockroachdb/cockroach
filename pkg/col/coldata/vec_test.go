@@ -56,7 +56,7 @@ func TestMemColumnWindow(t *testing.T) {
 			continue
 		}
 		if ints[i] != windowInts[j] {
-			t.Fatalf("unexected value at index %d (original index: %d): expected %d got %d", j, i, ints[i], windowInts[j])
+			t.Fatalf("unexpected value at index %d (original index: %d): expected %d got %d", j, i, ints[i], windowInts[j])
 		}
 	}
 }
