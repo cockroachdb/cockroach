@@ -14,7 +14,7 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # Run SqlLite tests.
 # Need to specify the flex-types flag in order to skip past variations that have
 # numeric typing differences.
-# TODO(yuzefovich): remove crdb_test_off tag once sqllite tests have been
+# TODO(yuzefovich): remove crdb_test_off tag once sqlite tests have been
 # adjusted to run in reasonable time with batch size randomizations.
 # WARNING! Keep all of this (including the flags/tags that we pass to the test)
 # in sync w/ build/teamcity/cockroach/ci/tests/sqlite_logic_test_impl.sh.
