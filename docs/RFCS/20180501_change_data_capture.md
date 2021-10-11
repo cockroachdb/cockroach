@@ -203,7 +203,7 @@ CREATE CHANGEFEED feed_vehicles FOR TABLE movr.vehicles INTO 'kafka:/...'
 ```
 
 When initially run, the `CREATE CHANGEFEED` takes a snapshot of all the initial
-states, consistent as of a timestamp and emits them to Kafka. All subsequest
+states, consistent as of a timestamp and emits them to Kafka. All subsequent
 changes are emitted as they happen. The default options are suitable for use
 with the Confluent [ElasticsearchSinkConnector], so Movr uses this to tail the
 Kafka `vehicles` topic and load it into ElasticSearch.
