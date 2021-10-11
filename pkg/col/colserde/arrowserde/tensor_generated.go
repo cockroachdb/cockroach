@@ -252,7 +252,7 @@ func (rcv *SparseTensorIndexCOO) Table() flatbuffers.Table {
 ///    [2, 2, 3, 1, 2, 0],
 ///    [0, 1, 0, 0, 3, 4]]
 ///
-/// Note that the indices are sorted in lexcographical order.
+/// Note that the indices are sorted in lexicographical order.
 func (rcv *SparseTensorIndexCOO) IndicesBuffer(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -288,7 +288,7 @@ func (rcv *SparseTensorIndexCOO) IndicesBuffer(obj *Buffer) *Buffer {
 ///    [2, 2, 3, 1, 2, 0],
 ///    [0, 1, 0, 0, 3, 4]]
 ///
-/// Note that the indices are sorted in lexcographical order.
+/// Note that the indices are sorted in lexicographical order.
 func SparseTensorIndexCOOStart(builder *flatbuffers.Builder) {
 	builder.StartObject(1)
 }

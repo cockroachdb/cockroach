@@ -79,7 +79,7 @@ table SparseTensorIndexCOO {
   ///    [2, 2, 3, 1, 2, 0],
   ///    [0, 1, 0, 0, 3, 4]]
   ///
-  /// Note that the indices are sorted in lexcographical order.
+  /// Note that the indices are sorted in lexicographical order.
   indicesBuffer: Buffer;
 }
 
