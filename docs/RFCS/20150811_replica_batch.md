@@ -55,7 +55,7 @@ admin path intact. Regarding the read/write path, there are two options:
   shared.
 
 Overall, option two seems preferable. As a byproduct, it would make `INCONSISTENT`
-reads consistent for free when they're part of a mutating batch anyways, and
+reads consistent for free when they're part of a mutating batch anyway, and
 (almost) implement `CONSENSUS` reads.
 
 ### Timestamp Cache and Command Queue
