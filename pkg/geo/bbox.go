@@ -29,7 +29,7 @@ type CartesianBoundingBox struct {
 }
 
 // NewCartesianBoundingBox returns a properly initialized empty bounding box
-// for carestian plane types.
+// for cartesian plane types.
 func NewCartesianBoundingBox() *CartesianBoundingBox {
 	return nil
 }
