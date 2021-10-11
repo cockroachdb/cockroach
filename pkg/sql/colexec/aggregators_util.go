@@ -92,7 +92,7 @@ func newAggregatorHelper(
 }
 
 // defaultAggregatorHelper is the default aggregatorHelper for the case
-// when no aggregate function is performing DISTINCT or FILTERing aggregation.
+// when no aggregate function is performing DISTINCT or FILTER-ing aggregation.
 type defaultAggregatorHelper struct {
 	spec *execinfrapb.AggregatorSpec
 }
