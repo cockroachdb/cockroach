@@ -131,7 +131,7 @@ func (ri *RangeIterator) Valid() bool {
 	return ri.Error() == nil
 }
 
-var errRangeIterNotInitialized = errors.New("range iterator not intialized with Seek()")
+var errRangeIterNotInitialized = errors.New("range iterator not initialized with Seek()")
 
 // Error returns the error the iterator encountered, if any. If
 // the iterator has not been initialized, returns iterator error.

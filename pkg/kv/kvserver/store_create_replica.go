@@ -314,7 +314,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 }
 
 // maybeMarkReplicaInitializedLocked should be called whenever a previously
-// unintialized replica has become initialized so that the store can update its
+// uninitialized replica has become initialized so that the store can update its
 // internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
 func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(

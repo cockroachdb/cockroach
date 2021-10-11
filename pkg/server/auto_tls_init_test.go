@@ -255,7 +255,7 @@ func TestDummyCertLoader(t *testing.T) {
 
 // TestNodeCertRotation tests that the rotation function will overwrite the
 // expected certificates and fail if they are not there.
-func TestRotationOnUnintializedNode(t *testing.T) {
+func TestRotationOnUninitializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.

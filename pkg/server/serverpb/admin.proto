@@ -770,7 +770,7 @@ message CertBundleRequest {
     bytes shared_secret = 2;
  }
 
-// CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+// CertBundleResponse contains a copy of all CAs needed to initialize TLS for
 // a new node.
 message CertBundleResponse {
   bytes bundle = 1;

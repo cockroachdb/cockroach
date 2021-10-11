@@ -59,7 +59,7 @@ func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	}
 }
 
-// RunJob runs the provided job control statement, intializing, notifying and
+// RunJob runs the provided job control statement, initializing, notifying and
 // closing the chan at the passed pointer (see below for why) and returning the
 // jobID and error result. PAUSE JOB and CANCEL JOB are racy in that it's hard
 // to guarantee that the job is still running when executing a PAUSE or

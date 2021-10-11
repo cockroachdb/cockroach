@@ -246,7 +246,7 @@ type zigzagJoiner struct {
 	baseRow rowenc.EncDatumRow
 
 	rowAlloc           rowenc.EncDatumRowAlloc
-	fetchedInititalRow bool
+	fetchedInitialRow bool
 
 	scanStats execinfra.ScanStats
 }
@@ -935,8 +935,8 @@ func (z *zigzagJoiner) collectAllMatches(
 // maybeFetchInitialRow checks whether we have already fetched an initial row
 // from one of the inputs and does so if we haven't.
 func (z *zigzagJoiner) maybeFetchInitialRow() error {
-	if !z.fetchedInititalRow {
-		z.fetchedInititalRow = true
+	if !z.fetchedInitialRow {
+		z.fetchedInitialRow = true
 
 		curInfo := z.infos[z.side]
 		err := curInfo.fetcher.StartScan(
