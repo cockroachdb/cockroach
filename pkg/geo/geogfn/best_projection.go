@@ -55,7 +55,7 @@ func BestGeomProjection(boundingRect s2.Rect) (geoprojbase.Proj4Text, error) {
 	if lngWidth.Degrees() < 6 {
 		// Determine the offset of the projection.
 		// Offset longitude -180 to 0 and divide by 6 to get the zone.
-		// Note that we treat 180 degree longtitudes as offset 59.
+		// Note that we treat 180 degree longitudes as offset 59.
 		// TODO(#geo): do we care about https://en.wikipedia.org/wiki/Universal_Transverse_Mercator_coordinate_system#Exceptions?
 		// PostGIS's _ST_BestSRID function doesn't seem to care: .
 		sridOffset := geopb.SRID(math.Min(math.Floor((center.Lng.Degrees()+180)/6), 59))
