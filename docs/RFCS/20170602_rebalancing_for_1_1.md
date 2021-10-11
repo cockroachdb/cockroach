@@ -252,7 +252,7 @@ split.
 
 Finally, the simplest alternative of all (proposed by bdarnell on #16296) is
 to not do load-based splitting at all, and instead just split more eagerly for
-tables with a small number of ranges (where "small" could reasonabl be defined
+tables with a small number of ranges (where "small" could reasonable be defined
 as "less than the number of nodes in the cluster"). This wouldn't help with
 steady state load at all, but it would help with the arguably more common
 scenario of a "big bang" of data growth when a service launches or during a
