@@ -26,7 +26,7 @@ func KeyUsageToString(ku x509.KeyUsage) []string {
 		ret = append(ret, "KeyEncipherment")
 	}
 	if ku&x509.KeyUsageDataEncipherment != 0 {
-		ret = append(ret, "DataEncirpherment")
+		ret = append(ret, "DataEncipherment")
 	}
 	if ku&x509.KeyUsageKeyAgreement != 0 {
 		ret = append(ret, "KeyAgreement")
