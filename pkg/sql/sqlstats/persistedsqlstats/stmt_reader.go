@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -39,7 +40,8 @@ func (s *PersistedSQLStats) IterateStatementStats(
 	// We compute the current aggregated_ts so that the in-memory stats can be
 	// merged with the persisted stats.
 	curAggTs := s.computeAggregatedTs()
-	memIter := newMemStmtStatsIterator(s.SQLStats, options, curAggTs)
+	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	memIter := newMemStmtStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
 	var persistedIter sqlutil.InternalRows
 	var colCnt int
@@ -108,6 +110,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"metadata",
 		"statistics",
 		"plan",
+		"agg_interval",
 	}
 
 	// [1]: selection columns
@@ -185,6 +188,9 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 		return nil, err
 	}
 	stats.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
+
+	aggInterval := tree.MustBeDInterval(row[8]).Duration
+	stats.AggregationInterval = time.Duration(aggInterval.Nanos())
 
 	return &stats, nil
 }
