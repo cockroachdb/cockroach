@@ -142,7 +142,7 @@ func (c *CustomFuncs) TwoOrMoreMinOrMax(aggs memo.AggregationsExpr) bool {
 }
 
 // MakeProjectFromPassthroughAggs constructs a top-level Project operator that
-// contains one output column per function in the given aggregrate list. The
+// contains one output column per function in the given aggregate list. The
 // input expression is expected to return zero or one rows, and the aggregate
 // functions are expected to always pass through their values in that case.
 func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
