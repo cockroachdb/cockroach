@@ -99,7 +99,7 @@ type Collection struct {
 	// temporary contains logic to access temporary schema descriptors.
 	temporary temporaryDescriptors
 
-	// hydratedTables is node-level cache of table descriptors which utlize
+	// hydratedTables is node-level cache of table descriptors which utilize
 	// user-defined types.
 	hydratedTables *hydratedtables.Cache
 
